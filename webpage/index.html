@@ -1,0 +1,42 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="entitle.css"/>
+    </head>
+<body >
+    <div id="form_group" class="form-container" >
+        <button class="form-submit-btn" type="submit" onclick="initiate()">Confirm</button>
+	</div>
+	<div id="headertile" class="header division">
+		<div id="display_name"></div>
+		<div id="currentviewing"></div>
+	</div>
+	<div id="main_division" class="main" >
+		<div id="alive_users"class="alive division">
+			<form class="form">
+				<label for="search">
+					<input required="" autocomplete="off" placeholder="search your chats" id="search" onfocusout="revert()" oninput="searchfunction()" type="text">
+					<div class="icon">
+						<svg stroke-width="2" stroke="currentColor" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="swap-on">
+							<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linejoin="round" stroke-linecap="round"></path>
+						</svg>
+						<svg stroke-width="2" stroke="currentColor" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="swap-off">
+							<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linejoin="round" stroke-linecap="round"></path>
+						</svg>
+					</div>
+				</label>
+			</form>
+            </div>
+            <div id="prattle" class="prattle division">
+				<div id="sender" class="sender_area division">
+					<textarea id="message" placeholder="use file::FILE_PATH to send files"></textarea>
+                    <button id="senderbutton" class="submitBtn">Send
+						<svg fill="white" viewBox="0 0 448 512" height="1em" class="arrow">
+							<path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z">
+							</path></svg></button>
+						</div>
+                <div id="intial_view" class="viewer" style="justify-content: center; align-items: center;"> No Users Currently </div>
+            </div>
+    </div>
+	<script src="perform.js"></script>
+</body>
+</html>

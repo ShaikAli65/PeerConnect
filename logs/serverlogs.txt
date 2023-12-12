@@ -1,0 +1,6 @@
+2023-12-12 21:26:01,058 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
+2023-12-12 21:26:03,059 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
+2023-12-12 21:26:03,059 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
+2023-12-12 21:29:57,783 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
+2023-12-12 21:29:59,785 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
+2023-12-12 21:29:59,785 - DEBUG - Connection failed, retrying...[Errno 11001] getaddrinfo failed
