@@ -11,15 +11,14 @@ class Nomad:
         self.address = (ip, port)
         self.safestop = True
         self.peersock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.start_thread()
+        const.OBJTHREAD = self.start_thread()
 
     def start_thread(self):
         threadrecv = threading.Thread(target=self.initiate, daemon=True)
-        threadsend = threading.Thread(target=self.send, daemon=True)
         threadrecv.start()
-        threadsend.start()
+        return threadrecv
 
-    def send(self,_touser,_data):
+    def send(self,_touser:tuple[str,int],_data:str):
         if _data:
             _data = _data.encode(const.FORMAT)
             _datalen = struct.pack('!I', len(_data))
@@ -43,7 +42,7 @@ class Nomad:
             sock.listen()
             while self.safestop:
                 _conn, _ = sock.accept()
-
+                logs.activitylog(f"New connection from {_[0]}:{_[1]}")
                 try:
                     _datalen = struct.unpack('!I', _conn.recv(4))[0]
                     _data = _conn.recv(_datalen).decode(const.FORMAT)

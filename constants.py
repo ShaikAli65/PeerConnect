@@ -1,7 +1,7 @@
 import os
 import socket
 import logs
-
+import avails.nomad as nomad
 THISIP = socket.gethostbyname(socket.gethostname())
 CURRENTDIR = os.getcwd()
 LOGDIR = os.path.join(CURRENTDIR, '..', 'logs')
@@ -12,6 +12,10 @@ PAGEPORT = 12347
 SERVERPORT = 8088
 SERVERIP = THISIP
 USERNAME = ''
+OBJ = None
+
+SERVERTHREAD = None
+OBJTHREAD = None
 
 
 def set_constants():
@@ -26,8 +30,8 @@ def set_constants():
 
     for name, value in zip(_variable_names, _values):
         try:
-            value = type(globals()[name])(value)
+            globals()[name] = type(globals()[name])(value)
         except ValueError as ve:
             logs.errorlog(f'Invalid value for {name} in config.txt: {ve}')
 
-        globals()[name] = value
+    return

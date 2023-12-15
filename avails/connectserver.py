@@ -20,21 +20,29 @@ def getlistfromserver():
         newpeer:tuple[bool,tuple[str,int]] = eval(SocketMain.recv(struct.unpack('!I', n)[0]).decode(const.FORMAT))
         if newpeer[0]:
             ListOfPeer.add(newpeer[1])
-
         else:
             ListOfPeer.remove(newpeer[1])
+    return
+
+
+def start_thread(threadfunc: callable):
+    thread = threading.Thread(target=threadfunc, daemon=True)
+    thread.start()
+    return thread
 
 
 def connectpeers(peerdata: tuple[str, int] = None):
     global SocketMain, ListOfPeer
     thread = threading.Thread(target=getlistfromserver, daemon=True)
-    thread.start()
+    const.SERVERTHREAD = start_thread(thread)
     peersocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
     try:
         if peerdata in ListOfPeer:
             peersocket.connect(peerdata)
     except Exception as exp:
         logs.serverlog(f'connection to peer :{peerdata} failed{exp}', 4)
+    return
 
 
 def initiateconnection():
@@ -46,8 +54,8 @@ def initiateconnection():
             print("::Connecting to server :",const.SERVERIP, const.SERVERPORT)
             SocketMain.connect((const.SERVERIP, const.SERVERPORT))
             print("::Connection to server succeeded")
-            firstdata = struct.pack('!I', len(f'{(const.THISIP, const.THISPORT)}'))
-            SocketMain.sendall(firstdata)
+            _prerequisites = struct.pack('!I', len(f'{(const.THISIP, const.THISPORT)}'))
+            SocketMain.sendall(_prerequisites)
             SocketMain.sendall(f'{(const.THISIP, const.THISPORT)}'.encode(const.FORMAT))
             connectpeers()
 

@@ -34,9 +34,25 @@ def serverlog(statustring: str, status: int):
     return
 
 
-def activitylog(statustring: str, status: int):
+def activitylog(statustring: str):
+    os.makedirs(constants.LOGDIR, exist_ok=True)
+    file_path = os.path.join(constants.LOGDIR, 'activitylogs.txt')
+    file_handler = logging.FileHandler(file_path)
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logging.getLogger('').addHandler(file_handler)
+    logging.info(statustring)
     pass
 
 
 def errorlog(statustring: str):
+    os.makedirs(constants.LOGDIR, exist_ok=True)
+    file_path = os.path.join(constants.LOGDIR, 'errorlogs.txt')
+    file_handler = logging.FileHandler(file_path)
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logging.getLogger('').addHandler(file_handler)
+    logging.info(statustring)
     pass

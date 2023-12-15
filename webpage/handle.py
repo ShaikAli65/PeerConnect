@@ -1,17 +1,22 @@
 import websockets
 import asyncio
 import constants as const
-WebSocket = websockets.WebSocketServerProtocol
+import logs
+web_socket: websockets.WebSocketServerProtocol
 
 
-def send_message(ip, text):
-
+def send_message(ip:tuple[str,int], text):
     print('send_message --- ', ip, text)
+
+    const.OBJ.send(ip, text)
+    return
 
 
 def send_file(ip, _path):
-
+    _filedata = ''
     print('send_file --- ', ip, _path)
+    const.OBJ.send(ip, _filedata)
+    return
 
 
 async def process(_message):
@@ -38,14 +43,14 @@ async def setname(new_username):
 
 
 async def handler(_websocket, port):
-    global WebSocket
-    WebSocket = _websocket
+    global web_socket
+    web_socket = _websocket
     if const.USERNAME == '':
-        await WebSocket.send("thisisacommand_/!_no..username")
+        await web_socket.send("thisisacommand_/!_no..username".encode(const.FORMAT))
     else:
-        await WebSocket.send(f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}")
+        await web_socket.send(f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}".encode(const.FORMAT))
     while True:
-        _data = await WebSocket.recv()
+        _data = await web_socket.recv()
         print(_data)
         _data = _data.split('_/!_')
         if _data[0] == 'setusername':
@@ -66,10 +71,14 @@ def end():
 
 
 async def feeduserdata(data):
-    pass
-
-
-async def feedserverdata(data):
+    global web_socket
+    data = f'thisismessage_/!_{data}_/!_{const.USERNAME}(^){const.THISIP}'
+    _prerequisites = str(len(data)).encode(const.FORMAT)
+    try:
+        await web_socket.send(_prerequisites)
+        await web_socket.send(data.encode(const.FORMAT))
+    except Exception as e:
+        logs.errorlog(f"Error sending data: {e}")
     pass
 
 
