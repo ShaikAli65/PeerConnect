@@ -1,11 +1,6 @@
-import os.path
-import sys
-import asyncio
-import webpage.handle
-import webbrowser
+import avails.connectserver as connectserver
 import avails.nomad as nomad
-import constants as const
-import logs
+from core import constants as const
 
 
 def initiate():
@@ -20,7 +15,7 @@ def initiate():
     #     sys.exit(-1)
     const.OBJ = nomad.Nomad(const.SERVERIP, const.SERVERPORT)
     # asyncio.get_event_loop().run_until_complete(webpage.handle.initiatecontrol())
-    # connectserver.initiateconnection()
+    connectserver.initiateconnection()
     return
 
 

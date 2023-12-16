@@ -1,13 +1,21 @@
 import socket
 import time
-import constants as const
+from core import constants as const
 import struct
 import logs
 import threading
 
+
 SocketMain = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-ListOfPeer = set[tuple[str, int]]
+ListOfPeer = set()
 SafeStop = True
+
+
+class peer:
+    def __init__(self,username:str, uri: tuple[str,int]):
+        self.username = username
+        self.uri = uri
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
 def getlistfromserver():
@@ -61,7 +69,7 @@ def initiateconnection():
 
             return True
         except Exception as exp:
-            time.sleep(2)
+            time.sleep(4)
             logs.serverlog(f"Connection failed, retrying...{exp}", 1)
 
 

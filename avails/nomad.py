@@ -3,7 +3,7 @@ import threading
 import struct
 from webpage import handle
 import logs
-import constants as const
+from core import constants as const
 
 
 class Nomad:

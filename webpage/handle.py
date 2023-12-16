@@ -1,7 +1,8 @@
 import websockets
 import asyncio
-import constants as const
+from core import constants as const
 import logs
+import avails
 web_socket: websockets.WebSocketServerProtocol
 
 
@@ -77,6 +78,18 @@ async def feeduserdata(data):
     try:
         await web_socket.send(_prerequisites)
         await web_socket.send(data.encode(const.FORMAT))
+    except Exception as e:
+        logs.errorlog(f"Error sending data: {e}")
+    pass
+
+
+def feedserverdata(peer:avails.connectserver.peer,status):
+    global web_socket
+    data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){peer.uri}'
+    _prerequisites = str(len(data)).encode(const.FORMAT)
+    try:
+        web_socket.send(_prerequisites)
+        web_socket.send(data.encode(const.FORMAT))
     except Exception as e:
         logs.errorlog(f"Error sending data: {e}")
     pass

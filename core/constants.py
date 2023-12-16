@@ -4,8 +4,8 @@ import logs
 import avails.nomad as nomad
 THISIP = socket.gethostbyname(socket.gethostname())
 CURRENTDIR = os.getcwd()
-LOGDIR = os.path.join(CURRENTDIR, '..', 'logs')
-CONFIGPATH = os.path.join(CURRENTDIR, '..', 'avails', 'config.txt')
+LOGDIR = os.path.join(CURRENTDIR, '../..', 'logs')
+CONFIGPATH = os.path.join(CURRENTDIR, '../..', 'avails', 'config.txt')
 FORMAT = 'utf-8'
 THISPORT = 5000
 PAGEPORT = 12347
@@ -19,7 +19,7 @@ OBJTHREAD = None
 
 
 def set_constants():
-    _file_path = os.path.join(CURRENTDIR, '..', 'avails', 'config.txt')
+    _file_path = os.path.join(CURRENTDIR, '../..', 'avails', 'config.txt')
     _variable_names = ["USERNAME", "THISPORT", "PAGEPORT", "SERVERPORT", "SERVERIP"]
 
     try:
