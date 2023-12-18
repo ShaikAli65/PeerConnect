@@ -1,1 +1,44 @@
-
+2023-12-18 23:51:23,237 - DEBUG - Connection failed, retrying...unpack requires a buffer of 4 bytes
+2023-12-18 23:54:12,580 - DEBUG - Connection failed, retrying...[WinError 10061] No connection could be made because the target machine actively refused it
+2023-12-18 23:54:16,605 - DEBUG - Connection failed, retrying...unpack requires a buffer of 4 bytes
+2023-12-18 23:54:16,605 - DEBUG - Connection failed, retrying...unpack requires a buffer of 4 bytes
+2023-12-18 23:57:32,882 - DEBUG - Connection failed, retrying...unpack requires a buffer of 4 bytes
+2023-12-19 00:01:46,756 - INFO - ::Connection accepted by server
+2023-12-19 00:04:40,401 - INFO - ::Connection accepted by server
+2023-12-19 00:15:16,530 - INFO - ::Connection accepted by server
+2023-12-19 00:16:02,747 - INFO - ::Connection accepted by server
+2023-12-19 00:17:23,931 - INFO - ::Connection accepted by server
+2023-12-19 00:18:43,331 - INFO - ::Connection accepted by server
+2023-12-19 00:19:14,232 - INFO - ::Connection accepted by server
+2023-12-19 00:24:27,585 - INFO - ::Connection accepted by server
+2023-12-19 00:26:16,894 - INFO - ::Connection accepted by server
+2023-12-19 00:27:25,001 - INFO - ::Connection accepted by server
+2023-12-19 00:28:15,889 - INFO - ::Connection accepted by server
+2023-12-19 00:28:33,923 - INFO - ::Connection accepted by server
+2023-12-19 00:29:06,869 - INFO - ::Connection accepted by server
+2023-12-19 00:29:31,759 - INFO - ::Connection accepted by server
+2023-12-19 00:30:22,411 - INFO - ::Connection accepted by server
+2023-12-19 00:30:40,929 - INFO - ::Connection accepted by server
+2023-12-19 00:30:58,639 - INFO - ::Connection accepted by server
+2023-12-19 00:31:08,729 - INFO - ::Connection accepted by server
+2023-12-19 00:32:37,939 - INFO - ::Connection accepted by server
+2023-12-19 00:32:51,785 - INFO - ::Connection accepted by server
+2023-12-19 00:33:12,876 - INFO - ::Connection accepted by server
+2023-12-19 00:33:27,140 - INFO - ::Connection accepted by server
+2023-12-19 00:33:53,988 - INFO - ::Connection accepted by server
+2023-12-19 01:19:06,900 - DEBUG - ::Connection failed, retrying...[WinError 10061] No connection could be made because the target machine actively refused it
+2023-12-19 01:19:13,946 - DEBUG - ::Connection failed, retrying...[WinError 10061] No connection could be made because the target machine actively refused it
+2023-12-19 01:19:13,946 - DEBUG - ::Connection failed, retrying...[WinError 10061] No connection could be made because the target machine actively refused it
+2023-12-19 01:19:18,948 - INFO - ::Connection accepted by server
+2023-12-19 01:19:18,948 - INFO - ::Connection accepted by server
+2023-12-19 01:19:18,948 - INFO - ::Connection accepted by server
+2023-12-19 01:23:08,604 - INFO - ::Connection accepted by server
+2023-12-19 01:23:08,605 - INFO - Error sending data: name 'web_socket' is not defined
+2023-12-19 01:23:12,618 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:16,622 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:20,623 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:51,946 - INFO - ::Connection accepted by server
+2023-12-19 01:23:51,947 - INFO - Error sending data: name 'web_socket' is not defined

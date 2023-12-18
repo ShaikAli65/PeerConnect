@@ -83,7 +83,7 @@ async def feeduserdata(data):
     pass
 
 
-def feedserverdata(peer:avails.connectserver.peer,status):
+def feedserverdata(peer,status):
     global web_socket
     data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){peer.uri}'
     _prerequisites = str(len(data)).encode(const.FORMAT)

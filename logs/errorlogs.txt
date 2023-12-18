@@ -1,0 +1,29 @@
+2023-12-19 01:23:08,605 - INFO - Error sending data: name 'web_socket' is not defined
+2023-12-19 01:23:12,618 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:12,618 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:16,622 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:16,622 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:16,622 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:20,623 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:20,623 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:20,623 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:20,623 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:24,677 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:28,685 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:32,692 - INFO - ::Exception with new user data:timed out
+2023-12-19 01:23:51,947 - INFO - Error sending data: name 'web_socket' is not defined

@@ -13,9 +13,11 @@ def initiate():
     # except webbrowser.Error:
     #     logs.errorlog(f'Browser not found{sys.exc_info()[0]}')
     #     sys.exit(-1)
-    const.OBJ = nomad.Nomad(const.SERVERIP, const.SERVERPORT)
+    # const.OBJ = nomad.Nomad(const.SERVERIP, const.SERVERPORT)
     # asyncio.get_event_loop().run_until_complete(webpage.handle.initiatecontrol())
+    const.SERVEDATA = nomad.Nomad.peer(const.USERNAME, const.THISIP)
     connectserver.initiateconnection()
+    const.SERVERTHREAD.join()
     return
 
 

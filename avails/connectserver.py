@@ -4,32 +4,37 @@ from core import constants as const
 import struct
 import logs
 import threading
-
+import pickle
+import webpage
 
 SocketMain = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 ListOfPeer = set()
 SafeStop = True
 
 
-class peer:
-    def __init__(self,username:str, uri: tuple[str,int]):
-        self.username = username
-        self.uri = uri
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-
 def getlistfromserver():
     global SocketMain, ListOfPeer, SafeStop
-    n = eval(SocketMain.recv(4).decode(const.FORMAT))
-    length = struct.unpack('!I', n)[0]
-    ListOfPeer = eval(SocketMain.recv(length).decode(const.FORMAT))
+    _n = SocketMain.recv(4)
+    _l = struct.unpack('!I', _n)[0]
+
+    for _ in range(_l):
+
+        try:
+            lenofpeer = struct.unpack('!I',SocketMain.recv(4))[0]
+            _nomad = pickle.loads(SocketMain.recv(lenofpeer))
+            webpage.handle.feedserverdata(_nomad, True)
+        except Exception as e:
+            logs.errorlog("::Exception while recieving list of users:" + str(e))
+
     while SafeStop:
-        n: int = eval(SocketMain.recv(4).decode(const.FORMAT))
-        newpeer:tuple[bool,tuple[str,int]] = eval(SocketMain.recv(struct.unpack('!I', n)[0]).decode(const.FORMAT))
-        if newpeer[0]:
-            ListOfPeer.add(newpeer[1])
-        else:
-            ListOfPeer.remove(newpeer[1])
+
+        try:
+            n = struct.unpack('!I',SocketMain.recv(4))[0]
+            status:bool = pickle.loads(SocketMain.recv(5))
+            newpeer = pickle.loads(SocketMain.recv(n - 5))
+        except Exception as e:
+            logs.errorlog("::Exception with new user data:" + str(e))
+            continue
     return
 
 
@@ -39,38 +44,27 @@ def start_thread(threadfunc: callable):
     return thread
 
 
-def connectpeers(peerdata: tuple[str, int] = None):
-    global SocketMain, ListOfPeer
-    thread = threading.Thread(target=getlistfromserver, daemon=True)
-    const.SERVERTHREAD = start_thread(thread)
-    peersocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    try:
-        if peerdata in ListOfPeer:
-            peersocket.connect(peerdata)
-    except Exception as exp:
-        logs.serverlog(f'connection to peer :{peerdata} failed{exp}', 4)
-    return
-
-
 def initiateconnection():
     global SocketMain
-    SocketMain.bind((const.THISIP, const.THISPORT))
-    SocketMain.settimeout(4)
+
     while True:
+
         try:
             print("::Connecting to server :",const.SERVERIP, const.SERVERPORT)
             SocketMain.connect((const.SERVERIP, const.SERVERPORT))
-            print("::Connection to server succeeded")
-            _prerequisites = struct.pack('!I', len(f'{(const.THISIP, const.THISPORT)}'))
+            _packet = pickle.dumps(const.SERVEDATA)
+            _prerequisites = struct.pack('!I', len(_packet))
             SocketMain.sendall(_prerequisites)
-            SocketMain.sendall(f'{(const.THISIP, const.THISPORT)}'.encode(const.FORMAT))
-            connectpeers()
-
+            SocketMain.sendall(_packet)
+            _l = struct.unpack('!I', SocketMain.recv(4))[0]
+            _data = SocketMain.recv(_l).decode(const.FORMAT)
+            if _data == 'connectionaccepted':
+                logs.serverlog('::Connection accepted by server',2)
+            const.SERVERTHREAD = start_thread(getlistfromserver)
             return True
         except Exception as exp:
-            time.sleep(4)
-            logs.serverlog(f"Connection failed, retrying...{exp}", 1)
+            logs.serverlog(f"::Connection failed, retrying...{exp}", 1)
+            time.sleep(5)
 
 
 def endconnection():
@@ -82,4 +76,4 @@ def endconnection():
         if SocketMain.close():
             return True
     except Exception as exp:
-        logs.serverlog(f'Failed disconnecting from server{exp}', 4)
+        logs.serverlog(f'::Failed disconnecting from server{exp}', 4)
