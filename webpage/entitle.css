@@ -78,6 +78,7 @@ body{
 .alive > div:hover
 {
     background-color: var(--superlight);
+    color : var(--dark);
     transition: cubic-bezier(0.755, 0.05, 0.855, 0.06);
     transform: scale(1.01);
     animation: 0.5s ease-in-out 0s 1 alternate none running pulse;

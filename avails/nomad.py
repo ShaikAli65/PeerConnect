@@ -1,8 +1,11 @@
 import socket
 import threading
 import struct
+import asyncio
+
+
 from webpage import handle
-import logs
+from logs import *
 from core import constants as const
 
 
@@ -37,7 +40,8 @@ class Nomad:
                         sock.sendall(_data)
                     break
                 except Exception as e:
-                    logs.errorlog(f"Error in sending data: {e}")
+                    # logs.errorlog(f"Error in sending data: {e}")
+                    print(f"Error in sending data retrying... {e}")
                     continue
 
         return
@@ -48,23 +52,24 @@ class Nomad:
             sock.listen()
             while self.safestop:
                 _conn, _ = sock.accept()
-                logs.activitylog(f"New connection from {_[0]}:{_[1]}")
+                # logs.activitylog(f"New connection from {_[0]}:{_[1]}")
                 Nomad.currentlyinconnection[_conn] = True
                 const.ACTIVEPEERS.append(
-                    self.start_thread(Nomad.getdata, args=_conn).isAlive())
+                    self.start_thread(Nomad.getdata, args=(_conn,)).isAlive())
         return
 
     @staticmethod
-    def getdata(cls,_conn):
+    def getdata(cls,_conn:socket.socket):
         while cls.currentlyinconnection[_conn]:
             try:
                 _datalen = struct.unpack('!I', _conn.recv(4))[0]
                 _data = _conn.recv(_datalen).decode(const.FORMAT)
                 if _data:
-                    print(_data)
-                    handle.feeduserdata(_data)
+                    print(f"data from {_conn.getpeername()} :",_data)
+                    asyncio.run(handle.feeduserdata(_data))
             except Exception as e:
-                logs.errorlog(f"Error handling connection: {e}")
+                # logs.errorlog(f"Error handling connection: {e}")
+                print("Error at getdata() line 72 :",e)
         return
 
     @staticmethod

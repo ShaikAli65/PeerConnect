@@ -1,9 +1,16 @@
 import websockets
 import asyncio
+import threading
+
+
 from core import constants as const
-import logs
-import avails
+from core.main import NotInUse
+from logs import *
+from avails import *
+
+
 web_socket: websockets.WebSocketServerProtocol
+serverdatalock = threading.Lock()
 
 
 def send_message(ip:tuple[str,int], text):
@@ -20,14 +27,19 @@ def send_file(ip, _path):
     return
 
 
-async def process(_message):
-    _message = _message.split('_/!_')
-    if _message[0] == 'thisisamessage':
-        send_message(*reversed(_message[1].split('~^~')))
-    elif _message[0] == 'thisisafile':
-        send_file(*reversed(_message[1].split('~^~')))
+async def getdata():
+    global web_socket
+    _data = await web_socket.recv()
+    print("data from page :", _data)
+    _data = _data.split('_/!_')
+    if _data[0] == 'thisisamessage':
+        send_message(*reversed(_data[1].split('~^~')))
+    elif _data[0] == 'thisisafile':
+        send_file(*reversed(_data[1].split('~^~')))
+    pass
 
 
+@NotInUse
 async def setname(new_username):
     _config_file_path = const.CONFIGPATH
     const.USERNAME = new_username
@@ -44,56 +56,53 @@ async def setname(new_username):
 
 
 async def handler(_websocket, port):
+    print('handler called')
     global web_socket
     web_socket = _websocket
     if const.USERNAME == '':
         await web_socket.send("thisisacommand_/!_no..username".encode(const.FORMAT))
+        print("no username")
     else:
-        await web_socket.send(f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}".encode(const.FORMAT))
+        userdata = f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}".encode(const.FORMAT)
+        await web_socket.send(userdata.decode(const.FORMAT))
+        print("username sent")
     while True:
-        _data = await web_socket.recv()
-        print(_data)
-        _data = _data.split('_/!_')
-        if _data[0] == 'setusername':
-            await setname(_data[1])
-        else:
-            await process(_data[1])
+        await getdata()
 
 
 def initiatecontrol():
+    print('initiatecontrol called')
     asyncio.set_event_loop(asyncio.new_event_loop())
-    _startserver = websockets.serve(handler, "localhost", 12346)
+    _startserver = websockets.serve(handler, "localhost", 12347)
     asyncio.get_event_loop().run_until_complete(_startserver)
     asyncio.get_event_loop().run_forever()
 
 
-def end():
-    pass
-
-
 async def feeduserdata(data):
     global web_socket
-    data = f'thisismessage_/!_{data}_/!_{const.USERNAME}(^){const.THISIP}'
-    _prerequisites = str(len(data)).encode(const.FORMAT)
+    data = f'thisismessage_/!_{data}(^){const.THISIP}'
     try:
-        await web_socket.send(_prerequisites)
-        await web_socket.send(data.encode(const.FORMAT))
+        await web_socket.send(data)
     except Exception as e:
-        logs.errorlog(f"Error sending data: {e}")
+        # logs.errorlog(f"Error sending data: {e}")
+        print(f"handle.py line 83 Error sending data: {e}")
     pass
 
 
-def feedserverdata(peer,status):
-    global web_socket
-    data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){peer.uri}'
-    _prerequisites = str(len(data)).encode(const.FORMAT)
-    try:
-        web_socket.send(_prerequisites)
-        web_socket.send(data.encode(const.FORMAT))
-    except Exception as e:
-        logs.errorlog(f"Error sending data: {e}")
-    pass
+async def feedserverdata(peer,status):
+    global web_socket,serverdatalock
+    with serverdatalock:
+        _ip = peer.uri[0]
+        _port = peer.uri[1]
+        data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){_ip}:{_port}'
+        print("data :",data)
+        try:
+            await web_socket.send(data)
+        except Exception as e:
+            # logs.errorlog(f"Error sending data: {e}")
+            print(f" handle.py line 97 Error sending data: {e}")
+        pass
 
 
-def getdata():
+def end():
     pass

@@ -1,7 +1,25 @@
+// utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+focusedUser        =   document.getElementById(       ""      );
+initial_view       =   document.getElementById( "intial_view" );
+main_division      =   document.getElementById("main_division");
+form_group         =   document.getElementById( "form_group"  );
+display_name       =   document.getElementById( "display_name");
+division_alive     =   document.getElementById( "alive_users" );
+division_viewerpov =   document.getElementById(   "prattle"   );
+searchbox          =   document.getElementById(   "search"    );
+headertile         =   document.getElementById( "headertile"  );
+viewname           =   document.getElementById("currentviewing");
+let senderdetail   =   "";
+let Spwaned   =   [];
+let countMessage   =   {};
+let users_list     =   [];
+let Connection     =   null;
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 function initiate()
 {
     var connectToCode_;
-    connectToCode_ = new WebSocket('ws://localhost:12346');
+    connectToCode_ = new WebSocket('ws://localhost:12347');
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
@@ -47,25 +65,33 @@ function revert()
 }
 function recievedataFromPython(connecttocode_)
 {
-    var connectToCode_ = connecttocode_;
+    const connectToCode_ = connecttocode_;
     connectToCode_.addEventListener('message', (event) => {
-        var recievedata_ = event.data.split("_/!_");
         console.log('::Received message :', event.data);                                       //*debug
+        var recievedata_ = event.data.split("_/!_");
         if  (recievedata_[0] == "thisisamessage")
             recievedmessage(recievedata_[1]);
-        else if (recievedata_[0] == "thisisausername")
-            {
-                createtile(recievedata_[1]);
-            }
         else if (recievedata_[0] == "thisisafile")
         {
             recievedmessage(recievedata_[1])
         }
         else if (recievedata_[0] == 'thisisacommand')
         {
-            removeuser(recievedata_[1]);
-            console.log("::User leaving away :",recievedata_[1]);
-        }
+            if (recievedata_[1] == "no..username")
+            {
+                console.log("::No username recieved from python");
+            }
+            else if (recievedata_[1] == "0")
+            {
+                removeuser(recievedata_[2]);
+                console.log("::User leaving away :",recievedata_[2]);
+            }
+            else if (recievedata_[1] == "1")
+            {
+                createUserTile(recievedata_[2]);
+                console.log("::User joined :",recievedata_[2]);
+            }
+            }
         else if (recievedata_[0] == "thisismyusername")
         {
             console.log("::Your user name :",recievedata_[1]);
@@ -73,40 +99,16 @@ function recievedataFromPython(connecttocode_)
             display_name.textContent = recievedata_[1];
         }
         else
-            console.error('::Received unknown message :', event.data);                           //*debug
-    });
-    // window.addEventListener('beforeunload', function (event) {
-    //     event.preventDefault();
-    //     event.returnValue = '';
-    //     connectToCode_.close();
-    //   });
-    // connectToCode_.addEventListener('close', (event) => {
-    //     console.log('::Connection closed :', event.data);
-    // });
+            console.error('::Received unknown message :', event.data);
+
+        });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
-     name(^)ipaddress using port 12346 to recieve
-       data syntax : thisisausername_/!_name(^)ipaddress
+        name(^)ipaddress
+       command syntax : f'thisisacommand_/!_{status}_/!_{peer.username}(^){peer.uri}'
     */
+   Connection = connectToCode_;
 }
 
-// utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-focusedUser        =   document.getElementById(       ""      );
-initial_view       =   document.getElementById( "intial_view" );
-main_division      =   document.getElementById("main_division");
-form_group         =   document.getElementById( "form_group"  );
-display_name       =   document.getElementById( "display_name");
-division_alive     =   document.getElementById( "alive_users" );
-division_viewerpov =   document.getElementById(   "prattle"   );
-searchbox          =   document.getElementById(   "search"    );
-headertile         =   document.getElementById( "headertile"  );
-viewname           =   document.getElementById("currentviewing");
-let senderdetail   =   "";
-let Spwaned   =   [];
-let countMessage   =   {};
-let users_list     =   [];
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 function eventlisteners()
 {
@@ -116,11 +118,9 @@ function eventlisteners()
             document.getElementById("senderbutton").click();
         }
     });
-
-
 }
 
-function createtile(idin='') // idin is the id of the user to be added syntax : name(^)ipaddress
+function createUserTile(idin='') // idin is the id of the user to be added syntax : name(^)ipaddress
 {
     var idin_=idin.split("(^)");
     document.getElementById("intial_view").textContent = "Click on Name to view chat";
@@ -142,6 +142,7 @@ function createtile(idin='') // idin is the id of the user to be added syntax : 
 
 function showcurrent(user)
 {
+
     var nametile_ = document.getElementById("person_"+user.id.split("_")[1]);
     nametile_.style.backgroundColor = "";
     document.getElementById("intial_view").style.display="none";
@@ -152,6 +153,7 @@ function showcurrent(user)
     user.style.display = "flex";
     user.style.backgroundColor = ""
     focusedUser = user;
+
     viewname.textContent = nametile_.textContent;
 }
 

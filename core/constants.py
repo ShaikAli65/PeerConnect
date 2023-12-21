@@ -1,7 +1,8 @@
 import os
 import socket
 import logs
-import avails.nomad as nomad
+
+
 THISIP = socket.gethostbyname(socket.gethostname())
 CURRENTDIR = os.getcwd()
 LOGDIR = os.path.join(CURRENTDIR, '..', 'logs')
@@ -9,6 +10,8 @@ CONFIGPATH = os.path.join(CURRENTDIR, '..', 'avails', 'config.txt')
 FORMAT = 'utf-8'
 THISPORT = 5000
 PAGEPORT = 12347
+PAGEPATH = os.path.join(CURRENTDIR,'..','webpage')
+MAXCALLBACKS = 6
 SERVERPORT = 8088
 SERVERIP = THISIP
 USERNAME = ''
