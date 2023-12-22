@@ -1,8 +1,6 @@
-username : admin
-thisport : 8088
-pageport : 12345
-serverport :7070
-serverip : localhost
-```
-this is a config file for my application. I want to read this file and store the values in a map.
-```
+[CONFIGURATIONS]
+username = admin
+thisport = 8088
+pageport = 12345
+serverport = 7070
+serverip = localhost

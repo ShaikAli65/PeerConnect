@@ -11,15 +11,40 @@ searchbox          =   document.getElementById(   "search"    );
 headertile         =   document.getElementById( "headertile"  );
 viewname           =   document.getElementById("currentviewing");
 let senderdetail   =   "";
-let Spwaned   =   [];
+let Usersviews     =   [];
 let countMessage   =   {};
 let users_list     =   [];
+let EventListeners =   [];
 let Connection     =   null;
+function searchfunction()
+{
+    var searched = searchbox.value;
+    if (searched == "")
+        return false;
+    users_list.forEach(element => {
+        if (element.textContent.toLowerCase().includes(searched.toLowerCase()))
+            element.style.display = "flex";
+        else
+            element.style.display = "none";
+    }
+    );
+}
+
+function eventlisteners()
+{
+    document.getElementById("message").addEventListener("keyup", function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            document.getElementById("senderbutton").click();
+        }
+    });
+    EventListeners.push(document.getElementById("message"));
+}
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 function initiate()
 {
     var connectToCode_;
-    connectToCode_ = new WebSocket('ws://localhost:12347');
+    connectToCode_ = new WebSocket('ws://localhost:12345');
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
@@ -38,24 +63,14 @@ function initiate()
                 console.log("message sent");
             }
         });
-
     });
+    connectToCode_.addEventListener('close', (event) => {
+        endsession(connectToCode_);
+    });
+    EventListeners.push(document.getElementById("senderbutton"));
     /*sending messages on port :12346 message syntax : "thisisamessage_/!_" + Content + "~^~" + focusedUser.id */
     eventlisteners();
     recievedataFromPython(connectToCode_);
-}
-function searchfunction()
-{
-    var searched = searchbox.value;
-    if (searched == "")
-        return false;
-    users_list.forEach(element => {
-        if (element.textContent.toLowerCase().includes(searched.toLowerCase()))
-            element.style.display = "flex";
-        else
-            element.style.display = "none";
-    }
-    );
 }
 function revert()
 {
@@ -70,7 +85,9 @@ function recievedataFromPython(connecttocode_)
         console.log('::Received message :', event.data);                                       //*debug
         var recievedata_ = event.data.split("_/!_");
         if  (recievedata_[0] == "thisisamessage")
+        {
             recievedmessage(recievedata_[1]);
+        }
         else if (recievedata_[0] == "thisisafile")
         {
             recievedmessage(recievedata_[1])
@@ -91,7 +108,7 @@ function recievedataFromPython(connecttocode_)
                 createUserTile(recievedata_[2]);
                 console.log("::User joined :",recievedata_[2]);
             }
-            }
+        }
         else if (recievedata_[0] == "thisismyusername")
         {
             console.log("::Your user name :",recievedata_[1]);
@@ -100,7 +117,6 @@ function recievedataFromPython(connecttocode_)
         }
         else
             console.error('::Received unknown message :', event.data);
-
         });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
@@ -109,15 +125,36 @@ function recievedataFromPython(connecttocode_)
    Connection = connectToCode_;
 }
 
-
-function eventlisteners()
+function endsession(connection)
 {
-    document.getElementById("message").addEventListener("keyup", function(event) {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            document.getElementById("senderbutton").click();
-        }
+    EventListeners.forEach(element => {
+        element.removeEventListener("click",function(){});
     });
+    document.body.innerHTML = "<h1>Session Ended</h1>";
+    document.body.style.display= "flex";
+    document.body.style.alignItems = "center";
+    document.body.style.justifyContent = "center";
+    connection = null;
+    document.title = "Chat Closed";
+    focusedUser        = null
+    initial_view       = null
+    main_division      = null
+    form_group         = null
+    display_name       = null
+    division_alive     = null
+    division_viewerpov = null
+    searchbox          = null
+    headertile         = null
+    viewname           = null
+    senderdetail       = null
+    Usersviews         = null
+    countMessage       = null
+    users_list         = null
+    EventListeners     = null
+    Connection         = null
+    if (typeof window.gc === 'function') {
+        window.gc();
+      }
 }
 
 function createUserTile(idin='') // idin is the id of the user to be added syntax : name(^)ipaddress
@@ -134,9 +171,10 @@ function createUserTile(idin='') // idin is the id of the user to be added synta
     newview_.className = "viewer division";
     newview_.style.display = "none";
     newtile_.addEventListener("click",function(){showcurrent(newview_)});
+    EventListeners.push(newtile_);
     division_alive.appendChild(newtile_);
     division_viewerpov.appendChild(newview_);
-    Spwaned.push(newview_);
+    Usersviews.push(newview_);
     users_list.push(newtile_);
 }
 
@@ -146,9 +184,9 @@ function showcurrent(user)
     var nametile_ = document.getElementById("person_"+user.id.split("_")[1]);
     nametile_.style.backgroundColor = "";
     document.getElementById("intial_view").style.display="none";
-    for (var i = 0;i < Spwaned.length;i++ )
+    for (var i = 0;i < Usersviews.length;i++ )
     {
-        Spwaned[i].style.display = "none";
+        Usersviews[i].style.display = "none";
     }
     user.style.display = "flex";
     user.style.backgroundColor = ""
@@ -190,7 +228,9 @@ function createmessage()
     focusedUser.appendChild(wrapperdiv_);
     focusedUser.scrollBy(0,100);
     document.getElementById("message").value="";
-    return "thisisamessage_/!_" + Content_ + "~^~" + focusedUser.id.split("_")[1];
+    trimmed = focusedUser.id.split("_")[1].split(":")
+    idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
+    return "thisisamessage_/!_" + Content_ + "~^~" + idtopython;
 }
 
 function recievedmessage(recievedata)
@@ -223,10 +263,11 @@ function recievedmessage(recievedata)
 }
 function removeuser(idin)
 {
+    // idin syntax : name(^)ipaddress
     idin = idin.split("(^)");
     var user_ = document.getElementById("person_"+idin[1]);
     var userview_ = document.getElementById("viewer_"+idin[1]);
-    console.log("uafaeu :",focusedUser);
+    console.log("removing user :",focusedUser);
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);
     if (focusedUser != userview_)

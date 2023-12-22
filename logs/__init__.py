@@ -2,7 +2,7 @@ import logging
 import os
 from core import constants
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 """
     status : 1 for DEBUG
     status : 2 for INFO
@@ -13,7 +13,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 
 def serverlog(statustring: str, status: int):
-    print('serverlog called')
     os.makedirs(constants.LOGDIR, exist_ok=True)
     file_path = os.path.join(constants.LOGDIR, 'serverlogs.txt')
     file_handler = logging.FileHandler(file_path)
@@ -39,7 +38,6 @@ def serverlog(statustring: str, status: int):
 
 
 def activitylog(statustring: str):
-    print('activitylog called')
     os.makedirs(constants.LOGDIR, exist_ok=True)
     file_path = os.path.join(constants.LOGDIR, 'activitylogs.txt')
     file_handler = logging.FileHandler(file_path)
@@ -56,7 +54,6 @@ def activitylog(statustring: str):
 
 
 def errorlog(statustring: str):
-    print('errorlog called')
     os.makedirs(constants.LOGDIR, exist_ok=True)
     file_path = os.path.join(constants.LOGDIR, 'errorlogs.txt')
     file_handler = logging.FileHandler(file_path)

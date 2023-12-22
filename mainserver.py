@@ -1,11 +1,9 @@
-import os
 import socket as soc
 import threading
-import signal
 import struct
 import pickle
-from avails import Fluxuant
-from avails.nomad import Nomad
+from core import Fluxuant
+from core.nomad import Nomad
 import time
 
 SAFE = threading.Lock()

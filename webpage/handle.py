@@ -1,45 +1,55 @@
+import time
+
 import websockets
 import asyncio
 import threading
+import select
+import os
 
-
+import main
+from avails import connectserver
 from core import constants as const
-from core.main import NotInUse
-from logs import *
-from avails import *
-
+import core
 
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
+SafeEnd = asyncio.Event()
 
 
-def send_message(ip:tuple[str,int], text):
+def send_message(text, ip):
     print('send_message --- ', ip, text)
-
+    ip = eval(ip)
     const.OBJ.send(ip, text)
     return
 
 
 def send_file(ip, _path):
-    _filedata = ''
     print('send_file --- ', ip, _path)
-    const.OBJ.send(ip, _filedata)
+    ip = eval(ip)
+    const.OBJ.send_file(ip, _path)
     return
 
 
 async def getdata():
     global web_socket
-    _data = await web_socket.recv()
-    print("data from page :", _data)
-    _data = _data.split('_/!_')
-    if _data[0] == 'thisisamessage':
-        send_message(*reversed(_data[1].split('~^~')))
-    elif _data[0] == 'thisisafile':
-        send_file(*reversed(_data[1].split('~^~')))
-    pass
+    while not SafeEnd.is_set():
+        try:
+            _data = await web_socket.recv()
+            print("data from page :", _data)
+            _data = _data.split('_/!_')
+            if _data[0] == 'thisisamessage':
+                send_message(*_data[1].split('~^~'))
+            elif _data[0] == 'thisisafile':
+                send_file(*_data[1].split('~^~'))
+            elif _data[0] == 'thisisacommand':
+                if _data[1] == 'endprogram':
+                    asyncio.run(main.endsession(0, 0))
+        except asyncio.CancelledError:
+            break
+    return
 
 
-@NotInUse
+@core.NotInUse
 async def setname(new_username):
     _config_file_path = const.CONFIGPATH
     const.USERNAME = new_username
@@ -57,7 +67,7 @@ async def setname(new_username):
 
 async def handler(_websocket, port):
     print('handler called')
-    global web_socket
+    global web_socket, SafeEnd
     web_socket = _websocket
     if const.USERNAME == '':
         await web_socket.send("thisisacommand_/!_no..username".encode(const.FORMAT))
@@ -66,21 +76,25 @@ async def handler(_websocket, port):
         userdata = f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}".encode(const.FORMAT)
         await web_socket.send(userdata.decode(const.FORMAT))
         print("username sent")
-    while True:
-        await getdata()
+    const.SAFELOCKFORPAGE = True
+    const.WEBSOCKET = web_socket
+    await getdata()
+    print('handler ended')
 
 
 def initiatecontrol():
     print('initiatecontrol called')
+    os.system(f'cd {const.PAGEPATH} && index.html')
     asyncio.set_event_loop(asyncio.new_event_loop())
-    _startserver = websockets.serve(handler, "localhost", 12347)
+    _startserver = websockets.serve(handler, "localhost", const.PAGEPORT)
     asyncio.get_event_loop().run_until_complete(_startserver)
+    const.HANDLECALL.set()
     asyncio.get_event_loop().run_forever()
 
 
-async def feeduserdata(data):
+async def feeduserdata(data, ip):
     global web_socket
-    data = f'thisismessage_/!_{data}(^){const.THISIP}'
+    data = f'thisismessage_/!_{data}(^){ip}'
     try:
         await web_socket.send(data)
     except Exception as e:
@@ -89,13 +103,13 @@ async def feeduserdata(data):
     pass
 
 
-async def feedserverdata(peer,status):
-    global web_socket,serverdatalock
+async def feedserverdata(peer, status):
+    global web_socket, serverdatalock
     with serverdatalock:
         _ip = peer.uri[0]
         _port = peer.uri[1]
         data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){_ip}:{_port}'
-        print("data :",data)
+        print("data :", data)
         try:
             await web_socket.send(data)
         except Exception as e:
@@ -104,5 +118,10 @@ async def feedserverdata(peer,status):
         pass
 
 
-def end():
+async def end():
+    global SafeEnd, web_socket
+    SafeEnd.set()
+    await web_socket.close()
+    print('::Page Disconnected Successfully')
+    asyncio.get_event_loop().stop()
     pass
