@@ -54,7 +54,7 @@ def initiate() -> int:
         return -1
 
     try:
-        # connectserver.initiateconnection()
+        connectserver.initiateconnection()
         const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
         const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.initiate)
         handle.initiatecontrol()
