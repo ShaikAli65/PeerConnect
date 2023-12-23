@@ -1,12 +1,11 @@
-import asyncio
-import select
 import json
 
+import select
 
-from webpage import handle
+import core.constants as const
+from core.fileobject import *
 from logs import *
-from core import constants as const
-from core import *
+from webpage import handle
 
 
 async def notify_users():
@@ -27,26 +26,31 @@ class Nomad:
             return f'{self.username}~^~{self.uri[0]}~^~{self.uri[1]}'
 
     def __init__(self, ip='localhost', port=8088):
+        print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
         self.safestop = True
         const.SERVEDATA = Nomad.peer(const.USERNAME, self.address)
+        self.peersock = None
         self.peersock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.peersock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.peersock.bind(self.address)
         const.OBJTHREAD = self.start_thread(self.initiate)
 
     def initiate(self):
         const.HANDLECALL.wait()
-        with self.peersock as sock:
-            sock.bind(self.address)
-            sock.listen()
-            while self.safestop:
-                readables, _, _ = select.select([sock], [], [], 0.001)
-                if sock not in readables:
-                    continue
-                _conn, _ = sock.accept()
-                activitylog(f"New connection from {_[0]}:{_[1]}")
-                Nomad.currently_in_connection[_conn] = True
-                const.ACTIVEPEERS.append(
-                    self.start_thread(Nomad.get_data, args=(_conn,)))
+        print("::Listening for connections at ", self.address)
+        self.peersock.listen()
+        while self.safestop:
+            readables, _, _ = select.select([self.peersock], [], [], 0.001)
+            if self.peersock in readables:
+                initiate_conn = None
+                try:
+                    initiate_conn, _ = self.peersock.accept()
+                    activitylog(f"New connection from {_[0]}:{_[1]}")
+                    Nomad.currently_in_connection[initiate_conn] = True
+                    Nomad.start_thread(recv_data, args=(initiate_conn,))
+                except (socket.error, OSError) as e:
+                    errorlog(f"Socket error: {e}")
         return
 
     def send(self, _touser, _data, filestatus=False):
@@ -63,7 +67,7 @@ class Nomad:
                         if sock not in readables:
                             continue
                         sock.connect(_touser)
-                        sock.send(_datalen)
+                        sock.sendall(_datalen)
                         sock.sendall(_data)
                         sock.close()
                     return True
@@ -82,51 +86,67 @@ class Nomad:
             sock.sendall(struct.pack('!I', len(sendfile_cmd)))
             sock.sendall(sendfile_cmd)
             time.sleep(0.2)
-            file = PeerFILE(path=filedata, sock=sock)
+            file = PeerFile(path=filedata, sock=sock)
             file.send_meta_data()
             file.send_file()
             sock.close()
-
-    @staticmethod
-    def get_data(cls, _conn: socket.socket):
-        while cls.currently_in_connection[_conn]:
-
-            try:
-                readables, _, _ = select.select([_conn], [], [], 0.001)
-                if _conn not in readables:
-                    continue
-                get_datalen = struct.unpack('!I', _conn.recv(4))[0]
-                getdata_data = _conn.recv(get_datalen)
-                print(f"data from {_conn.getpeername()} :", getdata_data)  # debug
-                if getdata_data.decode(const.FORMAT) == const.CMDSENDFILE:
-                    time.sleep(0.1)
-                    getdata_thread = cls.start_thread(cls.recv_file, args=(_conn,))
-                if getdata_data:
-                    asyncio.run(handle.feeduserdata(getdata_data, _conn.getpeername()))
-            except Exception as e:
-                errorlog(f"Error at get_data() from core/nomad at line 92 :{e}")
-
         return
 
     @staticmethod
-    def recv_file(cls, _conn: socket.socket):
-        getdata_file = PeerFILE(sock=_conn)
-        getdata_file.recv_meta_data()
-        getdata_file.recv_file()
-        pass
-
-    @staticmethod
-    def start_thread(target=None, args=()):
+    def start_thread(_target, args=()):
         if len(args) != 0:
-            threadrecv = threading.Thread(target=target, args=args)
+            threadrecv = threading.Thread(target=_target, args=args)
         else:
-            threadrecv = threading.Thread(target=target, daemon=True)
+            threadrecv = threading.Thread(target=_target, daemon=True)
         threadrecv.start()
         return threadrecv
 
     def end(self):
-        print("::Ending Nomad Object")
         self.safestop = False
         # asyncio.run(notifyusers())  # notify users that this user is going offline
+        time.sleep(1)
         self.peersock.close()
+        print("::Ending Nomad Object")
 
+
+def recv_file(_conn: socket.socket):
+    Nomad.currently_in_connection[_conn] = True
+
+    getdata_file = PeerFile(sock=_conn)
+    getdata_file.recv_meta_data()
+    getdata_file.recv_file()
+    return
+
+
+def recv_data(_conn: socket.socket):
+    c = 0
+    recvdata_flag = True
+    while recvdata_flag:
+
+        try:
+            readables, _, _ = select.select([_conn], [], [], 0.001)
+            if _conn not in readables:
+                continue
+            recvdata_raw_len = _conn.recv(4)
+            get_datalen = struct.unpack('!I',recvdata_raw_len)[0] if recvdata_raw_len else 0
+            if get_datalen == 0:
+                continue
+            recvdata_data = _conn.recv(get_datalen)
+            print(f"data from {_conn.getpeername()} :", recvdata_data)  # debug
+            if recvdata_data.decode(const.FORMAT) == const.CMDRECVFILE:
+                time.sleep(0.1)
+                Nomad.start_thread(recv_file, args=(_conn,))
+                return True
+            elif recvdata_data == const.CMDCLOSINGHEADER:
+                _conn.close()
+                recvdata_flag = False
+            elif recvdata_data:
+                asyncio.run(handle.feeduserdata(recvdata_data, _conn.getpeername()))
+        except Exception as e:
+            errorlog(f"Error at recv_data() from core/nomad at line 140 :{e}")
+            _conn.sendall(struct.pack('!I', len(const.CMDCLOSINGHEADER)))
+            _conn.sendall(const.CMDCLOSINGHEADER)
+            _conn.close()
+            return False
+
+    return True

@@ -1,15 +1,11 @@
-import socket
-import time
-import struct
-import threading
 import pickle
-import asyncio
 import select
+from queue import Queue
 
 
+from core import *
 from core import constants as const
 from webpage import handle
-from queue import Queue
 from logs import *
 
 
@@ -44,7 +40,7 @@ def recvintiallist(nofusers:int):
 
 def keeprecieving():
     global SocketMain, ListOfPeer, Saferecv, ErrorCalls
-    while not Saferecv.isSet():
+    while not Saferecv.is_set():
 
         try:
             readables, _, _ = select.select([SocketMain], [], [], 0.001)

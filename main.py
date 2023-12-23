@@ -54,9 +54,8 @@ def initiate() -> int:
         return -1
 
     try:
-        const.SERVEDATA = nomad.Nomad.peer(const.USERNAME, const.THISIP)
-        connectserver.initiateconnection()
-        const.OBJ = nomad.Nomad(const.SERVERIP, const.SERVERPORT)
+        # connectserver.initiateconnection()
+        const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
         handle.initiatecontrol()
     except Exception as e:
         errorlog(f"::Exception in main.py: {e}")

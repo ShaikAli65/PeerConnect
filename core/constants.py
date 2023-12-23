@@ -28,6 +28,10 @@ SAFELOCKFORPAGE = False
 WEBSOCKET = None
 
 CMDSENDFILE = 'thisisacommandtocore_/!_recvafile'
+CMDRECVFILE = 'thisisacommandtocore_/!_sendafile'
+CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'.encode(FORMAT)
+FILESENDINTITATEHEADER = 'inititatingfilesequence'.encode(FORMAT)
+TEXTSUCCESSHEADER = 'textstringrecvsuccess'.encode(FORMAT)
 
 
 def get_local_ip() -> str:
@@ -81,4 +85,7 @@ def set_constants() -> bool:
     THISPORT = int(config_map['CONFIGURATIONS']['thisport'])
     PAGEPORT = int(config_map['CONFIGURATIONS']['pageport'])
     SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
+    if USERNAME == '' or SERVERIP == '' or THISPORT == 0 or PAGEPORT == 0 or SERVERPORT == 0:
+        errorlog(f"Error reading config.txt from set_constants() at line 75 in core/constants.py")
+        return False
     return True

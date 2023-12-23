@@ -1,15 +1,8 @@
-import time
-
 import websockets
-import asyncio
-import threading
-import select
-import os
 
+from core import *
 import main
-from avails import connectserver
 from core import constants as const
-import core
 
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
@@ -43,13 +36,13 @@ async def getdata():
                 send_file(*_data[1].split('~^~'))
             elif _data[0] == 'thisisacommand':
                 if _data[1] == 'endprogram':
-                    asyncio.run(main.endsession(0, 0))
+                    await asyncio.create_task(main.endsession(0, 0))
         except asyncio.CancelledError:
             break
     return
 
 
-@core.NotInUse
+@NotInUse
 async def setname(new_username):
     _config_file_path = const.CONFIGPATH
     const.USERNAME = new_username
@@ -65,8 +58,7 @@ async def setname(new_username):
         file.writelines(_lines)
 
 
-async def handler(_websocket, port):
-    print('handler called')
+async def handler(_websocket):
     global web_socket, SafeEnd
     web_socket = _websocket
     if const.USERNAME == '':
@@ -75,7 +67,6 @@ async def handler(_websocket, port):
     else:
         userdata = f"thisismyusername_/!_{const.USERNAME}(^){const.THISIP}".encode(const.FORMAT)
         await web_socket.send(userdata.decode(const.FORMAT))
-        print("username sent")
     const.SAFELOCKFORPAGE = True
     const.WEBSOCKET = web_socket
     await getdata()
@@ -83,7 +74,7 @@ async def handler(_websocket, port):
 
 
 def initiatecontrol():
-    print('initiatecontrol called')
+    print('::Initiatecontrol called at handle.py :', const.PAGEPATH, const.PAGEPORT)
     os.system(f'cd {const.PAGEPATH} && index.html')
     asyncio.set_event_loop(asyncio.new_event_loop())
     _startserver = websockets.serve(handler, "localhost", const.PAGEPORT)

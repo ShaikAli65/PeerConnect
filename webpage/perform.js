@@ -124,12 +124,16 @@ function recievedataFromPython(connecttocode_)
     */
    Connection = connectToCode_;
 }
-
+function endcontrolfrompage()
+{
+    endsession(Connection);
+}
 function endsession(connection)
 {
     EventListeners.forEach(element => {
         element.removeEventListener("click",function(){});
     });
+    Connection.send("thisisacommand_/!_endprogram")
     document.body.innerHTML = "<h1>Session Ended</h1>";
     document.body.style.display= "flex";
     document.body.style.alignItems = "center";
