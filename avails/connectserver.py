@@ -103,7 +103,7 @@ def initiateconnection():
             SocketMain.connect((const.SERVERIP, const.SERVERPORT))
             readables, _, _ = select.select([SocketMain],[],[],0.001)
             if SocketMain in readables:
-                _packet = pickle.dumps(const.SERVEDATA)
+                _packet = pickle.dumps(const.REMOTEOBJECT)
                 _prerequisites = struct.pack('!I', len(_packet))
                 SocketMain.sendall(_prerequisites)
                 SocketMain.sendall(_packet)

@@ -1,9 +1,9 @@
 import json
 
 import select
-
-import core.constants as const
-from core.fileobject import *
+from core import *
+from core.fileobject import PeerFile
+from core.remotepeer import RemotePeer
 from logs import *
 from webpage import handle
 
@@ -17,24 +17,14 @@ async def notify_users():
 class Nomad:
     currently_in_connection = {}
 
-    class peer:
-        def __init__(self, username: str, uri: tuple[str, int]):
-            self.username = username
-            self.uri = uri
-
-        def __str__(self):
-            return f'{self.username}~^~{self.uri[0]}~^~{self.uri[1]}'
-
     def __init__(self, ip='localhost', port=8088):
         print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
         self.safestop = True
-        const.SERVEDATA = Nomad.peer(const.USERNAME, self.address)
-        self.peersock = None
+        const.REMOTEOBJECT = RemotePeer(const.USERNAME, self.address)
         self.peersock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.peersock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.peersock.bind(self.address)
-        const.OBJTHREAD = self.start_thread(self.initiate)
 
     def initiate(self):
         const.HANDLECALL.wait()
@@ -43,7 +33,6 @@ class Nomad:
         while self.safestop:
             readables, _, _ = select.select([self.peersock], [], [], 0.001)
             if self.peersock in readables:
-                initiate_conn = None
                 try:
                     initiate_conn, _ = self.peersock.accept()
                     activitylog(f"New connection from {_[0]}:{_[1]}")
