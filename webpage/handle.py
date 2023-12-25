@@ -83,9 +83,9 @@ def initiatecontrol():
     asyncio.get_event_loop().run_forever()
 
 
-async def feeduserdata(data, ip):
+async def feeduserdata(data: bytes = b'', ip: tuple = tuple()):
     global web_socket
-    data = f'thisismessage_/!_{data}(^){ip}'
+    data = f'thisismessage_/!_{data.decode(const.FORMAT)}(^){ip}'
     try:
         await web_socket.send(data)
     except Exception as e:
@@ -112,7 +112,7 @@ async def feedserverdata(peer, status):
 async def end():
     global SafeEnd, web_socket
     SafeEnd.set()
-    await web_socket.close()
     print('::Page Disconnected Successfully')
     asyncio.get_event_loop().stop()
+    await web_socket.close()
     pass

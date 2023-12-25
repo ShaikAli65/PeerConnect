@@ -1,4 +1,5 @@
 from core import *
+from core.textobject import PeerText
 
 
 class PeerFile:
@@ -8,20 +9,27 @@ class PeerFile:
         Allows sending and receiving files over sockets, managing file information,
         handling potential conflicts with existing files, and providing file-like
         behavior for iteration and size retrieval.
+
+        Ths Class Does Provide Error Handling Not Need To Be Handled At Calling Functions.
     """
 
-    def __init__(self, path: str = '', sock: socket.socket = None, chucksize: int = 2048, error_ext: str = '.invalid'):
+    def __init__(self, path: str = '', sock: socket.socket = None, chunksize: int = 4096, error_ext: str = '.invalid'):
         self.sock = sock
+        self._lock = threading.Lock()
+        self.chunksize = chunksize
+        self.errorextension = error_ext
         if path == '':
+            self.path = path
+            self.file = None
+            self.filename = ''
+            self.namelength = len(self.filename)
+            self.filesize = 0
             return
         self.path = path
         self.file = open(path, 'rb')
         self.filename = os.path.basename(path)
         self.namelength = len(self.filename)
         self.filesize = os.path.getsize(path)
-        self._lock = threading.Lock()
-        self.chunksize = chucksize
-        self.errorextension = error_ext
 
     def send_meta_data(self) -> bool:
         """
@@ -30,41 +38,61 @@ class PeerFile:
        Returns:
            bool: True if metadata was sent successfully, False otherwise.
        """
-        with self.sock as sock:
-            with self._lock:
-                try:
-                    sock.send(struct.pack('!Q', self.filesize))
-                    meta_data_filename = PeerText(self.filename, sock)
-                    meta_data_filename.send()
-                    if sock.recv(1024).decode('utf-8') == 'ready':
-                        return True
-                    else:
-                        return False
-                except Exception as e:
-                    errorlog(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-                    sock.close()
-                    return False
+        with self._lock:
+            try:
+                PeerText(self.sock,const.CMDRECVFILE).send()
+                PeerText(self.sock,f'{const.THISIP}:{const.FILEPORT}').send()
+                sendfile_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sendfile_sock.bind((const.THISIP, const.FILEPORT))
+                sendfile_sock.listen(2)
+                temp_data = PeerText(self.sock, const.CMDFILESOCKETHANDSHAKE).send()
+                filesock, _ = sendfile_sock.accept()
+                print('::connected to', filesock.getpeername())
+                self.sock = filesock
+                filesock.send(struct.pack('!Q', self.filesize))
+                print('::sent filesize')
+                PeerText(filesock,self.filename).send()
+                print('::sent filename')
+                time.sleep(0.1)
+                return PeerText(self.sock).receive(const.FILESENDINTITATEHEADER)
+            except Exception as e:
+                print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+                sendfile_sock.close()
+                return False
 
-    def recv_meta_data(self):
+    def recv_meta_data(self,socklock:threading.Lock) -> bool:
         """
             Receives file metadata (size and name) from the sender.
 
             Returns:
                 bool: True if metadata was received successfully, False otherwise.
         """
-        with self.sock as sock:
-            with self._lock:
-                try:
-                    self.filesize = struct.unpack('!Q', sock.recv(8))[0]
-                    self.namelength = struct.unpack('!I', sock.recv(4))[0]
-                    self.filename = sock.recv(self.namelength).decode(const.FORMAT)
-                    sock.sendall(struct.pack('!I', ))
-                    sock.send(const.FILESENDINTITATEHEADER)
+        with self._lock:
+            try:
+                with socklock:
+                    recvfile_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    ipaddress = PeerText(self.sock).receive().decode(const.FORMAT).split(':')
+                    ipaddress = (ipaddress[0], int(ipaddress[1]))
+                    print("ip :",ipaddress)
+                    if PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE):
+                        connectstatus = True
+                time.sleep(0.2)
+                if connectstatus:
+                    recvfile_sock.connect(ipaddress)
+                self.filesize = struct.unpack('!Q', recvfile_sock.recv(8))[0]
+                self.filename = PeerText(recvfile_sock).receive().decode(const.FORMAT)
+                self.namelength = len(self.filename)
+
+                self.sock = recvfile_sock
+                self.path = os.path.join(const.DOWNLOADIR, self.filename)
+                print('::', self.filename, self.filesize, self.namelength, self.path)
+                if self.namelength > 0:
+                    PeerText(recvfile_sock, const.FILESENDINTITATEHEADER).send()
                     return True
-                except Exception as e:
-                    errorlog(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
-                    sock.close()
-                    return False
+                return False
+            except Exception as e:
+                errorlog(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
+                return False
 
     def send_file(self):
         """
@@ -93,20 +121,20 @@ class PeerFile:
             Returns:
                 bool: True if the file was received successfully, False otherwise.
         """
-        with self.sock as sock:
-            with self._lock:
-                try:
-                    with open(self.__validatename(self.filename), 'wb') as file:
-                        while data := sock.recv(self.chunksize):
-                            file.write(data)
-                    activitylog(f'::recieved file from {sock.getpeername()}')
-                    with open(self.filename, 'rb') as file:
-                        self.file = file
-                    return True
-                except Exception as e:
-                    errorlog(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
-                    self.__file_error()
-                    return False
+
+        with self._lock:
+            try:
+                with open(os.path.join(const.DOWNLOADIR, self.__validatename(self.filename)), 'wb') as file:
+                    while data := self.sock.recv(self.chunksize):
+                        file.write(data)
+                activitylog(f'::recieved file from {self.sock.getpeername()}')
+                with open(self.filename, 'rb') as file:
+                    self.file = file
+                return True
+            except Exception as e:
+                errorlog(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
+                self.__file_error()
+                return False
 
     def __file_error(self):
         """
@@ -117,24 +145,25 @@ class PeerFile:
             self.filename += self.errorextension
         return True
 
-    def __validatename(self, file_path: str):
+    def __validatename(self, fileaddr: str):
         """
             Ensures a unique filename if a file with the same name already exists.
 
             Args:
-                file_path (str): The original filename.
+                fileaddr (str): The original filename.
 
             Returns:
                 str: The validated filename, ensuring uniqueness.
         """
-        base, ext = os.path.splitext(file_path)
+        base, ext = os.path.splitext(fileaddr)
         counter = 1
-        new_file_path = file_path
-        while os.path.exists(new_file_path):
-            new_file_path = f"{base}({counter}){ext}"
+        new_file_name = fileaddr
+        while os.path.exists(os.path.join(const.DOWNLOADIR,new_file_name)):
+            new_file_name = f"{base}({counter}){ext}"
             counter += 1
-        self.filename = os.path.basename(new_file_path)
-        return new_file_path
+        self.filename = os.path.basename(new_file_name)
+        self.namelength = len(self.filename)
+        return new_file_name
 
     def __iter__(self):
         """

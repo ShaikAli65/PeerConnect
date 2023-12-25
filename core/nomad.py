@@ -1,9 +1,12 @@
 import json
+import pickle
+import socket
 
 import select
 from core import *
 from core.fileobject import PeerFile
 from core.remotepeer import RemotePeer
+from core.textobject import PeerText
 from logs import *
 from webpage import handle
 
@@ -16,6 +19,7 @@ async def notify_users():
 
 class Nomad:
     currently_in_connection = {}
+    LOOPFLAG = True
 
     def __init__(self, ip='localhost', port=8088):
         print("::Initiating Nomad Object", ip, port)
@@ -42,42 +46,35 @@ class Nomad:
                     errorlog(f"Socket error: {e}")
         return
 
-    def send(self, _touser, _data, filestatus=False):
+    def send(self, _touser:tuple[str,int], _data:str, filestatus=False):
         if filestatus:
             self.send_file(_touser, _data)
-        if _data:
-            _data = _data.encode(const.FORMAT)
-            _datalen = struct.pack('!I', len(_data))
-            for _ in range(const.MAXCALLBACKS):
+        for _ in range(const.MAXCALLBACKS):
 
-                try:
-                    with self.peersock as sock:
-                        readables, _, _ = select.select([sock], [], [], 0.001)
-                        if sock not in readables:
-                            continue
-                        sock.connect(_touser)
-                        sock.sendall(_datalen)
-                        sock.sendall(_data)
-                        sock.close()
-                    return True
-                except Exception as e:
-                    time.sleep(1)
-                    # errorlog(f"Error in sending data: {e}")
-                    print(f"Error in sending data retrying... {e}")
+            try:
+                send_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                send_sock.connect(_touser)
+                readables, _, _ = select.select([send_sock], [], [], 0.001)
+                if send_sock not in readables:
                     continue
+                with send_sock:
+                    send_text = PeerText(send_sock, _data)
+                    return send_text.send()
+            except Exception as e:
+                time.sleep(1)
+                # errorlog(f"Error in sending data: {e}")
+                print(f"Error in sending data retrying... {e}")
+                continue
 
-        return
+        return False
 
-    def send_file(self, ip: str, filedata: str):
+    def send_file(self, ip: tuple[str,int], filedata: str):
         with self.peersock as sock:
             sock.connect(ip)
-            sendfile_cmd = const.CMDSENDFILE.encode(const.FORMAT)
-            sock.sendall(struct.pack('!I', len(sendfile_cmd)))
-            sock.sendall(sendfile_cmd)
-            time.sleep(0.2)
+            PeerText(sock, const.CMDRECVFILE).send()
             file = PeerFile(path=filedata, sock=sock)
-            file.send_meta_data()
-            file.send_file()
+            if file.send_meta_data():
+                file.send_file()
             sock.close()
         return
 
@@ -98,44 +95,55 @@ class Nomad:
         print("::Ending Nomad Object")
 
 
-def recv_file(_conn: socket.socket):
+def recv_file(_conn: socket.socket, _lock: threading.Lock):
     Nomad.currently_in_connection[_conn] = True
-
+    if not _conn:
+        print("::Closing connection from recv_file() from core/nomad at line 100")
+        return
     getdata_file = PeerFile(sock=_conn)
-    getdata_file.recv_meta_data()
-    getdata_file.recv_file()
+    if getdata_file.recv_meta_data(_lock):
+        getdata_file.recv_file()
     return
 
 
 def recv_data(_conn: socket.socket):
-    c = 0
-    recvdata_flag = True
-    while recvdata_flag:
+    recv_timeout = 0
+    recvdata_file_sock_lock = threading.Lock()
+    while Nomad.LOOPFLAG:
+        if recv_timeout >= 100:
+            print("::Closing connection from recv_data() from core/nomad at line 112")
+            _conn.close()
+            return False
 
         try:
             readables, _, _ = select.select([_conn], [], [], 0.001)
             if _conn not in readables:
                 continue
-            recvdata_raw_len = _conn.recv(4)
-            get_datalen = struct.unpack('!I',recvdata_raw_len)[0] if recvdata_raw_len else 0
-            if get_datalen == 0:
+            with recvdata_file_sock_lock:
+                recvdata_data = PeerText(_conn).receive()
+            if not recvdata_data:
                 continue
-            recvdata_data = _conn.recv(get_datalen)
-            print(f"data from {_conn.getpeername()} :", recvdata_data)  # debug
-            if recvdata_data.decode(const.FORMAT) == const.CMDRECVFILE:
-                time.sleep(0.1)
-                Nomad.start_thread(recv_file, args=(_conn,))
-                return True
-            elif recvdata_data == const.CMDCLOSINGHEADER:
+            print('data from peer :',_conn.getpeername(), recvdata_data)
+            if recvdata_data.decode(const.FORMAT) == const.CMDCLOSINGHEADER:
                 _conn.close()
-                recvdata_flag = False
+                print("::Closing connection from recv_data() from core/nomad at line 124")
+                return True
+            elif recvdata_data.decode(const.FORMAT) == const.CMDRECVFILE:
+                Nomad.start_thread(recv_file, args=(_conn,recvdata_file_sock_lock))
+                time.sleep(3)
+
             elif recvdata_data:
                 asyncio.run(handle.feeduserdata(recvdata_data, _conn.getpeername()))
+            else:
+                time.sleep(0.5)
+                recv_timeout += 1
         except Exception as e:
             errorlog(f"Error at recv_data() from core/nomad at line 140 :{e}")
-            _conn.sendall(struct.pack('!I', len(const.CMDCLOSINGHEADER)))
-            _conn.sendall(const.CMDCLOSINGHEADER)
-            _conn.close()
+            try:
+                PeerText(_conn, const.CMDCLOSINGHEADER).send() if _conn else None
+                _conn.close()
+            except socket.error as e:
+                errorlog(f"Error at recv_data() in handling closing of client from core/nomad at line 144 :{e}")
             return False
 
     return True

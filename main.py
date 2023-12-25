@@ -26,7 +26,6 @@ async def end_session_async() -> bool:
 
     connectserver.endconnection()
 
-    activitylog("::End Sequence Complete")
     return True
 
 
@@ -54,7 +53,7 @@ def initiate() -> int:
         return -1
 
     try:
-        connectserver.initiateconnection()
+        # connectserver.initiateconnection()
         const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
         const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.initiate)
         handle.initiatecontrol()
@@ -72,3 +71,4 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(endsession(signum, frame)))
     signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(endsession(signum, frame)))
     initiate()
+    activitylog("::End Sequence Complete")

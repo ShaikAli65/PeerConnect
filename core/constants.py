@@ -9,11 +9,13 @@ THISPORT = 0
 PAGEPORT = 0
 SERVERPORT = 0
 SERVERIP = ''
+FILEPORT = 45210
 
 CURRENTDIR = ''
 LOGDIR = ''
 CONFIGPATH = ''
 PAGEPATH = ''
+DOWNLOADIR = ''
 THISIP = ''
 FORMAT = 'utf-8'
 
@@ -27,11 +29,13 @@ HANDLECALL = threading.Event()
 SAFELOCKFORPAGE = False
 WEBSOCKET = None
 
-CMDSENDFILE = 'thisisacommandtocore_/!_recvafile'
-CMDRECVFILE = 'thisisacommandtocore_/!_sendafile'
-CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'.encode(FORMAT)
-FILESENDINTITATEHEADER = 'inititatingfilesequence'.encode(FORMAT)
+CMDSENDFILE = 'thisisacommandtocore_/!_sendafile'
+CMDRECVFILE = 'thisisacommandtocore_/!_recvafile'
+CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'
+CMDFILESOCKETHANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
+FILESENDINTITATEHEADER = 'inititatefilesequence'
 TEXTSUCCESSHEADER = 'textstringrecvsuccess'.encode(FORMAT)
+CMDFILESOCKETCLOSE = 'thisisacommandtocore_/!_closefilesocket'
 
 
 def get_local_ip() -> str:
@@ -70,11 +74,12 @@ def set_constants() -> bool:
     Returns:
         bool: True if configuration values were set successfully, False otherwise.
     """
-    global CONFIGPATH, CURRENTDIR, LOGDIR, PAGEPATH
+    global CONFIGPATH, CURRENTDIR, LOGDIR, PAGEPATH, DOWNLOADIR
     CURRENTDIR = os.path.join(os.getcwd())
     CONFIGPATH = os.path.join(CURRENTDIR, 'avails', 'config.txt')
     LOGDIR = os.path.join(CURRENTDIR, 'logs')
     PAGEPATH = os.path.join(CURRENTDIR, 'webpage')
+    DOWNLOADIR = os.path.join(CURRENTDIR, 'downloads')
 
     global THISIP, USERNAME, THISPORT, PAGEPORT, SERVERPORT, SERVERIP
     THISIP = get_local_ip()
