@@ -11,13 +11,13 @@
     font-family :sans-serif;
 }
 body{
-	background-color: rgba(255, 248, 248, 0.619);
-	color: #e2dedb;
+	background-color: #FAFAFA;
+	color: #c6c2be;
 }
 .main
 {
     height: 84.4vh;
-	background-color: rgb(232, 226, 223);
+	background-color: #FAFAFA;
     padding: 5px 10px;
 	margin-left: .7%;
 	margin-right: 1%;
@@ -159,7 +159,7 @@ body{
     flex-direction: row;
     justify-content: center;
 	align-items: center;
-	background-color:#e2dedb;
+	background-color:#F9F6EE;
 }
 #message
 {

@@ -44,7 +44,7 @@ function eventlisteners()
 function initiate()
 {
     var connectToCode_;
-    connectToCode_ = new WebSocket('ws://localhost:12345');
+    connectToCode_ = new WebSocket('ws://localhost:12266');
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
@@ -59,8 +59,9 @@ function initiate()
             }
             else
             {
-                connectToCode_.send(createmessage());
-                console.log("message sent");
+                data = createmessage();
+                connectToCode_.send(data);
+                console.log("message sent :",data);
             }
         });
     });
@@ -220,7 +221,9 @@ function createmessage()
         wrapperdiv_.appendChild(subDiv_);
         wrapperdiv_.className = "messagewrapper right";
         focusedUser.appendChild(wrapperdiv_);
-        return ("thisisafile_/!_"+Content_.split("::")[1]+"~^~" + focusedUser.id.split("_")[1]);
+        trimmed = focusedUser.id.split("_")[1].split("~")
+        idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
+        return ("thisisafile_/!_"+Content_.split("::")[1]+"~^~" +idtopython);
     }
     subDiv_.textContent = Content_;
     subDiv_.className = "message";
@@ -232,7 +235,7 @@ function createmessage()
     focusedUser.appendChild(wrapperdiv_);
     focusedUser.scrollBy(0,100);
     document.getElementById("message").value="";
-    trimmed = focusedUser.id.split("_")[1].split(":")
+    trimmed = focusedUser.id.split("_")[1].split("~")
     idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
     return "thisisamessage_/!_" + Content_ + "~^~" + idtopython;
 }

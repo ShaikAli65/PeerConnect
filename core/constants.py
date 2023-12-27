@@ -1,6 +1,8 @@
+import socket
 import socket as soc
 import threading
 import configparser
+import requests
 
 from logs import *
 
@@ -18,6 +20,8 @@ PAGEPATH = ''
 DOWNLOADIR = ''
 THISIP = ''
 FORMAT = 'utf-8'
+IPVERSION = soc.AF_INET
+PROTOCOL = soc.SOCK_STREAM
 
 MAXCALLBACKS = 6
 OBJ = None
@@ -34,11 +38,12 @@ CMDRECVFILE = 'thisisacommandtocore_/!_recvafile'
 CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'
 CMDFILESOCKETHANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
 FILESENDINTITATEHEADER = 'inititatefilesequence'
-TEXTSUCCESSHEADER = 'textstringrecvsuccess'.encode(FORMAT)
+TEXTSUCCESSHEADER = b'textstringrecvsuccess'
 CMDFILESOCKETCLOSE = 'thisisacommandtocore_/!_closefilesocket'
+SERVEROK = 'connectionaccepted'
 
 
-def get_local_ip() -> str:
+def get_ip() -> str:
     """Retrieves the local IP address of the machine.
 
     Attempts to connect to a public DNS server (8.8.8.8) to obtain the local IP.
@@ -50,17 +55,23 @@ def get_local_ip() -> str:
     Raises:
         soc.error: If a socket error occurs during connection.
     """
-    config_soc = soc.socket(soc.AF_INET, soc.SOCK_STREAM)
-    config_ip = ''
+    config_soc = soc.socket(IPVERSION, PROTOCOL)
+    config_ip = 'localhost'
     try:
-        config_PUBILC_DNS = "1.1.1.1"
-        config_soc.connect((config_PUBILC_DNS, 80))
-        config_ip = config_soc.getsockname()[0]
+        if IPVERSION == soc.AF_INET:
+            config_PUBILC_DNS = "1.1.1.1"
+            config_soc.connect((config_PUBILC_DNS, 80))
+            config_ip = config_soc.getsockname()[0]
+        else:
+            response = requests.get('https://api64.ipify.org?format=json')
+            if response.status_code == 200:
+                data = response.json()
+                config_ip = data['ip']
     except soc.error as e:
+        config_ip = soc.gethostbyname(soc.gethostname()) if IPVERSION == soc.AF_INET else soc.getaddrinfo(soc.gethostname(), None, IPVERSION)[0][4][0]
         errorlog(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
-        config_ip = soc.gethostbyname(soc.gethostname())
     finally:
-        print(f"Local IP: {config_ip}")
+        print("config_ip :",config_ip)
         config_soc.close()
         return config_ip
 
@@ -68,7 +79,7 @@ def get_local_ip() -> str:
 def set_constants() -> bool:
     """Sets global constants from values in the configuration file and directories.
 
-    Reads configuration values from config.txt and sets global variables accordingly.
+    Reads configuration values from config.ini and sets global variables accordingly.
     Also sets directory paths for logs and the webpage.
 
     Returns:
@@ -76,21 +87,34 @@ def set_constants() -> bool:
     """
     global CONFIGPATH, CURRENTDIR, LOGDIR, PAGEPATH, DOWNLOADIR
     CURRENTDIR = os.path.join(os.getcwd())
-    CONFIGPATH = os.path.join(CURRENTDIR, 'avails', 'config.txt')
+    CONFIGPATH = os.path.join(CURRENTDIR, 'avails', 'config.ini')
     LOGDIR = os.path.join(CURRENTDIR, 'logs')
     PAGEPATH = os.path.join(CURRENTDIR, 'webpage')
     DOWNLOADIR = os.path.join(CURRENTDIR, 'downloads')
 
-    global THISIP, USERNAME, THISPORT, PAGEPORT, SERVERPORT, SERVERIP
-    THISIP = get_local_ip()
     config_map = configparser.ConfigParser()
-    config_map.read(CONFIGPATH)
+    try:
+        config_map.read(CONFIGPATH)
+    except configparser.ParsingError as e:
+        print('::got parsing error:',e)
+
+    global USERNAME, SERVERPORT, SERVERIP
     USERNAME = config_map['CONFIGURATIONS']['username']
     SERVERIP = config_map['CONFIGURATIONS']['serverip']
-    THISPORT = int(config_map['CONFIGURATIONS']['thisport'])
-    PAGEPORT = int(config_map['CONFIGURATIONS']['pageport'])
     SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
+
+    global THISPORT,PAGEPORT
+    THISPORT = int(config_map['NERDOPTIONS']['thisport'])
+    PAGEPORT = int(config_map['NERDOPTIONS']['pageport'])
+
+    global PROTOCOL, IPVERSION, THISIP
+    PROTOCOL = socket.SOCK_STREAM if config_map['NERDOPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
+    IPVERSION = socket.AF_INET6 if config_map['NERDOPTIONS']['ipversion'] == '6' else socket.AF_INET
+    print('::configuration choices : ',USERNAME,':',THISPORT, SERVERIP,':',SERVERPORT,PAGEPORT,config_map['NERDOPTIONS']['protocol'], config_map['NERDOPTIONS']['ipversion'])
+    THISIP = get_ip()
+
     if USERNAME == '' or SERVERIP == '' or THISPORT == 0 or PAGEPORT == 0 or SERVERPORT == 0:
-        errorlog(f"Error reading config.txt from set_constants() at line 75 in core/constants.py")
+        errorlog(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
         return False
+
     return True

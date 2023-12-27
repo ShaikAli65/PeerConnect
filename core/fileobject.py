@@ -33,26 +33,23 @@ class PeerFile:
 
     def send_meta_data(self) -> bool:
         """
-       Sends file metadata (size and name) to the receiver.
-
+           Creates a socket for sending the file contents.
+           Sends file metadata (size and name) to the receiver.
        Returns:
            bool: True if metadata was sent successfully, False otherwise.
        """
         with self._lock:
             try:
                 PeerText(self.sock,const.CMDRECVFILE).send()
-                PeerText(self.sock,f'{const.THISIP}:{const.FILEPORT}').send()
-                sendfile_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                PeerText(self.sock,f'{const.THISIP}~{const.FILEPORT}').send()
+                sendfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 sendfile_sock.bind((const.THISIP, const.FILEPORT))
                 sendfile_sock.listen(2)
                 temp_data = PeerText(self.sock, const.CMDFILESOCKETHANDSHAKE).send()
                 filesock, _ = sendfile_sock.accept()
-                print('::connected to', filesock.getpeername())
                 self.sock = filesock
                 filesock.send(struct.pack('!Q', self.filesize))
-                print('::sent filesize')
                 PeerText(filesock,self.filename).send()
-                print('::sent filename')
                 time.sleep(0.1)
                 return PeerText(self.sock).receive(const.FILESENDINTITATEHEADER)
             except Exception as e:
@@ -60,22 +57,22 @@ class PeerFile:
                 sendfile_sock.close()
                 return False
 
-    def recv_meta_data(self,socklock:threading.Lock) -> bool:
+    def recv_meta_data(self) -> bool:
         """
+            Receives the file socket details from the sender.
+            changes the socket to file socket.
             Receives file metadata (size and name) from the sender.
-
             Returns:
                 bool: True if metadata was received successfully, False otherwise.
         """
         with self._lock:
             try:
-                with socklock:
-                    recvfile_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    ipaddress = PeerText(self.sock).receive().decode(const.FORMAT).split(':')
-                    ipaddress = (ipaddress[0], int(ipaddress[1]))
-                    print("ip :",ipaddress)
-                    if PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE):
-                        connectstatus = True
+                recvfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
+                ipaddress = PeerText(self.sock).receive().decode(const.FORMAT).split('~')
+                ipaddress = (ipaddress[0], int(ipaddress[1]))
+                print("ip :",ipaddress)
+                if PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE):
+                    connectstatus = True
                 time.sleep(0.2)
                 if connectstatus:
                     recvfile_sock.connect(ipaddress)
@@ -124,9 +121,10 @@ class PeerFile:
 
         with self._lock:
             try:
-                with open(os.path.join(const.DOWNLOADIR, self.__validatename(self.filename)), 'wb') as file:
-                    while data := self.sock.recv(self.chunksize):
-                        file.write(data)
+                with self.sock:
+                    with open(os.path.join(const.DOWNLOADIR, self.__validatename(self.filename)), 'wb') as file:
+                        while data := self.sock.recv(self.chunksize):
+                            file.write(data)
                 activitylog(f'::recieved file from {self.sock.getpeername()}')
                 with open(self.filename, 'rb') as file:
                     self.file = file

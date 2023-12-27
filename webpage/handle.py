@@ -2,7 +2,6 @@ import websockets
 
 from core import *
 import main
-from core import constants as const
 
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
@@ -12,11 +11,12 @@ SafeEnd = asyncio.Event()
 def send_message(text, ip):
     print('send_message --- ', ip, text)
     ip = eval(ip)
-    const.OBJ.send(ip, text)
+    if const.OBJ.send(ip, text):
+        print('sent msg successfully')
     return
 
 
-def send_file(ip, _path):
+def send_file(_path,ip):
     print('send_file --- ', ip, _path)
     ip = eval(ip)
     const.OBJ.send_file(ip, _path)
@@ -26,19 +26,23 @@ def send_file(ip, _path):
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
-        try:
-            _data = await web_socket.recv()
-            print("data from page :", _data)
-            _data = _data.split('_/!_')
-            if _data[0] == 'thisisamessage':
-                send_message(*_data[1].split('~^~'))
-            elif _data[0] == 'thisisafile':
-                send_file(*_data[1].split('~^~'))
-            elif _data[0] == 'thisisacommand':
-                if _data[1] == 'endprogram':
-                    await asyncio.create_task(main.endsession(0, 0))
-        except asyncio.CancelledError:
-            break
+        # try:
+        _data = await web_socket.recv()
+        print("data from page :", _data)
+        _data = _data.split('_/!_')
+        if _data[0] == 'thisisamessage':
+            send_message(*_data[1].split('~^~'))
+        elif _data[0] == 'thisisafile':
+            send_file(*_data[1].split('~^~'))
+        elif _data[0] == 'thisisacommand':
+            if _data[1] == 'endprogram':
+                await asyncio.create_task(main.endsession(0, 0))
+            if _data[1] == 'connectuser':
+                pass
+    # except Exception as webexp:
+    #     print('got Exception at getdata():',webexp)
+    #     await asyncio.create_task(main.endsession(0, 0))
+    #     break
     return
 
 
@@ -69,6 +73,7 @@ async def handler(_websocket):
         await web_socket.send(userdata.decode(const.FORMAT))
     const.SAFELOCKFORPAGE = True
     const.WEBSOCKET = web_socket
+    const.HANDLECALL.set()
     await getdata()
     print('handler ended')
 
@@ -79,7 +84,6 @@ def initiatecontrol():
     asyncio.set_event_loop(asyncio.new_event_loop())
     _startserver = websockets.serve(handler, "localhost", const.PAGEPORT)
     asyncio.get_event_loop().run_until_complete(_startserver)
-    const.HANDLECALL.set()
     asyncio.get_event_loop().run_forever()
 
 
@@ -94,15 +98,15 @@ async def feeduserdata(data: bytes = b'', ip: tuple = tuple()):
     pass
 
 
-async def feedserverdata(peer, status):
+async def feedserverdata(peer):
     global web_socket, serverdatalock
     with serverdatalock:
         _ip = peer.uri[0]
         _port = peer.uri[1]
-        data = f'thisisacommand_/!_{status}_/!_{peer.username}(^){_ip}:{_port}'
+        data = f'thisisacommand_/!_{peer.status}_/!_{peer.username}(^){_ip}~{_port}'
         print("data :", data)
         try:
-            await web_socket.send(data)
+            await const.WEBSOCKET.send(data)
         except Exception as e:
             # logs.errorlog(f"Error sending data: {e}")
             print(f" handle.py line 97 Error sending data: {e}")

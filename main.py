@@ -21,10 +21,10 @@ async def end_session_async() -> bool:
     if const.OBJ:
         const.OBJ.end()
 
+    connectserver.endconnection()
+
     if const.SAFELOCKFORPAGE:
         await handle.end()
-
-    connectserver.endconnection()
 
     return True
 
@@ -50,11 +50,9 @@ def initiate() -> int:
     if not const.set_constants():
         print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
         errorlog("::CONFIG AND CONSTANTS NOT SET EXITING ...")
-        return -1
-
     try:
-        # connectserver.initiateconnection()
         const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
+        connectserver.initiateconnection()
         const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.initiate)
         handle.initiatecontrol()
     except Exception as e:

@@ -1,6 +1,7 @@
 import json
 import pickle
 import socket
+import struct
 
 import select
 from core import *
@@ -25,8 +26,8 @@ class Nomad:
         print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
         self.safestop = True
-        const.REMOTEOBJECT = RemotePeer(const.USERNAME, self.address)
-        self.peersock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        const.REMOTEOBJECT = RemotePeer(const.USERNAME, ip, port, 1)
+        self.peersock = socket.socket(const.IPVERSION, const.PROTOCOL)
         self.peersock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.peersock.bind(self.address)
 
@@ -35,6 +36,8 @@ class Nomad:
         print("::Listening for connections at ", self.address)
         self.peersock.listen()
         while self.safestop:
+            if not isinstance(self.peersock, socket.socket):
+                continue
             readables, _, _ = select.select([self.peersock], [], [], 0.001)
             if self.peersock in readables:
                 try:
@@ -46,36 +49,37 @@ class Nomad:
                     errorlog(f"Socket error: {e}")
         return
 
-    def send(self, _touser:tuple[str,int], _data:str, filestatus=False):
+    def send(self, _touser: tuple[str, int], _data: str, filestatus=False):
         if filestatus:
             self.send_file(_touser, _data)
+
         for _ in range(const.MAXCALLBACKS):
 
             try:
-                send_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                send_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 send_sock.connect(_touser)
-                readables, _, _ = select.select([send_sock], [], [], 0.001)
-                if send_sock not in readables:
-                    continue
-                with send_sock:
-                    send_text = PeerText(send_sock, _data)
-                    return send_text.send()
-            except Exception as e:
-                time.sleep(1)
+                # readables, _, _ = select.select([send_sock], [], [], 0.001)
+                # if send_sock in readables:
+                return PeerText(send_sock, _data).send()
+                # break
+            except socket.error as err:
+                time.sleep(3)
+                if err.errno == 10054:
+                    return False
                 # errorlog(f"Error in sending data: {e}")
-                print(f"Error in sending data retrying... {e}")
+                print(f"Error in sending data retrying... {err}")
                 continue
 
         return False
 
-    def send_file(self, ip: tuple[str,int], filedata: str):
-        with self.peersock as sock:
-            sock.connect(ip)
-            PeerText(sock, const.CMDRECVFILE).send()
-            file = PeerFile(path=filedata, sock=sock)
-            if file.send_meta_data():
-                file.send_file()
-            sock.close()
+    def send_file(self, ip: tuple[str, int], filedata: str):
+        print("sendfile ip :",ip)
+        sendfile_sock = self.peersock = socket.socket(const.IPVERSION, const.PROTOCOL)
+        sendfile_sock.connect((ip[0],int(ip[1])))
+        PeerText(sendfile_sock, const.CMDRECVFILE).send()
+        file = PeerFile(path=filedata,sock=self.peersock)
+        if file.send_meta_data():
+            file.send_file()
         return
 
     @staticmethod
@@ -90,9 +94,16 @@ class Nomad:
     def end(self):
         self.safestop = False
         # asyncio.run(notifyusers())  # notify users that this user is going offline
+        Nomad.LOOPFLAG = False
         time.sleep(1)
         self.peersock.close()
         print("::Ending Nomad Object")
+
+    def __repr__(self):
+        return f'Nomad({self.address[0]}, {self.address[1]})'
+
+    def __str__(self):
+        return f'{const.USERNAME}~^~{self.address[0]}~^~{self.address[1]}'
 
 
 def recv_file(_conn: socket.socket, _lock: threading.Lock):
@@ -101,7 +112,9 @@ def recv_file(_conn: socket.socket, _lock: threading.Lock):
         print("::Closing connection from recv_file() from core/nomad at line 100")
         return
     getdata_file = PeerFile(sock=_conn)
-    if getdata_file.recv_meta_data(_lock):
+    with _lock:
+        st = getdata_file.recv_meta_data()
+    if st:
         getdata_file.recv_file()
     return
 
@@ -123,14 +136,14 @@ def recv_data(_conn: socket.socket):
                 recvdata_data = PeerText(_conn).receive()
             if not recvdata_data:
                 continue
-            print('data from peer :',_conn.getpeername(), recvdata_data)
+            print('data from peer :', _conn.getpeername(), recvdata_data)
             if recvdata_data.decode(const.FORMAT) == const.CMDCLOSINGHEADER:
                 _conn.close()
                 print("::Closing connection from recv_data() from core/nomad at line 124")
                 return True
             elif recvdata_data.decode(const.FORMAT) == const.CMDRECVFILE:
-                Nomad.start_thread(recv_file, args=(_conn,recvdata_file_sock_lock))
-                time.sleep(3)
+                recv_file(_conn, recvdata_file_sock_lock)
+                time.sleep(5)
 
             elif recvdata_data:
                 asyncio.run(handle.feeduserdata(recvdata_data, _conn.getpeername()))

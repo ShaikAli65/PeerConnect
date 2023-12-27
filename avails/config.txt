@@ -1,6 +1,0 @@
-[CONFIGURATIONS]
-username = admin
-thisport = 42513
-pageport = 12345
-serverport = 7070
-serverip = localhost

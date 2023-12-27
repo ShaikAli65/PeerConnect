@@ -12,10 +12,10 @@ class PeerText:
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
 
-    def __init__(self, sendsock: socket.socket, text: str = ''):
+    def __init__(self, refersock: socket.socket, text: str = ''):
         self.raw_text = text.encode(const.FORMAT)
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
-        self.sock = sendsock
+        self.sock = refersock
 
     def send(self) -> bool:
         """
@@ -25,7 +25,7 @@ class PeerText:
         - bool: True if the text was successfully sent; False otherwise.
 
         """
-        self.sock.send(self.text_len_encoded)
+        self.sock.sendall(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
         send_rawlength = self.sock.recv(4)
         send_length = struct.unpack('!I', send_rawlength)[0] if send_rawlength else 0
