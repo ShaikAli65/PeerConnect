@@ -19,30 +19,29 @@ def send_message(text, ip):
 def send_file(_path,ip):
     print('send_file --- ', ip, _path)
     ip = eval(ip)
-    const.OBJ.send_file(ip, _path)
-    return
+    return const.OBJ.send_file(ip, _path)
 
 
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
-        # try:
-        _data = await web_socket.recv()
-        print("data from page :", _data)
-        _data = _data.split('_/!_')
-        if _data[0] == 'thisisamessage':
-            send_message(*_data[1].split('~^~'))
-        elif _data[0] == 'thisisafile':
-            send_file(*_data[1].split('~^~'))
-        elif _data[0] == 'thisisacommand':
-            if _data[1] == 'endprogram':
-                await asyncio.create_task(main.endsession(0, 0))
-            if _data[1] == 'connectuser':
-                pass
-    # except Exception as webexp:
-    #     print('got Exception at getdata():',webexp)
-    #     await asyncio.create_task(main.endsession(0, 0))
-    #     break
+        try:
+            _data = await web_socket.recv()
+            print("data from page :", _data)
+            _data = _data.split('_/!_')
+            if _data[0] == 'thisisamessage':
+                send_message(*_data[1].split('~^~'))
+            elif _data[0] == 'thisisafile':
+                send_file(*_data[1].split('~^~'))
+            elif _data[0] == 'thisisacommand':
+                if _data[1] == 'endprogram':
+                    await asyncio.create_task(main.endsession(0, 0))
+                if _data[1] == 'connectuser':
+                    pass
+        except Exception as webexp:
+            print('got Exception at getdata():',webexp)
+            await asyncio.create_task(main.endsession(0, 0))
+            break
     return
 
 
@@ -104,7 +103,7 @@ async def feedserverdata(peer):
         _ip = peer.uri[0]
         _port = peer.uri[1]
         data = f'thisisacommand_/!_{peer.status}_/!_{peer.username}(^){_ip}~{_port}'
-        print("data :", data)
+        # print("data :", data)
         try:
             await const.WEBSOCKET.send(data)
         except Exception as e:

@@ -53,7 +53,7 @@ def initiate() -> int:
     try:
         const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
         connectserver.initiateconnection()
-        const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.initiate)
+        const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.commence)
         handle.initiatecontrol()
     except Exception as e:
         errorlog(f"::Exception in main.py: {e}")

@@ -13,7 +13,7 @@ class PeerFile:
         Ths Class Does Provide Error Handling Not Need To Be Handled At Calling Functions.
     """
 
-    def __init__(self, path: str = '', sock: socket.socket = None, chunksize: int = 4096, error_ext: str = '.invalid'):
+    def __init__(self, path: str = '', sock: socket.socket = None, chunksize: int = 2048, error_ext: str = '.invalid'):
         self.sock = sock
         self._lock = threading.Lock()
         self.chunksize = chunksize
@@ -54,7 +54,7 @@ class PeerFile:
                 return PeerText(self.sock).receive(const.FILESENDINTITATEHEADER)
             except Exception as e:
                 print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-                sendfile_sock.close()
+                sendfile_sock.close() if sendfile_sock else None
                 return False
 
     def recv_meta_data(self) -> bool:
@@ -70,7 +70,7 @@ class PeerFile:
                 recvfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 ipaddress = PeerText(self.sock).receive().decode(const.FORMAT).split('~')
                 ipaddress = (ipaddress[0], int(ipaddress[1]))
-                print("ip :",ipaddress)
+                # print("ip :",ipaddress)
                 if PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE):
                     connectstatus = True
                 time.sleep(0.2)
@@ -82,7 +82,7 @@ class PeerFile:
 
                 self.sock = recvfile_sock
                 self.path = os.path.join(const.DOWNLOADIR, self.filename)
-                print('::', self.filename, self.filesize, self.namelength, self.path)
+                # print('::', self.filename, self.filesize, self.namelength, self.path)
                 if self.namelength > 0:
                     PeerText(recvfile_sock, const.FILESENDINTITATEHEADER).send()
                     return True

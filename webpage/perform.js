@@ -10,7 +10,6 @@ division_viewerpov =   document.getElementById(   "prattle"   );
 searchbox          =   document.getElementById(   "search"    );
 headertile         =   document.getElementById( "headertile"  );
 viewname           =   document.getElementById("currentviewing");
-let senderdetail   =   "";
 let Usersviews     =   [];
 let countMessage   =   {};
 let users_list     =   [];
@@ -113,8 +112,7 @@ function recievedataFromPython(connecttocode_)
         else if (recievedata_[0] == "thisismyusername")
         {
             console.log("::Your user name :",recievedata_[1]);
-            senderdetail = recievedata_[1];
-            display_name.textContent = recievedata_[1];
+            display_name.textContent = recievedata_[1].split("(^)")[0];
         }
         else
             console.error('::Received unknown message :', event.data);
@@ -151,7 +149,6 @@ function endsession(connection)
     searchbox          = null
     headertile         = null
     viewname           = null
-    senderdetail       = null
     Usersviews         = null
     countMessage       = null
     users_list         = null

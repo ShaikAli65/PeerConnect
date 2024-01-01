@@ -1,15 +1,14 @@
-import socket
-
 from core import *
 import pickle
 
 
 class RemotePeer:
-    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, status: int = 0):
+    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088,reqport:int = 35896,status: int = 0):
         self.username = username
         self.uri = (ip, port)
         self.status = status
         self.callbacks = 0
+        self.requri = (ip,reqport)
 
     def serialize(self, tosend: socket.socket) -> bool:
         if self.callbacks > const.MAXCALLBACKS:
@@ -30,10 +29,15 @@ class RemotePeer:
 
     def __str__(self):
         return f'{self.username}~^~{self.uri[0]}~^~{self.uri[1]}'
+
     def __hash__(self) -> int:
         return hash(self.uri)
-    def __eq__(self, o: object) -> bool:
-        return self.uri == o.uri
+
+    def __eq__(self, obj) -> bool:
+        if not isinstance(obj, RemotePeer):
+            return NotImplemented
+        return self.uri == obj.uri
+
 
 def deserialize(torecv: socket.socket) -> RemotePeer:
     try:

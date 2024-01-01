@@ -12,6 +12,7 @@ PAGEPORT = 0
 SERVERPORT = 0
 SERVERIP = ''
 FILEPORT = 45210
+REQPORT = 35896
 
 CURRENTDIR = ''
 LOGDIR = ''
@@ -25,7 +26,6 @@ PROTOCOL = soc.SOCK_STREAM
 
 MAXCALLBACKS = 6
 OBJ = None
-SERVERTHREAD = None
 OBJTHREAD = None
 REMOTEOBJECT = None
 ACTIVEPEERS = []
@@ -41,6 +41,7 @@ FILESENDINTITATEHEADER = 'inititatefilesequence'
 TEXTSUCCESSHEADER = b'textstringrecvsuccess'
 CMDFILESOCKETCLOSE = 'thisisacommandtocore_/!_closefilesocket'
 SERVEROK = 'connectionaccepted'
+REQFORLIST = 'thisisarequestocore_/!_listofusers'
 
 
 def get_ip() -> str:
@@ -71,7 +72,6 @@ def get_ip() -> str:
         config_ip = soc.gethostbyname(soc.gethostname()) if IPVERSION == soc.AF_INET else soc.getaddrinfo(soc.gethostname(), None, IPVERSION)[0][4][0]
         errorlog(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
     finally:
-        print("config_ip :",config_ip)
         config_soc.close()
         return config_ip
 
@@ -97,15 +97,18 @@ def set_constants() -> bool:
         config_map.read(CONFIGPATH)
     except configparser.ParsingError as e:
         print('::got parsing error:',e)
+        return False
 
-    global USERNAME, SERVERPORT, SERVERIP
+    global USERNAME, SERVERIP
     USERNAME = config_map['CONFIGURATIONS']['username']
     SERVERIP = config_map['CONFIGURATIONS']['serverip']
-    SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
 
-    global THISPORT,PAGEPORT
+    global THISPORT,PAGEPORT,SERVERPORT,REQPORT,FILEPORT
+    SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
     THISPORT = int(config_map['NERDOPTIONS']['thisport'])
     PAGEPORT = int(config_map['NERDOPTIONS']['pageport'])
+    REQPORT = int(config_map['NERDOPTIONS']['reqport'])
+    FILEPORT = int(config_map['NERDOPTIONS']['fileport'])
 
     global PROTOCOL, IPVERSION, THISIP
     PROTOCOL = socket.SOCK_STREAM if config_map['NERDOPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
