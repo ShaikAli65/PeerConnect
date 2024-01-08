@@ -1,0 +1,3 @@
+2024-01-03 13:38:54,166 - INFO - ::Exception in main.py: [Errno 11001] getaddrinfo failed
+2024-01-08 18:25:51,286 - INFO - ::Exception in main.py: [Errno 11001] getaddrinfo failed
+2024-01-08 18:27:41,607 - INFO - ::Exception in main.py: no running event loop

@@ -1,8 +1,10 @@
 import websockets
+import json
 
+import core.textobject
 from core import *
 import main
-
+import core.nomad as nomad
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -11,15 +13,15 @@ SafeEnd = asyncio.Event()
 def send_message(text, ip):
     print('send_message --- ', ip, text)
     ip = eval(ip)
-    if const.OBJ.send(ip, text):
+    if nomad.send(ip, text):
         print('sent msg successfully')
     return
 
 
-def send_file(_path,ip):
+def send_file(_path, ip):
     print('send_file --- ', ip, _path)
     ip = eval(ip)
-    return const.OBJ.send_file(ip, _path)
+    return nomad.send_file(ip, _path)
 
 
 async def getdata():
@@ -39,7 +41,7 @@ async def getdata():
                 if _data[1] == 'connectuser':
                     pass
         except Exception as webexp:
-            print('got Exception at getdata():',webexp)
+            print('got Exception at getdata():', webexp)
             await asyncio.create_task(main.endsession(0, 0))
             break
     return
@@ -86,9 +88,13 @@ def initiatecontrol():
     asyncio.get_event_loop().run_forever()
 
 
-async def feeduserdata(data: bytes = b'', ip: tuple = tuple()):
+async def feeduserdata(data: core.textobject.PeerText, ip: tuple = tuple()):
     global web_socket
-    data = f'thisismessage_/!_{data.decode(const.FORMAT)}(^){ip}'
+    data = {
+        "header": "thisismessage",
+        "content": f"{data.decode()}",
+        "id": f"{data.id}",
+    }
     try:
         await web_socket.send(data)
     except Exception as e:

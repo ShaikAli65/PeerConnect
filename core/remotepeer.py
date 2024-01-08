@@ -1,3 +1,5 @@
+import random
+
 from core import *
 import pickle
 
@@ -9,6 +11,7 @@ class RemotePeer:
         self.status = status
         self.callbacks = 0
         self.requri = (ip,reqport)
+        self.id = str()
 
     def serialize(self, tosend: socket.socket) -> bool:
         if self.callbacks > const.MAXCALLBACKS:

@@ -2,6 +2,8 @@ import threading
 
 import select
 
+import core.remotepeer
+import main
 from core import *
 from core.textobject import PeerText
 import core.remotepeer as remote_peer
@@ -15,13 +17,16 @@ ErrorCalls = 0
 
 def intiallist(noofusers: int, initiate_socket):
     global ListOfPeer, Safe, ErrorCalls
+    countuser = 0
     if noofusers != 0:
         for _ in range(noofusers):
 
             try:
                 readables, _, _ = select.select([initiate_socket], [], [], 0.001)
                 if initiate_socket in readables:
-                    _nomad = remote_peer.deserialize(initiate_socket)
+                    _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
+                    _nomad.id = countuser
+                    countuser += 1
                     ListOfPeer.add(_nomad) if _nomad.status == 1 else ListOfPeer.discard(_nomad)
                     asyncio.run(handle.feedserverdata(_nomad))
 
@@ -80,6 +85,7 @@ def give_list():
 def initiateconnection():
     global ListOfPeer, Safe, ErrorCalls
     threading.Thread(target=give_list).start()
+    callcount = 0
     while not Safe.is_set():
 
         try:
@@ -103,11 +109,14 @@ def initiateconnection():
                     pass
             return True
         except socket.error as exp:
+            if callcount <= const.MAXCALLBACKS:
+                asyncio.run(main.endsession(0,0))
             # logs.serverlog(f"::Connection failed, retrying...{exp}", 1)
             print(f"::Connection failed, retrying...{exp}")
             if exp.errno == 10056:
                 return False
             time.sleep(5)
+            callcount += 1
 
 
 def endconnection():
@@ -125,3 +134,4 @@ def endconnection():
     except Exception as exp:
         # serverlog(f'::Failed disconnecting from server{exp}', 4)
         print(f'::Failed closing server{exp}')
+

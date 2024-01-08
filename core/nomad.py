@@ -134,13 +134,14 @@ def recv_data(_conn: socket.socket):
             if _conn not in readables:
                 continue
             with recvdata_sock_lock:
-                recvdata_data = PeerText(_conn).receive()
+                recvdata_data = PeerText(_conn)
+                recvdata_data.receive()
             print('data from peer :', recvdata_data)
-            if recvdata_data.decode(const.FORMAT) == const.CMDCLOSINGHEADER:
+            if recvdata_data.decode() == const.CMDCLOSINGHEADER:
                 _conn.close()
                 print("::Closing connection from recv_data() from core/nomad at line 124")
                 return True
-            elif recvdata_data.decode(const.FORMAT) == const.CMDRECVFILE:
+            elif recvdata_data.decode() == const.CMDRECVFILE:
                 # print("::Recieving file from :", _conn.getpeername())
                 recv_file(_conn, recvdata_sock_lock)
 

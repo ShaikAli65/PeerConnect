@@ -40,8 +40,8 @@ class PeerFile:
        """
         with self._lock:
             try:
-                PeerText(self.sock,const.CMDRECVFILE).send()
-                PeerText(self.sock,f'{const.THISIP}~{const.FILEPORT}').send()
+                PeerText(self.sock, const.CMDRECVFILE).send()
+                PeerText(self.sock, f'{const.THISIP}~{const.FILEPORT}').send()
                 sendfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 sendfile_sock.bind((const.THISIP, const.FILEPORT))
                 sendfile_sock.listen(2)
@@ -49,7 +49,7 @@ class PeerFile:
                 filesock, _ = sendfile_sock.accept()
                 self.sock = filesock
                 filesock.send(struct.pack('!Q', self.filesize))
-                PeerText(filesock,self.filename).send()
+                PeerText(filesock, self.filename).send()
                 time.sleep(0.1)
                 return PeerText(self.sock).receive(const.FILESENDINTITATEHEADER)
             except Exception as e:
@@ -103,13 +103,13 @@ class PeerFile:
                 try:
                     while data := self.file.read(self.chunksize):
                         sock.sendall(data)
-                    self.file.close()
                     activitylog(f'::sent file to {sock.getpeername()}')
                     return True
                 except Exception as e:
                     errorlog(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
-
                     return False
+                finally:
+                    self.file.close()
 
     def recv_file(self):
         """
@@ -156,7 +156,7 @@ class PeerFile:
         base, ext = os.path.splitext(fileaddr)
         counter = 1
         new_file_name = fileaddr
-        while os.path.exists(os.path.join(const.DOWNLOADIR,new_file_name)):
+        while os.path.exists(os.path.join(const.DOWNLOADIR, new_file_name)):
             new_file_name = f"{base}({counter}){ext}"
             counter += 1
         self.filename = os.path.basename(new_file_name)
@@ -186,3 +186,40 @@ class PeerFile:
             Returns the filename.
         """
         return self.filename
+
+
+"""
+import ftplib
+
+class PeerFile:
+    ...  # Existing class code
+
+    def send_file_ftp(self):
+
+
+
+        with self._lock:
+            try:
+                with ftplib.FTP(const.FTP_SERVER, const.FTP_USER, const.FTP_PASSWORD) as ftp:
+                    ftp.storbinary(f"STOR {self.filename}", self.file)
+                    activitylog(f'::sent file to {const.FTP_SERVER}')
+                    return True
+            except Exception as e:
+                errorlog(f'::got {e} at core\\__init__.py from self.send_file_ftp() closing connection')
+                return False
+
+    def recv_file_ftp(self):
+
+        with self._lock:
+            try:
+                with ftplib.FTP(const.FTP_SERVER, const.FTP_USER, const.FTP_PASSWORD) as ftp:
+                    with open(os.path.join(const.DOWNLOADIR, self.filename), 'wb') as file:
+                        ftp.retrbinary(f"RETR {self.filename}", file.write)
+                    activitylog(f'::received file from {const.FTP_SERVER}')
+                    self.file = file
+                    return True
+            except Exception as e:
+                errorlog(f'::got {e} at core\\__init__.py from self.recv_file_ftp() closing connection')
+                self.__file_error()
+                return False
+"""

@@ -16,6 +16,7 @@ class PeerText:
         self.raw_text = text.encode(const.FORMAT)
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.sock = refersock
+        self.id = const.REMOTEOBJECT.id
 
     def send(self) -> bool:
         """
@@ -54,6 +55,9 @@ class PeerText:
             if cmpstring:
                 return True if self.raw_text == cmpstring.encode(const.FORMAT) else False
         return self.raw_text if self.raw_text else False
+
+    def decode(self):
+        return self.raw_text.decode(const.FORMAT)
 
     def __str__(self):
         """
