@@ -93,7 +93,9 @@ def send(_touser: tuple[str, int], _data: str, filestatus=False):
             send_sock.connect(_touser)
             # readables, _, _ = select.select([send_sock], [], [], 0.001)
             # if send_sock in readables:
-            return PeerText(send_sock, _data).send()
+            status = PeerText(send_sock, _data).send()
+            send_sock.close()
+            return status
             # break
         except socket.error as err:
             time.sleep(3)

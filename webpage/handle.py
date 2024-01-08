@@ -96,10 +96,11 @@ async def feeduserdata(data: core.textobject.PeerText, ip: tuple = tuple()):
         "id": f"{data.id}",
     }
     try:
-        await web_socket.send(data)
+        await web_socket.send(json.dumps(data))
     except Exception as e:
         # logs.errorlog(f"Error sending data: {e}")
         print(f"handle.py line 83 Error sending data: {e}")
+        return
     pass
 
 
