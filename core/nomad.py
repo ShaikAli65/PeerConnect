@@ -11,7 +11,6 @@ from core.textobject import PeerText
 from logs import *
 from webpage import handle
 
-
 recvdata_sock_lock = threading.Lock()
 
 
@@ -23,27 +22,31 @@ class Nomad:
         print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
         self.safestop = True
-        const.REMOTEOBJECT = RemotePeer(const.USERNAME, ip, port,reqport=const.REQPORT, status=1)
-        self.peersock = socket.socket(const.IPVERSION, const.PROTOCOL)
-        self.peersock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.peersock.bind(self.address)
+        const.REMOTEOBJECT = RemotePeer(const.USERNAME, ip, port, reqport=const.REQPORT, status=1)
+        self.peer_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
+        self.peer_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.peer_sock.bind(self.address)
 
     def commence(self):
         const.HANDLECALL.wait()
         # print("::Listening for connections at ", self.address)
-        self.peersock.listen()
+        self.peer_sock.listen()
         while self.safestop:
-            if not isinstance(self.peersock, socket.socket):
+            if not isinstance(self.peer_sock, socket.socket):
                 continue
-            readables, _, _ = select.select([self.peersock], [], [], 0.001)
-            if self.peersock in readables:
+
+            readables, _, _ = select.select([self.peer_sock], [], [], 0.001)
+            if self.peer_sock in readables:
+
                 try:
-                    initiate_conn, _ = self.peersock.accept()
-                    activitylog(f"New connection from {_[0]}:{_[1]}")
+                    initiate_conn, _ = self.peer_sock.accept()
+                    # activitylog(f"New connection from {_[0]}:{_[1]}")
+                    print(f"New connection from {_[0]}:{_[1]}")
                     Nomad.currently_in_connection[initiate_conn] = True
-                    Nomad.start_thread(recv_data, args=(initiate_conn,))
+                    Nomad.start_thread(connectNew, args=(initiate_conn,))
                 except (socket.error, OSError) as e:
                     errorlog(f"Socket error: {e}")
+
         return
 
     @staticmethod
@@ -60,13 +63,14 @@ class Nomad:
         # asyncio.run(notifyusers())  # notify users that this user is going offline
         Nomad.currently_in_connection = dict.fromkeys(Nomad.currently_in_connection, False)
         time.sleep(1)
-        self.peersock.close()
+        self.peer_sock.close()
         print("::Ending Nomad Object")
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
 
 
+@NotInUse
 def notify_users():
     const.WEBSOCKET.send('thisisacommand_/!_sendlistofactivepeers')
     _data = json.loads(const.WEBSOCKET.recv())
@@ -76,7 +80,7 @@ def notify_users():
 def send_file(ip: tuple[str, int], filedata: str):
     sendfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
     sendfile_sock.connect(ip)
-    file = PeerFile(path=filedata,sock=sendfile_sock)
+    file = PeerFile(path=filedata, sock=sendfile_sock)
     if file.send_meta_data():
         return file.send_file()
     return False
@@ -122,12 +126,12 @@ def recv_file(_conn: socket.socket, _lock: threading.Lock):
     return
 
 
-def recv_data(_conn: socket.socket):
+def connectNew(_conn: socket.socket):
     global recvdata_sock_lock
     recv_timeout = 0
     while Nomad.currently_in_connection[_conn]:
         if recv_timeout >= 100:
-            print("::Closing connection from recv_data() from core/nomad at line 112")
+            print("::Closing connection from connectNew() from core/nomad at line 112")
             _conn.close()
             return False
 
@@ -138,28 +142,28 @@ def recv_data(_conn: socket.socket):
             with recvdata_sock_lock:
                 recvdata_data = PeerText(_conn)
                 recvdata_data.receive()
+                data = recvdata_data.decode()
             print('data from peer :', recvdata_data)
-            if recvdata_data.decode() == const.CMDCLOSINGHEADER:
+            if data == const.CMDCLOSINGHEADER:
                 _conn.close()
-                print("::Closing connection from recv_data() from core/nomad at line 124")
+                print("::Closing connection from connectNew() from core/nomad at line 124")
                 return True
-            elif recvdata_data.decode() == const.CMDRECVFILE:
+            elif data == const.CMDRECVFILE:
                 # print("::Recieving file from :", _conn.getpeername())
                 recv_file(_conn, recvdata_sock_lock)
 
-            elif recvdata_data:
+            elif data:
                 asyncio.run(handle.feeduserdata(recvdata_data, _conn.getpeername()))
-
             else:
-                time.sleep(5)
-                recv_timeout += 1
+                return
         except Exception as e:
-            errorlog(f"Error at recv_data() from core/nomad at line 140 :{e}")
+            # errorlog(f"Error at connectNew() from core/nomad at line 140 :{e}")
+            print("line 157", e)
             try:
                 PeerText(_conn, const.CMDCLOSINGHEADER).send() if _conn else None
                 _conn.close()
             except socket.error as e:
-                errorlog(f"Error at recv_data() in handling closing of client from core/nomad at line 144 :{e}")
+                errorlog(f"Error at connectNew() in handling closing of client from core/nomad at line 144 :{e}")
             return False
 
     return True

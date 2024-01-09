@@ -18,6 +18,7 @@ class PeerFile:
         self._lock = threading.Lock()
         self.chunksize = chunksize
         self.errorextension = error_ext
+        path = path.replace('\n','')
         if path == '':
             self.path = path
             self.file = None
@@ -195,8 +196,6 @@ class PeerFile:
     ...  # Existing class code
 
     def send_file_ftp(self):
-
-
 
         with self._lock:
             try:

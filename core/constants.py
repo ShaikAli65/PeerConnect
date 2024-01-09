@@ -32,7 +32,7 @@ ACTIVEPEERS = []
 HANDLECALL = threading.Event()
 SAFELOCKFORPAGE = False
 WEBSOCKET = None
-
+LISTOFPEERS = {}
 CMDSENDFILE = 'thisisacommandtocore_/!_sendafile'
 CMDRECVFILE = 'thisisacommandtocore_/!_recvafile'
 CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'

@@ -52,7 +52,7 @@ def initiate() -> int:
         errorlog("::CONFIG AND CONSTANTS NOT SET EXITING ...")
     try:
         const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
-        connectserver.initiateconnection()
+        connectserver.initiate_connection()
         const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.commence)
         handle.initiatecontrol()
     except Exception as e:

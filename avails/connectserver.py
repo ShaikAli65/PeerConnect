@@ -10,35 +10,40 @@ import core.remotepeer as remote_peer
 from webpage import handle
 from logs import *
 
-ListOfPeer = set()
 Safe = threading.Event()
 ErrorCalls = 0
 
 
-def intiallist(noofusers: int, initiate_socket):
-    global ListOfPeer, Safe, ErrorCalls
-    countuser = 0
-    if noofusers != 0:
-        for _ in range(noofusers):
+def initial_list(no_of_users: int, initiate_socket):
+    global Safe, ErrorCalls
+    initial_list_peer = const.LISTOFPEERS
+    count_of_user = 0
+    if no_of_users == 0:
+        return False
+    for _ in range(no_of_users):
 
-            try:
-                readables, _, _ = select.select([initiate_socket], [], [], 0.001)
-                if initiate_socket in readables:
-                    _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
-                    _nomad.id = countuser
-                    countuser += 1
-                    ListOfPeer.add(_nomad) if _nomad.status == 1 else ListOfPeer.discard(_nomad)
-                    asyncio.run(handle.feedserverdata(_nomad))
+        try:
+            readables, _, _ = select.select([initiate_socket], [], [], 0.001)
+            if initiate_socket not in readables:
+                continue
+            _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
+            _nomad.id = str(count_of_user)
+            if _nomad.status == 1:
+                initial_list_peer[count_of_user] = _nomad
+            else:
+                del initial_list_peer[count_of_user]
+            count_of_user += 1
+            asyncio.run(handle.feed_server_data(_nomad))
 
-            except socket.error as e:
-                errorlog("::Exception while recieving list of users:" + str(e))
-                if e.errno == 10054:
-                    time.sleep(5)
-                    endconnection()
+        except socket.error as e:
+            errorlog("::Exception while recieving list of users:" + str(e))
+            if e.errno == 10054:
+                time.sleep(5)
+                endconnection()
 
-                    # logs.serverlog(f"::Server disconnected retrycount :{_}", 4)
-                    initiateconnection()
-                    return False
+                # logs.serverlog(f"::Server disconnected retrycount :{_}", 4)
+                initiate_connection()
+                return False
 
     return True
 
@@ -58,7 +63,7 @@ def getlistfrom(initiate_socket):
             print(f"::Exception while recieving list of users: retrying... {e}")
             continue
 
-    return intiallist(struct.unpack('!Q', rawlength)[0], initiate_socket)
+    return initial_list(struct.unpack('!Q', rawlength)[0], initiate_socket)
 
 
 def give_list():
@@ -82,29 +87,29 @@ def give_list():
                     continue
 
 
-def initiateconnection():
+def initiate_connection():
     global ListOfPeer, Safe, ErrorCalls
     threading.Thread(target=give_list).start()
     callcount = 0
     while not Safe.is_set():
 
         try:
-            InitiateSocket = socket.socket(const.IPVERSION, const.PROTOCOL)
-            InitiateSocket.connect((const.SERVERIP, const.SERVERPORT))
-            const.REMOTEOBJECT.serialize(InitiateSocket)
-            if PeerText(InitiateSocket).receive(cmpstring=const.SERVEROK):
+            initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
+            initiate_connection_socket.connect((const.SERVERIP, const.SERVERPORT))
+            const.REMOTEOBJECT.serialize(initiate_connection_socket)
+            if PeerText(initiate_connection_socket).receive(cmpstring=const.SERVEROK):
                 # logs.serverlog('::Connection accepted by server', 2)
                 print('::Connection accepted by server')
-                threading.Thread(target=getlistfrom, args=(InitiateSocket,)).start()
+                threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
             else:
-                recv_list_user = remote_peer.deserialize(InitiateSocket)
+                recv_list_user = remote_peer.deserialize(initiate_connection_socket)
                 ListOfPeer.add(recv_list_user)
-                InitiateSocket.close()
-                InitiateSocket = socket.socket(const.IPVERSION, const.PROTOCOL)
-                InitiateSocket.connect(recv_list_user.requri)
-                PeerText(InitiateSocket, const.REQFORLIST).send()
-                print(f"::Connecting to {InitiateSocket.getpeername()}, getting list")
-                threading.Thread(target=getlistfrom, args=(InitiateSocket,)).start()
+                initiate_connection_socket.close()
+                initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
+                initiate_connection_socket.connect(recv_list_user.requri)
+                PeerText(initiate_connection_socket, const.REQFORLIST).send()
+                print(f"::Connecting to {initiate_connection_socket.getpeername()}, ...getting list")
+                threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
                 if recv_list_user.status == 1:
                     pass
             return True

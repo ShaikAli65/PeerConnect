@@ -24,6 +24,14 @@ def send_file(_path, ip):
     return nomad.send_file(ip, _path)
 
 
+def handle_connection(addr_id):
+    if not addr_id:
+        return
+    list_of_peer = const.LISTOFPEERS
+    _nomad = list_of_peer[addr_id]
+    pass
+
+
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
@@ -31,6 +39,22 @@ async def getdata():
             _data = await web_socket.recv()
             print("data from page :", _data)
             _data = _data.split('_/!_')
+            """
+            _data = json.loads()
+            _data_header = _data['header']
+            _data_content = _data['content']
+            _data_id = _data['id']
+            if _data_header == const.HANDLEMESSAGEHEADER:
+                pass
+            elif _data_header == const.HANDLEFILEHEADER:
+                pass
+            elif _data_header == const.HANDLECOMMAND:
+                pass
+                if _data_content == const.HANDLEND:
+                      await asyncio.create_task(main.endsession(0, 0))
+                if _data_content == const.HANDLECONNECTUSER:
+                      handle_connection(addr_id=_data_id)
+            """
             if _data[0] == 'thisisamessage':
                 send_message(*_data[1].split('~^~'))
             elif _data[0] == 'thisisafile':
@@ -39,6 +63,7 @@ async def getdata():
                 if _data[1] == 'endprogram':
                     await asyncio.create_task(main.endsession(0, 0))
                 if _data[1] == 'connectuser':
+                    handle_connection(addr_id="")
                     pass
         except Exception as webexp:
             print('got Exception at getdata():', webexp)
@@ -104,15 +129,25 @@ async def feeduserdata(data: core.textobject.PeerText, ip: tuple = tuple()):
     pass
 
 
-async def feedserverdata(peer):
+async def feed_server_data(peer):
     global web_socket, serverdatalock
     with serverdatalock:
         _ip = peer.uri[0]
         _port = peer.uri[1]
-        data = f'thisisacommand_/!_{peer.status}_/!_{peer.username}(^){_ip}~{_port}'
+        _data = f'thisisacommand_/!_{peer.status}_/!_{peer.username}(^){_ip}~{_port}'
+        """
+        _data = {
+            'header':const.HANDLECOMMAND,
+            'content':peer.username,
+            'id':peer.id             
+        }
+        
+        serialized_data = json.dumps(_data)
+        
+        """
         # print("data :", data)
         try:
-            await const.WEBSOCKET.send(data)
+            await const.WEBSOCKET.send(_data)
         except Exception as e:
             # logs.errorlog(f"Error sending data: {e}")
             print(f" handle.py line 97 Error sending data: {e}")
@@ -124,5 +159,5 @@ async def end():
     SafeEnd.set()
     print('::Page Disconnected Successfully')
     asyncio.get_event_loop().stop()
-    await web_socket.close()
+    await web_socket.close() if web_socket else None
     pass
