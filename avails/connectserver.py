@@ -1,8 +1,4 @@
-import threading
-
 import select
-
-import core.remotepeer
 import main
 from core import *
 from core.textobject import PeerText
@@ -50,7 +46,7 @@ def initial_list(no_of_users: int, initiate_socket):
 
 def getlistfrom(initiate_socket):
     const.HANDLECALL.wait()
-    global ListOfPeer, Safe, ErrorCalls
+    global Safe, ErrorCalls
     rawlength = 0
     for _ in range(const.MAXCALLBACKS):
         try:
@@ -75,7 +71,7 @@ def give_list():
         if list_soc not in readables:
             continue
         peer, addr = list_soc.accept()
-        for _nomad in ListOfPeer:
+        for _nomad in const.LISTOFPEERS.values():
             if not Safe.is_set():
                 return
             if _nomad.status == 1:
@@ -88,7 +84,7 @@ def give_list():
 
 
 def initiate_connection():
-    global ListOfPeer, Safe, ErrorCalls
+    global Safe, ErrorCalls
     threading.Thread(target=give_list).start()
     callcount = 0
     while not Safe.is_set():
@@ -103,7 +99,7 @@ def initiate_connection():
                 threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
             else:
                 recv_list_user = remote_peer.deserialize(initiate_connection_socket)
-                ListOfPeer.add(recv_list_user)
+                const.LISTOFPEERS.add(recv_list_user)
                 initiate_connection_socket.close()
                 initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
                 initiate_connection_socket.connect(recv_list_user.requri)
@@ -125,7 +121,7 @@ def initiate_connection():
 
 
 def endconnection():
-    global Safe, ListOfPeer
+    global Safe
     print('::Disconnecting from server')
     Safe.set()
     try:
@@ -134,7 +130,7 @@ def endconnection():
         EndSocket.connect((const.SERVERIP, const.SERVERPORT))
         if const.REMOTEOBJECT.serialize(EndSocket):
             EndSocket.close() if EndSocket else None
-        ListOfPeer.clear()
+        const.LISTOFPEERS.clear()
         Safe = threading.Event()
     except Exception as exp:
         # serverlog(f'::Failed disconnecting from server{exp}', 4)
