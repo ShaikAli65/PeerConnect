@@ -1,3 +1,5 @@
+import select
+
 from core import *
 
 
@@ -16,7 +18,7 @@ class PeerText:
         self.raw_text = text.encode(const.FORMAT)
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.sock = refersock
-        self.id = const.REMOTEOBJECT.id
+        self.id = ''
 
     def send(self) -> bool:
         """
@@ -30,8 +32,12 @@ class PeerText:
         self.sock.sendall(self.raw_text)
         send_rawlength = self.sock.recv(4)
         send_length = struct.unpack('!I', send_rawlength)[0] if send_rawlength else 0
-        if self.sock.recv(send_length) == const.TEXTSUCCESSHEADER:
-            return True
+        while True:
+            readables, _, _ = select.select([self.sock], [], [], 0.001)
+            if self.sock not in readables:
+                continue
+            if self.sock.recv(send_length) == const.TEXTSUCCESSHEADER:
+                return True
         return False
 
     def receive(self, cmpstring='') -> [bool, bytes]:
@@ -98,3 +104,9 @@ class PeerText:
 
         """
         return iter(self.raw_text)
+
+    def __eq__(self, other):
+        return self.raw_text == other
+
+    def __ne__(self, other):
+        return self.raw_text != other

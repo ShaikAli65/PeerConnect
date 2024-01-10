@@ -3,7 +3,7 @@ import socket as soc
 import threading
 import configparser
 import requests
-
+import core
 from logs import *
 
 USERNAME = ''
@@ -32,16 +32,21 @@ ACTIVEPEERS = []
 HANDLECALL = threading.Event()
 SAFELOCKFORPAGE = False
 WEBSOCKET = None
-LISTOFPEERS = {}
+LISTOFPEERS:dict = {}
 CMDSENDFILE = 'thisisacommandtocore_/!_sendafile'
-CMDRECVFILE = 'thisisacommandtocore_/!_recvafile'
-CMDCLOSINGHEADER = 'thisisacommandtocore_/!_closeconnection'
+CMDRECVFILE = b'thisisacommandtocore_/!_recvafile'
+CMDCLOSINGHEADER = b'thisisacommandtocore_/!_closeconnection'
 CMDFILESOCKETHANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
 FILESENDINTITATEHEADER = 'inititatefilesequence'
 TEXTSUCCESSHEADER = b'textstringrecvsuccess'
 CMDFILESOCKETCLOSE = 'thisisacommandtocore_/!_closefilesocket'
 SERVEROK = 'connectionaccepted'
 REQFORLIST = 'thisisarequestocore_/!_listofusers'
+HANDLEMESSAGEHEADER = 'thisisamessage'
+HANDLEND = 'endprogram'
+HANDLECOMMAND = 'thisisacommand'
+HANDLEFILEHEADER = 'thisisafile'
+HANDLECONNECTUSER = 'connectuser'
 
 
 def get_ip() -> str:
@@ -69,7 +74,8 @@ def get_ip() -> str:
                 data = response.json()
                 config_ip = data['ip']
     except soc.error as e:
-        config_ip = soc.gethostbyname(soc.gethostname()) if IPVERSION == soc.AF_INET else soc.getaddrinfo(soc.gethostname(), None, IPVERSION)[0][4][0]
+        config_ip = soc.gethostbyname(soc.gethostname()) if IPVERSION == soc.AF_INET else \
+        soc.getaddrinfo(soc.gethostname(), None, IPVERSION)[0][4][0]
         errorlog(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
     finally:
         config_soc.close()
@@ -96,14 +102,14 @@ def set_constants() -> bool:
     try:
         config_map.read(CONFIGPATH)
     except configparser.ParsingError as e:
-        print('::got parsing error:',e)
+        print('::got parsing error:', e)
         return False
 
     global USERNAME, SERVERIP
     USERNAME = config_map['CONFIGURATIONS']['username']
     SERVERIP = config_map['CONFIGURATIONS']['serverip']
 
-    global THISPORT,PAGEPORT,SERVERPORT,REQPORT,FILEPORT
+    global THISPORT, PAGEPORT, SERVERPORT, REQPORT, FILEPORT
     SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
     THISPORT = int(config_map['NERDOPTIONS']['thisport'])
     PAGEPORT = int(config_map['NERDOPTIONS']['pageport'])
@@ -113,7 +119,8 @@ def set_constants() -> bool:
     global PROTOCOL, IPVERSION, THISIP
     PROTOCOL = socket.SOCK_STREAM if config_map['NERDOPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
     IPVERSION = socket.AF_INET6 if config_map['NERDOPTIONS']['ipversion'] == '6' else socket.AF_INET
-    print('::configuration choices : ',USERNAME,':',THISPORT, SERVERIP,':',SERVERPORT,PAGEPORT,config_map['NERDOPTIONS']['protocol'], config_map['NERDOPTIONS']['ipversion'])
+    print('::configuration choices : ', USERNAME, ':', THISPORT, SERVERIP, ':', SERVERPORT, PAGEPORT,
+          config_map['NERDOPTIONS']['protocol'], config_map['NERDOPTIONS']['ipversion'])
     THISIP = get_ip()
 
     if USERNAME == '' or SERVERIP == '' or THISPORT == 0 or PAGEPORT == 0 or SERVERPORT == 0:

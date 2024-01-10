@@ -1,73 +1,92 @@
+import socket
+
 import websockets
 import json
-
+from collections import deque
 import core.textobject
 from core import *
 import main
 import core.nomad as nomad
+
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
 SafeEnd = asyncio.Event()
+focus_user_stack = deque()
 
 
-def send_message(text, ip):
-    print('send_message --- ', ip, text)
-    ip = eval(ip)
-    if nomad.send(ip, text):
-        print('sent msg successfully')
-    return
+async def send_message(content):
+    """
+    A Wrapper function to function at {nomad.send()}
+    Provides Error Handling And Ensures robustness of sending data.
+
+    :param content:
+    :return bool:
+    """
+    if not len(focus_user_stack):
+        return False
+    try:
+        peer_sock: socket.socket = focus_user_stack[0]
+        return nomad.send(peer_sock, content)
+    except socket.error as exp:
+        errorlog(f"got error at handle/send_message :{exp}")
+        return False
 
 
-def send_file(_path, ip):
-    print('send_file --- ', ip, _path)
-    ip = eval(ip)
-    return nomad.send_file(ip, _path)
+async def send_file(_path):
+    """
+    :param _path:
+    :return bool:
+    """
+    if not len(focus_user_stack):
+        return False
+    try:
+        peer_sock: socket.socket = focus_user_stack[0]
+        return nomad.send(peer_sock,_data=_path,filestatus=True)
+    except socket.error as exp:
+        errorlog(f"got error at handle/send_message :{exp}")
+        return False
 
 
-def handle_connection(addr_id):
+async def handle_connection(addr_id):
+    global focus_user_stack
     if not addr_id:
-        return
+        return False
     list_of_peer = const.LISTOFPEERS
-    _nomad = list_of_peer[addr_id]
-    pass
+    _nomad: core.remotepeer = list_of_peer[addr_id]
+    if _nomad.status == 0:
+        return False
+    focus_user_stack.pop()
+    peer_soc = socket.socket(const.IPVERSION, const.PROTOCOL)
+    peer_soc.connect(_nomad.uri)
+    focus_user_stack.append(peer_soc)
+    return True
 
 
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
         try:
-            _data = await web_socket.recv()
+            raw_data = await web_socket.recv()
+            _data = json.loads(raw_data)
             print("data from page :", _data)
-            _data = _data.split('_/!_')
-            """
-            _data = json.loads()
             _data_header = _data['header']
             _data_content = _data['content']
             _data_id = _data['id']
-            if _data_header == const.HANDLEMESSAGEHEADER:
-                pass
-            elif _data_header == const.HANDLEFILEHEADER:
-                pass
-            elif _data_header == const.HANDLECOMMAND:
-                pass
+            if _data_header == const.HANDLECOMMAND:
                 if _data_content == const.HANDLEND:
-                      await asyncio.create_task(main.endsession(0, 0))
-                if _data_content == const.HANDLECONNECTUSER:
-                      handle_connection(addr_id=_data_id)
-            """
-            if _data[0] == 'thisisamessage':
-                send_message(*_data[1].split('~^~'))
-            elif _data[0] == 'thisisafile':
-                send_file(*_data[1].split('~^~'))
-            elif _data[0] == 'thisisacommand':
-                if _data[1] == 'endprogram':
                     await asyncio.create_task(main.endsession(0, 0))
-                if _data[1] == 'connectuser':
-                    handle_connection(addr_id="")
-                    pass
+                # --
+                elif _data_content == const.HANDLECONNECTUSER:
+                    await handle_connection(addr_id=_data_id)
+            # --
+            elif _data_header == const.HANDLEMESSAGEHEADER:
+                await send_message(content=_data_content)
+            # --
+            elif _data_header == const.HANDLEFILEHEADER:
+                await send_file(_path=_data_content)
         except Exception as webexp:
             print('got Exception at getdata():', webexp)
-            await asyncio.create_task(main.endsession(0, 0))
+            # await asyncio.create_task(main.endsession(0, 0))
             break
     return
 
