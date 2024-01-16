@@ -1,16 +1,16 @@
-import socket
-
 import websockets
-import json
+import os
 from collections import deque
-import core.textobject
+import avails.textobject
 from core import *
 import main
 import core.nomad as nomad
+from avails import  remotepeer
 
 web_socket: websockets.WebSocketServerProtocol
 serverdatalock = threading.Lock()
 SafeEnd = asyncio.Event()
+stacksafe = threading.Lock()
 focus_user_stack = deque()
 
 
@@ -52,10 +52,10 @@ async def handle_connection(addr_id):
     if not addr_id:
         return False
     list_of_peer = const.LISTOFPEERS
-    _nomad: core.remotepeer = list_of_peer[addr_id]
+    _nomad: avails.remotepeer = list_of_peer[addr_id]
     if _nomad.status == 0:
         return False
-    focus_user_stack.pop()
+    focus_user_stack.pop() if not len(focus_user_stack) else None
     peer_soc = socket.socket(const.IPVERSION, const.PROTOCOL)
     peer_soc.connect(_nomad.uri)
     focus_user_stack.append(peer_soc)
@@ -65,29 +65,29 @@ async def handle_connection(addr_id):
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
-        try:
-            raw_data = await web_socket.recv()
-            _data = json.loads(raw_data)
-            print("data from page :", _data)
-            _data_header = _data['header']
-            _data_content = _data['content']
-            _data_id = _data['id']
-            if _data_header == const.HANDLECOMMAND:
-                if _data_content == const.HANDLEND:
-                    await asyncio.create_task(main.endsession(0, 0))
-                # --
-                elif _data_content == const.HANDLECONNECTUSER:
-                    await handle_connection(addr_id=_data_id)
+        # try:
+        raw_data = await web_socket.recv()
+        _data = json.loads(raw_data)
+        print("data from page :", _data)
+        _data_header = _data['header']
+        _data_content = _data['content']
+        _data_id = _data['id']
+        if _data_header == const.HANDLECOMMAND:
+            if _data_content == const.HANDLEND:
+                await asyncio.create_task(main.endsession(0, 0))
             # --
-            elif _data_header == const.HANDLEMESSAGEHEADER:
-                await send_message(content=_data_content)
-            # --
-            elif _data_header == const.HANDLEFILEHEADER:
-                await send_file(_path=_data_content)
-        except Exception as webexp:
-            print('got Exception at getdata():', webexp)
-            # await asyncio.create_task(main.endsession(0, 0))
-            break
+            elif _data_content == const.HANDLECONNECTUSER:
+                await handle_connection(addr_id=_data_id)
+        # --
+        elif _data_header == const.HANDLEMESSAGEHEADER:
+            await send_message(content=_data_content)
+        # --
+        elif _data_header == const.HANDLEFILEHEADER:
+            await send_file(_path=_data_content)
+        # except Exception as webexp:
+        #     print('got Exception at handle/getdata():', webexp)
+        #     # await asyncio.create_task(main.endsession(0, 0))
+        #     break
     return
 
 
@@ -120,7 +120,7 @@ async def handler(_websocket):
     const.WEBSOCKET = web_socket
     const.HANDLECALL.set()
     await getdata()
-    print('handler ended')
+    print('::handler ended')
 
 
 def initiatecontrol():
@@ -132,7 +132,7 @@ def initiatecontrol():
     asyncio.get_event_loop().run_forever()
 
 
-async def feeduserdata(data: core.textobject.PeerText, ip: tuple = tuple()):
+async def feed_user_data(data: avails.textobject.PeerText, ip: tuple = tuple()):
     global web_socket
     data = {
         "header": "thisismessage",
@@ -167,6 +167,7 @@ async def feed_server_data(peer):
         # print("data :", data)
         try:
             await const.WEBSOCKET.send(_data)
+
         except Exception as e:
             # logs.errorlog(f"Error sending data: {e}")
             print(f" handle.py line 97 Error sending data: {e}")

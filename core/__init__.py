@@ -1,15 +1,15 @@
-import socket
-import struct
 import threading
-import asyncio
+import avails.constants as const
+import socket
 import time
-
+import json
+import asyncio
+import struct
 from collections.abc import MutableSet
-import core.constants as const
-from logs import *
-from core import remotepeer
-from core import textobject
-from core import fileobject
+
+from logs import errorlog
+from logs import activitylog
+from logs import serverlog
 
 
 class Fluxuant(MutableSet):

@@ -1,8 +1,8 @@
 import select
 import main
 from core import *
-from core.textobject import PeerText
-import core.remotepeer as remote_peer
+from avails.textobject import PeerText
+import avails.remotepeer as remote_peer
 from webpage import handle
 from logs import *
 
@@ -64,8 +64,8 @@ def getlistfrom(initiate_socket):
 
 def give_list():
     list_soc = socket.socket(const.IPVERSION, const.PROTOCOL)
-    list_soc.bind((const.THISIP, const.REQPORT))
-    list_soc.listen(5)
+    # list_soc.bind((const.THISIP, const.REQPORT))
+    # list_soc.listen(5)
     while not Safe.is_set():
         readables, _, _ = select.select([list_soc], [], [], 0.001)
         if list_soc not in readables:
@@ -99,7 +99,7 @@ def initiate_connection():
                 threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
             else:
                 recv_list_user = remote_peer.deserialize(initiate_connection_socket)
-                const.LISTOFPEERS.add(recv_list_user)
+                # const.LISTOFPEERS.add(recv_list_user)
                 initiate_connection_socket.close()
                 initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
                 initiate_connection_socket.connect(recv_list_user.requri)
@@ -110,7 +110,7 @@ def initiate_connection():
                     pass
             return True
         except socket.error as exp:
-            if callcount <= const.MAXCALLBACKS:
+            if callcount >= const.MAXCALLBACKS:
                 asyncio.run(main.endsession(0,0))
             # logs.serverlog(f"::Connection failed, retrying...{exp}", 1)
             print(f"::Connection failed, retrying...{exp}")

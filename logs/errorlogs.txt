@@ -1,0 +1,14 @@
+2024-01-11 21:46:07,141 - INFO - ::Exception in main.py: no running event loop
+2024-01-15 21:04:36,887 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:07:10,130 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:09:56,852 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:14:01,772 - INFO - ::got 'bool' object has no attribute 'decode' at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:25:23,863 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:27:13,324 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:29:44,835 - INFO - ::got list index out of range at core\__init__.py from self.recv_meta_data() closing connection
+2024-01-15 21:38:53,963 - INFO - ::got [WinError 10038] An operation was attempted on something that is not a socket at core\__init__.py from self.recv_file() closing connection
+2024-01-15 21:40:20,382 - INFO - ::got [WinError 10038] An operation was attempted on something that is not a socket at core\__init__.py from self.recv_file() closing connection
+2024-01-15 21:41:41,443 - INFO - ::got [WinError 10038] An operation was attempted on something that is not a socket at core\__init__.py from self.recv_file() closing connection
+2024-01-16 15:00:20,008 - INFO - ::Exception in main.py: no running event loop
+2024-01-16 15:00:43,637 - INFO - ::Exception in main.py: no running event loop
+2024-01-16 15:01:05,095 - INFO - ::Exception in main.py: no running event loop

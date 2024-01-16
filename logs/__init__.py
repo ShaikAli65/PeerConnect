@@ -1,6 +1,6 @@
 import logging
 import os
-from core import constants
+from avails import constants
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 """

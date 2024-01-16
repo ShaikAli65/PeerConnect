@@ -14,11 +14,12 @@ class PeerText:
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
 
-    def __init__(self, refersock: socket.socket, text: str = ''):
-        self.raw_text = text.encode(const.FORMAT)
+    def __init__(self, refersock: socket.socket, text: str = '',byteable=True):
+        self.raw_text = text.encode(const.FORMAT) if byteable else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.sock = refersock
         self.id = ''
+        self.byteable = byteable
 
     def send(self) -> bool:
         """
@@ -54,7 +55,7 @@ class PeerText:
         """
         recieve_rawlength = self.sock.recv(4)
         recieve_text_length = struct.unpack('!I', recieve_rawlength)[0] if recieve_rawlength else 0
-        self.raw_text = self.sock.recv(recieve_text_length) if recieve_text_length else b''
+        self.raw_text = self.sock.recv(recieve_text_length) # if recieve_text_length else b''
         if self.raw_text:
             self.sock.send(struct.pack('!I', len(const.TEXTSUCCESSHEADER)))
             self.sock.sendall(const.TEXTSUCCESSHEADER)
@@ -110,3 +111,6 @@ class PeerText:
 
     def __ne__(self, other):
         return self.raw_text != other
+
+    def __hash__(self):
+        return hash(self.raw_text)

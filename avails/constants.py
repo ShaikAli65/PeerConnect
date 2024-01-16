@@ -3,7 +3,6 @@ import socket as soc
 import threading
 import configparser
 import requests
-import core
 from logs import *
 
 USERNAME = ''

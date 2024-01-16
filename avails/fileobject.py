@@ -1,5 +1,6 @@
+import os
 from core import *
-from core.textobject import PeerText
+from avails.textobject import PeerText
 
 
 class PeerFile:
@@ -41,7 +42,7 @@ class PeerFile:
        """
         with self._lock:
             try:
-                PeerText(self.sock, const.CMDRECVFILE).send()
+                PeerText(self.sock, const.CMDRECVFILE,byteable=False).send()
                 PeerText(self.sock, f'{const.THISIP}~{const.FILEPORT}').send()
                 sendfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 sendfile_sock.bind((const.THISIP, const.FILEPORT))
@@ -68,14 +69,12 @@ class PeerFile:
         """
         with self._lock:
             try:
-                recvfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                 ipaddress = PeerText(self.sock).receive().decode(const.FORMAT).split('~')
                 ipaddress = (ipaddress[0], int(ipaddress[1]))
-                # print("ip :",ipaddress)
-                if PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE):
-                    connectstatus = True
+                connectstatus = PeerText(self.sock).receive(const.CMDFILESOCKETHANDSHAKE)
                 time.sleep(0.2)
                 if connectstatus:
+                    recvfile_sock = socket.socket(const.IPVERSION, const.PROTOCOL)
                     recvfile_sock.connect(ipaddress)
                 self.filesize = struct.unpack('!Q', recvfile_sock.recv(8))[0]
                 self.filename = PeerText(recvfile_sock).receive().decode(const.FORMAT)

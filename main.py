@@ -3,8 +3,8 @@
 import signal
 import asyncio
 
-from avails import connectserver as connectserver
-from core import constants as const, nomad as nomad
+from avails import constants as const
+from core import nomad as nomad, connectserver as connectserver
 from webpage import handle
 from logs import *
 
