@@ -83,22 +83,18 @@ function recievedataFromPython(connecttocode_)
     const connectToCode_ = connecttocode_;
     connectToCode_.addEventListener('message', (event) => {
         console.log('::Received message :', event.data);                                       //*debug
-        var recievedata_ = event.data.split("_/!_");
-        if  (recievedata_[0] == "thisisamessage")
+        var recievedata_ = JSON.stringify(event.data)
+        if  (recievedata_.header == "thisisamessage")
         {
             recievedmessage(recievedata_[1]);
         }
-        else if (recievedata_[0] == "thisisafile")
+        else if (recievedata_.header == "thisisafile")
         {
             recievedmessage(recievedata_[1])
         }
-        else if (recievedata_[0] == 'thisisacommand')
+        else if (recievedata_.header == 'thisisacommand')
         {
-            if (recievedata_[1] == "no..username")
-            {
-                console.log("::No username recieved from python");
-            }
-            else if (recievedata_[1] == "0")
+            if (recievedata_[1] == "0")
             {
                 removeuser(recievedata_[2]);
                 console.log("::User leaving away :",recievedata_[2]);

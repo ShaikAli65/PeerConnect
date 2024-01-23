@@ -14,7 +14,7 @@ class RemotePeer:
         self.id = str()
 
     def serialize(self, tosend: socket.socket) -> bool:
-        if self.callbacks > const.MAXCALLBACKS:
+        if self.callbacks > const.MAX_CALL_BACKS:
             return False
         try:
             serialized = pickle.dumps(self)

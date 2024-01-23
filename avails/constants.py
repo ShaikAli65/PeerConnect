@@ -6,46 +6,48 @@ import requests
 from logs import *
 
 USERNAME = ''
-THISPORT = 0
-PAGEPORT = 0
-SERVERPORT = 0
-SERVERIP = ''
-FILEPORT = 45210
-REQPORT = 35896
+THIS_PORT = 0
+PAGE_PORT = 0
+SERVER_PORT = 0
+SERVER_IP = ''
+FILE_PORT = 45210
+REQ_PORT = 35896
 
-CURRENTDIR = ''
-LOGDIR = ''
-CONFIGPATH = ''
-PAGEPATH = ''
+CURRENT_DIR = ''
+LOG_DIR = ''
+CONFIG_PATH = ''
+PAGE_PATH = ''
 DOWNLOADIR = ''
-THISIP = ''
+THIS_IP = ''
 FORMAT = 'utf-8'
-IPVERSION = soc.AF_INET
+IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 
-MAXCALLBACKS = 6
+MAX_CALL_BACKS = 6
 OBJ = None
-OBJTHREAD = None
-REMOTEOBJECT = None
-ACTIVEPEERS = []
-HANDLECALL = threading.Event()
-SAFELOCKFORPAGE = False
-WEBSOCKET = None
-LISTOFPEERS:dict = {}
-CMDSENDFILE = 'thisisacommandtocore_/!_sendafile'
-CMDRECVFILE = b'thisisacommandtocore_/!_recvafile'
-CMDCLOSINGHEADER = b'thisisacommandtocore_/!_closeconnection'
-CMDFILESOCKETHANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
-FILESENDINTITATEHEADER = 'inititatefilesequence'
-TEXTSUCCESSHEADER = b'textstringrecvsuccess'
-CMDFILESOCKETCLOSE = 'thisisacommandtocore_/!_closefilesocket'
-SERVEROK = 'connectionaccepted'
-REQFORLIST = 'thisisarequestocore_/!_listofusers'
-HANDLEMESSAGEHEADER = 'thisisamessage'
-HANDLEND = 'endprogram'
-HANDLECOMMAND = 'thisisacommand'
-HANDLEFILEHEADER = 'thisisafile'
-HANDLECONNECTUSER = 'connectuser'
+OBJ_THREAD = None
+REQUESTS_THREAD = None
+REMOTE_OBJECT = None
+ACTIVE_PEERS = []
+HANDLE_CALL = threading.Event()
+SAFE_LOCK_FOR_PAGE = False
+WEB_SOCKET = None
+LIST_OF_PEERS: dict = {}
+CMD_SEND_FILE = 'thisisacommandtocore_/!_sendafile'
+CMD_RECV_FILE = b'thisisacommandtocore_/!_recvafile'
+CMD_CLOSING_HEADER = b'thisisacommandtocore_/!_closeconnection'
+CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
+FILESEND_INTITATE_HEADER = 'inititatefilesequence'
+TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
+CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
+SERVER_OK = 'connectionaccepted'
+REQ_FOR_LIST = 'thisisarequestocore_/!_listofusers'
+HANDLE_MESSAGE_HEADER = 'thisisamessage'
+HANDLE_END = 'endprogram'
+HANDLE_COMMAND = 'thisisacommand'
+HANDLE_FILE_HEADER = 'thisisafile'
+HANDLE_CONNECT_USER = 'connectuser'
+CMD_NOTIFY_USER = 'thisisacommandtocore_/!_notifyuser'
 
 
 def get_ip() -> str:
@@ -60,10 +62,10 @@ def get_ip() -> str:
     Raises:
         soc.error: If a socket error occurs during connection.
     """
-    config_soc = soc.socket(IPVERSION, PROTOCOL)
+    config_soc = soc.socket(IP_VERSION, PROTOCOL)
     config_ip = 'localhost'
     try:
-        if IPVERSION == soc.AF_INET:
+        if IP_VERSION == soc.AF_INET:
             config_PUBILC_DNS = "1.1.1.1"
             config_soc.connect((config_PUBILC_DNS, 80))
             config_ip = config_soc.getsockname()[0]
@@ -73,8 +75,8 @@ def get_ip() -> str:
                 data = response.json()
                 config_ip = data['ip']
     except soc.error as e:
-        config_ip = soc.gethostbyname(soc.gethostname()) if IPVERSION == soc.AF_INET else \
-        soc.getaddrinfo(soc.gethostname(), None, IPVERSION)[0][4][0]
+        config_ip = soc.gethostbyname(soc.gethostname()) if IP_VERSION == soc.AF_INET else \
+            soc.getaddrinfo(soc.gethostname(), None, IP_VERSION)[0][4][0]
         errorlog(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
     finally:
         config_soc.close()
@@ -90,39 +92,39 @@ def set_constants() -> bool:
     Returns:
         bool: True if configuration values were set successfully, False otherwise.
     """
-    global CONFIGPATH, CURRENTDIR, LOGDIR, PAGEPATH, DOWNLOADIR
-    CURRENTDIR = os.path.join(os.getcwd())
-    CONFIGPATH = os.path.join(CURRENTDIR, 'avails', 'config.ini')
-    LOGDIR = os.path.join(CURRENTDIR, 'logs')
-    PAGEPATH = os.path.join(CURRENTDIR, 'webpage')
-    DOWNLOADIR = os.path.join(CURRENTDIR, 'downloads')
+    global CONFIG_PATH, CURRENT_DIR, LOG_DIR, PAGE_PATH, DOWNLOADIR
+    CURRENT_DIR = os.path.join(os.getcwd())
+    CONFIG_PATH = os.path.join(CURRENT_DIR, 'avails', 'config.ini')
+    LOG_DIR = os.path.join(CURRENT_DIR, 'logs')
+    PAGE_PATH = os.path.join(CURRENT_DIR, 'webpage')
+    DOWNLOADIR = os.path.join(CURRENT_DIR, 'downloads')
 
     config_map = configparser.ConfigParser()
     try:
-        config_map.read(CONFIGPATH)
+        config_map.read(CONFIG_PATH)
     except configparser.ParsingError as e:
         print('::got parsing error:', e)
         return False
 
-    global USERNAME, SERVERIP
+    global USERNAME, SERVER_IP
     USERNAME = config_map['CONFIGURATIONS']['username']
-    SERVERIP = config_map['CONFIGURATIONS']['serverip']
+    SERVER_IP = config_map['CONFIGURATIONS']['serverip']
 
-    global THISPORT, PAGEPORT, SERVERPORT, REQPORT, FILEPORT
-    SERVERPORT = int(config_map['CONFIGURATIONS']['serverport'])
-    THISPORT = int(config_map['NERDOPTIONS']['thisport'])
-    PAGEPORT = int(config_map['NERDOPTIONS']['pageport'])
-    REQPORT = int(config_map['NERDOPTIONS']['reqport'])
-    FILEPORT = int(config_map['NERDOPTIONS']['fileport'])
+    global THIS_PORT, PAGE_PORT, SERVER_PORT, REQ_PORT, FILE_PORT
+    SERVER_PORT = int(config_map['CONFIGURATIONS']['serverport'])
+    THIS_PORT = int(config_map['NERDOPTIONS']['thisport'])
+    PAGE_PORT = int(config_map['NERDOPTIONS']['pageport'])
+    REQ_PORT = int(config_map['NERDOPTIONS']['reqport'])
+    FILE_PORT = int(config_map['NERDOPTIONS']['fileport'])
 
-    global PROTOCOL, IPVERSION, THISIP
+    global PROTOCOL, IP_VERSION, THIS_IP
     PROTOCOL = socket.SOCK_STREAM if config_map['NERDOPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
-    IPVERSION = socket.AF_INET6 if config_map['NERDOPTIONS']['ipversion'] == '6' else socket.AF_INET
-    print('::configuration choices : ', USERNAME, ':', THISPORT, SERVERIP, ':', SERVERPORT, PAGEPORT,
+    IP_VERSION = socket.AF_INET6 if config_map['NERDOPTIONS']['ipversion'] == '6' else socket.AF_INET
+    print('::configuration choices : ', USERNAME, ':', THIS_PORT, SERVER_IP, ':', SERVER_PORT, PAGE_PORT,
           config_map['NERDOPTIONS']['protocol'], config_map['NERDOPTIONS']['ipversion'])
-    THISIP = get_ip()
+    THIS_IP = get_ip()
 
-    if USERNAME == '' or SERVERIP == '' or THISPORT == 0 or PAGEPORT == 0 or SERVERPORT == 0:
+    if USERNAME == '' or SERVER_IP == '' or THIS_PORT == 0 or PAGE_PORT == 0 or SERVER_PORT == 0:
         errorlog(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
         return False
 

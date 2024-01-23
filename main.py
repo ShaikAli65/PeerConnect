@@ -4,7 +4,7 @@ import signal
 import asyncio
 
 from avails import constants as const
-from core import nomad as nomad, connectserver as connectserver
+from core import nomad as nomad, connectserver as connectserver, managerequests as manage_requests
 from webpage import handle
 from logs import *
 
@@ -23,7 +23,7 @@ async def end_session_async() -> bool:
 
     connectserver.endconnection()
 
-    if const.SAFELOCKFORPAGE:
+    if const.SAFE_LOCK_FOR_PAGE:
         await handle.end()
 
     return True
@@ -51,9 +51,10 @@ def initiate() -> int:
         print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
         errorlog("::CONFIG AND CONSTANTS NOT SET EXITING ...")
     try:
-        const.OBJ = nomad.Nomad(const.THISIP, const.THISPORT)
+        const.OBJ = nomad.Nomad(const.THIS_IP, const.THIS_PORT)
         connectserver.initiate_connection()
-        const.OBJTHREAD = const.OBJ.start_thread(const.OBJ.commence)
+        const.OBJ_THREAD = const.OBJ.start_thread(const.OBJ.commence)
+        const.REQUESTS_THREAD = const.OBJ.start_thread(manage_requests.control_user_management)
         handle.initiatecontrol()
     except Exception as e:
         errorlog(f"::Exception in main.py: {e}")

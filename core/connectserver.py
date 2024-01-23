@@ -12,7 +12,7 @@ ErrorCalls = 0
 
 def initial_list(no_of_users: int, initiate_socket):
     global Safe, ErrorCalls
-    initial_list_peer = const.LISTOFPEERS
+    initial_list_peer = const.LIST_OF_PEERS
     count_of_user = 0
     if no_of_users == 0:
         return False
@@ -45,10 +45,10 @@ def initial_list(no_of_users: int, initiate_socket):
 
 
 def getlistfrom(initiate_socket):
-    const.HANDLECALL.wait()
+    const.HANDLE_CALL.wait()
     global Safe, ErrorCalls
     rawlength = 0
-    for _ in range(const.MAXCALLBACKS):
+    for _ in range(const.MAX_CALL_BACKS):
         try:
             readables, _, _ = select.select([initiate_socket], [], [], 0.001)
             if initiate_socket in readables:
@@ -63,15 +63,15 @@ def getlistfrom(initiate_socket):
 
 
 def give_list():
-    list_soc = socket.socket(const.IPVERSION, const.PROTOCOL)
-    # list_soc.bind((const.THISIP, const.REQPORT))
+    list_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
+    # list_soc.bind((const.THIS_IP, const.REQ_PORT))
     # list_soc.listen(5)
     while not Safe.is_set():
         readables, _, _ = select.select([list_soc], [], [], 0.001)
         if list_soc not in readables:
             continue
         peer, addr = list_soc.accept()
-        for _nomad in const.LISTOFPEERS.values():
+        for _nomad in const.LIST_OF_PEERS.values():
             if not Safe.is_set():
                 return
             if _nomad.status == 1:
@@ -90,27 +90,27 @@ def initiate_connection():
     while not Safe.is_set():
 
         try:
-            initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
-            initiate_connection_socket.connect((const.SERVERIP, const.SERVERPORT))
-            const.REMOTEOBJECT.serialize(initiate_connection_socket)
-            if PeerText(initiate_connection_socket).receive(cmpstring=const.SERVEROK):
+            initiate_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+            initiate_connection_socket.connect((const.SERVER_IP, const.SERVER_PORT))
+            const.REMOTE_OBJECT.serialize(initiate_connection_socket)
+            if PeerText(initiate_connection_socket).receive(cmpstring=const.SERVER_OK):
                 # logs.serverlog('::Connection accepted by server', 2)
                 print('::Connection accepted by server')
                 threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
             else:
                 recv_list_user = remote_peer.deserialize(initiate_connection_socket)
-                # const.LISTOFPEERS.add(recv_list_user)
+                # const.LIST_OF_PEERS.add(recv_list_user)
                 initiate_connection_socket.close()
-                initiate_connection_socket = socket.socket(const.IPVERSION, const.PROTOCOL)
+                initiate_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
                 initiate_connection_socket.connect(recv_list_user.requri)
-                PeerText(initiate_connection_socket, const.REQFORLIST).send()
+                PeerText(initiate_connection_socket, const.REQ_FOR_LIST).send()
                 print(f"::Connecting to {initiate_connection_socket.getpeername()}, ...getting list")
                 threading.Thread(target=getlistfrom, args=(initiate_connection_socket,)).start()
                 if recv_list_user.status == 1:
                     pass
             return True
         except socket.error as exp:
-            if callcount >= const.MAXCALLBACKS:
+            if callcount >= const.MAX_CALL_BACKS:
                 asyncio.run(main.endsession(0,0))
             # logs.serverlog(f"::Connection failed, retrying...{exp}", 1)
             print(f"::Connection failed, retrying...{exp}")
@@ -125,12 +125,12 @@ def endconnection():
     print('::Disconnecting from server')
     Safe.set()
     try:
-        const.REMOTEOBJECT.status = 0
-        EndSocket = socket.socket(const.IPVERSION, const.PROTOCOL)
-        EndSocket.connect((const.SERVERIP, const.SERVERPORT))
-        if const.REMOTEOBJECT.serialize(EndSocket):
+        const.REMOTE_OBJECT.status = 0
+        EndSocket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+        EndSocket.connect((const.SERVER_IP, const.SERVER_PORT))
+        if const.REMOTE_OBJECT.serialize(EndSocket):
             EndSocket.close() if EndSocket else None
-        const.LISTOFPEERS.clear()
+        const.LIST_OF_PEERS.clear()
         Safe = threading.Event()
     except Exception as exp:
         # serverlog(f'::Failed disconnecting from server{exp}', 4)

@@ -12,3 +12,4 @@
 2024-01-16 15:00:20,008 - INFO - ::Exception in main.py: no running event loop
 2024-01-16 15:00:43,637 - INFO - ::Exception in main.py: no running event loop
 2024-01-16 15:01:05,095 - INFO - ::Exception in main.py: no running event loop
+2024-01-23 21:25:44,103 - INFO - ::Exception in main.py: no running event loop

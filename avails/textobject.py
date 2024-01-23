@@ -37,7 +37,7 @@ class PeerText:
             readables, _, _ = select.select([self.sock], [], [], 0.001)
             if self.sock not in readables:
                 continue
-            if self.sock.recv(send_length) == const.TEXTSUCCESSHEADER:
+            if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER:
                 return True
         return False
 
@@ -57,8 +57,8 @@ class PeerText:
         recieve_text_length = struct.unpack('!I', recieve_rawlength)[0] if recieve_rawlength else 0
         self.raw_text = self.sock.recv(recieve_text_length) # if recieve_text_length else b''
         if self.raw_text:
-            self.sock.send(struct.pack('!I', len(const.TEXTSUCCESSHEADER)))
-            self.sock.sendall(const.TEXTSUCCESSHEADER)
+            self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
+            self.sock.sendall(const.TEXT_SUCCESS_HEADER)
             if cmpstring:
                 return True if self.raw_text == cmpstring.encode(const.FORMAT) else False
         return self.raw_text if self.raw_text else False

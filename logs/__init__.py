@@ -13,8 +13,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 def serverlog(statustring: str, status: int):
-    os.makedirs(constants.LOGDIR, exist_ok=True)
-    file_path = os.path.join(constants.LOGDIR, 'serverlogs.txt')
+    os.makedirs(constants.LOG_DIR, exist_ok=True)
+    file_path = os.path.join(constants.LOG_DIR, 'serverlogs.txt')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -38,8 +38,8 @@ def serverlog(statustring: str, status: int):
 
 
 def activitylog(statustring: str):
-    os.makedirs(constants.LOGDIR, exist_ok=True)
-    file_path = os.path.join(constants.LOGDIR, 'activitylogs.txt')
+    os.makedirs(constants.LOG_DIR, exist_ok=True)
+    file_path = os.path.join(constants.LOG_DIR, 'activitylogs.txt')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -54,8 +54,8 @@ def activitylog(statustring: str):
 
 
 def errorlog(statustring: str):
-    os.makedirs(constants.LOGDIR, exist_ok=True)
-    file_path = os.path.join(constants.LOGDIR, 'errorlogs.txt')
+    os.makedirs(constants.LOG_DIR, exist_ok=True)
+    file_path = os.path.join(constants.LOG_DIR, 'errorlogs.txt')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
