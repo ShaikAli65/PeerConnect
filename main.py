@@ -4,7 +4,9 @@ import signal
 import asyncio
 
 from avails import constants as const
-from core import nomad as nomad, connectserver as connectserver, managerequests as manage_requests
+from core import nomad as nomad
+from core import connectserver as connect_server
+from core import managerequests as manage_requests
 from webpage import handle
 from logs import *
 
@@ -21,15 +23,13 @@ async def end_session_async() -> bool:
     if const.OBJ:
         const.OBJ.end()
 
-    connectserver.endconnection()
-
-    if const.SAFE_LOCK_FOR_PAGE:
-        await handle.end()
-
+    connect_server.end_connection()
+    await handle.end()
+    print("::Page Ended")
     return True
 
 
-async def endsession(signum, frame) -> None:
+async def _(signum, frame) -> None:
     """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
 
     Args:
@@ -52,10 +52,10 @@ def initiate() -> int:
         errorlog("::CONFIG AND CONSTANTS NOT SET EXITING ...")
     try:
         const.OBJ = nomad.Nomad(const.THIS_IP, const.THIS_PORT)
-        connectserver.initiate_connection()
+        connect_server.initiate_connection()
         const.OBJ_THREAD = const.OBJ.start_thread(const.OBJ.commence)
-        const.REQUESTS_THREAD = const.OBJ.start_thread(manage_requests.control_user_management)
-        handle.initiatecontrol()
+        const.REQUESTS_THREAD = const.OBJ.start_thread(manage_requests.initiate)
+        handle.initiate_control()
     except Exception as e:
         errorlog(f"::Exception in main.py: {e}")
         print(f"::Exception in main.py: {e}")
@@ -67,7 +67,7 @@ def initiate() -> int:
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
 
-    signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(endsession(signum, frame)))
-    signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(endsession(signum, frame)))
+    signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(_(signum, frame)))
+    signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(_(signum, frame)))
     initiate()
     activitylog("::End Sequence Complete")

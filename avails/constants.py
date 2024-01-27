@@ -17,7 +17,7 @@ CURRENT_DIR = ''
 LOG_DIR = ''
 CONFIG_PATH = ''
 PAGE_PATH = ''
-DOWNLOADIR = ''
+DOWNLOAD_PATH = ''
 THIS_IP = ''
 FORMAT = 'utf-8'
 IP_VERSION = soc.AF_INET
@@ -33,6 +33,7 @@ HANDLE_CALL = threading.Event()
 SAFE_LOCK_FOR_PAGE = False
 WEB_SOCKET = None
 LIST_OF_PEERS: dict = {}
+
 CMD_SEND_FILE = 'thisisacommandtocore_/!_sendafile'
 CMD_RECV_FILE = b'thisisacommandtocore_/!_recvafile'
 CMD_CLOSING_HEADER = b'thisisacommandtocore_/!_closeconnection'
@@ -92,12 +93,12 @@ def set_constants() -> bool:
     Returns:
         bool: True if configuration values were set successfully, False otherwise.
     """
-    global CONFIG_PATH, CURRENT_DIR, LOG_DIR, PAGE_PATH, DOWNLOADIR
+    global CONFIG_PATH, CURRENT_DIR, LOG_DIR, PAGE_PATH, DOWNLOAD_PATH
     CURRENT_DIR = os.path.join(os.getcwd())
     CONFIG_PATH = os.path.join(CURRENT_DIR, 'avails', 'config.ini')
     LOG_DIR = os.path.join(CURRENT_DIR, 'logs')
     PAGE_PATH = os.path.join(CURRENT_DIR, 'webpage')
-    DOWNLOADIR = os.path.join(CURRENT_DIR, 'downloads')
+    DOWNLOAD_PATH = os.path.join(CURRENT_DIR, 'downloads')
 
     config_map = configparser.ConfigParser()
     try:
@@ -111,17 +112,24 @@ def set_constants() -> bool:
     SERVER_IP = config_map['CONFIGURATIONS']['serverip']
 
     global THIS_PORT, PAGE_PORT, SERVER_PORT, REQ_PORT, FILE_PORT
-    SERVER_PORT = int(config_map['CONFIGURATIONS']['serverport'])
-    THIS_PORT = int(config_map['NERDOPTIONS']['thisport'])
-    PAGE_PORT = int(config_map['NERDOPTIONS']['pageport'])
-    REQ_PORT = int(config_map['NERDOPTIONS']['reqport'])
-    FILE_PORT = int(config_map['NERDOPTIONS']['fileport'])
+    SERVER_PORT = int(config_map['CONFIGURATIONS']['server_port'])
+    THIS_PORT = int(config_map['NERD_OPTIONS']['this_port'])
+    PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])
+    REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
+    FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
 
     global PROTOCOL, IP_VERSION, THIS_IP
-    PROTOCOL = socket.SOCK_STREAM if config_map['NERDOPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
-    IP_VERSION = socket.AF_INET6 if config_map['NERDOPTIONS']['ipversion'] == '6' else socket.AF_INET
-    print('::configuration choices : ', USERNAME, ':', THIS_PORT, SERVER_IP, ':', SERVER_PORT, PAGE_PORT,
-          config_map['NERDOPTIONS']['protocol'], config_map['NERDOPTIONS']['ipversion'])
+    PROTOCOL = socket.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
+    IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
+    print('======:configuration choices===================')
+    print("USERNAME:", USERNAME, end='\t\t')
+    print("THIS_PORT:", THIS_PORT)
+    print("SERVER_IP:", SERVER_IP, end='\t\t')
+    print("SERVER_PORT:", SERVER_PORT)
+    print("PAGE_PORT:", PAGE_PORT, end='\t\t')
+    print("PROTOCOL:", config_map['NERD_OPTIONS']['protocol'])
+    print("IP_VERSION:", config_map['NERD_OPTIONS']['ip_version'])
+    print("===============================================")
     THIS_IP = get_ip()
 
     if USERNAME == '' or SERVER_IP == '' or THIS_PORT == 0 or PAGE_PORT == 0 or SERVER_PORT == 0:

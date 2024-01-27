@@ -31,11 +31,11 @@ class PeerText:
         """
         self.sock.sendall(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
-        send_rawlength = self.sock.recv(4)
-        send_length = struct.unpack('!I', send_rawlength)[0] if send_rawlength else 0
+        send_raw_length = self.sock.recv(4)
+        send_length = struct.unpack('!I', send_raw_length)[0] if send_raw_length else 0
         while True:
-            readables, _, _ = select.select([self.sock], [], [], 0.001)
-            if self.sock not in readables:
+            readable, _, _ = select.select([self.sock], [], [], 0.001)
+            if self.sock not in readable:
                 continue
             if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER:
                 return True

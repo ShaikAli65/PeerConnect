@@ -1,6 +1,4 @@
 import os
-import socket
-import time
 
 from avails.remotepeer import RemotePeer
 from core import *
@@ -18,12 +16,12 @@ class PeerFile:
         Ths Class Does Provide Error Handling Not Need To Be Handled At Calling Functions.
     """
 
-    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunksize: int = 2048,
+    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 2048,
                  error_ext: str = '.invalid'):
         self.remote_obj: RemotePeer = obj
         self._lock = threading.Lock()
-        self.chunksize = chunksize
-        self.errorextension = error_ext
+        self.chunk_size = chunk_size
+        self.error_extension = error_ext
         self.sock = None
         path = path.replace('\n', '')
         if path == '':
@@ -31,8 +29,8 @@ class PeerFile:
             self.path = path
             self.file = None
             self.filename = ''
-            self.namelength = len(self.filename)
-            self.filesize = 0
+            self.name_length = len(self.filename)
+            self.file_size = 0
             return
         self.path = path
         self.file = open(path, 'rb')
@@ -60,7 +58,7 @@ class PeerFile:
         with self._lock:
             try:
                 self.filename = PeerText(self.sock).receive()
-                self.filesize = struct.unpack('!Q', self.sock.recv(8))[0]
+                self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
                 errorlog(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
@@ -75,7 +73,7 @@ class PeerFile:
         """
         with self._lock:
             try:
-                while data := self.file.read(self.chunksize):
+                while data := self.file.read(self.chunk_size):
                     self.sock.sendall(data)
                 activitylog(f'::sent file to {self.sock.getpeername()}')
                 return True
@@ -95,10 +93,10 @@ class PeerFile:
 
         with self._lock:
             try:
-                with open(os.path.join(const.DOWNLOADIR, self.__validatename(self.filename)), 'wb') as file:
-                    while data := self.sock.recv(self.chunksize):
+                with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
+                    while data := self.sock.recv(self.chunk_size):
                         file.write(data)
-                activitylog(f'::recieved file from {self.sock.getpeername()}')
+                activitylog(f'::received file from {self.sock.getpeername()}')
                 with open(self.filename, 'rb') as file:
                     self.file = file
                 return True
@@ -112,28 +110,28 @@ class PeerFile:
             Handles file errors by renaming the file with an error extension.
         """
         with self._lock:
-            os.rename(self.filename, self.filename + self.errorextension)
-            self.filename += self.errorextension
+            os.rename(self.filename, self.filename + self.error_extension)
+            self.filename += self.error_extension
         return True
 
-    def __validatename(self, fileaddr: str):
+    def __validatename(self, file_addr: str):
         """
             Ensures a unique filename if a file with the same name already exists.
 
             Args:
-                fileaddr (str): The original filename.
+                file addr (str): The original filename.
 
             Returns:
                 str: The validated filename, ensuring uniqueness.
         """
-        base, ext = os.path.splitext(fileaddr)
+        base, ext = os.path.splitext(file_addr)
         counter = 1
-        new_file_name = fileaddr
-        while os.path.exists(os.path.join(const.DOWNLOADIR, new_file_name)):
+        new_file_name = file_addr
+        while os.path.exists(os.path.join(const.DOWNLOAD_PATH, new_file_name)):
             new_file_name = f"{base}({counter}){ext}"
             counter += 1
         self.filename = os.path.basename(new_file_name)
-        self.namelength = len(self.filename)
+        self.name_length = len(self.filename)
         return new_file_name
 
     def __iter__(self):
@@ -152,7 +150,7 @@ class PeerFile:
         """
             Returns the file size.
         """
-        return self.filesize
+        return self.file_size
 
     def __str__(self):
         """
@@ -160,37 +158,3 @@ class PeerFile:
         """
         return self.filename
 
-
-"""
-import ftplib
-
-class PeerFile:
-    ...  # Existing class code
-
-    def send_file_ftp(self):
-
-        with self._lock:
-            try:
-                with ftplib.FTP(const.FTP_SERVER, const.FTP_USER, const.FTP_PASSWORD) as ftp:
-                    ftp.storbinary(f"STOR {self.filename}", self.file)
-                    activitylog(f'::sent file to {const.FTP_SERVER}')
-                    return True
-            except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.send_file_ftp() closing connection')
-                return False
-
-    def recv_file_ftp(self):
-
-        with self._lock:
-            try:
-                with ftplib.FTP(const.FTP_SERVER, const.FTP_USER, const.FTP_PASSWORD) as ftp:
-                    with open(os.path.join(const.DOWNLOADIR, self.filename), 'wb') as file:
-                        ftp.retrbinary(f"RETR {self.filename}", file.write)
-                    activitylog(f'::received file from {const.FTP_SERVER}')
-                    self.file = file
-                    return True
-            except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.recv_file_ftp() closing connection')
-                self.__file_error()
-                return False
-"""

@@ -5,12 +5,12 @@ import avails.textobject
 from core import *
 import main
 import core.nomad as nomad
-from avails import  remotepeer
+from avails import remotepeer
 
 web_socket: websockets.WebSocketServerProtocol
-serverdatalock = threading.Lock()
+server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
-stacksafe = threading.Lock()
+stack_safe = threading.Lock()
 focus_user_stack = deque()
 
 
@@ -41,7 +41,7 @@ async def send_file(_path):
         return False
     try:
         peer_remote_obj = focus_user_stack[0]
-        return nomad.send(peer_remote_obj,_data=_path,filestatus=True)
+        return nomad.send(peer_remote_obj, _data=_path, _file_status=True)
     except socket.error as exp:
         errorlog(f"got error at handle/send_message :{exp}")
         return False
@@ -74,7 +74,7 @@ async def getdata():
         _data_id = _data['id']
         if _data_header == const.HANDLE_COMMAND:
             if _data_content == const.HANDLE_END:
-                await asyncio.create_task(main.endsession(0, 0))
+                await asyncio.create_task(main._(0, 0))
             # --
             elif _data_content == const.HANDLE_CONNECT_USER:
                 await handle_connection(addr_id=_data_id)
@@ -86,7 +86,7 @@ async def getdata():
             await send_file(_path=_data_content)
         # except Exception as webexp:
         #     print('got Exception at handle/getdata():', webexp)
-        #     # await asyncio.create_task(main.endsession(0, 0))
+        #     # await asyncio.create_task(main._(0, 0))
         #     break
     return
 
@@ -114,8 +114,12 @@ async def handler(_websocket):
         await web_socket.send("thisisacommand_/!_no..username".encode(const.FORMAT))
         print("no username")
     else:
-        userdata = f"thisismyusername_/!_{const.USERNAME}(^){const.THIS_IP}".encode(const.FORMAT)
-        await web_socket.send(userdata.decode(const.FORMAT))
+        userdata = {
+            "header": "thisismyusername",
+            "content": f"{const.USERNAME}(^){const.THIS_IP}",
+            "id": "0"
+        }
+        await web_socket.send(json.dumps(userdata))
     const.SAFE_LOCK_FOR_PAGE = True
     const.WEB_SOCKET = web_socket
     const.HANDLE_CALL.set()
@@ -123,12 +127,12 @@ async def handler(_websocket):
     print('::handler ended')
 
 
-def initiatecontrol():
-    print('::Initiatecontrol called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
+def initiate_control():
+    print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
     os.system(f'cd {const.PAGE_PATH} && index.html')
     asyncio.set_event_loop(asyncio.new_event_loop())
-    _startserver = websockets.serve(handler, "localhost", const.PAGE_PORT)
-    asyncio.get_event_loop().run_until_complete(_startserver)
+    start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
+    asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
 
@@ -142,15 +146,15 @@ async def feed_user_data(data: avails.textobject.PeerText, ip: tuple = tuple()):
     try:
         await web_socket.send(json.dumps(data))
     except Exception as e:
-        # logs.errorlog(f"Error sending data: {e}")
+        errorlog(f"Error sending data: {e}")
         print(f"handle.py line 83 Error sending data: {e}")
         return
     pass
 
 
 async def feed_server_data(peer:avails.remotepeer.RemotePeer):
-    global web_socket, serverdatalock
-    with serverdatalock:
+    global web_socket, server_data_lock
+    with server_data_lock:
         _data = {
             'header':const.HANDLE_COMMAND,
             'content':peer.username,
@@ -160,10 +164,10 @@ async def feed_server_data(peer:avails.remotepeer.RemotePeer):
 
         # print("data :", data)
         try:
-            await const.WEB_SOCKET.send(_data)
+            await const.WEB_SOCKET.send(serialized_data)
 
         except Exception as e:
-            # logs.errorlog(f"Error sending data: {e}")
+            errorlog(f"Error sending data at handle.py/feed_server_data, exp: {e}")
             print(f" handle.py line 97 Error sending data: {e}")
         pass
 
@@ -171,7 +175,7 @@ async def feed_server_data(peer:avails.remotepeer.RemotePeer):
 async def end():
     global SafeEnd, web_socket
     SafeEnd.set()
-    print('::Page Disconnected Successfully')
     asyncio.get_event_loop().stop()
     await web_socket.close() if web_socket else None
+    print('::Page Disconnected Successfully')
     pass

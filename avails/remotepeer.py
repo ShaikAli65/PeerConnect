@@ -5,27 +5,27 @@ import pickle
 
 
 class RemotePeer:
-    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088,reqport:int = 35896,status: int = 0):
+    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, report:int = 35896, status: int = 0):
         self.username = username
         self.uri = (ip, port)
         self.status = status
         self.callbacks = 0
-        self.requri = (ip,reqport)
+        self.req_uri = (ip, report)
         self.id = str()
 
-    def serialize(self, tosend: socket.socket) -> bool:
+    def serialize(self, _to_send: socket.socket) -> bool:
         if self.callbacks > const.MAX_CALL_BACKS:
             return False
         try:
             serialized = pickle.dumps(self)
-            tosend.send(struct.pack('!Q', len(serialized)))
-            tosend.send(serialized)
+            _to_send.send(struct.pack('!Q', len(serialized)))
+            _to_send.send(serialized)
             return True
         except socket.error as e:
             print(f"::Exception while serializing retrying in 5sec: {e}")
             time.sleep(5)
             self.callbacks += 1
-            return self.serialize(tosend)
+            return self.serialize(_to_send)
 
     def __repr__(self):
         return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.status})'

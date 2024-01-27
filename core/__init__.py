@@ -1,5 +1,4 @@
 import threading
-import avails.constants as const
 import socket
 import time
 import json
@@ -7,9 +6,13 @@ import asyncio
 import struct
 from collections.abc import MutableSet
 
+import avails.constants as const
 from logs import errorlog
 from logs import activitylog
 from logs import serverlog
+from avails.fileobject import PeerFile
+from avails.remotepeer import RemotePeer
+from avails.textobject import PeerText
 
 
 class Fluxuant(MutableSet):
