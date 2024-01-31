@@ -10,16 +10,17 @@ class PeerText:
     Allows sending and receiving text/strings over sockets, managing text information,
     handling potential conflicts with sending/receiving texts, and providing string-like
     behavior for iteration and size retrieval.
-
+    The text is encoded in UTF-8 format, and stored as bytes,
+    all comparisons are done on the stored bytes.
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
 
-    def __init__(self, refersock: socket.socket, text: str = '',byteable=True):
+    def __init__(self, refer_sock: socket.socket, text: str = '', byteable=True):
         self.raw_text = text.encode(const.FORMAT) if byteable else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
-        self.sock = refersock
+        self.sock = refer_sock
         self.id = ''
-        self.byteable = byteable
+        self.byte_able = byteable
 
     def send(self) -> bool:
         """
@@ -53,9 +54,9 @@ class PeerText:
                         otherwise returns the received text as bytes.
 
         """
-        recieve_rawlength = self.sock.recv(4)
-        recieve_text_length = struct.unpack('!I', recieve_rawlength)[0] if recieve_rawlength else 0
-        self.raw_text = self.sock.recv(recieve_text_length) # if recieve_text_length else b''
+        receive_raw_length = self.sock.recv(4)
+        receive_text_length = struct.unpack('!I', receive_raw_length)[0] if receive_raw_length else 0
+        self.raw_text = self.sock.recv(receive_text_length)  # if receive_text_length else b''
         if self.raw_text:
             self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
             self.sock.sendall(const.TEXT_SUCCESS_HEADER)
@@ -65,6 +66,19 @@ class PeerText:
 
     def decode(self):
         return self.raw_text.decode(const.FORMAT)
+
+    def compare(self, cmp_string:bytes) -> bool:
+        """
+        Compare the stored text to a provided string.
+
+        Parameters:
+        - cmp_string (str): The string to compare to the stored text.
+
+        Returns:
+        - bool: True if the stored text matches cmp_string; False otherwise.
+
+        """
+        return self.raw_text == cmp_string
 
     def __str__(self):
         """

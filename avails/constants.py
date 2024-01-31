@@ -2,6 +2,8 @@ import socket
 import socket as soc
 import threading
 import configparser
+import time
+
 import requests
 from logs import *
 
@@ -12,25 +14,30 @@ SERVER_PORT = 0
 SERVER_IP = ''
 FILE_PORT = 45210
 REQ_PORT = 35896
-
 CURRENT_DIR = ''
 LOG_DIR = ''
 CONFIG_PATH = ''
 PAGE_PATH = ''
 DOWNLOAD_PATH = ''
 THIS_IP = ''
-FORMAT = 'utf-8'
+
 IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
-
+FORMAT = 'utf-8'
+count_of_user_id = 0
+user_id_lock = threading.Lock()
+anim_delay = 0.06
 MAX_CALL_BACKS = 6
+
 OBJ = None
 OBJ_THREAD = None
 REQUESTS_THREAD = None
 REMOTE_OBJECT = None
+SERVER_THREAD = None
 ACTIVE_PEERS = []
-HANDLE_CALL = threading.Event()
+PAGE_HANDLE_CALL = threading.Event()
 SAFE_LOCK_FOR_PAGE = False
+PRINT_LOCK = threading.Lock()
 WEB_SOCKET = None
 LIST_OF_PEERS: dict = {}
 
@@ -42,7 +49,7 @@ FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
 SERVER_OK = 'connectionaccepted'
-REQ_FOR_LIST = 'thisisarequestocore_/!_listofusers'
+REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'
 HANDLE_END = 'endprogram'
 HANDLE_COMMAND = 'thisisacommand'
@@ -78,10 +85,33 @@ def get_ip() -> str:
     except soc.error as e:
         config_ip = soc.gethostbyname(soc.gethostname()) if IP_VERSION == soc.AF_INET else \
             soc.getaddrinfo(soc.gethostname(), None, IP_VERSION)[0][4][0]
-        errorlog(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
+        error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
     finally:
         config_soc.close()
         return config_ip
+
+
+def is_port_empty(port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", port))
+            return True
+    except socket.error:
+        return False
+
+
+def validate_ports() -> None:
+    global THIS_PORT, PAGE_PORT, REQ_PORT, FILE_PORT
+    ports_list = [THIS_PORT, PAGE_PORT, REQ_PORT, FILE_PORT]
+    for i in range(len(ports_list)):
+        if is_port_empty(ports_list[i]):
+            continue
+        else:
+            while not is_port_empty(ports_list[i]):
+                ports_list[i] += 1
+            error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
+    THIS_PORT, PAGE_PORT, REQ_PORT, FILE_PORT = ports_list
+    return None
 
 
 def set_constants() -> bool:
@@ -117,23 +147,37 @@ def set_constants() -> bool:
     PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])
     REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
     FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
-
+    validate_ports()
+    time.sleep(0.1)
     global PROTOCOL, IP_VERSION, THIS_IP
     PROTOCOL = socket.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
     IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
-    print('======:configuration choices===================')
-    print("USERNAME:", USERNAME, end='\t\t')
-    print("THIS_PORT:", THIS_PORT)
-    print("SERVER_IP:", SERVER_IP, end='\t\t')
-    print("SERVER_PORT:", SERVER_PORT)
-    print("PAGE_PORT:", PAGE_PORT, end='\t\t')
-    print("PROTOCOL:", config_map['NERD_OPTIONS']['protocol'])
-    print("IP_VERSION:", config_map['NERD_OPTIONS']['ip_version'])
-    print("===============================================")
+
+    line_format = "{:<15} {:<10}"
+    with PRINT_LOCK:
+        print(':configuration choices=========================')
+        time.sleep(anim_delay)
+        print(line_format.format("USERNAME   :", USERNAME))
+        time.sleep(anim_delay)
+        print(line_format.format("THIS_PORT  :", THIS_PORT))
+        time.sleep(anim_delay)
+        print(line_format.format("SERVER_IP  :", SERVER_IP))
+        time.sleep(anim_delay)
+        print(line_format.format("SERVER_PORT:", SERVER_PORT))
+        time.sleep(anim_delay)
+        print(line_format.format("PAGE_PORT  :", PAGE_PORT))
+        time.sleep(anim_delay)
+        print(line_format.format("PROTOCOL   :", PROTOCOL))
+        time.sleep(anim_delay)
+        print(line_format.format("IP_VERSION :", IP_VERSION))
+        time.sleep(anim_delay)
+        print(line_format.format("REQ_PORT   :", REQ_PORT))
+        time.sleep(anim_delay)
+        print("===============================================")
     THIS_IP = get_ip()
 
     if USERNAME == '' or SERVER_IP == '' or THIS_PORT == 0 or PAGE_PORT == 0 or SERVER_PORT == 0:
-        errorlog(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
+        error_log(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
         return False
 
     return True

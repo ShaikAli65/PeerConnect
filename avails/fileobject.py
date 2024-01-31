@@ -50,7 +50,7 @@ class PeerFile:
                 self.sock = send_file_sock
                 return PeerText(send_file_sock, const.CMD_FILESOCKET_HANDSHAKE).send()
             except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+                error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
                 return False
 
     def recv_meta_data(self) -> bool:
@@ -61,7 +61,7 @@ class PeerFile:
                 self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
+                error_log(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
                 return False
 
     def send_file(self):
@@ -75,10 +75,10 @@ class PeerFile:
             try:
                 while data := self.file.read(self.chunk_size):
                     self.sock.sendall(data)
-                activitylog(f'::sent file to {self.sock.getpeername()}')
+                activity_log(f'::sent file to {self.sock.getpeername()}')
                 return True
             except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
+                error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
                 return False
             finally:
                 self.file.close()
@@ -96,12 +96,12 @@ class PeerFile:
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
-                activitylog(f'::received file from {self.sock.getpeername()}')
+                activity_log(f'::received file from {self.sock.getpeername()}')
                 with open(self.filename, 'rb') as file:
                     self.file = file
                 return True
             except Exception as e:
-                errorlog(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
+                error_log(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
                 self.__file_error()
                 return False
 

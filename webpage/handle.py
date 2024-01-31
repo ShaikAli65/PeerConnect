@@ -6,8 +6,10 @@ from core import *
 import main
 import core.nomad as nomad
 from avails import remotepeer
+from avails.dataweaver import DataWeaver as datawrap
 
-web_socket: websockets.WebSocketServerProtocol
+
+web_socket = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
 stack_safe = threading.Lock()
@@ -28,7 +30,7 @@ async def send_message(content):
         peer_sock: socket.socket = focus_user_stack[0]
         return nomad.send(peer_sock, content)
     except socket.error as exp:
-        errorlog(f"got error at handle/send_message :{exp}")
+        error_log(f"got error at handle/send_message :{exp}")
         return False
 
 
@@ -43,7 +45,7 @@ async def send_file(_path):
         peer_remote_obj = focus_user_stack[0]
         return nomad.send(peer_remote_obj, _data=_path, _file_status=True)
     except socket.error as exp:
-        errorlog(f"got error at handle/send_message :{exp}")
+        error_log(f"got error at handle/send_message :{exp}")
         return False
 
 
@@ -67,23 +69,21 @@ async def getdata():
     while not SafeEnd.is_set():
         # try:
         raw_data = await web_socket.recv()
-        _data = json.loads(raw_data)
-        print("data from page :", _data)
-        _data_header = _data['header']
-        _data_content = _data['content']
-        _data_id = _data['id']
-        if _data_header == const.HANDLE_COMMAND:
-            if _data_content == const.HANDLE_END:
-                await asyncio.create_task(main._(0, 0))
+        data = datawrap(byte_data=raw_data)
+        with const.PRINT_LOCK:
+            print("data from page :", data)
+        if data.match(_header=const.HANDLE_COMMAND):
+            if data.match(_content=const.HANDLE_END):
+                await asyncio.create_task(main.end_session_async())
             # --
-            elif _data_content == const.HANDLE_CONNECT_USER:
-                await handle_connection(addr_id=_data_id)
+            elif data.match(_content=const.HANDLE_CONNECT_USER):
+                await handle_connection(addr_id=data.id)
         # --
-        elif _data_header == const.HANDLE_MESSAGE_HEADER:
-            await send_message(content=_data_content)
+        elif data.match(_header=const.HANDLE_MESSAGE_HEADER):
+            await send_message(content=data.content)
         # --
-        elif _data_header == const.HANDLE_FILE_HEADER:
-            await send_file(_path=_data_content)
+        elif data.match(_header=const.HANDLE_FILE_HEADER):
+            await send_file(_path=data.content)
         # except Exception as webexp:
         #     print('got Exception at handle/getdata():', webexp)
         #     # await asyncio.create_task(main._(0, 0))
@@ -91,8 +91,8 @@ async def getdata():
     return
 
 
-@NotInUse
-async def setname(new_username):
+# @NotInUse
+async def set_name(new_username):
     _config_file_path = const.CONFIG_PATH
     const.USERNAME = new_username
     with open(_config_file_path, 'r') as file:
@@ -111,24 +111,26 @@ async def handler(_websocket):
     global web_socket, SafeEnd
     web_socket = _websocket
     if const.USERNAME == '':
-        await web_socket.send("thisisacommand_/!_no..username".encode(const.FORMAT))
-        print("no username")
+        userdata = datawrap(header="thisisacommand",
+                            content="no..username",)
+        await web_socket.send(userdata.dump())
+        # print("no username")
     else:
-        userdata = {
-            "header": "thisismyusername",
-            "content": f"{const.USERNAME}(^){const.THIS_IP}",
-            "id": "0"
-        }
-        await web_socket.send(json.dumps(userdata))
+        userdata = datawrap(header="thisismyusername",
+                            content=f"{const.USERNAME}(^){const.THIS_IP}",
+                            _id='0')
+        await web_socket.send(userdata.dump())
     const.SAFE_LOCK_FOR_PAGE = True
     const.WEB_SOCKET = web_socket
-    const.HANDLE_CALL.set()
+    const.PAGE_HANDLE_CALL.set()
     await getdata()
-    print('::handler ended')
+    with const.PRINT_LOCK:
+        print('::handler ended')
 
 
 def initiate_control():
-    print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
+    with const.PRINT_LOCK:
+        print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
     os.system(f'cd {const.PAGE_PATH} && index.html')
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
@@ -146,8 +148,7 @@ async def feed_user_data(data: avails.textobject.PeerText, ip: tuple = tuple()):
     try:
         await web_socket.send(json.dumps(data))
     except Exception as e:
-        errorlog(f"Error sending data: {e}")
-        print(f"handle.py line 83 Error sending data: {e}")
+        error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
         return
     pass
 
@@ -155,27 +156,25 @@ async def feed_user_data(data: avails.textobject.PeerText, ip: tuple = tuple()):
 async def feed_server_data(peer:avails.remotepeer.RemotePeer):
     global web_socket, server_data_lock
     with server_data_lock:
-        _data = {
-            'header':const.HANDLE_COMMAND,
-            'content':peer.username,
-            'id':peer.id
-        }
-        serialized_data = json.dumps(_data)
-
-        # print("data :", data)
+        _data = datawrap(header=const.HANDLE_COMMAND,
+                         content=peer.username,
+                         _id=peer.id)
         try:
-            await const.WEB_SOCKET.send(serialized_data)
+            await const.WEB_SOCKET.send(_data.dump())
 
         except Exception as e:
-            errorlog(f"Error sending data at handle.py/feed_server_data, exp: {e}")
-            print(f" handle.py line 97 Error sending data: {e}")
+            error_log(f"Error sending data at handle.py/feed_server_data, exp: {e}")
         pass
 
 
 async def end():
     global SafeEnd, web_socket
+    if web_socket is None:
+        return
     SafeEnd.set()
     asyncio.get_event_loop().stop()
-    await web_socket.close() if web_socket else None
-    print('::Page Disconnected Successfully')
+    await web_socket.close()
+    with const.PRINT_LOCK:
+        time.sleep(const.anim_delay)
+        print('::Page Disconnected Successfully')
     pass

@@ -1,9 +1,8 @@
-import select
-
 from core import *
 from logs import *
 from webpage import handle
 from core import managerequests as manage_requests
+import main
 
 
 class Nomad:
@@ -11,7 +10,9 @@ class Nomad:
     LOOP_FLAG = True
 
     def __init__(self, ip='localhost', port=8088):
-        print("::Initiating Nomad Object", ip, port)
+        with const.PRINT_LOCK:
+            time.sleep(const.anim_delay)
+            print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
         self.safe_stop = True
         const.REMOTE_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.REQ_PORT, status=1)
@@ -20,9 +21,11 @@ class Nomad:
         self.peer_sock.bind(self.address)
 
     def commence(self):
-        const.HANDLE_CALL.wait()
-        print("::Listening for connections at ", self.address)
+        with const.PRINT_LOCK:
+            time.sleep(const.anim_delay)
+            print("::Listening for connections at ", self.address)
         self.peer_sock.listen()
+        const.PAGE_HANDLE_CALL.wait()
         while self.safe_stop:
             if not isinstance(self.peer_sock, socket.socket):
                 continue
@@ -31,41 +34,40 @@ class Nomad:
                 continue
             try:
                 initiate_conn, _ = self.peer_sock.accept()
-                activitylog(f'New connection from {_[0]}:{_[1]}')
-                print(f"New connection from {_[0]}:{_[1]}")
+                activity_log(f'New connection from {_[0]}:{_[1]}')
+                with const.PRINT_LOCK:
+                    print(f"New connection from {_[0]}:{_[1]}")
                 Nomad.currently_in_connection[initiate_conn] = True
-                Nomad.start_thread(connectNew, args=(initiate_conn,))
+                main.start_thread(connectNew, args=(initiate_conn,))
             except (socket.error, OSError) as e:
-                errorlog(f"Socket error: {e}")
+                error_log(f"Socket error: {e}")
 
         return
 
-    @staticmethod
-    def start_thread(_target, args=()):
-        if len(args) != 0:
-            thread_recv = threading.Thread(target=_target, args=args)
-        else:
-            thread_recv = threading.Thread(target=_target, daemon=True)
-        thread_recv.start()
-        return thread_recv
-
     def end(self):
         self.safe_stop = False
-        manage_requests.notify_users()  # notify users that this user is going offline
         if Nomad:
             Nomad.currently_in_connection = dict.fromkeys(Nomad.currently_in_connection, False)
-        time.sleep(1)
         self.peer_sock.close() if self.peer_sock else None
-        print("::Nomad Object Ended")
+        try:
+            manage_requests.notify_users()  # notify users that this user is going offline
+        except Exception as e:
+            error_log(f"Error notifying users: {e}")
+        with const.PRINT_LOCK:
+            time.sleep(const.anim_delay)
+            print("::Nomad Object Ended")
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
 
     def __del__(self):
-        self.end()
+        try:
+            self.end()
+        except Exception:
+            return
 
 
-@NotInUse
+# @NotInUse
 def notify_users():
     const.WEB_SOCKET.send('thisisacommand_/!_sendlistofactivepeers')
     _data = json.loads(const.WEB_SOCKET.recv())
@@ -88,8 +90,9 @@ def send(_to_user_soc, _data: str, _file_status=False):
             time.sleep(3)
             if err.errno == 10054:
                 return False
-            errorlog(f"Error in sending data: {e}")
-            print(f"Error in sending data retrying... {err}")
+            error_log(f"Error in sending data: {err}")
+            with const.PRINT_LOCK:
+                print(f"Error in sending data retrying... {err}")
             continue
 
     return False
@@ -98,12 +101,11 @@ def send(_to_user_soc, _data: str, _file_status=False):
 def recv_file(_conn: socket.socket):
     Nomad.currently_in_connection[_conn] = True
     if not _conn:
-        print("::Closing connection from recv_file() from core/nomad at line 100")
+        with const.PRINT_LOCK:
+            print("::Closing connection from recv_file() from core/nomad at line 100")
         return
     getdata_file = PeerFile(recv_soc=_conn)
-    st = getdata_file.recv_meta_data()
-
-    if st:
+    if getdata_file.recv_meta_data():
         getdata_file.recv_file()
     return
 
@@ -117,11 +119,12 @@ def connectNew(_conn: socket.socket):
         with recv_sock_lock:
             connectNew_data = PeerText(_conn)
             connectNew_data.receive()
-        print('data from peer :', connectNew_data)
-        if connectNew_data.raw_text == const.CMD_CLOSING_HEADER:
+        with const.PRINT_LOCK:
+            print('data from peer :', connectNew_data)
+        if connectNew_data.compare(const.CMD_CLOSING_HEADER):
             disconnect_user(_conn)
             return True
-        elif connectNew_data.raw_text == const.CMD_RECV_FILE:
+        elif connectNew_data.compare(const.CMD_RECV_FILE):
             # asyncio.run(handle.feed_user_data(_conn, recvdata_sock_lock))
             threading.Thread(target=recv_file,args=(_conn,)).start()
         elif connectNew_data.raw_text:

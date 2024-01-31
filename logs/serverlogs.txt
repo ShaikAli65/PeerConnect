@@ -1,2 +1,55 @@
-2024-01-28 00:16:26,807 - INFO - ::Connection accepted by server connect
-2024-01-28 00:17:07,644 - INFO - ::Connection accepted by server connect
+2024-01-31 18:57:43,540 - INFO - ::Connection accepted by server connect
+2024-01-31 18:57:43,735 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 18:57:43,736 - INFO - server listening on [::1]:12260
+2024-01-31 18:57:44,857 - INFO - connection open
+2024-01-31 18:59:21,224 - INFO - ::Connection accepted by server connect
+2024-01-31 18:59:21,423 - INFO - server listening on [::1]:12260
+2024-01-31 18:59:21,423 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 18:59:22,540 - INFO - connection open
+2024-01-31 19:00:45,136 - INFO - ::Connection accepted by server connect
+2024-01-31 19:00:45,334 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 19:00:45,334 - INFO - server listening on [::1]:12260
+2024-01-31 19:00:46,457 - INFO - connection open
+2024-01-31 19:03:35,173 - INFO - ::Connection accepted by server connect
+2024-01-31 19:03:35,393 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 19:03:35,394 - INFO - server listening on [::1]:12260
+2024-01-31 19:03:36,384 - INFO - connection open
+2024-01-31 19:03:59,676 - ERROR - connection handler failed
+Traceback (most recent call last):
+  File "C:\Users\7862s\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\websockets\legacy\server.py", line 236, in handler
+    await self.ws_handler(self)
+  File "C:\Users\7862s\Desktop\remotezone\webpage\handle.py", line 126, in handler
+    await getdata()
+  File "C:\Users\7862s\Desktop\remotezone\webpage\handle.py", line 72, in getdata
+    data = datawrap(byte_data=raw_data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\7862s\Desktop\remotezone\avails\dataweaver.py", line 7, in __init__
+    self.data = json.loads(byte_data)
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2032.0_x64__qbz5n2kfra8p0\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2032.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2032.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2024-01-31 19:03:59,693 - INFO - connection closed
+2024-01-31 22:00:11,471 - INFO - ::Connection accepted by server connect
+2024-01-31 22:00:11,675 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 22:00:11,675 - INFO - server listening on [::1]:12260
+2024-01-31 22:00:20,032 - INFO - connection open
+2024-01-31 22:00:55,162 - INFO - ::Connection accepted by server connect
+2024-01-31 22:00:55,342 - INFO - server listening on [::1]:12260
+2024-01-31 22:00:55,342 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 22:00:58,479 - INFO - connection open
+2024-01-31 22:01:48,146 - ERROR - ::Failed disconnecting from server at server.py/end_connection, exp : [WinError 10061] No connection could be made because the target machine actively refused it
+2024-01-31 22:02:05,340 - INFO - ::Connection accepted by server connect
+2024-01-31 22:02:05,484 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 22:02:05,485 - INFO - server listening on [::1]:12260
+2024-01-31 22:02:08,968 - INFO - connection open
+2024-01-31 22:11:22,767 - INFO - ::Connection accepted by server connect
+2024-01-31 22:11:22,964 - INFO - server listening on [::1]:12260
+2024-01-31 22:11:22,964 - INFO - server listening on 127.0.0.1:12260
+2024-01-31 22:11:24,105 - INFO - connection open

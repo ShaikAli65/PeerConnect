@@ -4,12 +4,13 @@ import time
 import json
 import asyncio
 import struct
+import select
 from collections.abc import MutableSet
 
 import avails.constants as const
-from logs import errorlog
-from logs import activitylog
-from logs import serverlog
+from logs import error_log
+from logs import activity_log
+from logs import server_log
 from avails.fileobject import PeerFile
 from avails.remotepeer import RemotePeer
 from avails.textobject import PeerText

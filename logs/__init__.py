@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 """
 
 
-def serverlog(statustring: str, status: int):
+def server_log(status_string: str, status: int):
     os.makedirs(constants.LOG_DIR, exist_ok=True)
     file_path = os.path.join(constants.LOG_DIR, 'serverlogs.txt')
     file_handler = logging.FileHandler(file_path)
@@ -26,18 +26,18 @@ def serverlog(statustring: str, status: int):
     root_logger.addHandler(file_handler)
 
     if status == 1:
-        logging.debug(statustring)
+        logging.debug(status_string)
     elif status == 2:
-        logging.info(statustring)
+        logging.info(status_string)
     elif status == 3:
-        logging.warning(statustring)
+        logging.warning(status_string)
     elif status == 4:
-        logging.error(statustring)
+        logging.error(status_string)
     elif status == 5:
-        logging.critical(statustring)
+        logging.critical(status_string)
 
 
-def activitylog(statustring: str):
+def activity_log(status_string: str):
     os.makedirs(constants.LOG_DIR, exist_ok=True)
     file_path = os.path.join(constants.LOG_DIR, 'activitylogs.txt')
     file_handler = logging.FileHandler(file_path)
@@ -49,13 +49,15 @@ def activitylog(statustring: str):
         if isinstance(handler, logging.StreamHandler):
             root_logger.removeHandler(handler)
     root_logger.addHandler(file_handler)
-    logging.info(statustring)
+    logging.info(status_string)
     pass
 
 
-def errorlog(statustring: str):
+def error_log(status_string: str):
     os.makedirs(constants.LOG_DIR, exist_ok=True)
     file_path = os.path.join(constants.LOG_DIR, 'errorlogs.txt')
+    # with open(file_path, 'w') as f:
+    #     f.write('')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -65,5 +67,5 @@ def errorlog(statustring: str):
         if isinstance(handler, logging.StreamHandler):
             root_logger.removeHandler(handler)
     root_logger.addHandler(file_handler)
-    logging.info(statustring)
+    logging.info(status_string)
     pass

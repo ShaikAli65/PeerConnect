@@ -1,4 +1,9 @@
-2024-01-28 00:16:26,920 - INFO - ::Exception in main.py: [Errno 10048] error while attempting
- to bind on address ('::1', 12260, 0, 0):
-  only one usage of each socket address (protocol/network address/port) is normally permitted
-2024-01-28 00:17:07,768 - INFO - ::Exception in main.py: [Errno 10048] error while attempting to bind on address ('::1', 12260, 0, 0): only one usage of each socket address (protocol/network address/port) is normally permitted
+2024-01-31 18:57:38,258 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 18:59:16,559 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 19:00:40,893 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 19:02:26,684 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 19:04:05,774 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 22:00:37,137 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 22:01:45,987 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 22:10:59,433 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 22:11:45,507 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket

@@ -1,5 +1,3 @@
-import random
-
 from core import *
 import pickle
 
@@ -42,11 +40,11 @@ class RemotePeer:
         return self.uri == obj.uri
 
 
-def deserialize(torecv: socket.socket) -> RemotePeer:
+def deserialize(to_recv: socket.socket) -> RemotePeer:
     try:
-        rawlength = torecv.recv(8)
-        length = struct.unpack('!Q', rawlength)[0]
-        serialized = torecv.recv(length)
+        raw_length = to_recv.recv(8)
+        length = struct.unpack('!Q', raw_length)[0]
+        serialized = to_recv.recv(length)
         return pickle.loads(serialized)
     except Exception as e:
         print(f"::Exception while deserializing: {e}")

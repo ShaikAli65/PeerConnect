@@ -105,10 +105,10 @@ function recievedataFromPython(connecttocode_)
                 console.log("::User joined :",recievedata_[2]);
             }
         }
-        else if (recievedata_[0] == "thisismyusername")
+        else if (recievedata_.header == "thisismyusername")
         {
             console.log("::Your user name :",recievedata_[1]);
-            display_name.textContent = recievedata_[1].split("(^)")[0];
+            display_name.textContent = recievedata_.content.split("(^)")[0];
         }
         else
             console.error('::Received unknown message :', event.data);
