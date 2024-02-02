@@ -115,11 +115,11 @@ def validate_ports() -> None:
 
 
 def clear_logs():
-    with open(os.path.join(LOG_DIR, 'errorlogs.txt'),'w') as e:
+    with open(os.path.join(LOG_DIR, 'error.logs'),'w') as e:
         e.write('')
-    with os.path.join(LOG_DIR, 'activitylogs.txt','w') as a:
+    with os.path.join(LOG_DIR, 'activity.logs','w') as a:
         a.write('')
-    with os.path.join(LOG_DIR, 'serverlogs.txt','w') as s:
+    with os.path.join(LOG_DIR, 'server.logs','w') as s:
         s.write('')
     return
 
