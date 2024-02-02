@@ -3,13 +3,11 @@ import os
 from collections import deque
 import avails.textobject
 from core import *
-import main
 import core.nomad as nomad
 from avails import remotepeer
 from avails.dataweaver import DataWeaver as datawrap
 
-
-web_socket = websockets.WebSocketServerProtocol
+web_socket:websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
 stack_safe = threading.Lock()
@@ -74,7 +72,7 @@ async def getdata():
             print("data from page :", data)
         if data.match(_header=const.HANDLE_COMMAND):
             if data.match(_content=const.HANDLE_END):
-                await asyncio.create_task(main.end_session_async())
+                await asyncio.create_task(use.end_session_async())
             # --
             elif data.match(_content=const.HANDLE_CONNECT_USER):
                 await handle_connection(addr_id=data.id)
@@ -112,7 +110,7 @@ async def handler(_websocket):
     web_socket = _websocket
     if const.USERNAME == '':
         userdata = datawrap(header="thisisacommand",
-                            content="no..username",)
+                            content="no..username", )
         await web_socket.send(userdata.dump())
         # print("no username")
     else:
@@ -140,21 +138,19 @@ def initiate_control():
 
 async def feed_user_data(_data: avails.textobject.PeerText, ip):
     global web_socket
-    _data = {
-        "header": "thisismessage",
-        "content": f"{_data.decode()}",
-        "id": f"{_data.id}"
-    }
+    _data = datawrap(header="thisismessage",
+                     content=f"{_data.decode()}",
+                     _id=f"{_data.id}")
     try:
         print(f"::Sending data :{_data} \n to page: {ip}")
-        await web_socket.send(json.dumps(_data))
+        await web_socket.send(_data.dump())
     except Exception as e:
         error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
         return
     pass
 
 
-async def feed_server_data(peer:avails.remotepeer.RemotePeer):
+async def feed_server_data(peer: avails.remotepeer.RemotePeer):
     global web_socket, server_data_lock
     with server_data_lock:
         _data = datawrap(header=const.HANDLE_COMMAND,
