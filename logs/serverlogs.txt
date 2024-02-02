@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2024-02-01 11:40:37,100 - INFO - ::Connection accepted by server connect
 2024-02-01 11:43:00,214 - INFO - ::Connection accepted by server connect
 2024-02-01 11:43:00,531 - INFO - server listening on [::1]:12261
@@ -57,3 +58,5 @@ websockets.exceptions.ConnectionClosedOK: received 1001 (going away); then sent 
 2024-02-01 11:58:27,655 - INFO - server listening on [::1]:12260
 2024-02-01 11:58:27,655 - INFO - server listening on 127.0.0.1:12260
 2024-02-01 11:58:30,013 - INFO - connection open
+=======
+>>>>>>> b0aae69bc1db6aa97c668313cfc36032535b67a8

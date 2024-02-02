@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2024-02-01 11:46:43,346 - INFO - ::Initiating End Sequence
 2024-02-01 11:46:43,693 - INFO - ::End Sequence Complete
 2024-02-01 11:47:20,920 - INFO - ::Initiating End Sequence
@@ -9,3 +10,5 @@
 2024-02-01 11:58:54,282 - INFO - ::Initiating End Sequence
 2024-02-01 11:58:54,490 - INFO - ::End Sequence Complete
 2024-02-01 17:33:56,879 - INFO - ::End Sequence Complete
+=======
+>>>>>>> b0aae69bc1db6aa97c668313cfc36032535b67a8
