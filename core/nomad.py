@@ -49,10 +49,6 @@ class Nomad:
         if Nomad:
             Nomad.currently_in_connection = dict.fromkeys(Nomad.currently_in_connection, False)
         self.peer_sock.close() if self.peer_sock else None
-        try:
-            manage_requests.notify_users()  # notify users that this user is going offline
-        except Exception as e:
-            error_log(f"Error notifying users: {e}")
         with const.PRINT_LOCK:
             time.sleep(const.anim_delay)
             print("::Nomad Object Ended")
@@ -63,8 +59,8 @@ class Nomad:
     def __del__(self):
         try:
             self.end()
-        except Exception:
-            return
+        except Exception as exp:
+            return exp
 
 
 # @NotInUse

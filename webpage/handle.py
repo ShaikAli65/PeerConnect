@@ -9,7 +9,7 @@ from avails import remotepeer
 from avails.dataweaver import DataWeaver as datawrap
 
 
-web_socket = None
+web_socket = websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
 stack_safe = threading.Lock()
@@ -86,7 +86,7 @@ async def getdata():
             await send_file(_path=data.content)
         # except Exception as webexp:
         #     print('got Exception at handle/getdata():', webexp)
-        #     # await asyncio.create_task(main._(0, 0))
+        #     # await asyncio.create_task(main.endSequenceWrapper(0, 0))
         #     break
     return
 
@@ -170,7 +170,7 @@ async def feed_server_data(peer:avails.remotepeer.RemotePeer):
 async def end():
     global SafeEnd, web_socket
     if web_socket is None:
-        return
+        return None
     SafeEnd.set()
     asyncio.get_event_loop().stop()
     await web_socket.close()

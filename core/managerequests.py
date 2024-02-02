@@ -1,3 +1,4 @@
+import queue
 import main
 from avails import remotepeer
 from core import *
@@ -98,6 +99,23 @@ def notify_user_connection(_remote_peer: remotepeer):
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
         return None
     pass
+
+
+def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
+    while safe_stop.is_set() and not queue_in.empty():
+        with lock:
+            _id = queue_in.get()
+        if not const.LIST_OF_PEERS[_id]:
+            continue
+        try:
+            _conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
+            _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
+            PeerText(_conn, const.CMD_NOTIFY_USER).send()
+            const.LIST_OF_PEERS[_id].serialize(_conn)
+            _conn.close()
+        except socket.error as e:
+            error_log(f"Error sending active status at manager_requests.py/signal_active_status exp :  {e}")
+    return None
 
 
 def notify_users():

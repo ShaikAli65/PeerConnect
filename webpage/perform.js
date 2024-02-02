@@ -63,6 +63,18 @@ function initiate()
                 console.log("message sent :",data);
             }
         });
+        document.getElementById("idbutton").addEventListener("click",()=>{
+            var touser = document.getElementById("touser").value;
+            connectToCode_.send(JSON.stringify({
+                "header":"thisisacommand",
+                "content":"connectuser",
+                "id":touser
+            })
+            );
+        })
+    });
+    document.getElementById("Close Application").addEventListener("click",()=>{
+        endsession(connectToCode_);
     });
     connectToCode_.addEventListener('close', (event) => {
         endsession(connectToCode_);
@@ -83,35 +95,6 @@ function recievedataFromPython(connecttocode_)
     const connectToCode_ = connecttocode_;
     connectToCode_.addEventListener('message', (event) => {
         console.log('::Received message :', event.data);                                       //*debug
-        var recievedata_ = JSON.stringify(event.data)
-        if  (recievedata_.header == "thisisamessage")
-        {
-            recievedmessage(recievedata_[1]);
-        }
-        else if (recievedata_.header == "thisisafile")
-        {
-            recievedmessage(recievedata_[1])
-        }
-        else if (recievedata_.header == 'thisisacommand')
-        {
-            if (recievedata_[1] == "0")
-            {
-                removeuser(recievedata_[2]);
-                console.log("::User leaving away :",recievedata_[2]);
-            }
-            else if (recievedata_[1] == "1")
-            {
-                createUserTile(recievedata_[2]);
-                console.log("::User joined :",recievedata_[2]);
-            }
-        }
-        else if (recievedata_.header == "thisismyusername")
-        {
-            console.log("::Your user name :",recievedata_[1]);
-            display_name.textContent = recievedata_.content.split("(^)")[0];
-        }
-        else
-            console.error('::Received unknown message :', event.data);
         });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
@@ -119,16 +102,16 @@ function recievedataFromPython(connecttocode_)
     */
    Connection = connectToCode_;
 }
-function endcontrolfrompage()
-{
-    endsession(Connection);
-}
 function endsession(connection)
 {
-    EventListeners.forEach(element => {
-        element.removeEventListener("click",function(){});
-    });
-    Connection.send("thisisacommand_/!_endprogram")
+    // EventListeners.forEach(element => {
+    //     element.removeEventListener("click",function(){});
+    // });
+    connection.send(JSON.stringify({
+        "header":"thisisacommand",
+        "content":"endprogram",
+        id:""
+    }));
     document.body.innerHTML = "<h1>Session Ended</h1>";
     document.body.style.display= "flex";
     document.body.style.alignItems = "center";

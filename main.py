@@ -3,6 +3,8 @@
 import signal
 import asyncio
 import threading
+import tracemalloc
+
 from avails import constants as const
 from core import nomad as nomad
 from core import connectserver as connect_server
@@ -35,12 +37,11 @@ async def end_session_async() -> bool:
     manage_requests.end_connection()
     connect_server.end_connection()
     await handle.end()
-    with const.PRINT_LOCK:
-        print("::Page Ended")
+
     return True
 
 
-async def _(signum, frame) -> None:
+async def endSequenceWrapper(signum, frame) -> None:
     """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
 
     Args:
@@ -82,12 +83,16 @@ def initiate() -> int:
 
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
-
-    signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(_(signum, frame)))
-    signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(_(signum, frame)))
-    initiate()
-    activity_log("::End Sequence Complete")
-
+    try:
+        tracemalloc.start()
+        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(endSequenceWrapper(signum, frame)))
+        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(endSequenceWrapper(signum, frame)))
+        initiate()
+        activity_log("::End Sequence Complete")
+    except RuntimeError:
+        error_log("::RuntimeError in main.py")
+    finally:
+        exit(0)
 
 """
     pip install --upgrade pip

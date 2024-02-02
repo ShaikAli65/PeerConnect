@@ -1,13 +1,12 @@
-import threading
-
+import queue
 import main
 from core import *
 from avails.textobject import PeerText
 import avails.remotepeer as remote_peer
 from webpage import handle
+import managerequests
 from logs import *
 
-const.count_of_user_id = 0
 End_Safe = threading.Event()
 Error_Calls = 0
 
@@ -15,22 +14,24 @@ Error_Calls = 0
 def initial_list(no_of_users: int, initiate_socket):
     global End_Safe, Error_Calls
     initial_list_peer = const.LIST_OF_PEERS
+    ping_queue = queue.Queue()
+    queue_lock = threading.Lock()
     if no_of_users == 0:
         return None
-    for _ in range(no_of_users):
+    for i in range(no_of_users):
 
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
+            if i % const.MAX_CALL_BACKS == 0:
+                main.start_thread(_target=managerequests.signal_active_status, args=(ping_queue,queue_lock))
             if initiate_socket not in readable:
                 continue
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
-            with const.user_id_lock:
-                _nomad.id = str(const.count_of_user_id)
-                if _nomad.status == 1:
-                    initial_list_peer[const.count_of_user_id] = _nomad
-                const.count_of_user_id += 1
+            if _nomad.status == 1:
+                initial_list_peer[_nomad.id] = _nomad
+                ping_queue.put(_nomad.id)
             asyncio.run(handle.feed_server_data(_nomad))
-            print(f"user {const.count_of_user_id} name {_nomad.uri} added to list")
+            print(f"user {_nomad.id} name {_nomad.uri} added to list")
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))
             if e.errno == 10054:
@@ -39,7 +40,9 @@ def initial_list(no_of_users: int, initiate_socket):
                 server_log(f"::Server disconnected retry count :{_}", 4)
                 initiate_connection()
                 return False
-
+    if not ping_queue.empty():
+        main.start_thread(_target=managerequests.signal_active_status, args=(ping_queue,queue_lock))
+    initiate_socket.close()
     return True
 
 
@@ -96,13 +99,14 @@ def initiate_connection():
             return True
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
             if call_count >= const.MAX_CALL_BACKS:
+                time.sleep(const.anim_delay)
                 print("\n::Ending program server refused connection")
                 return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
             # time.sleep(1)
-        except socket.error as exp:
-            if call_count >= const.MAX_CALL_BACKS or exp.errno == 10054:
+        except Exception as exp:
+            if call_count >= const.MAX_CALL_BACKS:  # or exp.errno == 10054:
                 return False
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
             server_log(f'::Connection failed, retrying... at server.py/initiate_connection, exp : {exp}', 4)

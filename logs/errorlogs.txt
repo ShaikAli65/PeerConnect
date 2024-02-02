@@ -1,9 +1,8 @@
-2024-01-31 18:57:38,258 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 18:59:16,559 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 19:00:40,893 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 19:02:26,684 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 19:04:05,774 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 22:00:37,137 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 22:01:45,987 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 22:10:59,433 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
-2024-01-31 22:11:45,507 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 23:10:33,420 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 23:12:01,899 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-01-31 23:13:20,010 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-01 11:46:43,390 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-01 11:47:20,920 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-01 11:55:39,153 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-01 11:57:36,200 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-01 11:58:54,282 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket

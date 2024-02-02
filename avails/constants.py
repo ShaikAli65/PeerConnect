@@ -26,7 +26,7 @@ PROTOCOL = soc.SOCK_STREAM
 FORMAT = 'utf-8'
 count_of_user_id = 0
 user_id_lock = threading.Lock()
-anim_delay = 0.06
+anim_delay = 0.1
 MAX_CALL_BACKS = 6
 
 OBJ = None
@@ -114,6 +114,16 @@ def validate_ports() -> None:
     return None
 
 
+def clear_logs():
+    with open(os.path.join(LOG_DIR, 'errorlogs.txt'),'w') as e:
+        e.write('')
+    with os.path.join(LOG_DIR, 'activitylogs.txt','w') as a:
+        a.write('')
+    with os.path.join(LOG_DIR, 'serverlogs.txt','w') as s:
+        s.write('')
+    return
+
+
 def set_constants() -> bool:
     """Sets global constants from values in the configuration file and directories.
 
@@ -129,7 +139,7 @@ def set_constants() -> bool:
     LOG_DIR = os.path.join(CURRENT_DIR, 'logs')
     PAGE_PATH = os.path.join(CURRENT_DIR, 'webpage')
     DOWNLOAD_PATH = os.path.join(CURRENT_DIR, 'downloads')
-
+    # clear_logs()
     config_map = configparser.ConfigParser()
     try:
         config_map.read(CONFIG_PATH)
