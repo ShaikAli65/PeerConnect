@@ -1,7 +1,4 @@
 import queue
-import threading
-
-import main
 from avails import remotepeer
 from core import *
 
@@ -57,8 +54,8 @@ def control_user_manager(_control_sock: socket.socket):
         try:
             initiate_conn, _ = _control_sock.accept()
             with const.PRINT_LOCK:
-                print(f"New connection from {_[0]}:{_[1]} at control_user_management")
-            main.start_thread(_target=control_connected_user, args=(initiate_conn,))
+                print(f"New connection from {_[0]}:{_[1]} at manage requests.py/control_user_manager")
+            use.start_thread(_target=control_connected_user, args=(initiate_conn,))
         except (socket.error, OSError) as e:
             error_log(f"Socket error at manage requests/control_user_management: {e}")
     return
@@ -77,6 +74,7 @@ def control_connected_user(_conn: socket.socket):
                 _conn.close()
                 return
             elif data.compare(const.CMD_NOTIFY_USER):
+                print(f"{_conn.getpeername()} said i came ...")
                 notify_user_connection(remotepeer.deserialize(_conn))
                 _conn.close()
                 return
@@ -91,6 +89,7 @@ def notify_user_connection(_remote_peer: remotepeer):
     try:
         if not _remote_peer:
             return
+        const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
         handle.feed_server_data(_remote_peer)
         return None
     except Exception as e:
@@ -100,10 +99,10 @@ def notify_user_connection(_remote_peer: remotepeer):
 
 
 def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
-    # print("::at signal_active_status :",threading.get_native_id())
     while safe_stop.is_set() and not queue_in.empty():
         with lock:
             _id = queue_in.get()
+            print(f"::at signal_active_status with {_id} :",threading.get_native_id())
         if not const.LIST_OF_PEERS[_id]:
             continue
         try:

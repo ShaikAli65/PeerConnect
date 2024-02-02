@@ -138,15 +138,16 @@ def initiate_control():
     asyncio.get_event_loop().run_forever()
 
 
-async def feed_user_data(data: avails.textobject.PeerText, ip: tuple = tuple()):
+async def feed_user_data(_data: avails.textobject.PeerText, ip):
     global web_socket
-    data = {
+    _data = {
         "header": "thisismessage",
-        "content": f"{data.decode()}",
-        "id": f"{data.id}",
+        "content": f"{_data.decode()}",
+        "id": f"{_data.id}"
     }
     try:
-        await web_socket.send(json.dumps(data))
+        print(f"::Sending data :{_data} \n to page: {ip}")
+        await web_socket.send(json.dumps(_data))
     except Exception as e:
         error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
         return
@@ -160,6 +161,8 @@ async def feed_server_data(peer:avails.remotepeer.RemotePeer):
                          content=peer.username,
                          _id=peer.id)
         try:
+            with const.PRINT_LOCK:
+                print(f"::Sending data :{_data} \nto page: {peer.username}")
             await const.WEB_SOCKET.send(_data.dump())
 
         except Exception as e:

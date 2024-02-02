@@ -1,8 +1,6 @@
 from core import *
 from logs import *
 from webpage import handle
-from core import managerequests as manage_requests
-import main
 
 
 class Nomad:
@@ -38,7 +36,7 @@ class Nomad:
                 with const.PRINT_LOCK:
                     print(f"New connection from {_[0]}:{_[1]}")
                 Nomad.currently_in_connection[initiate_conn] = True
-                main.start_thread(connectNew, args=(initiate_conn,))
+                use.start_thread(connectNew, args=(initiate_conn,))
             except (socket.error, OSError) as e:
                 error_log(f"Socket error: {e}")
 
@@ -121,11 +119,10 @@ def connectNew(_conn: socket.socket):
             disconnect_user(_conn)
             return True
         elif connectNew_data.compare(const.CMD_RECV_FILE):
-            # asyncio.run(handle.feed_user_data(_conn, recvdata_sock_lock))
+            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
             threading.Thread(target=recv_file,args=(_conn,)).start()
         elif connectNew_data.raw_text:
-            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()))
-        time.sleep(1)
+            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
 
     return True
 

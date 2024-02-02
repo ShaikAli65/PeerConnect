@@ -8,12 +8,14 @@ import select
 from collections.abc import MutableSet
 
 import avails.constants as const
+from avails import useables as use
 from logs import error_log
 from logs import activity_log
 from logs import server_log
 from avails.fileobject import PeerFile
 from avails.remotepeer import RemotePeer
 from avails.textobject import PeerText
+import avails.remotepeer as remote_peer
 
 
 class Fluxuant(MutableSet):
@@ -52,10 +54,3 @@ class Fluxuant(MutableSet):
 
     def __str__(self) -> str:
         return super().__str__()
-
-
-class NotInUse(DeprecationWarning):
-    """A class to denote deprecated/not currently used functions/methods/classes"""
-
-    def __init__(self, *args, **kwargs):
-        pass

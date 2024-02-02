@@ -72,3 +72,15 @@ websockets.exceptions.ConnectionClosedOK: received 1001 (going away); then sent 
 2024-02-02 16:38:03,078 - INFO - server listening on [::1]:12260
 2024-02-02 16:38:03,078 - INFO - server listening on 127.0.0.1:12260
 2024-02-02 16:38:05,341 - INFO - connection open
+2024-02-02 16:49:42,630 - INFO - ::Connection accepted by server connect
+2024-02-02 16:49:42,740 - INFO - server listening on [::1]:12260
+2024-02-02 16:49:42,741 - INFO - server listening on 127.0.0.1:12260
+2024-02-02 16:49:49,697 - INFO - connection open
+2024-02-02 16:57:36,915 - INFO - ::Connection accepted by server connect
+2024-02-02 16:57:37,028 - INFO - server listening on 127.0.0.1:12260
+2024-02-02 16:57:37,029 - INFO - server listening on [::1]:12260
+2024-02-02 16:57:38,610 - INFO - connection open
+2024-02-02 17:06:33,512 - INFO - ::Connection accepted by server connect
+2024-02-02 17:06:33,642 - INFO - server listening on 127.0.0.1:12260
+2024-02-02 17:06:33,643 - INFO - server listening on [::1]:12260
+2024-02-02 17:06:35,428 - INFO - connection open

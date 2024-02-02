@@ -2,54 +2,14 @@
 
 import signal
 import asyncio
-import threading
 import tracemalloc
-
+import avails.useables as use
 from avails import constants as const
 from core import nomad as nomad
 from core import connectserver as connect_server
 from core import managerequests as manage_requests
 from webpage import handle
 from logs import *
-
-
-def start_thread(_target, args=()):
-    if len(args) != 0:
-        thread_recv = threading.Thread(target=_target, args=args)
-    else:
-        thread_recv = threading.Thread(target=_target, daemon=True)
-    thread_recv.start()
-
-    return thread_recv
-
-
-async def end_session_async() -> bool:
-    """Asynchronously performs cleanup tasks for ending the application session.
-
-    Returns:
-        bool: True if cleanup was successful, False otherwise.
-    """
-
-    activity_log("::Initiating End Sequence")
-
-    if const.OBJ:
-        const.OBJ.end()
-    manage_requests.end_connection()
-    connect_server.end_connection()
-    await handle.end()
-
-    return True
-
-
-async def endSequenceWrapper(signum, frame) -> None:
-    """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
-
-    Args:
-        signum (int): The signal number.
-        frame (FrameType): The current stack frame.
-    """
-
-    await asyncio.create_task(end_session_async())
 
 
 def initiate() -> int:
@@ -65,8 +25,8 @@ def initiate() -> int:
         error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
     # try:
     const.OBJ = nomad.Nomad(const.THIS_IP, const.THIS_PORT)
-    const.OBJ_THREAD = start_thread(const.OBJ.commence)
-    const.REQUESTS_THREAD = start_thread(manage_requests.initiate)
+    const.OBJ_THREAD = use.start_thread(const.OBJ.commence)
+    const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     if connect_server.initiate_connection() is False:
         const.OBJ.end()
         manage_requests.end_connection()
@@ -85,12 +45,12 @@ if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     try:
         tracemalloc.start()
-        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(endSequenceWrapper(signum, frame)))
-        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(endSequenceWrapper(signum, frame)))
+        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper(signum, frame)))
+        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper(signum, frame)))
         initiate()
         activity_log("::End Sequence Complete")
-    except RuntimeError:
-        error_log("::RuntimeError in main.py")
+    except RuntimeError as re:
+        error_log(f"::RuntimeError in main.py exp: {re}")
     finally:
         exit(0)
 

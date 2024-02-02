@@ -1,8 +1,6 @@
 import os
 
-from avails.remotepeer import RemotePeer
 from core import *
-from avails.textobject import PeerText
 
 
 class PeerFile:
