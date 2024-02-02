@@ -3,8 +3,9 @@ import main
 from core import *
 from avails.textobject import PeerText
 import avails.remotepeer as remote_peer
+from core import managerequests
 from webpage import handle
-import managerequests
+import core.managerequests
 from logs import *
 
 End_Safe = threading.Event()

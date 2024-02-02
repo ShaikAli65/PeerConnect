@@ -1,4 +1,6 @@
 import queue
+import threading
+
 import main
 from avails import remotepeer
 from core import *
@@ -89,10 +91,6 @@ def notify_user_connection(_remote_peer: remotepeer):
     try:
         if not _remote_peer:
             return
-        _remote_peer.status = 1
-        with const.user_id_lock:
-            _remote_peer.id = const.count_of_user_id + 1
-            const.count_of_user_id += 1
         handle.feed_server_data(_remote_peer)
         return None
     except Exception as e:
@@ -102,6 +100,7 @@ def notify_user_connection(_remote_peer: remotepeer):
 
 
 def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
+    # print("::at signal_active_status :",threading.get_native_id())
     while safe_stop.is_set() and not queue_in.empty():
         with lock:
             _id = queue_in.get()
