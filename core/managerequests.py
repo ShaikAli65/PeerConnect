@@ -91,7 +91,7 @@ def notify_user_connection(_remote_peer: remotepeer):
             const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
         else:
             const.LIST_OF_PEERS.pop(_remote_peer.uri[0],None)
-        handle.feed_server_data(_remote_peer)
+        asyncio.run(handle.feed_server_data(_remote_peer))
         return None
     except Exception as e:
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
