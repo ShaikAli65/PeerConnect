@@ -32,15 +32,11 @@ async def end_session_async() -> bool:
     return True
 
 
-async def endSequenceWrapper(signum, frame) -> None:
+async def endSequenceWrapper() -> None:
     """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
-
-    Args:
-        signum (int): The signal number.
-        frame (FrameType): The current stack frame.
     """
 
-    await asyncio.create_task(end_session_async())
+    await end_session_async()
 
 
 class NotInUse(DeprecationWarning):

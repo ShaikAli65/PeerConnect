@@ -18,6 +18,7 @@ from avails.textobject import PeerText
 import avails.remotepeer as remote_peer
 
 
+
 class Fluxuant(MutableSet):
     def __init__(self):
         self._data = set()

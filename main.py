@@ -3,8 +3,8 @@
 import signal
 import asyncio
 import tracemalloc
-import avails.useables as use
 from avails import constants as const
+import avails.useables as use
 from core import nomad as nomad
 from core import connectserver as connect_server
 from core import managerequests as manage_requests
@@ -45,8 +45,8 @@ if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     try:
         tracemalloc.start()
-        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper(signum, frame)))
-        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper(signum, frame)))
+        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper()))
+        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper()))
         initiate()
         activity_log("::End Sequence Complete")
     except RuntimeError as re:
@@ -60,4 +60,3 @@ if __name__ == "__main__":
     pip install asyncio
     pip install threading
 """
-

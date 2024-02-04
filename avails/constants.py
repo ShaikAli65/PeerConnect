@@ -115,11 +115,11 @@ def validate_ports() -> None:
 
 
 def clear_logs():
-    with open(os.path.join(LOG_DIR, 'error.logs'),'w') as e:
+    with open(os.path.join(LOG_DIR, 'error.logs'), 'w') as e:
         e.write('')
-    with os.path.join(LOG_DIR, 'activity.logs','w') as a:
+    with os.path.join(LOG_DIR, 'activity.logs', 'w') as a:
         a.write('')
-    with os.path.join(LOG_DIR, 'server.logs','w') as s:
+    with os.path.join(LOG_DIR, 'server.logs', 'w') as s:
         s.write('')
     return
 
@@ -135,20 +135,17 @@ def set_constants() -> bool:
     """
     global CONFIG_PATH, CURRENT_DIR, LOG_DIR, PAGE_PATH, DOWNLOAD_PATH
     CURRENT_DIR = os.path.join(os.getcwd())
+    # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
     CONFIG_PATH = os.path.join(CURRENT_DIR, 'avails', 'config.ini')
     LOG_DIR = os.path.join(CURRENT_DIR, 'logs')
     PAGE_PATH = os.path.join(CURRENT_DIR, 'webpage')
     DOWNLOAD_PATH = os.path.join(CURRENT_DIR, 'downloads')
     # clear_logs()
     config_map = configparser.ConfigParser()
-    try:
-        config_map.read(CONFIG_PATH)
-    except configparser.ParsingError as e:
-        print('::got parsing error:', e)
-        return False
-
+    config_map.read('avails\\config.ini')
+    # print(config_map.sections())
     global USERNAME, SERVER_IP
-    USERNAME = config_map['CONFIGURATIONS']['username']
+    USERNAME = config_map["CONFIGURATIONS"]['username']
     SERVER_IP = config_map['CONFIGURATIONS']['serverip']
 
     global THIS_PORT, PAGE_PORT, SERVER_PORT, REQ_PORT, FILE_PORT
