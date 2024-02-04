@@ -27,8 +27,8 @@ async def end_session_async() -> bool:
         const.OBJ.end()
     manage_requests.end_connection()
     connect_server.end_connection_with_server()
+    manage_requests.end_connection()
     await handle.end()
-
     return True
 
 

@@ -1,2 +1,17 @@
 2024-02-05 00:39:20,572 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
 2024-02-05 00:41:28,303 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:44:41,864 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:46:08,495 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:47:24,354 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:47:54,370 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:49:24,328 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:50:18,091 - INFO - Port is not empty. choosing another port: 12261
+2024-02-05 00:50:20,038 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:50:20,390 - INFO - connection open
+2024-02-05 00:50:42,677 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:51:51,711 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:52:21,297 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:53:43,722 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 00:55:45,043 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:56:13,207 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-05 01:08:40,455 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
