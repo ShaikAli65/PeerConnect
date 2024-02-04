@@ -26,7 +26,7 @@ PROTOCOL = soc.SOCK_STREAM
 FORMAT = 'utf-8'
 count_of_user_id = 0
 user_id_lock = threading.Lock()
-anim_delay = 0.1
+anim_delay = 0
 MAX_CALL_BACKS = 6
 
 OBJ = None
