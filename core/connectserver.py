@@ -15,7 +15,6 @@ def initial_list(no_of_users: int, initiate_socket):
     if no_of_users == 0:
         return None
     for i in range(no_of_users):
-
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
             if i % const.MAX_CALL_BACKS == 0:

@@ -25,7 +25,7 @@ async def send_message(content):
     if not len(focus_user_stack):
         return False
     try:
-        peer_sock: socket.socket = focus_user_stack[0]
+        peer_sock = focus_user_stack[0]
         return nomad.send(peer_sock, content)
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -51,40 +51,53 @@ async def handle_connection(addr_id):
     global focus_user_stack
     if not addr_id:
         return False
-    _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
+    try:
+        _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
+    except KeyError as e:
+        print("Looks like the user is not in the list can't connect to the user")
+        return False
     if _nomad.status == 0:
         return False
-    focus_user_stack.pop() if not len(focus_user_stack) else None
+    focus_user_stack.pop() if len(focus_user_stack) else None
     # peer_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
     # peer_soc.connect(_nomad.uri)
     focus_user_stack.append(_nomad)
     return True
 
 
+async def control_data_flow(data_in:datawrap):
+    """
+    A function to control the data flow from the page
+    :param data_in:
+    :return:
+    """
+    if data_in.match(_header=const.HANDLE_COMMAND):
+        if data_in.match(_content=const.HANDLE_END):
+            await asyncio.create_task(use.end_session_async())
+        # --
+        elif data_in.match(_content=const.HANDLE_CONNECT_USER):
+            await handle_connection(addr_id=data_in.id)
+    # --
+    elif data_in.match(_header=const.HANDLE_MESSAGE_HEADER):
+        await send_message(content=data_in.content)
+    # --
+    elif data_in.match(_header=const.HANDLE_FILE_HEADER):
+        await send_file(_path=data_in.content)
+
+
 async def getdata():
     global web_socket
     while not SafeEnd.is_set():
         # try:
-        raw_data = await web_socket.recv()
-        data = datawrap(byte_data=raw_data)
-        with const.PRINT_LOCK:
-            print("data from page :", data)
-        if data.match(_header=const.HANDLE_COMMAND):
-            if data.match(_content=const.HANDLE_END):
-                await asyncio.create_task(use.end_session_async())
-            # --
-            elif data.match(_content=const.HANDLE_CONNECT_USER):
-                await handle_connection(addr_id=data.id)
-        # --
-        elif data.match(_header=const.HANDLE_MESSAGE_HEADER):
-            await send_message(content=data.content)
-        # --
-        elif data.match(_header=const.HANDLE_FILE_HEADER):
-            await send_file(_path=data.content)
+            raw_data = await web_socket.recv()
+            data = datawrap(byte_data=raw_data)
+            with const.PRINT_LOCK:
+                print("data from page :", data)
+            await control_data_flow(data_in=data)
         # except Exception as webexp:
         #     print('got Exception at handle/getdata():', webexp)
         #     # await asyncio.create_task(main.endSequenceWrapper(0, 0))
-        #     break
+        #     # break
     return
 
 

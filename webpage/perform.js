@@ -99,7 +99,9 @@ function recievedataFromPython(connecttocode_)
         if (data.header === "thisisacommand")
         {
             createUserTile(data.content);
-
+        }
+        if (data.header === "thisismyusername") {
+            display_name.textContent = data.content;
         }
         });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
@@ -167,7 +169,6 @@ function createUserTile(idin='') // idin is the id of the user to be added synta
 
 function showcurrent(user)
 {
-
     var nametile_ = document.getElementById("person_"+user.id.split("_")[1]);
     nametile_.style.backgroundColor = "";
     document.getElementById("intial_view").style.display="none";
@@ -186,7 +187,7 @@ function createmessage()
 {
     var subDiv_ = document.createElement("div");
     var Content_ = document.getElementById("message").value;
-    console.log('::Message sent :', Content_);                                       //*debug
+    // console.log('::Message sent :', Content_);                                       //*debug
     if (Content_ === "")
         return false;
     if (Content_.includes("file::"))
@@ -219,7 +220,11 @@ function createmessage()
     document.getElementById("message").value="";
     trimmed = focusedUser.id.split("_")[1].split("~")
     idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
-    return "thisisamessage_/!_" + Content_ + "~^~" + idtopython;
+    return JSON.stringify({
+                "header":"thisisamessage",
+                "content":Content_,
+                "id":idtopython
+            });
 }
 
 function recievedmessage(recievedata)

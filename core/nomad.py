@@ -68,7 +68,7 @@ def notify_users():
     pass
 
 
-def send(_to_user_soc, _data: str, _file_status=False):
+def send(_to_user_soc:remote_peer.RemotePeer, _data: str, _file_status=False):
     if _file_status:
         file = PeerFile(path=_data, obj=_to_user_soc)
         if file.send_meta_data():
@@ -78,7 +78,10 @@ def send(_to_user_soc, _data: str, _file_status=False):
     for _ in range(const.MAX_CALL_BACKS):
 
         try:
-            status = PeerText(_to_user_soc, _data).send()
+            send_ip = _to_user_soc.req_uri
+            sender_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
+            sender_soc.connect(send_ip)
+            status = PeerText(sender_soc, _data).send()
             return status
         except socket.error as err:
             time.sleep(3)

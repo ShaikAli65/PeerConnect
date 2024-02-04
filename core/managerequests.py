@@ -50,7 +50,6 @@ def control_user_manager(_control_sock: socket.socket):
         readable, _, _ = select.select([_control_sock], [], [], 0.001)
         if _control_sock not in readable:
             continue
-
         try:
             initiate_conn, _ = _control_sock.accept()
             use.start_thread(_target=control_connected_user, args=(initiate_conn,))
