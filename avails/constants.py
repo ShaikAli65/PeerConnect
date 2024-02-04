@@ -162,13 +162,14 @@ def set_constants() -> bool:
     global PROTOCOL, IP_VERSION, THIS_IP
     PROTOCOL = socket.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else socket.SOCK_DGRAM
     IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
-
+    THIS_IP = get_ip()
     line_format = "{:<15} {:<10}"
     with PRINT_LOCK:
         print(':configuration choices=========================')
         time.sleep(anim_delay)
         print(line_format.format("USERNAME   :", USERNAME))
         time.sleep(anim_delay)
+        print(line_format.format("YOUR IP    :", THIS_IP))
         print(line_format.format("THIS_PORT  :", THIS_PORT))
         time.sleep(anim_delay)
         print(line_format.format("SERVER_IP  :", SERVER_IP))
@@ -184,7 +185,6 @@ def set_constants() -> bool:
         print(line_format.format("REQ_PORT   :", REQ_PORT))
         time.sleep(anim_delay)
         print("===============================================")
-    THIS_IP = get_ip()
 
     if USERNAME == '' or SERVER_IP == '' or THIS_PORT == 0 or PAGE_PORT == 0 or SERVER_PORT == 0:
         error_log(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
