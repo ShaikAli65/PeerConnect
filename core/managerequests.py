@@ -109,7 +109,7 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
         try:
             _conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
             _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
-            PeerText(_conn, const.CMD_NOTIFY_USER).send()
+            PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
             const.LIST_OF_PEERS[_id].serialize(_conn)
             _conn.close()
         except socket.error as e:
@@ -126,7 +126,7 @@ def notify_users():
         try:
             notify_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
             notify_soc.connect(peer.req_uri)
-            PeerText(notify_soc, const.CMD_NOTIFY_USER).send()
+            PeerText(notify_soc, const.CMD_NOTIFY_USER,byteable=False).send()
             const.REMOTE_OBJECT.status = 0
             const.REMOTE_OBJECT.serialize(notify_soc)
             notify_soc.close()

@@ -67,7 +67,7 @@ class PeerText:
     def decode(self):
         return self.raw_text.decode(const.FORMAT)
 
-    def compare(self, cmp_string:bytes) -> bool:
+    def compare(self, cmp_string: bytes) -> bool:
         """
         Compare the stored text to a provided string.
 

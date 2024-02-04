@@ -1,0 +1,2 @@
+2024-02-05 00:39:20,572 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-05 00:41:28,303 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
