@@ -72,7 +72,6 @@ def control_connected_user(_conn: socket.socket):
                 _conn.close()
                 return
             elif data.compare(const.CMD_NOTIFY_USER):
-                print(f"{_conn.getpeername()} said i came ...")
                 notify_user_connection(remotepeer.deserialize(_conn))
                 _conn.close()
                 return
@@ -91,6 +90,7 @@ def notify_user_connection(_remote_peer: remotepeer):
             const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
         else:
             const.LIST_OF_PEERS.pop(_remote_peer.uri[0],None)
+        print(f"{_remote_peer} said i came ...")
         asyncio.run(handle.feed_server_data(_remote_peer))
         return None
     except Exception as e:

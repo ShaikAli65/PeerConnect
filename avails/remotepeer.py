@@ -29,7 +29,7 @@ class RemotePeer:
         return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.status})'
 
     def __str__(self):
-        return f'{self.username}~^~{self.uri[0]}~^~{self.uri[1]}'
+        return f'{self.username}~^~{self.uri[0]}:{self.uri[1]}'
 
     def __hash__(self) -> int:
         return hash(self.uri)
