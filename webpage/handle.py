@@ -51,8 +51,7 @@ async def handle_connection(addr_id):
     global focus_user_stack
     if not addr_id:
         return False
-    list_of_peer = const.LIST_OF_PEERS
-    _nomad: avails.remotepeer = list_of_peer[addr_id]
+    _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
     if _nomad.status == 0:
         return False
     focus_user_stack.pop() if not len(focus_user_stack) else None
