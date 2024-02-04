@@ -60,7 +60,8 @@ def get_list_from(initiate_socket: socket.socket):
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/get_list_from ' + str(e))
             print(f"::Exception while receiving list of users: retrying... {e}")
-            continue
+            end_connection_with_server()
+            initiate_connection()
         except Exception as e:
             print(f"::Exception while receiving list of users: retrying... {e}")
             continue

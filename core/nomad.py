@@ -1,6 +1,7 @@
 from core import *
 from logs import *
 from webpage import handle
+from core import filemanager
 
 
 class Nomad:
@@ -61,19 +62,7 @@ class Nomad:
             return exp
 
 
-# @NotInUse
-def notify_users():
-    const.WEB_SOCKET.send('thisisacommand_/!_sendlistofactivepeers')
-    _data = json.loads(const.WEB_SOCKET.recv())
-    pass
-
-
-def send(_to_user_soc:remote_peer.RemotePeer, _data: str, _file_status=False):
-    if _file_status:
-        file = PeerFile(path=_data, obj=_to_user_soc)
-        if file.send_meta_data():
-            return file.send_file()
-        return False
+def send(_to_user_soc:remote_peer.RemotePeer, _data: str):
 
     for _ in range(const.MAX_CALL_BACKS):
 
@@ -95,27 +84,13 @@ def send(_to_user_soc:remote_peer.RemotePeer, _data: str, _file_status=False):
     return False
 
 
-def recv_file(_conn: socket.socket):
-    Nomad.currently_in_connection[_conn] = True
-    if not _conn:
-        with const.PRINT_LOCK:
-            print("::Closing connection from recv_file() from core/nomad at line 100")
-        return
-    getdata_file = PeerFile(recv_soc=_conn)
-    if getdata_file.recv_meta_data():
-        getdata_file.recv_file()
-    return
-
-
 def connectNew(_conn: socket.socket):
-    recv_sock_lock = threading.Lock()
     while Nomad.currently_in_connection[_conn]:
         readable, _, _ = select.select([_conn], [], [], 0.001)
         if _conn not in readable:
             continue
-        with recv_sock_lock:
-            connectNew_data = PeerText(_conn)
-            connectNew_data.receive()
+        connectNew_data = PeerText(_conn)
+        connectNew_data.receive()
         with const.PRINT_LOCK:
             print('data from peer :', connectNew_data)
         if connectNew_data.compare(const.CMD_CLOSING_HEADER):
@@ -123,7 +98,7 @@ def connectNew(_conn: socket.socket):
             return True
         elif connectNew_data.compare(const.CMD_RECV_FILE):
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
-            threading.Thread(target=recv_file,args=(_conn,)).start()
+            threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
         elif connectNew_data.raw_text:
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
 

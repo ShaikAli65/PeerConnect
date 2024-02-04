@@ -87,7 +87,10 @@ def notify_user_connection(_remote_peer: remotepeer):
     try:
         if not _remote_peer:
             return
-        const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
+        if _remote_peer.status == 1:
+            const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
+        else:
+            const.LIST_OF_PEERS.pop(_remote_peer.uri[0],None)
         handle.feed_server_data(_remote_peer)
         return None
     except Exception as e:
@@ -124,6 +127,7 @@ def notify_users():
             notify_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
             notify_soc.connect(peer.req_uri)
             PeerText(notify_soc, const.CMD_NOTIFY_USER).send()
+            const.REMOTE_OBJECT.status = 0
             const.REMOTE_OBJECT.serialize(notify_soc)
             notify_soc.close()
         except socket.error as e:

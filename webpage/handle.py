@@ -6,6 +6,7 @@ from core import *
 import core.nomad as nomad
 from avails import remotepeer
 from avails.dataweaver import DataWeaver as datawrap
+from core import filemanager
 
 web_socket:websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
@@ -41,7 +42,7 @@ async def send_file(_path):
         return False
     try:
         peer_remote_obj = focus_user_stack[0]
-        return nomad.send(peer_remote_obj, _data=_path, _file_status=True)
+        return filemanager.file_sender(_to_user_soc=peer_remote_obj, _data=_path)
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
         return False
