@@ -18,3 +18,7 @@
 2024-02-04 22:32:29,192 - INFO - connection open
 2024-02-04 22:32:29,253 - ERROR - GetQueuedCompletionStatus() returned an unexpected event
 status: 'err=0 transferred=29 key=0x0 address=0x1c4ec7b6500'
+2024-02-04 22:53:03,815 - INFO - ::Connection accepted by server connect
+2024-02-04 22:53:03,962 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 22:53:03,963 - INFO - server listening on [::1]:12260
+2024-02-04 22:53:05,377 - INFO - connection open

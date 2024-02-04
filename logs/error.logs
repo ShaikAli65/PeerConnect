@@ -9,3 +9,5 @@
 2024-02-04 22:32:29,281 - INFO - Error sending data at handle.py/feed_server_data, exp: Non-thread-safe operation invoked on an event loop other than the current one
 2024-02-04 22:32:43,426 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
 2024-02-04 22:32:50,346 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-04 22:53:14,509 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-04 22:53:26,432 - INFO - Error sending active status at manager_requests.py/signal_active_status exp :  [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond

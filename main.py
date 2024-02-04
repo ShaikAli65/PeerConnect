@@ -53,7 +53,6 @@ if __name__ == "__main__":
         error_log(f'::RuntimeError in main.py exp: {re}')
     finally:
         exit(0)
-
 """
     pip install --upgrade pip
     pip install websockets
