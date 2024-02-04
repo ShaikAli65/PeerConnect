@@ -67,7 +67,7 @@ def control_connected_user(_conn: socket.socket):
         try:
             data = PeerText(_conn)
             data.receive()
-            print(f"{_[0]}:{_[1]} said {data} at manage requests.py/control_connected_user")
+            print(f"{_conn.getpeername()} said {data} at manage requests.py/control_connected_user")
             if data.compare(const.REQ_FOR_LIST):
                 send_list(_conn)
                 _conn.close()
