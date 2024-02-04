@@ -86,7 +86,6 @@ def initiate_connection():
     with const.PRINT_LOCK:
         print("::Connecting to server")
     while not End_Safe.is_set():
-
         try:
             server_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
             server_connection_socket.connect((const.SERVER_IP, const.SERVER_PORT))

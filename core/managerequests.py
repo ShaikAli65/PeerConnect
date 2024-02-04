@@ -53,8 +53,6 @@ def control_user_manager(_control_sock: socket.socket):
 
         try:
             initiate_conn, _ = _control_sock.accept()
-            with const.PRINT_LOCK:
-                print(f"New connection from {_[0]}:{_[1]} at manage requests.py/control_user_manager")
             use.start_thread(_target=control_connected_user, args=(initiate_conn,))
         except (socket.error, OSError) as e:
             error_log(f"Socket error at manage requests/control_user_management: {e}")
@@ -69,6 +67,7 @@ def control_connected_user(_conn: socket.socket):
         try:
             data = PeerText(_conn)
             data.receive()
+            print(f"{_[0]}:{_[1]} said {data} at manage requests.py/control_connected_user")
             if data.compare(const.REQ_FOR_LIST):
                 send_list(_conn)
                 _conn.close()

@@ -1,0 +1,24 @@
+2024-02-04 17:13:43,234 - INFO - ::Connection accepted by server connect
+2024-02-04 17:13:43,513 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:13:43,513 - INFO - server listening on [::1]:12260
+2024-02-04 17:13:45,359 - INFO - connection open
+2024-02-04 17:17:52,992 - INFO - ::Connection accepted by server connect
+2024-02-04 17:17:53,262 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:17:53,262 - INFO - server listening on [::1]:12260
+2024-02-04 17:17:54,801 - INFO - connection open
+2024-02-04 17:31:58,509 - INFO - ::Connection accepted by server connect
+2024-02-04 17:31:58,788 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:31:58,810 - INFO - server listening on [::1]:12260
+2024-02-04 17:32:00,044 - INFO - connection open
+2024-02-04 17:46:09,632 - INFO - ::Connection accepted by server connect
+2024-02-04 17:46:09,797 - INFO - server listening on [::1]:12260
+2024-02-04 17:46:09,798 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:46:10,943 - INFO - connection open
+2024-02-04 17:49:11,163 - INFO - ::Connection accepted by server connect
+2024-02-04 17:49:11,300 - INFO - server listening on [::1]:12260
+2024-02-04 17:49:11,301 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:49:12,209 - INFO - connection open
+2024-02-04 17:50:38,816 - INFO - ::Connection accepted by server connect
+2024-02-04 17:50:39,143 - INFO - server listening on 127.0.0.1:12260
+2024-02-04 17:50:39,144 - INFO - server listening on [::1]:12260
+2024-02-04 17:50:40,130 - INFO - connection open

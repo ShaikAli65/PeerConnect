@@ -94,7 +94,13 @@ function recievedataFromPython(connecttocode_)
 {
     const connectToCode_ = connecttocode_;
     connectToCode_.addEventListener('message', (event) => {
-        console.log('::Received message :', event.data);                                       //*debug
+        console.log('::Received message :', event.data);
+        data = JSON.parse(event.data);
+        if (data.header === "thisisacommand")
+        {
+            createUserTile(data.content);
+
+        }
         });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
