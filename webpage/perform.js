@@ -104,13 +104,14 @@ function recievedataFromPython(connecttocode_)
             }
             createUserTile(data.content+"(^)"+data.id);
         }
-        if (data.header === "thisismyusername") {
+        if (data.header === "thisismyusername")
+        {
             display_name.textContent = data.content;
         }
         if (data.header === "thisisamessage")
         {
-            recievedmessage(data);
-        });
+            recievedmessage(data.content,data.id);
+        }});
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
        command syntax : f'thisisacommand_/!_{status}_/!_{peer.username}(^){peer.uri}'
@@ -234,11 +235,11 @@ function createmessage()
             });
 }
 
-function recievedmessage(recievedata)
+function recievedmessage(recievedata,reciever_id)
 {
     console.log("::recievedata : ",recievedata);
-    var reciever = recievedata.id;
-    recievedata = recievedata.content;
+    var reciever = reciever_id;
+    recievedata = recievedata;
     console.log("::recievedata : ","person_",reciever);
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
