@@ -244,7 +244,7 @@ function recievedmessage(recievedata)
 {
     console.log("::recievedata : ",recievedata);
     var reciever = recievedata.id;
-    recievedata = recievedata.content;  1
+    recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
