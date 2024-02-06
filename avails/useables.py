@@ -1,3 +1,5 @@
+import time
+
 from core import *
 from core import connectserver as connect_server
 from core import managerequests as manage_requests
@@ -14,7 +16,19 @@ def start_thread(_target, args=()):
     return thread_recv
 
 
-async def end_session_async() -> bool:
+def echo_print(delay_status=False, *args) -> None:
+    """Prints the given arguments to the console.
+
+    Args:
+        *args: The arguments to print.
+        :param delay_status:
+    """
+    with const.PRINT_LOCK:
+        time.sleep(const.anim_delay) if delay_status else None
+        print(*args)
+
+
+def end_session_async() -> bool:
     """Asynchronously performs cleanup tasks for ending the application session.
 
     Returns:
@@ -22,21 +36,20 @@ async def end_session_async() -> bool:
     """
 
     activity_log("::Initiating End Sequence")
-
+    const.LIST_OF_PEERS.clear()
     if const.OBJ:
         const.OBJ.end()
     manage_requests.end_connection()
     connect_server.end_connection_with_server()
-    manage_requests.end_connection()
-    await handle.end()
+    handle.end()
     return True
 
 
-async def endSequenceWrapper() -> None:
+def endSequenceWrapper() -> None:
     """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
     """
 
-    await end_session_async()
+    end_session_async()
 
 
 class NotInUse(DeprecationWarning):

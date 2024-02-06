@@ -15,24 +15,25 @@ class Nomad:
         self.address = (ip, port)
         self.safe_stop = True
         const.REMOTE_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.REQ_PORT, status=1)
-        self.peer_sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        self.peer_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.peer_sock.bind(self.address)
+        self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.main_socket.bind(self.address)
 
     def commence(self):
-        with const.PRINT_LOCK:
-            time.sleep(const.anim_delay)
-            print("::Listening for connections at ", self.address)
-        self.peer_sock.listen()
+        self.main_socket.listen()
         const.PAGE_HANDLE_CALL.wait()
+        use.echo_print(True,"::Listening for connections at ", self.address)
         while self.safe_stop:
-            if not isinstance(self.peer_sock, socket.socket):
-                continue
-            readable, _, _ = select.select([self.peer_sock], [], [], 0.001)
-            if self.peer_sock not in readable:
+            if not isinstance(self.main_socket, socket.socket):
+                self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+                self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.main_socket.bind(self.address)
+                self.main_socket.listen()
+            readable, _, _ = select.select([self.main_socket], [], [], 0.001)
+            if self.main_socket not in readable:
                 continue
             try:
-                initiate_conn, _ = self.peer_sock.accept()
+                initiate_conn, _ = self.main_socket.accept()
                 activity_log(f'New connection from {_[0]}:{_[1]}')
                 with const.PRINT_LOCK:
                     print(f"New connection from {_[0]}:{_[1]}")
@@ -47,10 +48,8 @@ class Nomad:
         self.safe_stop = False
         if Nomad:
             Nomad.currently_in_connection = dict.fromkeys(Nomad.currently_in_connection, False)
-        self.peer_sock.close() if self.peer_sock else None
-        with const.PRINT_LOCK:
-            time.sleep(const.anim_delay)
-            print("::Nomad Object Ended")
+        self.main_socket.close() if self.main_socket else None
+        use.echo_print(True, "::Nomad Object Ended")
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
@@ -85,7 +84,7 @@ def send(_to_user_soc:remote_peer.RemotePeer, _data: str):
 
 
 def connectNew(_conn: socket.socket):
-    while Nomad.currently_in_connection[_conn]:
+    while Nomad.currently_in_connection.get(_conn):
         readable, _, _ = select.select([_conn], [], [], 0.001)
         if _conn not in readable:
             continue
@@ -99,9 +98,11 @@ def connectNew(_conn: socket.socket):
         elif connectNew_data.compare(const.CMD_RECV_FILE):
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
             threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
+        elif connectNew_data.compare(const.CMD_RECV_DIR):
+            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
+            threading.Thread(target=filemanager.directory_reciever,args=(_conn,)).start()
         elif connectNew_data.raw_text:
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
-
     return True
 
 

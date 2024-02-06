@@ -32,8 +32,9 @@ def initial_list(no_of_users: int, initiate_socket):
             if e.errno == 10054:
                 end_connection_with_server()
                 time.sleep(5)
-                server_log(f"::Server disconnected retrying ...", 4)
-                list_error_handler()
+                if not ping_queue.empty():
+                    server_log(f"::Server disconnected recieved some users retrying ...", 4)
+                    list_error_handler()
                 return False
     if not ping_queue.empty():
         use.start_thread(_target=managerequests.signal_active_status, args=(ping_queue,queue_lock))
@@ -42,7 +43,6 @@ def initial_list(no_of_users: int, initiate_socket):
 
 
 def list_error_handler():
-    # initiate_connection()
     pass
 
 
@@ -63,8 +63,8 @@ def get_list_from(initiate_socket: socket.socket):
             end_connection_with_server()
             initiate_connection()
         except Exception as e:
-            print(f"::Exception while receiving list of users: retrying... {e}")
-            continue
+            print(f"::Exception fatal... exp:{e}")
+            return False
     return initial_list(struct.unpack('!Q', raw_length)[0], initiate_socket)
 
 
@@ -109,27 +109,21 @@ def initiate_connection():
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
             # time.sleep(1)
         except Exception as exp:
-            if call_count >= const.MAX_CALL_BACKS:  # or exp.errno == 10054:
-                return False
-            print(f"\r::Connection refused by server, retrying... {call_count}", end='')
-            server_log(f'::Connection failed, retrying... at server.py/initiate_connection, exp : {exp}', 4)
+            server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
+            return False
 
 
 def end_connection_with_server():
     global End_Safe
-    with const.PRINT_LOCK:
-        time.sleep(const.anim_delay)
-        print("::Disconnecting from server")
     End_Safe.set()
     try:
         const.REMOTE_OBJECT.status = 0
         EndSocket = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        EndSocket.connect((const.SERVER_IP, const.SERVER_PORT))
-        if const.REMOTE_OBJECT.serialize(EndSocket):
-            EndSocket.close() if EndSocket else None
-        const.LIST_OF_PEERS.clear()
-        End_Safe = threading.Event()
-        print("::Disconnected from server")
+        with EndSocket:
+            EndSocket.connect((const.SERVER_IP, const.SERVER_PORT))
+            const.REMOTE_OBJECT.serialize(EndSocket)
+        print("::sent leaving status to server")
+        return True
     except Exception as exp:
         server_log(f'::Failed disconnecting from server at server.py/end_connection, exp : {exp}', 4)
         return False

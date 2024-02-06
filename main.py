@@ -45,8 +45,8 @@ if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     try:
         tracemalloc.start()
-        signal.signal(signal.SIGTERM, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper()))
-        signal.signal(signal.SIGINT, lambda signum, frame: asyncio.create_task(use.endSequenceWrapper()))
+        signal.signal(signal.SIGTERM, lambda signum, frame: use.endSequenceWrapper())
+        signal.signal(signal.SIGINT, lambda signum, frame: use.endSequenceWrapper())
         initiate()
         activity_log("::End Sequence Complete")
     except RuntimeError as re:

@@ -35,17 +35,14 @@ def initiate():
     control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     control_sock.bind(const.REMOTE_OBJECT.req_uri)
     control_sock.listen()
-    with const.PRINT_LOCK:
-        time.sleep(const.anim_delay)
-        print("::Requests bind success full at ", const.REMOTE_OBJECT.req_uri)
+    use.echo_print(True,"::Requests bind success full at ", const.REMOTE_OBJECT.req_uri)
     const.PAGE_HANDLE_CALL.wait()
     control_user_manager(control_sock)
     return
 
 
 def control_user_manager(_control_sock: socket.socket):
-    with const.PRINT_LOCK:
-        print("::Listening for requests at ", _control_sock.getsockname())
+    use.echo_print(True,"::Listening for requests at ", _control_sock.getsockname())
     while safe_stop.is_set():
         readable, _, _ = select.select([_control_sock], [], [], 0.001)
         if _control_sock not in readable:
@@ -54,43 +51,43 @@ def control_user_manager(_control_sock: socket.socket):
             initiate_conn, _ = _control_sock.accept()
             use.start_thread(_target=control_connected_user, args=(initiate_conn,))
         except (socket.error, OSError) as e:
-            error_log(f"Socket error at manage requests/control_user_management: {e}")
+            error_log(f"Error at manage requests/control_user_management exp: {e}")
     return
 
 
 def control_connected_user(_conn: socket.socket):
-    while safe_stop:
+    while safe_stop.is_set():
         readable, _, _ = select.select([_conn], [], [], 0.001)
         if _conn not in readable:
             continue
-        try:
-            data = PeerText(_conn)
-            data.receive()
-            print(f"{_conn.getpeername()} said {data} at manage requests.py/control_connected_user")
-            if data.compare(const.REQ_FOR_LIST):
-                send_list(_conn)
-                _conn.close()
+        with _conn:
+            try:
+                data = PeerText(_conn)
+                data.receive()
+                print(f"{_conn.getpeername()} said {data} at manage requests.py/control_connected_user")
+                if data.compare(const.REQ_FOR_LIST):
+                    send_list(_conn)
+                    break
+                elif data.compare(const.CMD_NOTIFY_USER):
+                    notify_user_connection(_conn)
+                    break
+            except (socket.error, OSError) as e:
+                error_log(f"Socket error at manage requests/control_new_user exp:{e}")
                 return
-            elif data.compare(const.CMD_NOTIFY_USER):
-                notify_user_connection(remotepeer.deserialize(_conn))
-                _conn.close()
-                return
-        except (socket.error, OSError) as e:
-            error_log(f"Socket error at manage requests/control_new_user exp:{e}")
-            _conn.close()
-            return
     return
 
 
-def notify_user_connection(_remote_peer: remotepeer):
+def notify_user_connection(_conn_socket:socket.socket):
     try:
+        _remote_peer: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
         if not _remote_peer:
             return
         if _remote_peer.status == 1:
             const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
+            use.echo_print(False,f"{_remote_peer} said i came ...")
         else:
             const.LIST_OF_PEERS.pop(_remote_peer.uri[0],None)
-        print(f"{_remote_peer} said i came ...")
+            use.echo_print(False,f"{_remote_peer} said i am going ...")
         asyncio.run(handle.feed_server_data(_remote_peer))
         return None
     except Exception as e:
@@ -104,14 +101,12 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
         with lock:
             _id = queue_in.get()
             print(f"::at signal_active_status with {_id} :",threading.get_native_id())
-        if not const.LIST_OF_PEERS[_id]:
-            continue
         try:
             _conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
-            PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
-            const.LIST_OF_PEERS[_id].serialize(_conn)
-            _conn.close()
+            with _conn:
+                _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
+                PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
+                const.LIST_OF_PEERS.get(_id).serialize(_conn)
         except socket.error as e:
             error_log(f"Error sending active status at manager_requests.py/signal_active_status exp :  {e}")
     return None
@@ -119,17 +114,15 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
 
 def notify_users():
     for peer in const.LIST_OF_PEERS.values():
-        if safe_stop.is_set():
-            return
         if not peer:
             continue
         try:
             notify_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            notify_soc.connect(peer.req_uri)
-            PeerText(notify_soc, const.CMD_NOTIFY_USER,byteable=False).send()
-            const.REMOTE_OBJECT.status = 0
-            const.REMOTE_OBJECT.serialize(notify_soc)
-            notify_soc.close()
+            with notify_soc:
+                notify_soc.connect(peer.req_uri)
+                PeerText(notify_soc, const.CMD_NOTIFY_USER,byteable=False).send()
+                const.REMOTE_OBJECT.status = 0
+                const.REMOTE_OBJECT.serialize(notify_soc)
         except socket.error as e:
             error_log(f"Error sending leaving status at manager_requests.py/notify_users exp :  {e}")
     return None

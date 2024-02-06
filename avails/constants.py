@@ -56,6 +56,7 @@ HANDLE_COMMAND = 'thisisacommand'
 HANDLE_FILE_HEADER = 'thisisafile'
 HANDLE_CONNECT_USER = 'connectuser'
 CMD_NOTIFY_USER = b'thisisacommandtocore_/!_notifyuser'
+CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
 
 
 def get_ip() -> str:

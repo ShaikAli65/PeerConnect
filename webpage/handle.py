@@ -8,7 +8,7 @@ from avails import remotepeer
 from avails.dataweaver import DataWeaver as datawrap
 from core import filemanager
 
-web_socket:websockets.WebSocketServerProtocol = None
+web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
 stack_safe = threading.Lock()
@@ -54,7 +54,7 @@ async def handle_connection(addr_id):
         return False
     try:
         _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
-    except KeyError as e:
+    except KeyError:
         print("Looks like the user is not in the list can't connect to the user")
         return False
     if _nomad.status == 0:
@@ -66,7 +66,7 @@ async def handle_connection(addr_id):
     return True
 
 
-async def control_data_flow(data_in:datawrap):
+async def control_data_flow(data_in: datawrap):
     """
     A function to control the data flow from the page
     :param data_in:
@@ -86,22 +86,6 @@ async def control_data_flow(data_in:datawrap):
         await send_file(_path=data_in.content)
 
 
-async def getdata():
-    global web_socket
-    while not SafeEnd.is_set():
-        # try:
-            raw_data = await web_socket.recv()
-            data = datawrap(byte_data=raw_data)
-            with const.PRINT_LOCK:
-                print("data from page :", data)
-            await control_data_flow(data_in=data)
-        # except Exception as webexp:
-        #     print('got Exception at handle/getdata():', webexp)
-        #     # await asyncio.create_task(main.endSequenceWrapper(0, 0))
-        #     # break
-    return
-
-
 # @NotInUse
 async def set_name(new_username):
     _config_file_path = const.CONFIG_PATH
@@ -118,6 +102,21 @@ async def set_name(new_username):
         file.writelines(_lines)
 
 
+async def getdata():
+    global web_socket, SafeEnd
+    while not SafeEnd.is_set():
+        try:
+            raw_data = await web_socket.recv()
+            data = datawrap(byte_data=raw_data)
+            with const.PRINT_LOCK:
+                print("data from page:", data)
+            await control_data_flow(data_in=data)
+        except Exception as e:
+            print(f"Error in getdata: {e}")
+            break
+    print('::SafeEnd is set')
+
+
 async def handler(_websocket):
     global web_socket, SafeEnd
     web_socket = _websocket
@@ -125,7 +124,6 @@ async def handler(_websocket):
         userdata = datawrap(header="thisisacommand",
                             content="no..username", )
         await web_socket.send(userdata.dump())
-        # print("no username")
     else:
         userdata = datawrap(header="thisismyusername",
                             content=f"{const.USERNAME}(^){const.THIS_IP}",
@@ -143,7 +141,7 @@ def initiate_control():
     with const.PRINT_LOCK:
         print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
     os.system(f'cd {const.PAGE_PATH} && index.html')
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    # asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
@@ -179,14 +177,11 @@ async def feed_server_data(peer: avails.remotepeer.RemotePeer):
         pass
 
 
-async def end():
+def end():
     global SafeEnd, web_socket
     if web_socket is None:
         return None
     SafeEnd.set()
     asyncio.get_event_loop().stop()
-    await web_socket.close()
-    with const.PRINT_LOCK:
-        time.sleep(const.anim_delay)
-        print('::Page Disconnected Successfully')
-    pass
+    use.echo_print(True, "::Handle Ended")
+    return
