@@ -107,6 +107,9 @@ function recievedataFromPython(connecttocode_)
         if (data.header === "thisismyusername") {
             display_name.textContent = data.content;
         }
+        if (data.header === "thisisamessage")
+        {
+            recievedmessage(data);
         });
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
@@ -233,9 +236,9 @@ function createmessage()
 
 function recievedmessage(recievedata)
 {
-    console.log("::recievedata : ",recievedata.split("(^)"));
-    var reciever = recievedata.split("(^)")[1];
-    recievedata = recievedata.split("(^)")[0];
+    console.log("::recievedata : ",recievedata);
+    var reciever = recievedata.id;
+    recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
