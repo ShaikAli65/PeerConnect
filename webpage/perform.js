@@ -212,9 +212,11 @@ function createmessage()
         wrapperdiv_.appendChild(subDiv_);
         wrapperdiv_.className = "messagewrapper right";
         focusedUser.appendChild(wrapperdiv_);
-        trimmed = focusedUser.id.split("_")[1].split("~")
-        idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
-        return ("thisisafile_/!_"+Content_.split("::")[1]+"~^~" +idtopython);
+        return JSON.stringify({
+                "header":"thisisafile",
+                "content":Content_,
+                "id":focusedUser.id.split("_")[1]
+            });
     }
     subDiv_.textContent = Content_;
     subDiv_.className = "message";
