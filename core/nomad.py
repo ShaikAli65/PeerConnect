@@ -88,6 +88,9 @@ def connectNew(_conn: socket.socket):
             continue
         connectNew_data = PeerText(_conn)
         connectNew_data.receive()
+        if connectNew_data.compare(b""):
+            _conn.close() if _conn else None
+            return
         with const.PRINT_LOCK:
             print('data from peer :', connectNew_data)
         if connectNew_data.compare(const.CMD_CLOSING_HEADER):
