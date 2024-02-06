@@ -267,7 +267,7 @@ function removeuser(idin)
     // idin syntax : name(^)ipaddress
     var user_ = document.getElementById("person_"+idin);
     var userview_ = document.getElementById("viewer_"+idin);
-    console.log("removing user :",focusedUser);
+    console.log("removing user :",user_," ",userview_," ",idin);
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);
     if (focusedUser != userview_)
