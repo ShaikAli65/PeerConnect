@@ -214,10 +214,10 @@ function createmessage()
         var wrapperdiv_ = document.createElement("div");
         wrapperdiv_.appendChild(subDiv_);
         wrapperdiv_.className = "messagewrapper right";
-        focusedUser.appendChild(wrapperdiv_);
+        focusedUser.appendChild(wrapperdiv_); 
         return JSON.stringify({
                 "header":"thisisafile",
-                "content":Content_,
+                "content":Content_.split("file::")[1],
                 "id":focusedUser.id.split("_")[1]
             });
     }
