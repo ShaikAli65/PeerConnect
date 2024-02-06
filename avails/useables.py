@@ -36,12 +36,12 @@ def end_session_async() -> bool:
     """
 
     activity_log("::Initiating End Sequence")
-    const.LIST_OF_PEERS.clear()
     if const.OBJ:
         const.OBJ.end()
     manage_requests.end_connection()
     connect_server.end_connection_with_server()
     handle.end()
+    const.LIST_OF_PEERS.clear()
     return True
 
 
