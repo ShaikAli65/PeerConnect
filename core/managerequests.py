@@ -79,16 +79,16 @@ def control_connected_user(_conn: socket.socket):
 
 def notify_user_connection(_conn_socket:socket.socket):
     try:
-        _remote_peer: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
-        if not _remote_peer:
+        new_peer_object: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
+        if not new_peer_object:
             return
-        if _remote_peer.status == 1:
-            const.LIST_OF_PEERS[_remote_peer.uri[0]] = _remote_peer
-            use.echo_print(False,f"{_remote_peer} said i came ...")
+        if new_peer_object.status == 1:
+            const.LIST_OF_PEERS[new_peer_object.uri[0]] = new_peer_object
+            use.echo_print(False,f"{new_peer_object} said i came ...")
         else:
-            const.LIST_OF_PEERS.pop(_remote_peer.uri[0],None)
-            use.echo_print(False,f"{_remote_peer} said i am going ...")
-        asyncio.run(handle.feed_server_data(_remote_peer))
+            const.LIST_OF_PEERS.pop(new_peer_object.uri[0],None)
+            use.echo_print(False,f"{new_peer_object} said i am going ...")
+        asyncio.run(handle.feed_server_data(new_peer_object))
         return None
     except Exception as e:
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
@@ -106,7 +106,7 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
             with _conn:
                 _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
                 PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
-                const.LIST_OF_PEERS.get(_id).serialize(_conn)
+                const.REMOTE_OBJECT.serialize(_conn)
         except socket.error as e:
             error_log(f"Error sending active status at manager_requests.py/signal_active_status exp :  {e}")
     return None
