@@ -102,7 +102,10 @@ function recievedataFromPython(connecttocode_)
             {
                 removeuser(data.id);
             }
-            createUserTile(data.content+"(^)"+data.id);
+            else
+            {
+                createUserTile(data.content+"(^)"+data.id);
+            }
         }
         if (data.header === "thisismyusername")
         {
@@ -241,7 +244,7 @@ function recievedmessage(recievedata)
 {
     console.log("::recievedata : ",recievedata);
     var reciever = recievedata.id;
-    recievedata = recievedata.content;
+    recievedata = recievedata.content;  1
     console.log("::recievedata : ","person_",reciever);
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
@@ -282,5 +285,6 @@ function removeuser(idin)
          division_viewerpov.appendChild(initial_view);
          userview_.textContent='User Lost !';
          focusedUser = null;
+         division_viewerpov.removeChild(userview_);
     }
 }

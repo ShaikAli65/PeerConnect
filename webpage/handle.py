@@ -1,4 +1,4 @@
-import socket
+import webbrowser
 
 import websockets
 import os
@@ -43,7 +43,8 @@ async def send_file(_path):
     if not len(focus_user_stack):
         return False
     try:
-        peer_remote_obj = focus_user_stack[0]
+        peer_remote_sock:socket.socket = focus_user_stack[0]
+        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         return filemanager.file_sender(_to_user_soc=peer_remote_obj, _data=_path)
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -144,7 +145,8 @@ async def handler(_websocket):
 def initiate_control():
     with const.PRINT_LOCK:
         print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
-    os.system(f'cd {const.PAGE_PATH} && index.html')
+    # os.system(f'cd {const.PAGE_PATH} && index.html')
+    webbrowser.open(os.path.join(const.PAGE_PATH,"index.html"))
     # asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
     asyncio.get_event_loop().run_until_complete(start_server)

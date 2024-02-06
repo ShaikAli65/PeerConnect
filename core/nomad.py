@@ -68,7 +68,6 @@ def send(_to_user_soc:socket.socket, _data: str):
     for _ in range(const.MAX_CALL_BACKS):
 
         try:
-            print(f"::Sending data{_data} to {_to_user_soc.getpeername()} ...")
             return PeerText(_to_user_soc, _data).send()
         except socket.error as err:
             time.sleep(3)
