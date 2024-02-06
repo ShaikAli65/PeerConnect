@@ -102,7 +102,7 @@ function recievedataFromPython(connecttocode_)
             {
                 removeuser(data.id);
             }
-            createUserTile(data.content);
+            createUserTile(data.content+"(^)"+data.id);
         }
         if (data.header === "thisismyusername") {
             display_name.textContent = data.content;

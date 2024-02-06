@@ -1,3 +1,5 @@
+import socket
+
 import websockets
 import os
 from collections import deque
@@ -26,7 +28,7 @@ async def send_message(content):
     if not len(focus_user_stack):
         return False
     try:
-        peer_sock = focus_user_stack[0]
+        peer_sock:socket.socket = focus_user_stack[0]
         return nomad.send(peer_sock, content)
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -54,6 +56,8 @@ async def handle_connection(addr_id):
         return False
     try:
         _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
+        conn_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+        conn_socket.connect(_nomad.uri)
     except KeyError:
         print("Looks like the user is not in the list can't connect to the user")
         return False
@@ -62,7 +66,7 @@ async def handle_connection(addr_id):
     focus_user_stack.pop() if len(focus_user_stack) else None
     # peer_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
     # peer_soc.connect(_nomad.uri)
-    focus_user_stack.append(_nomad)
+    focus_user_stack.append(conn_socket)
     return True
 
 

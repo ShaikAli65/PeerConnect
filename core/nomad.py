@@ -1,3 +1,5 @@
+import socket
+
 from core import *
 from logs import *
 from webpage import handle
@@ -61,16 +63,13 @@ class Nomad:
             return exp
 
 
-def send(_to_user_soc:remote_peer.RemotePeer, _data: str):
+def send(_to_user_soc:socket.socket, _data: str):
 
     for _ in range(const.MAX_CALL_BACKS):
 
         try:
-            send_ip = _to_user_soc.req_uri
-            sender_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            sender_soc.connect(send_ip)
-            status = PeerText(sender_soc, _data).send()
-            return status
+            print(f"::Sending data{_data} to {_to_user_soc.getpeername()} ...")
+            return PeerText(_to_user_soc, _data).send()
         except socket.error as err:
             time.sleep(3)
             if err.errno == 10054:
