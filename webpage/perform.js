@@ -110,7 +110,7 @@ function recievedataFromPython(connecttocode_)
         }
         if (data.header === "thisisamessage")
         {
-            recievedmessage(data.content,data.id);
+            recievedmessage(data);
         }});
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
@@ -235,11 +235,11 @@ function createmessage()
             });
 }
 
-function recievedmessage(recievedata,reciever_id)
+function recievedmessage(recievedata)
 {
     console.log("::recievedata : ",recievedata);
-    var reciever = reciever_id;
-    recievedata = recievedata;
+    var reciever = recievedata.id;
+    recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
