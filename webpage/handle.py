@@ -165,7 +165,7 @@ async def feed_server_data(peer: avails.remotepeer.RemotePeer):
     global web_socket, server_data_lock
     with server_data_lock:
         _data = datawrap(header=const.HANDLE_COMMAND,
-                         content=peer.username,
+                         content=(peer.username if peer.status else 0),
                          _id=peer.id)
         try:
             with const.PRINT_LOCK:

@@ -98,6 +98,10 @@ function recievedataFromPython(connecttocode_)
         data = JSON.parse(event.data);
         if (data.header === "thisisacommand")
         {
+            if (data.content == '0')
+            {
+                removeuser(data.id);
+            }
             createUserTile(data.content);
         }
         if (data.header === "thisismyusername") {
