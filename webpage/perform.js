@@ -262,9 +262,8 @@ function recievedmessage(recievedata)
 function removeuser(idin)
 {
     // idin syntax : name(^)ipaddress
-    idin = idin.split("(^)");
-    var user_ = document.getElementById("person_"+idin[1]);
-    var userview_ = document.getElementById("viewer_"+idin[1]);
+    var user_ = document.getElementById("person_"+idin);
+    var userview_ = document.getElementById("viewer_"+idin);
     console.log("removing user :",focusedUser);
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);

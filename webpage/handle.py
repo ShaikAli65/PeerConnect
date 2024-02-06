@@ -155,7 +155,7 @@ async def feed_user_data(_data: avails.textobject.PeerText, ip):
     global web_socket
     _data = datawrap(header="thisismessage",
                      content=f"{_data.decode()}",
-                     _id=f"{_data.id}")
+                     _id=f"{ip}")
     try:
         print(f"::Sending data :{_data} \n to page: {ip}")
         await web_socket.send(_data.dump())
