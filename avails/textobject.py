@@ -61,7 +61,7 @@ class PeerText:
             self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
             self.sock.sendall(const.TEXT_SUCCESS_HEADER)
             if cmpstring:
-                return True if self.raw_text == cmpstring.encode(const.FORMAT) else False
+                return True if self.raw_text == (cmpstring.encode(const.FORMAT) if isinstance(cmpstring,str) else cmpstring) else False
         return self.raw_text if self.raw_text else False
 
     def decode(self):

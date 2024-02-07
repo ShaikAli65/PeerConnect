@@ -143,7 +143,8 @@ def set_constants() -> bool:
     DOWNLOAD_PATH = os.path.join(CURRENT_DIR, 'downloads')
     # clear_logs()
     config_map = configparser.ConfigParser()
-    config_map.read('avails\\config.ini')
+    # config_map.read('avails\\config.ini')
+    config_map.read(CONFIG_PATH)
     # print(config_map.sections())
     global USERNAME, SERVER_IP
     USERNAME = config_map["CONFIGURATIONS"]['username']
