@@ -111,15 +111,15 @@ async def set_name(new_username):
 async def getdata():
     global web_socket, SafeEnd
     while not SafeEnd.is_set():
-        try:
-            raw_data = await web_socket.recv()
-            data = datawrap(byte_data=raw_data)
-            with const.PRINT_LOCK:
-                print("data from page:", data)
-            await control_data_flow(data_in=data)
-        except Exception as e:
-            print(f"Error in getdata: {e}")
-            break
+        # try:
+        raw_data = await web_socket.recv()
+        data = datawrap(byte_data=raw_data)
+        with const.PRINT_LOCK:
+            print("data from page:", data)
+        await control_data_flow(data_in=data)
+        # except Exception as e:
+        #     print(f"Error in getdata: {e} at handle.py/getdata() ")
+        #     break
     print('::SafeEnd is set')
 
 

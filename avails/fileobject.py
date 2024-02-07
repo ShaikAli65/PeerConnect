@@ -1,5 +1,6 @@
 import os
 from core import *
+from avails.textobject import PeerText
 
 
 class PeerFile:
@@ -27,16 +28,16 @@ class PeerFile:
 
         with self._lock:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            try:
-                self.sock.connect(self.reciever_obj.uri)
-                PeerText(self.sock, const.CMD_RECV_FILE,byteable=False).send()
-                PeerText(self.sock, self.filename).send()
-                self.sock.sendall(self.raw_size)
-                return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
-            except Exception as e:
-                print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-                # error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-                return False
+            # try:
+            self.sock.connect(self.reciever_obj.uri)
+            PeerText(self.sock, const.CMD_RECV_FILE,byteable=False).send()
+            PeerText(self.sock, self.filename).send()
+            self.sock.sendall(self.raw_size)
+            return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
+            # except Exception as e:
+            #     print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+            #     # error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+            #     return False
 
     def recv_meta_data(self) -> bool:
 

@@ -1,15 +1,15 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-focusedUser        =   document.getElementById(       ""      );
-initial_view       =   document.getElementById( "intial_view" );
-main_division      =   document.getElementById("main_division");
-form_group         =   document.getElementById( "form_group"  );
-display_name       =   document.getElementById( "display_name");
-division_alive     =   document.getElementById( "alive_users" );
-division_viewerpov =   document.getElementById(   "prattle"   );
-searchbox          =   document.getElementById(   "search"    );
-headertile         =   document.getElementById( "headertile"  );
-viewname           =   document.getElementById("currentviewing");
+let focusedUser        =   document.getElementById(       ""      );
+let initial_view       =   document.getElementById( "intial_view" );
+let main_division      =   document.getElementById("main_division");
+let form_group         =   document.getElementById( "form_group"  );
+let display_name       =   document.getElementById( "display_name");
+let division_alive     =   document.getElementById( "alive_users" );
+let division_viewerpov =   document.getElementById(   "prattle"   );
+let searchbox          =   document.getElementById(   "search"    );
+let headertile         =   document.getElementById( "headertile"  );
+let viewname           =   document.getElementById("currentviewing");
 let Usersviews     =   [];
 let countMessage   =   {};
 let users_list     =   [];
@@ -111,7 +111,7 @@ function recievedataFromPython(connecttocode_)
         {
             display_name.textContent = data.content;
         }
-        if (data.header === "thisisamessage")
+        if (data.header === "thisismessage")
         {
             recievedmessage(data);
         }});
