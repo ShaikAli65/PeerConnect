@@ -89,7 +89,10 @@ def connectNew(_conn: socket.socket):
             return True
         elif connectNew_data.compare(const.CMD_RECV_FILE):
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
-            threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
+            # threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
+            filemanager.file_reciever(_conn)
+            _conn.close()
+            return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
             threading.Thread(target=filemanager.directory_reciever,args=(_conn,)).start()

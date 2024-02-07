@@ -276,6 +276,8 @@ function removeuser(idin)
     console.log("removing user :",user_," ",userview_," ",idin);
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);
+    initial_view.textContent = "Select a user to chat";
+    initial_view.style.display = "flex";
     if (focusedUser != userview_)
     {
         division_viewerpov.removeChild(userview_);
