@@ -6,3 +6,29 @@
 2024-02-06 17:23:35,658 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
 2024-02-06 17:26:50,931 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
 2024-02-06 17:33:07,172 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 18:11:47,311 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 18:15:30,300 - INFO - got error at handle/send_message :[Errno 22] Invalid argument: 'file::C:\\Users\\7862s\\Desktop\\lockscreenbackground.jpg'
+2024-02-06 18:33:09,969 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 18:42:52,994 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 18:43:57,296 - INFO - got error at handle/send_message :[Errno 22] Invalid argument: 'file::C:\\Users\\7862s\\Desktop\\lockscreenbackground.jpg'
+2024-02-06 18:45:37,760 - INFO - got error at handle/send_message :[Errno 22] Invalid argument: 'file::C:\\Users\\7862s\\Desktop\\lockscreenbackground.jpg'
+2024-02-06 18:45:46,418 - INFO - got error at handle/send_message :[Errno 22] Invalid argument: 'file::C:\\Users\\7862s\\Desktop\\lockscreenbackground.jpg'
+2024-02-06 18:48:01,687 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 21:03:40,798 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:04:34,577 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 21:06:05,567 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 21:06:31,558 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:07:36,553 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:08:38,247 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 21:09:00,390 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:10:59,413 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:11:43,689 - INFO - Error in sending data: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-06 21:12:12,300 - INFO - connection closed
+2024-02-06 21:12:56,317 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-06 21:17:22,599 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:19:17,446 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:19:17,446 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-06 21:19:51,595 - INFO - Error in sending data: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2024-02-06 21:20:57,790 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-07 11:30:52,044 - INFO - ::got name 'PeerText' is not defined at core\__init__.py from self.send_meta_data() closing connection
+2024-02-07 11:31:25,057 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket

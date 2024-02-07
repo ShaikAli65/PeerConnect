@@ -1,5 +1,3 @@
-import time
-
 from core import *
 from core import connectserver as connect_server
 from core import managerequests as manage_requests

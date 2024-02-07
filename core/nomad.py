@@ -1,5 +1,3 @@
-import socket
-
 from core import *
 from logs import *
 from webpage import handle
@@ -65,18 +63,11 @@ class Nomad:
 
 def send(_to_user_soc:socket.socket, _data: str):
 
-    for _ in range(const.MAX_CALL_BACKS):
-
-        try:
-            return PeerText(_to_user_soc, _data).send()
-        except socket.error as err:
-            time.sleep(3)
-            if err.errno == 10054:
-                return False
-            error_log(f"Error in sending data: {err}")
-            with const.PRINT_LOCK:
-                print(f"Error in sending data retrying... {err}")
-            continue
+    try:
+        return PeerText(_to_user_soc, _data).send()
+    except socket.error as err:
+        with const.PRINT_LOCK:
+            print(f"Error in sending data retrying... {err}")
 
     return False
 

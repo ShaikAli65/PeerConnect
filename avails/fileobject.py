@@ -41,8 +41,8 @@ class PeerFile:
             send_file_sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
             try:
                 send_file_sock.connect(self.remote_obj.uri)
-                PeerText(send_file_sock, const.CMD_RECV_FILE).send()
-                time.sleep(0.15)
+                PeerText(send_file_sock, const.CMD_RECV_FILE,byteable=False).send()
+                # time.sleep(0.15)
                 PeerText(send_file_sock, self.filename).send()
                 send_file_sock.sendall(self.raw_size)
                 self.sock = send_file_sock

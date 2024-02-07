@@ -217,7 +217,7 @@ function createmessage()
         focusedUser.appendChild(wrapperdiv_); 
         return JSON.stringify({
                 "header":"thisisafile",
-                "content":Content_.split("file::")[1],
+                "content":Content_.split("file::")[1].trim(),
                 "id":focusedUser.id.split("_")[1]
             });
     }
@@ -279,6 +279,7 @@ function removeuser(idin)
     if (focusedUser != userview_)
     {
         division_viewerpov.removeChild(userview_);
+        division_viewerpov.appendChild(initial_view);
     }
     else
     {

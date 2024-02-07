@@ -102,8 +102,7 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
             _id = queue_in.get()
             print(f"::at signal_active_status with {_id} :",threading.get_native_id())
         try:
-            _conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            with _conn:
+            with socket.socket(const.IP_VERSION, const.PROTOCOL)as  _conn:
                 _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
                 PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
                 const.REMOTE_OBJECT.serialize(_conn)
@@ -117,8 +116,7 @@ def notify_users():
         if not peer:
             continue
         try:
-            notify_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            with notify_soc:
+            with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
                 notify_soc.connect(peer.req_uri)
                 PeerText(notify_soc, const.CMD_NOTIFY_USER,byteable=False).send()
                 const.REMOTE_OBJECT.status = 0
