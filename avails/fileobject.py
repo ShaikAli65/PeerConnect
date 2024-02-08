@@ -1,4 +1,6 @@
 import os
+import sys
+
 from core import *
 from avails.textobject import PeerText
 
@@ -64,6 +66,7 @@ class PeerFile:
                     while data := file.read(self.chunk_size):
                         self.sock.sendall(data)
                 # activity_log(f'::sent file to {self.sock.getpeername()}')
+                print("::file sent: ", self.filename, " to ", self.sock.getpeername())
                 return True
             except Exception as e:
                 # error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
@@ -73,20 +76,25 @@ class PeerFile:
 
     def recv_file(self):
         """
-            Receives the file contents from the sender.
+        Receives the file contents from the sender.
 
-            Returns:
-                bool: True if the file was received successfully, False otherwise.
+        Returns:
+            bool: True if the file was received successfully, False otherwise.
         """
-
         with self._lock:
             try:
                 print("::receiving file")
+                received_bytes = 0
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
-                activity_log(f'::received file from {self.sock.getpeername()}')
-                print("::file received: ", self.filename)
+                        received_bytes += len(data)
+                        file_size = os.path.getsize(os.path.join(const.DOWNLOAD_PATH, self.filename))
+                        progress_percentage = (received_bytes / file_size) * 100
+                        print(f"\r::file received: {self.filename} {progress_percentage:.2f}%", end="")
+                        sys.stdout.flush()
+                activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
+                print(f"\n::file received: {self.filename}")
                 return True
             except Exception as e:
                 error_log(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
@@ -122,18 +130,6 @@ class PeerFile:
         self.filename = os.path.basename(new_file_name)
         self.name_length = len(self.filename)
         return new_file_name
-
-    def __iter__(self):
-        """
-            Returns an iterator over the file's contents.
-        """
-        return self.file
-
-    def __next__(self):
-        """
-           Returns the next chunk of data from the file.
-       """
-        return next(self.file)
 
     def __len__(self):
         """

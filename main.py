@@ -5,6 +5,7 @@ import tracemalloc
 from avails import constants as const
 import avails.useables as use
 from core import nomad as nomad
+from core import configure_app
 from core import connectserver as connect_server
 from core import managerequests as manage_requests
 from webpage import handle
@@ -18,7 +19,7 @@ def initiate() -> int:
         int: 1 on successful initialization, -1 on failure.
     """
 
-    if not const.set_constants():
+    if not configure_app.set_constants():
         with const.PRINT_LOCK:
             print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
         error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
