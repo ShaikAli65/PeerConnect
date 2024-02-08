@@ -8,10 +8,10 @@ import select
 from collections.abc import MutableSet
 
 import avails.constants as const
-from avails import useables as use
 from logs import error_log
 from logs import activity_log
 from logs import server_log
+from avails import useables as use
 from avails.fileobject import PeerFile
 from avails.remotepeer import RemotePeer
 from avails.textobject import PeerText

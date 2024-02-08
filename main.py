@@ -7,6 +7,7 @@ import avails.useables as use
 from core import nomad as nomad
 from core import configure_app
 from core import connectserver as connect_server
+from core import error_manager
 from core import managerequests as manage_requests
 from webpage import handle
 from logs import *
@@ -28,10 +29,12 @@ def initiate() -> int:
     const.OBJ_THREAD = use.start_thread(const.OBJ.commence)
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     if connect_server.initiate_connection() is False:
+        # error = error_manager.ErrorManager(ConnectionError, "Connection to server failed", 0, __file__)
+        # error.resolve()
         const.OBJ.end()
         manage_requests.end_connection()
         return -1
-    handle.initiate_control()
+    use.start_thread(handle.initiate_control()).join()
     # except Exception as e:
     #     e.with_traceback(None)
     #     error_log(f"::Exception in main.py: {e}")
