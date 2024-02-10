@@ -14,7 +14,7 @@ class PeerFile:
         self.chunk_size = chunk_size
         self.error_extension = error_ext
         self.sock = None
-        path = path.replace('\n', '').strip()
+        path = path.replace('\n', '').replace('\"','').strip()
         if path == '':
             self.sock = recv_soc
             self.path = ''
@@ -89,8 +89,7 @@ class PeerFile:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
                         received_bytes += len(data)
-                        file_size = os.path.getsize(os.path.join(const.DOWNLOAD_PATH, self.filename))
-                        progress_percentage = (received_bytes / file_size) * 100
+                        progress_percentage = (received_bytes / self.file_size) * 100
                         print(f"\r::file received: {self.filename} {progress_percentage:.2f}%", end="")
                         sys.stdout.flush()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')

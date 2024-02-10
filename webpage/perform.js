@@ -43,7 +43,7 @@ function eventlisteners()
 function initiate()
 {
     let connectToCode_;
-    connectToCode_ = new WebSocket('ws://localhost:12261');
+    connectToCode_ = new WebSocket('ws://localhost:12260');
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";

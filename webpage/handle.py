@@ -148,7 +148,7 @@ def initiate_control():
         print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
     # os.system(f'cd {const.PAGE_PATH} && index.html')
     webbrowser.open(os.path.join(const.PAGE_PATH,"index.html"))
-    # asyncio.set_event_loop(asyncio.new_event_loop())
+    asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
