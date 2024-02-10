@@ -83,14 +83,14 @@ class PeerFile:
         """
         with self._lock:
             try:
-                print("::receiving file")
+                print(f"::receiving file {self.filename}")
                 received_bytes = 0
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
                         received_bytes += len(data)
                         progress_percentage = (received_bytes / self.file_size) * 100
-                        print(f"\r::file received: {self.filename} {progress_percentage:.2f}%", end="")
+                        print(f"\r::file received: {progress_percentage:.2f}%", end="")
                         sys.stdout.flush()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
                 print(f"\n::file received: {self.filename}")

@@ -1,3 +1,5 @@
+import timeit
+
 from core import *
 from logs import *
 from webpage import handle
@@ -90,7 +92,8 @@ def connectNew(_conn: socket.socket):
         elif connectNew_data.compare(const.CMD_RECV_FILE):
             asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
             # threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
-            filemanager.file_reciever(_conn)
+            recieve_time = timeit.timeit(filemanager.file_reciever(_conn), number=1)
+            print("::recieving time: ", recieve_time)
             _conn.close()
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):

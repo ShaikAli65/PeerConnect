@@ -63,15 +63,6 @@ function initiate()
                 console.log("message sent :",data);
             }
         });
-        document.getElementById("idbutton").addEventListener("click",()=>{
-            var touser = document.getElementById("touser").value;
-            connectToCode_.send(JSON.stringify({
-                "header":"thisisacommand",
-                "content":"connectuser",
-                "id":touser
-            })
-            );
-        })
     });
     document.getElementById("Close Application").addEventListener("click",()=>{
         endsession(connectToCode_);
@@ -83,6 +74,15 @@ function initiate()
     /*sending messages on port :12346 message syntax : "thisisamessage_/!_" + Content + "~^~" + focusedUser.id */
     eventlisteners();
     recievedataFromPython(connectToCode_);
+}
+function ping_currentuser_id_topython(touser="") {
+    Connection.send(
+        JSON.stringify({
+            "header":"thisisacommand",
+            "content":"connectuser",
+            "id":touser
+        })
+    );
 }
 function revert()
 {
@@ -183,14 +183,15 @@ function showcurrent(user)
     var nametile_ = document.getElementById("person_"+user.id.split("_")[1]);
     nametile_.style.backgroundColor = "";
     document.getElementById("intial_view").style.display="none";
-    for (var i = 0;i < Usersviews.length;i++ )
+    if (focusedUser != null)
     {
-        Usersviews[i].style.display = "none";
+        focuseduser_viewer_pane = document.getElementById("viewer_"+focusedUser.id.split("_")[1]);
+        focuseduser_viewer_pane.style.display = "none";
     }
+    ping_currentuser_id_topython(user.id.split("_")[1]);
     user.style.display = "flex";
-    user.style.backgroundColor = ""
+    user.style.backgroundColor = "";
     focusedUser = user;
-
     viewname.textContent = nametile_.textContent;
 }
 
