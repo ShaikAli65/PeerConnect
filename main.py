@@ -54,8 +54,8 @@ if __name__ == "__main__":
         activity_log("::End Sequence Complete")
     except RuntimeError as re:
         error_log(f'::RuntimeError in main.py exp: {re}')
-    finally:
-        exit(0)
+    # finally:
+    #     exit(0)
 
 """
     pip install --upgrade pip

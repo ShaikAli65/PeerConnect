@@ -250,8 +250,14 @@ function recievedmessage(recievedata)
     var recieverid_ = document.getElementById("person_"+reciever);
     if(recieverid_ == null)
     {
-        console.error("::recieverid_ is null ",reciever);
-        return false;
+        var nulluser = document.getElementById("person_0");
+        if (nulluser == null)
+        {
+            createUserTile("Unknown@"+reciever+"(^)0");
+            nulluser = document.getElementById("person_0");
+        }
+        nulluser.style.backgroundColor = "var(--dark)";
+        return;
     }
     if(recieverid_ != focusedUser)
     {

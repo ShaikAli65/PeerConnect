@@ -11,7 +11,7 @@ import avails.constants as const   # <--- This is the only import from avails/co
 def get_ip() -> str:
     """Retrieves the local IP address of the machine.
 
-    Attempts to connect to a public DNS server (8.8.8.8) to obtain the local IP.
+    Attempts to connect to a public DNS server (1.1.1.1) to obtain the local IP.
     If unsuccessful, falls back to using gethostbyname().
 
     Returns:
