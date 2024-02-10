@@ -50,7 +50,7 @@ class PeerFile:
 
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
-                print(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
+                print(f'::got {e} at avails\\fileobject.py from self.recv_meta_data() closing connection')
                 # error_log(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
                 return False
 

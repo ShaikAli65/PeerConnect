@@ -91,11 +91,14 @@ def connectNew(_conn: socket.socket):
         elif connectNew_data.compare(const.CMD_RECV_FILE):
 
             # threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
+            filename = ""
+
             def wrapper():
-                return filemanager.file_reciever(_conn)
+                nonlocal filename
+                filename = filemanager.file_reciever(_conn)
+
             recieve_time = timeit.timeit(wrapper, number=1)
-            filename = wrapper()
-            asyncio.run(handle.feed_user_data("sent u a file : "+filename, _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data("sent u a file : " + filename, _conn.getpeername()[0]))
             print("::recieving time: ", recieve_time)
             _conn.close()
             return True
