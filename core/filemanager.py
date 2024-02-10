@@ -34,7 +34,7 @@ def file_reciever(_conn: socket.socket):
     getdata_file = PeerFile(recv_soc=_conn)
     if getdata_file.recv_meta_data():
         getdata_file.recv_file()
-    return
+    return getdata_file.filename
 
 
 def open_file_dialog():

@@ -47,6 +47,7 @@ class PeerFile:
             try:
                 self.filename = PeerText(self.sock).receive().decode(const.FORMAT)
                 self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
+
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
                 print(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')

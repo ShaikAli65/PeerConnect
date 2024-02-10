@@ -24,7 +24,7 @@ class Nomad:
     def commence(self):
         self.main_socket.listen()
         const.PAGE_HANDLE_CALL.wait()
-        use.echo_print(True,"::Listening for connections at ", self.address)
+        use.echo_print(True, "::Listening for connections at ", self.address)
         while self.safe_stop:
             if not isinstance(self.main_socket, socket.socket):
                 self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -63,8 +63,7 @@ class Nomad:
             return exp
 
 
-def send(_to_user_soc:socket.socket, _data: str):
-
+def send(_to_user_soc: socket.socket, _data: str):
     try:
         return PeerText(_to_user_soc, _data).send()
     except socket.error as err:
@@ -90,17 +89,21 @@ def connectNew(_conn: socket.socket):
             disconnect_user(_conn)
             return True
         elif connectNew_data.compare(const.CMD_RECV_FILE):
-            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
+
             # threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
-            recieve_time = timeit.timeit(filemanager.file_reciever(_conn), number=1)
+            def wrapper():
+                return filemanager.file_reciever(_conn)
+            recieve_time = timeit.timeit(wrapper, number=1)
+            filename = wrapper()
+            asyncio.run(handle.feed_user_data("sent u a file : "+filename, _conn.getpeername()[0]))
             print("::recieving time: ", recieve_time)
             _conn.close()
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
-            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
-            threading.Thread(target=filemanager.directory_reciever,args=(_conn,)).start()
+            asyncio.run(handle.feed_user_data(connectNew_data.decode(), _conn.getpeername()[0]))
+            threading.Thread(target=filemanager.directory_reciever, args=(_conn,)).start()
         elif connectNew_data.raw_text:
-            asyncio.run(handle.feed_user_data(connectNew_data, _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data(connectNew_data.decode(), _conn.getpeername()[0]))
     return True
 
 

@@ -154,10 +154,10 @@ def initiate_control():
     asyncio.get_event_loop().run_forever()
 
 
-async def feed_user_data(_data: avails.textobject.PeerText, ip):
+async def feed_user_data(_data: str, ip):
     global web_socket
     _data = datawrap(header="thisismessage",
-                     content=f"{_data.decode()}",
+                     content=f"{_data}",
                      _id=f"{ip}")
     try:
         print(f"::Sending data :{_data} \n to page: {ip}")
