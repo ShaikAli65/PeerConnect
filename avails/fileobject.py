@@ -94,10 +94,9 @@ class PeerFile:
                         print(f"\r::file received: {progress_percentage:.2f}%", end="")
                         sys.stdout.flush()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
-                print(f"\n::file received: {self.filename}")
                 return True
             except Exception as e:
-                error_log(f'::got {e} at core\\__init__.py from self.recv_file() closing connection')
+                error_log(f'::got {e} at avails\\fileobject.py from self.recv_file() closing connection')
                 self.sock.close()
                 self.__file_error()
                 return False
