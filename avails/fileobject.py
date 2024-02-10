@@ -30,16 +30,16 @@ class PeerFile:
 
         with self._lock:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            # try:
-            self.sock.connect(self.reciever_obj.uri)
-            PeerText(self.sock, const.CMD_RECV_FILE,byteable=False).send()
-            PeerText(self.sock, self.filename).send()
-            self.sock.sendall(self.raw_size)
-            return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
-            # except Exception as e:
-            #     print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-            #     # error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-            #     return False
+            try:
+                self.sock.connect(self.reciever_obj.uri)
+                PeerText(self.sock, const.CMD_RECV_FILE,byteable=False).send()
+                PeerText(self.sock, self.filename).send()
+                self.sock.sendall(self.raw_size)
+                return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
+            except Exception as e:
+                print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+                # error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+                return False
 
     def recv_meta_data(self) -> bool:
 
@@ -63,6 +63,7 @@ class PeerFile:
         """
         with self._lock:
             try:
+                self.chunk_size = 2048*4
                 with open(self.path, 'rb') as file:
                     while data := file.read(self.chunk_size):
                         self.sock.sendall(data)
@@ -70,7 +71,7 @@ class PeerFile:
                 print("::file sent: ", self.filename, " to ", self.sock.getpeername())
                 return True
             except Exception as e:
-                # error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
+                error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
                 return False
             finally:
                 self.sock.close()
@@ -93,6 +94,7 @@ class PeerFile:
                         progress_percentage = (received_bytes / self.file_size) * 100
                         print(f"\r::file received: {progress_percentage:.2f}%", end="")
                         sys.stdout.flush()
+                print()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
                 return True
             except Exception as e:
