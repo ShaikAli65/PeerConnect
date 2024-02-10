@@ -176,6 +176,7 @@ function createUserTile(idin='') // idin is the id of the user to be added synta
     division_viewerpov.appendChild(newview_);
     Usersviews.push(newview_);
     users_list.push(newtile_);
+    return newtile_;
 }
 
 function showcurrent(user)
@@ -247,21 +248,15 @@ function recievedmessage(recievedata)
     var reciever = recievedata.id.trim();
     recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
-    var recieverid_ = document.getElementById("person_"+reciever);
-    if(recieverid_ == null)
+    var reciever_tile = document.getElementById("person_"+reciever);
+    if(reciever_tile == null)
     {
-        var nulluser = document.getElementById("person_0");
-        if (nulluser == null)
-        {
-            createUserTile("Unknown@"+reciever+"(^)0");
-            nulluser = document.getElementById("person_0");
-        }
-        nulluser.style.backgroundColor = "var(--dark)";
-        return;
+        reciever_tile = createUserTile("Unknown@"+reciever+"(^)"+reciever);
+        reciever_tile.style.backgroundColor = "var(--dark)";
     }
-    if(recieverid_ != focusedUser)
+    if(reciever_tile != focusedUser)
     {
-        recieverid_.style.backgroundColor = "var(--dark)";
+        reciever_tile.style.backgroundColor = "var(--dark)";
     }
     var wrapperdiv_ = document.createElement("div");
     var subDiv_ = document.createElement("div");
