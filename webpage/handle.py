@@ -63,6 +63,9 @@ async def handle_connection(addr_id):
     except KeyError:
         print("Looks like the user is not in the list can't connect to the user")
         return False
+    except socket.error as exp:
+        error_log(f"got error at handle/handle_connection :{exp}")
+        return False
     if _nomad.status == 0:
         return False
     focus_user_stack.pop() if len(focus_user_stack) else None
