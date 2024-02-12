@@ -68,9 +68,9 @@ async def handle_connection(addr_id):
         return False
     if _nomad.status == 0:
         return False
-    focus_user_stack.pop() if len(focus_user_stack) else None
-    # peer_soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
-    # peer_soc.connect(_nomad.uri)
+    user_conn = focus_user_stack.pop() if len(focus_user_stack) else None
+    if user_conn:
+        user_conn.close()
     focus_user_stack.append(conn_socket)
     return True
 

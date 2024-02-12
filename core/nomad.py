@@ -1,3 +1,4 @@
+import socket
 import timeit
 
 from core import *
@@ -80,7 +81,7 @@ def connectNew(_conn: socket.socket):
             continue
         connectNew_data = PeerText(_conn)
         connectNew_data.receive()
-        if connectNew_data.compare(b""):
+        if connectNew_data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
             _conn.close() if _conn else None
             return
         with const.PRINT_LOCK:
