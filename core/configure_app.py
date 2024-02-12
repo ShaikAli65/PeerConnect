@@ -89,6 +89,8 @@ def set_constants() -> bool:
     const.PAGE_PATH = os.path.join(const.CURRENT_DIR, 'webpage')
     const.DOWNLOAD_PATH = os.path.join(const.CURRENT_DIR, 'downloads')
     # clear_logs()
+    if not os.path.exists(const.DOWNLOAD_PATH):
+        os.makedirs(const.DOWNLOAD_PATH)
     config_map = configparser.ConfigParser()
     # config_map.read('avails\\config.ini')
     config_map.read(const.CONFIG_PATH)

@@ -5,3 +5,6 @@
 2024-02-11 22:58:33,352 - INFO - ::got [WinError 10054] An existing connection was forcibly closed by the remote host at core\__init__.py from self.send_file() closing connection
 2024-02-11 23:01:29,657 - INFO - ::got [WinError 10054] An existing connection was forcibly closed by the remote host at core\__init__.py from self.send_file() closing connection
 2024-02-11 23:15:09,189 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-12 17:17:00,087 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket
+2024-02-12 17:21:09,830 - INFO - ::got [WinError 10054] An existing connection was forcibly closed by the remote host at core\__init__.py from self.send_file() closing connection
+2024-02-12 17:30:29,274 - INFO - Socket error: [WinError 10038] An operation was attempted on something that is not a socket

@@ -12,3 +12,31 @@
 2024-02-11 22:55:34,161 - INFO - server listening on [::1]:12260
 2024-02-11 22:55:35,827 - INFO - connection open
 2024-02-11 23:21:12,481 - ERROR - ::Connection fatal ... at server.py/initiate_connection, exp : [Errno 11001] getaddrinfo failed
+2024-02-12 16:54:44,765 - INFO - ::Connection accepted by server connect
+2024-02-12 16:54:44,944 - INFO - server listening on 127.0.0.1:12260
+2024-02-12 16:54:44,944 - INFO - server listening on [::1]:12260
+2024-02-12 16:54:46,674 - INFO - connection open
+2024-02-12 17:17:02,138 - ERROR - ::Failed disconnecting from server at server.py/end_connection, exp : [WinError 10061] No connection could be made because the target machine actively refused it
+2024-02-12 17:17:02,140 - ERROR - connection handler failed
+Traceback (most recent call last):
+  File "C:\Users\7862s\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\websockets\legacy\server.py", line 236, in handler
+    await self.ws_handler(self)
+  File "C:\Users\7862s\Desktop\remotezone\webpage\handle.py", line 144, in handler
+    await getdata()
+  File "C:\Users\7862s\Desktop\remotezone\webpage\handle.py", line 122, in getdata
+    await control_data_flow(data_in=data)
+  File "C:\Users\7862s\Desktop\remotezone\webpage\handle.py", line 86, in control_data_flow
+    await asyncio.create_task(use.end_session_async())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2288.0_x64__qbz5n2kfra8p0\Lib\asyncio\tasks.py", line 384, in create_task
+    task = loop.create_task(coro)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2288.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py", line 437, in create_task
+    task = tasks.Task(coro, loop=self, name=name, context=context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: a coroutine was expected, got True
+2024-02-12 17:17:02,254 - INFO - connection closed
+2024-02-12 17:17:21,896 - INFO - ::Connection accepted by server connect
+2024-02-12 17:17:22,143 - INFO - server listening on 127.0.0.1:12260
+2024-02-12 17:17:22,143 - INFO - server listening on [::1]:12260
+2024-02-12 17:17:26,778 - INFO - connection open
