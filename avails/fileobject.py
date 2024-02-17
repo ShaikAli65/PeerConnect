@@ -7,7 +7,7 @@ from avails.textobject import PeerText
 
 class PeerFile:
 
-    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 4096*2,
+    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 4096*4,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
         self._lock = threading.Lock()
@@ -63,7 +63,6 @@ class PeerFile:
         """
         with self._lock:
             try:
-                self.chunk_size = 2048 * 4
                 with open(self.path, 'rb') as file:
                     while data := file.read(self.chunk_size):
                         self.sock.sendall(data)
@@ -87,7 +86,7 @@ class PeerFile:
             try:
                 # received_bytes = 0
                 progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename}", unit="B", unit_scale=True,
-                                     unit_divisor=self.chunk_size)
+                                     unit_divisor=1024)
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
@@ -95,7 +94,7 @@ class PeerFile:
                         # progress_percentage = (received_bytes / self.file_size) * 100
                         # print(f"\r::file received: {progress_percentage:.2f}%", end="")
                         # sys.stdout.flush()
-                        progress.update(len(data))
+                        progress.update(self.chunk_size)
                 progress.close()
                 print()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')

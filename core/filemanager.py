@@ -5,6 +5,7 @@ from tkinter import filedialog
 from core import *
 from logs import *
 import core.nomad as nomad
+import zipfile
 
 
 def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
@@ -34,6 +35,12 @@ def file_reciever(_conn: socket.socket):
     if getdata_file.recv_meta_data():
         getdata_file.recv_file()
     return getdata_file.filename
+
+
+def compress_file(file_pa):
+    with open(file_pa, 'rb') as file:
+        compressed_data = zipfile.compress(file.read())
+    return compressed_data
 
 
 def open_file_dialog():
