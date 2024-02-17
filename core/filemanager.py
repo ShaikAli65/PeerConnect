@@ -7,17 +7,16 @@ from logs import *
 import core.nomad as nomad
 
 
-def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str,is_dir=False):
-    if is_dir:
-        directory_sender(_to_user_soc,_data)
-    else:
-        file = PeerFile(path=_data, obj=_to_user_soc)
-        if file.send_meta_data():
-            return file.send_file()
-        return False
+def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
+    file = PeerFile(path=_data, obj=_to_user_soc)
+    if file.send_meta_data():
+        file.send_file()
+        return file.filename
+    return False
 
 
 def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
+    
     pass
 
 

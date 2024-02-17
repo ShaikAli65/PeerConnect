@@ -36,20 +36,20 @@ PRINT_LOCK = threading.Lock()
 WEB_SOCKET = None
 LIST_OF_PEERS: dict = {}
 
-CMD_SEND_FILE = 'thisisacommandtocore_/!_sendafile'
 CMD_RECV_FILE = b'thisisacommandtocore_/!_recvafile'
 CMD_CLOSING_HEADER = b'thisisacommandtocore_/!_closeconnection'
+TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
+REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
+CMD_NOTIFY_USER = b'thisisacommandtocore_/!_notifyuser'
+CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
+
 CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
 FILESEND_INTITATE_HEADER = 'inititatefilesequence'
-TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
 SERVER_OK = 'connectionaccepted'
-REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'
 HANDLE_END = 'endprogram'
 HANDLE_COMMAND = 'thisisacommand'
 HANDLE_FILE_HEADER = 'thisisafile'
 HANDLE_CONNECT_USER = 'connectuser'
-CMD_NOTIFY_USER = b'thisisacommandtocore_/!_notifyuser'
-CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
-
+HANDLE_RELOAD = 'thisiscommandtocore_/!_reload'

@@ -26,7 +26,7 @@ def echo_print(delay_status=False, *args) -> None:
         print(*args)
 
 
-def end_session_async() -> bool:
+def end_session() -> bool:
     """Asynchronously performs cleanup tasks for ending the application session.
 
     Returns:
@@ -47,7 +47,7 @@ def endSequenceWrapper() -> None:
     """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
     """
 
-    end_session_async()
+    end_session()
 
 
 class NotInUse(DeprecationWarning):
@@ -55,3 +55,9 @@ class NotInUse(DeprecationWarning):
 
     def __init__(self, *args, **kwargs):
         pass
+
+
+def reload_protocol():
+    # end_session()
+
+    return None
