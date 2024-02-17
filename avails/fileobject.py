@@ -1,6 +1,6 @@
 import os
 import sys
-
+import tqdm
 from core import *
 from avails.textobject import PeerText
 
@@ -14,7 +14,7 @@ class PeerFile:
         self.chunk_size = chunk_size
         self.error_extension = error_ext
         self.sock = None
-        path = path.replace('\n', '').replace('\"','').strip()
+        path = path.replace('\n', '').replace('\"', '').strip()
         if path == '':
             self.sock = recv_soc
             self.path = ''
@@ -32,7 +32,7 @@ class PeerFile:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
             try:
                 self.sock.connect(self.reciever_obj.uri)
-                PeerText(self.sock, const.CMD_RECV_FILE,byteable=False).send()
+                PeerText(self.sock, const.CMD_RECV_FILE, byteable=False).send()
                 PeerText(self.sock, self.filename).send()
                 self.sock.sendall(self.raw_size)
                 return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
@@ -63,7 +63,7 @@ class PeerFile:
         """
         with self._lock:
             try:
-                self.chunk_size = 2048*4
+                self.chunk_size = 2048 * 4
                 with open(self.path, 'rb') as file:
                     while data := file.read(self.chunk_size):
                         self.sock.sendall(data)
@@ -86,14 +86,18 @@ class PeerFile:
         with self._lock:
             try:
                 print(f"::receiving file {self.filename}")
-                received_bytes = 0
+                # received_bytes = 0
+                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename}", unit="B", unit_scale=True,
+                                     unit_divisor=1024)
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
-                        received_bytes += len(data)
-                        progress_percentage = (received_bytes / self.file_size) * 100
-                        print(f"\r::file received: {progress_percentage:.2f}%", end="")
-                        sys.stdout.flush()
+                        # received_bytes += len(data)
+                        # progress_percentage = (received_bytes / self.file_size) * 100
+                        # print(f"\r::file received: {progress_percentage:.2f}%", end="")
+                        # sys.stdout.flush()
+                        progress.update(len(data))
+                progress.close()
                 print()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
                 return True
@@ -143,4 +147,3 @@ class PeerFile:
             Returns the filename.
         """
         return self.filename
-
