@@ -90,7 +90,7 @@ class PeerFile:
         with self._lock:
             try:
                 # received_bytes = 0
-                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename}", unit="B", unit_scale=True,
+                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename}\n", unit="B", unit_scale=True,
                                      unit_divisor=1024)
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
