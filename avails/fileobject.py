@@ -99,7 +99,7 @@ class PeerFile:
                         # progress_percentage = (received_bytes / self.file_size) * 100
                         # print(f"\r::file received: {progress_percentage:.2f}%", end="")
                         # sys.stdout.flush()
-                        progress.update(self.chunk_size)
+                        progress.update(len(data))
                 progress.close()
                 print()
                 activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
