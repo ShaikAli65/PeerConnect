@@ -145,3 +145,23 @@ class PeerFile:
             Returns the filename.
         """
         return self.filename
+
+# -----------------------------------------------------------------------------------------------
+def calculate_buffer_size(file_size):
+    # Define the minimum and maximum buffer sizes
+    min_buffer_size = 64 * 1024  # 64 KB
+    max_buffer_size = 1024 * 1024  # 1 MB
+
+    # Define the minimum and maximum file sizes
+    min_file_size = 0  # Smallest file size
+    max_file_size = 1024 * 1024 * 1024  # 1 GB (adjust as needed)
+
+    # Calculate the buffer size based on the file size
+    if file_size <= min_file_size:
+        return min_buffer_size
+    elif file_size >= max_file_size:
+        return max_buffer_size
+    else:
+        # Linear scaling between min and max buffer sizes
+        buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (max_file_size - min_file_size)
+        return int(buffer_size)
