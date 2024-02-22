@@ -31,9 +31,9 @@ class PeerFile:
         with self._lock:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
 
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
+            # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
+            #
+            # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
             try:
                 self.sock.connect(self.reciever_obj.uri)
                 PeerText(self.sock, const.CMD_RECV_FILE, byteable=False).send()
@@ -51,8 +51,8 @@ class PeerFile:
             try:
                 self.filename = PeerText(self.sock).receive().decode(const.FORMAT)
                 self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
-                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
+                # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
+                # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
                 print(f'::got {e} at avails\\fileobject.py from self.recv_meta_data() closing connection')
@@ -90,7 +90,7 @@ class PeerFile:
         with self._lock:
             try:
                 # received_bytes = 0
-                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename}\n", unit="B", unit_scale=True,
+                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]} ... ", unit="B", unit_scale=True,
                                      unit_divisor=1024)
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
