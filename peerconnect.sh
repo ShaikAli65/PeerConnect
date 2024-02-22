@@ -1,4 +1,3 @@
-#!/bin/bash
 source ./env/bin/activate.fish
 pip install websockets
 pip install requests
