@@ -7,7 +7,7 @@ from avails.textobject import PeerText
 
 class PeerFile:
 
-    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 4096*4,
+    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 1024*1024,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
         self._lock = threading.Lock()
