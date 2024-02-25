@@ -7,7 +7,10 @@ from logs import *
 import core.nomad as nomad
 from avails import dataweaver
 from webpage import handle
-import zipfile
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+from os import PathLike
+from typing import Union
 
 
 def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
@@ -21,6 +24,7 @@ def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
         return False
     except NotADirectoryError as nde:
         prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=_to_user_soc.id)
+        directory_sender(_to_user_soc, nde.filename)
     except FileNotFoundError as fne:
         prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=_to_user_soc.id)
     finally:
@@ -28,12 +32,27 @@ def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
 
 
 def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
-    
+    def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
+        src_path = Path(source_dir).expanduser().resolve(strict=True)
+        with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
+            for file in src_path.rglob('*'):
+                zf.write(file, file.relative_to(src_path.parent))
+        return zip_name
+    zip_dir("temp.zip", _data)
+    file_sender(_to_user_soc, "temp.zip")
     pass
 
 
 def directory_reciever(_conn: socket.socket):
-    pass
+    nomad.Nomad.currently_in_connection[_conn] = True
+    if not _conn:
+        with const.PRINT_LOCK:
+            print("::Closing connection from recv_file() from core/nomad at line 100")
+        return
+    getdata_file = PeerFile(recv_soc=_conn)
+    if getdata_file.recv_meta_data():
+        getdata_file.recv_file()
+    return getdata_file.filename
 
 
 def file_reciever(_conn: socket.socket):
@@ -78,3 +97,5 @@ def open_directory_dialog():
         print("Selected Directory:", directory_path)
 
     return directory_path if directory_path else None
+
+
