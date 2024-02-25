@@ -63,7 +63,7 @@ async def send_file_with_window(_path, user_id):
         peer_remote_sock: socket.socket = focus_user_stack[0]
         peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_file_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
-        use.start_thread(_target=filemanager.file_sender, args=(peer_remote_obj, _path))
+        use.start_thread(_target=filemanager.pop_file_selector_and_send, args=(peer_remote_obj,))
         return True
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -77,7 +77,7 @@ async def send_dir_with_window(_path, user_id):
         peer_remote_sock: socket.socket = focus_user_stack[0]
         peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_dir_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
-        use.start_thread(_target=filemanager.file_sender, args=(peer_remote_obj, _path))
+        use.start_thread(_target=filemanager.pop_dir_selector_and_send, args=(peer_remote_obj,))
         return True
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -119,9 +119,9 @@ async def control_data_flow(data_in: datawrap):
         elif data_in.match(_content=const.HANDLE_CONNECT_USER):
             await handle_connection(addr_id=data_in.id)
         elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
-            managers.filemanager.pop_dir_selector_and_send()
+            await send_dir_with_window(_path=data_in.content, user_id=data_in.id)
         elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
-            managers.filemanager.pop_file_selector_and_send()
+            await send_file_with_window(_path=data_in.content, user_id=data_in.id)
         elif data_in.match(_content=const.HANDLE_OPEN_FILE):
             use.open_file(data_in.content)
         elif data_in.match(const.HANDLE_RELOAD):
