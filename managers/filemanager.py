@@ -12,10 +12,10 @@ every_file = {}
 count = 0
 
 
-def file_sender(_to_user: remote_peer.RemotePeer, _data: str):
+def file_sender(_to_user: remote_peer.RemotePeer, _data: str, isdir=False):
     prompt_data, file = None, None
     try:
-        file = PeerFile(path=_data, obj=_to_user)
+        file = PeerFile(path=_data, obj=_to_user, is_dir=isdir)
         _to_user.increment_file_count()
         every_file[f"{_to_user.id }(^){_to_user.get_file_count()}"] = file
         if file.send_meta_data():
@@ -42,7 +42,7 @@ def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
     provisional_name = f"temp{_to_user_soc.get_file_count()}!!{_to_user_soc.id}.zip"
     zip_dir(provisional_name, _data)
     print("generated zip file: ", provisional_name)
-    file_sender(_to_user_soc, provisional_name)
+    file_sender(_to_user_soc, provisional_name, isdir = True)
     print("sent zip file: ", provisional_name)
     os.remove(provisional_name)
     pass

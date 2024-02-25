@@ -51,7 +51,7 @@ def end_session() -> bool:
     handle.end()
     const.LIST_OF_PEERS.clear()
     # threadmanager.end_all_threads()
-    filemanager.end_file_threads()
+    # filemanager.end_file_threads()
     return True
 
 

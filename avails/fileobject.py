@@ -8,13 +8,14 @@ from avails.textobject import PeerText
 
 
 class PeerFile:
-    def __init__(self, controlflag=threading.Event(), path: str = '', obj=None,
+    def __init__(self, controlflag=threading.Event(), path: str = '',is_dir=False, obj=None,
                  recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
         self._lock = threading.Lock()
         self.control_flag: threading.Event = controlflag
         self.chunk_size = chunk_size
+        self.is_dir = is_dir
         self.error_extension = error_ext
         self.sock = None
         if path == '':
@@ -49,7 +50,7 @@ class PeerFile:
                 if self.control_flag.is_set():
                     return
                 self.sock.connect(self.reciever_obj.uri)
-                PeerText(self.sock, const.CMD_RECV_FILE, byteable=False).send()
+                PeerText(self.sock, (const.CMD_RECV_DIR if self.is_dir else const.CMD_RECV_FILE), byteable=False).send()
                 PeerText(self.sock, self.filename).send()
                 self.sock.sendall(self.raw_size)
                 return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
