@@ -203,7 +203,7 @@ function createmessage()
     // console.log('::Message sent :', Content_);                                       //*debug
     if (Content_ === "")
         return false;
-    if (Content_.includes("file::"))
+    if (Content_.substring(0,7).includes("file::"))
     {
         subDiv_.textContent = "U sent a file";
         subDiv_.className = "message";
@@ -220,6 +220,26 @@ function createmessage()
         return JSON.stringify({
                 "header":"thisisafile",
                 "content":Content_.split("file::")[1].trim(),
+                "id":focusedUser.id.split("_")[1]
+            });
+    }
+    if (Content_.substring(0,7).includes("dir::"))
+    {
+        subDiv_.textContent = "U sent a dir";
+        subDiv_.className = "message";
+        subDiv_.style.display = "flex";
+        subDiv_.style.backgroundColor = "#92b892";
+        subDiv_.style.alignItems = "center";
+        subDiv_.style.justifyContent = "center";
+        subDiv_.id = "message_" + countMessage[focusedUser.id];
+        countMessage[focusedUser.id] += 1 ;
+        var wrapperdiv_ = document.createElement("div");
+        wrapperdiv_.appendChild(subDiv_);
+        wrapperdiv_.className = "messagewrapper right";
+        focusedUser.appendChild(wrapperdiv_); 
+        return JSON.stringify({
+                "header":"thisisadir",
+                "content":Content_.split("dir::")[1].trim(),
                 "id":focusedUser.id.split("_")[1]
             });
     }

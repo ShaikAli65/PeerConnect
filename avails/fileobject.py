@@ -14,6 +14,11 @@ class PeerFile:
         self.chunk_size = chunk_size
         self.error_extension = error_ext
         self.sock = None
+        if path == '':
+            self.sock = recv_soc
+            self.filename = ''
+            self.file_size = 0
+            return
 
         self.path = Path(path).resolve()
 
@@ -26,13 +31,8 @@ class PeerFile:
         if not self.path.is_file():
             raise IsADirectoryError(f"Not a regular file: {self.path}")
 
-        if self.path.name == '':
-            self.sock = recv_soc
-            self.filename = ''
-            self.file_size = 0
-        else:
-            self.filename = self.path.name
-            self.file_size = self.path.stat().st_size
+        self.filename = self.path.name
+        self.file_size = self.path.stat().st_size
         self.raw_size = struct.pack('!Q', self.file_size)
 
     def send_meta_data(self) -> bool:

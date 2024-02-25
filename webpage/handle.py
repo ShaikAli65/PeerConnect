@@ -99,6 +99,8 @@ async def control_data_flow(data_in: datawrap):
     # --
     elif data_in.match(_header=const.HANDLE_FILE_HEADER):
         await send_file(_path=data_in.content)
+    elif data_in.match(_header=const.HANDLE_DIR_HEADER):
+        await send_file(_path=data_in.content)
     # --
 
 
