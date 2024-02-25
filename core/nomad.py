@@ -26,14 +26,14 @@ class Nomad:
         const.PAGE_HANDLE_CALL.wait()
         use.echo_print(True, "::Listening for connections at ", self.address)
         while self.safe_stop:
+            readable, _, _ = select.select([self.main_socket], [], [], 0.001)
+            if self.main_socket not in readable:
+                continue
             if not isinstance(self.main_socket, socket.socket):
                 self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
                 self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self.main_socket.bind(self.address)
                 self.main_socket.listen()
-            readable, _, _ = select.select([self.main_socket], [], [], 0.001)
-            if self.main_socket not in readable:
-                continue
             try:
                 initiate_conn, _ = self.main_socket.accept()
                 activity_log(f'New connection from {_[0]}:{_[1]}')

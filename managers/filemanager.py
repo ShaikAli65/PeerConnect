@@ -17,7 +17,12 @@ def file_sender(_to_user: remote_peer.RemotePeer, _data: str):
     try:
         file = PeerFile(path=_data, obj=_to_user)
         _to_user.increment_file_count()
-        every_file[_to_user.id + "(^)" + _to_user.get_file_count()] = file
+        every_file[f"{_to_user.id }(^){_to_user.get_file_count()}"] = file
+        if file.send_meta_data():
+            file.send_file()
+            prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=file.filename, _id=_to_user.id)
+            return file.filename
+        return False
     except NotADirectoryError as nde:
         prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=_to_user.id)
         directory_sender(_to_user, _data)
@@ -26,12 +31,6 @@ def file_sender(_to_user: remote_peer.RemotePeer, _data: str):
     finally:
         asyncio.run(handle.feed_core_data_to_page(prompt_data))
 
-    if file.send_meta_data():
-        file.send_file()
-        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=file.filename, _id=_to_user.id)
-        return file.filename
-    return False
-
 
 def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
     def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
@@ -39,8 +38,8 @@ def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
         with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
             for file in src_path.rglob('*'):
                 zf.write(file, file.relative_to(src_path.parent))
-        return zip_name
-    provisional_name = f"temp{_to_user_soc.get_file_count()}//{_to_user_soc.id}.zip"
+        return
+    provisional_name = f"temp{_to_user_soc.get_file_count()}!!{_to_user_soc.id}.zip"
     zip_dir(provisional_name, _data)
     print("generated zip file: ", provisional_name)
     file_sender(_to_user_soc, provisional_name)
