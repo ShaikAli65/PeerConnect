@@ -42,7 +42,7 @@ def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
     provisional_name = f"temp{_to_user_soc.get_file_count()}!!{_to_user_soc.id}.zip"
     zip_dir(provisional_name, _data)
     print("generated zip file: ", provisional_name)
-    file_sender(_to_user_soc, provisional_name, isdir = True)
+    file_sender(_to_user_soc, provisional_name, isdir=True)
     print("sent zip file: ", provisional_name)
     os.remove(provisional_name)
     pass
