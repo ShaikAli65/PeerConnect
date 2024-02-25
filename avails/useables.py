@@ -2,7 +2,7 @@ from core import *
 from core import connectserver as connect_server
 from core import requestshandler as manage_requests
 from webpage import handle
-from managers import threadmanager
+# from managers import threadmanager
 from managers import filemanager
 import subprocess
 import tkinter as tk
@@ -50,7 +50,7 @@ def end_session() -> bool:
     manage_requests.end_connection()
     handle.end()
     const.LIST_OF_PEERS.clear()
-    threadmanager.end_all_threads()
+    # threadmanager.end_all_threads()
     filemanager.end_file_threads()
     return True
 
