@@ -45,16 +45,16 @@ def initiate() -> int:
 
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
-    try:
-        tracemalloc.start()
-        signal.signal(signal.SIGTERM, lambda signum, frame: use.endSequenceWrapper())
-        signal.signal(signal.SIGINT, lambda signum, frame: use.endSequenceWrapper())
-        initiate()
-        activity_log("::End Sequence Complete")
-    except RuntimeError as re:
-        error_log(f'::RuntimeError in main.py exp: {re}')
-    finally:
-        exit(0)
+    # try:
+    tracemalloc.start()
+    signal.signal(signal.SIGTERM, lambda signum, frame: use.endSequenceWrapper())
+    signal.signal(signal.SIGINT, lambda signum, frame: use.endSequenceWrapper())
+    initiate()
+    activity_log("::End Sequence Complete")
+    # except RuntimeError as re:
+    #     error_log(f'::RuntimeError in main.py exp: {re}')
+    # finally:
+    #     exit(0)
 
 """
     pip install --upgrade pip

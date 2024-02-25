@@ -38,6 +38,13 @@ function eventlisteners()
         }
     });
     EventListeners.push(document.getElementById("message"));
+    window.addEventListener('beforeunload', function(event) {
+        event.preventDefault();
+        event.returnValue = '';
+        endsession(Connection);
+        return 'Are you sure you want to leave?'; // Uncomment this line to show a confirmation dialog
+    });
+    
 }
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 function initiate()
