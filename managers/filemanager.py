@@ -20,7 +20,7 @@ def file_sender(_to_user: remote_peer.RemotePeer, _data: str):
         every_file[_to_user.id + "(^)" + _to_user.get_file_count()] = file
     except NotADirectoryError as nde:
         prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=_to_user.id)
-        directory_sender(_to_user, nde.filename)
+        directory_sender(_to_user, _data)
     except FileNotFoundError as fne:
         prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=_to_user.id)
     finally:
