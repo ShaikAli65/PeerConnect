@@ -1,10 +1,9 @@
-import socket
 import timeit
 
 from core import *
 from logs import *
 from webpage import handle
-from core import filemanager
+from managers import filemanager
 
 
 class Nomad:
@@ -100,6 +99,7 @@ def connectNew(_conn: socket.socket):
 
             recieve_time = timeit.timeit(wrapper, number=1)
             asyncio.run(handle.feed_user_data_to_page("sent u a file : " + filename, _conn.getpeername()[0]))
+
             print("::recieving time: ", recieve_time)
             _conn.close()
             return True

@@ -7,8 +7,7 @@ import avails.useables as use
 from core import nomad as nomad
 from core import configure_app
 from core import connectserver as connect_server
-from core import error_manager
-from core import managerequests as manage_requests
+from core import requestshandler as manage_requests
 from webpage import handle
 from logs import *
 

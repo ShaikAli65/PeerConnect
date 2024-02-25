@@ -1,16 +1,16 @@
-import asyncio
 import webbrowser
 import websockets
 import os
 from collections import deque
 
 import avails.textobject
+import managers.filemanager
 from core import *
 import core.nomad as nomad
 from avails import remotepeer
 from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
-from core import filemanager
+from managers import filemanager
 
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
@@ -56,6 +56,34 @@ async def send_file(_path):
         return False
 
 
+async def send_file_with_window(_path, user_id):
+    if not len(focus_user_stack):
+        return False
+    try:
+        peer_remote_sock: socket.socket = focus_user_stack[0]
+        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
+        print("at send_file_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
+        use.start_thread(_target=filemanager.file_sender, args=(peer_remote_obj, _path))
+        return True
+    except socket.error as exp:
+        error_log(f"got error at handle/send_message :{exp}")
+        return False
+
+
+async def send_dir_with_window(_path, user_id):
+    if not len(focus_user_stack):
+        return False
+    try:
+        peer_remote_sock: socket.socket = focus_user_stack[0]
+        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
+        print("at send_dir_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
+        use.start_thread(_target=filemanager.file_sender, args=(peer_remote_obj, _path))
+        return True
+    except socket.error as exp:
+        error_log(f"got error at handle/send_message :{exp}")
+        return False
+
+
 async def handle_connection(addr_id):
     global focus_user_stack
     if not addr_id:
@@ -88,9 +116,14 @@ async def control_data_flow(data_in: datawrap):
     if data_in.match(_header=const.HANDLE_COMMAND):
         if data_in.match(_content=const.HANDLE_END):
             await asyncio.create_task(use.end_session())
-        # --
         elif data_in.match(_content=const.HANDLE_CONNECT_USER):
             await handle_connection(addr_id=data_in.id)
+        elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
+            managers.filemanager.pop_dir_selector_and_send()
+        elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
+            managers.filemanager.pop_file_selector_and_send()
+        elif data_in.match(_content=const.HANDLE_OPEN_FILE):
+            use.open_file(data_in.content)
         elif data_in.match(const.HANDLE_RELOAD):
             use.reload_protocol()
     # --
@@ -98,8 +131,6 @@ async def control_data_flow(data_in: datawrap):
         await send_message(content=data_in.content)
     # --
     elif data_in.match(_header=const.HANDLE_FILE_HEADER):
-        await send_file(_path=data_in.content)
-    elif data_in.match(_header=const.HANDLE_DIR_HEADER):
         await send_file(_path=data_in.content)
     # --
 

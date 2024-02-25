@@ -5,7 +5,7 @@ import time
 
 import requests
 from logs import *
-import avails.constants as const   # <--- This is the only import from avails/constants.py
+import avails.constants as const  # <--- This is the only import from avails/constants.py
 
 
 def get_ip() -> str:
@@ -73,41 +73,7 @@ def clear_logs():
     return
 
 
-def set_constants() -> bool:
-    """Sets global constants from values in the configuration file and directories.
-
-    Reads configuration values from config.ini and sets global variables accordingly.
-    Also sets directory paths for logs and the webpage.
-
-    Returns:
-        bool: True if configuration values were set successfully, False otherwise.
-    """
-    const.CURRENT_DIR = os.path.join(os.getcwd())
-    # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    const.CONFIG_PATH = os.path.join(const.CURRENT_DIR, 'avails', 'config.ini')
-    const.LOG_DIR = os.path.join(const.CURRENT_DIR, 'logs')
-    const.PAGE_PATH = os.path.join(const.CURRENT_DIR, 'webpage')
-    const.DOWNLOAD_PATH = os.path.join(const.CURRENT_DIR, 'downloads')
-    # clear_logs()
-    if not os.path.exists(const.DOWNLOAD_PATH):
-        os.makedirs(const.DOWNLOAD_PATH)
-    config_map = configparser.ConfigParser()
-    # config_map.read('avails\\config.ini')
-    config_map.read(const.CONFIG_PATH)
-    # print(config_map.sections())
-    const.USERNAME = config_map["CONFIGURATIONS"]['username']
-    const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']
-
-    const.SERVER_PORT = int(config_map['CONFIGURATIONS']['server_port'])
-    const.THIS_PORT = int(config_map['NERD_OPTIONS']['this_port'])
-    const.PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])
-    const.REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
-    const.FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
-    validate_ports()
-    time.sleep(0.1)
-    const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
-    const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
-    const.THIS_IP = get_ip()
+def print_constants():
     line_format = "{:<15} {:<10}"
     with const.PRINT_LOCK:
         print(':configuration choices=========================')
@@ -130,7 +96,53 @@ def set_constants() -> bool:
         print(line_format.format("REQ_PORT   :", const.REQ_PORT))
         time.sleep(const.anim_delay)
         print("===============================================")
+    return
 
+
+def set_paths():
+    const.CURRENT_DIR = os.path.join(os.getcwd())
+    # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+    const.CONFIG_PATH = os.path.join(const.CURRENT_DIR, 'avails', 'config.ini')
+    const.LOG_DIR = os.path.join(const.CURRENT_DIR, 'logs')
+    const.PAGE_PATH = os.path.join(const.CURRENT_DIR, 'webpage')
+    downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
+    const.DOWNLOAD_PATH = os.path.join(downloads_path, 'peerconnect-downloads')
+    if not os.path.exists(const.DOWNLOAD_PATH):
+        os.makedirs(const.DOWNLOAD_PATH)
+
+    # const.DOWNLOAD_PATH = os.path.join(const.CURRENT_DIR, 'downloads')
+    # # clear_logs()
+    # if not os.path.exists(const.DOWNLOAD_PATH):
+    #     os.makedirs(const.DOWNLOAD_PATH)
+
+
+def set_constants() -> bool:
+    """Sets global constants from values in the configuration file and directories.
+
+    Reads configuration values from config.ini and sets global variables accordingly.
+    Also sets directory paths for logs and the webpage.
+
+    Returns:
+        bool: True if configuration values were set successfully, False otherwise.
+    """
+    set_paths()
+    config_map = configparser.ConfigParser()
+    config_map.read(const.CONFIG_PATH)
+    # print(config_map.sections())
+    const.USERNAME = config_map["CONFIGURATIONS"]['username']
+    const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']
+
+    const.SERVER_PORT = int(config_map['CONFIGURATIONS']['server_port'])
+    const.THIS_PORT = int(config_map['NERD_OPTIONS']['this_port'])
+    const.PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])
+    const.REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
+    const.FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
+    validate_ports()
+    time.sleep(0.1)
+    const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
+    const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
+    const.THIS_IP = get_ip()
+    print_constants()
     if const.USERNAME == '' or const.SERVER_IP == '' or const.THIS_PORT == 0 or const.PAGE_PORT == 0 or const.SERVER_PORT == 0:
         error_log(f"Error reading config.ini from set_constants() at line 75 in core/constants.py")
         return False

@@ -1,5 +1,6 @@
 import os
-import sys
+import threading
+
 import tqdm
 from pathlib import Path
 from core import *
@@ -7,10 +8,12 @@ from avails.textobject import PeerText
 
 
 class PeerFile:
-    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
+    def __init__(self, controlflag=threading.Event(), path: str = '', obj=None,
+                 recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
         self._lock = threading.Lock()
+        self.control_flag: threading.Event = controlflag
         self.chunk_size = chunk_size
         self.error_extension = error_ext
         self.sock = None
@@ -35,7 +38,7 @@ class PeerFile:
         self.file_size = self.path.stat().st_size
         self.raw_size = struct.pack('!Q', self.file_size)
 
-    def send_meta_data(self) -> bool:
+    def send_meta_data(self) -> Union[bool, None]:
 
         with self._lock:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -43,6 +46,8 @@ class PeerFile:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
 
             try:
+                if self.control_flag.is_set():
+                    return
                 self.sock.connect(self.reciever_obj.uri)
                 PeerText(self.sock, const.CMD_RECV_FILE, byteable=False).send()
                 PeerText(self.sock, self.filename).send()
@@ -98,10 +103,11 @@ class PeerFile:
         with self._lock:
             try:
                 # received_bytes = 0
-                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]}... ", unit="B", unit_scale=True,
+                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]}... ", unit="B",
+                                     unit_scale=True,
                                      unit_divisor=1024)
                 with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename__(self.filename)), 'wb') as file:
-                    while data := self.sock.recv(self.chunk_size):
+                    while (not self.control_flag.is_set()) and (data := self.sock.recv(self.chunk_size)):
                         file.write(data)
                         # received_bytes += len(data)
                         # progress_percentage = (received_bytes / self.file_size) * 100
@@ -128,8 +134,8 @@ class PeerFile:
         return True
 
     def __chunkify__(self):
-        with open(self.path,'rb') as file:
-            while chunk := file.read(self.chunk_size):
+        with open(self.path, 'rb') as file:
+            while (not self.control_flag.is_set()) and (chunk := file.read(self.chunk_size)):
                 yield chunk
 
     def __validatename__(self, file_addr: str):
@@ -164,7 +170,11 @@ class PeerFile:
         """
         return self.filename
 
-# -----------------------------------------------------------------------------------------------
+    def hold(self):
+        self.control_flag.set()
+
+
+# ++++++++++++++++--------------------------------------------------------------------------------------------------++++++++++++++++
 
 
 def calculate_buffer_size(file_size):
@@ -183,5 +193,6 @@ def calculate_buffer_size(file_size):
         return max_buffer_size
     else:
         # Linear scaling between min and max buffer sizes
-        buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (max_file_size - min_file_size)
+        buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (
+                    max_file_size - min_file_size)
         return int(buffer_size)
