@@ -88,7 +88,7 @@ def notify_user_connection(_conn_socket:socket.socket):
         else:
             const.LIST_OF_PEERS.pop(new_peer_object.uri[0],None)
             use.echo_print(False,f"{new_peer_object} said i am going ...")
-        asyncio.run(handle.feed_server_data(new_peer_object))
+        asyncio.run(handle.feed_server_data_to_page(new_peer_object))
         return None
     except Exception as e:
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")

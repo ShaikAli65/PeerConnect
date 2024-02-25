@@ -25,7 +25,7 @@ def initial_list(no_of_users: int, initiate_socket):
             if _nomad.status == 1:
                 const.LIST_OF_PEERS[_nomad.id] = _nomad
                 ping_queue.put(_nomad.id)
-            asyncio.run(handle.feed_server_data(_nomad))
+            asyncio.run(handle.feed_server_data_to_page(_nomad))
             print(f"user {_nomad.id} name {_nomad.uri} added to list")
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))

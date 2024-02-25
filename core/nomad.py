@@ -99,15 +99,15 @@ def connectNew(_conn: socket.socket):
                 filename = filemanager.file_reciever(_conn)
 
             recieve_time = timeit.timeit(wrapper, number=1)
-            asyncio.run(handle.feed_user_data("sent u a file : " + filename, _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data_to_page("sent u a file : " + filename, _conn.getpeername()[0]))
             print("::recieving time: ", recieve_time)
             _conn.close()
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
-            asyncio.run(handle.feed_user_data(connectNew_data.decode(), _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
             threading.Thread(target=filemanager.directory_reciever, args=(_conn,)).start()
         elif connectNew_data.raw_text:
-            asyncio.run(handle.feed_user_data(connectNew_data.decode(), _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
     return True
 
 

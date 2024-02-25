@@ -1,17 +1,17 @@
 from core import *
+from collections import defaultdict
 
 
 class DataWeaver:
     def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
+        self.data_lock = threading.Lock()
         if byte_data:
             self.data = json.loads(byte_data)
             self.header = self.data['header']
             self.id = self.data['id']
             self.content = self.data['content']
-            self.data_lock = threading.Lock()
         else:
-            self.data = dict()
-            self.data_lock = threading.Lock()
+            self.data = defaultdict()
             self.data['header'] = header
             self.data['content'] = content
             self.data['id'] = _id

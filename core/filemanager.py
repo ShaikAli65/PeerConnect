@@ -5,15 +5,26 @@ from tkinter import filedialog
 from core import *
 from logs import *
 import core.nomad as nomad
+from avails import dataweaver
+from webpage import handle
 import zipfile
 
 
 def file_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
-    file = PeerFile(path=_data, obj=_to_user_soc)
-    if file.send_meta_data():
-        file.send_file()
-        return file.filename
-    return False
+    prompt_data = None
+    try:
+        file = PeerFile(path=_data, obj=_to_user_soc)
+        if file.send_meta_data():
+            file.send_file()
+            prompt_data = dataweaver.DataWeaver(header="thisisaprompt",content=file.filename,_id=_to_user_soc.id)
+            return file.filename
+        return False
+    except NotADirectoryError as nde:
+        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=_to_user_soc.id)
+    except FileNotFoundError as fne:
+        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=_to_user_soc.id)
+    finally:
+        asyncio.run(handle.feed_core_data_to_page(prompt_data))
 
 
 def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):

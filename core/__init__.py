@@ -6,6 +6,7 @@ import asyncio
 import struct
 import select
 from collections.abc import MutableSet
+from typing import Union
 
 import avails.constants as const
 from logs import error_log

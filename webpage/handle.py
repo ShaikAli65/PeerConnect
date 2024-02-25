@@ -1,3 +1,4 @@
+import asyncio
 import webbrowser
 import websockets
 import os
@@ -29,8 +30,8 @@ async def send_message(content):
     if not len(focus_user_stack):
         return False
     try:
-        peer_sock:socket.socket = focus_user_stack[0]
-        use.start_thread(_target=nomad.send,args=(peer_sock, content))
+        peer_sock: socket.socket = focus_user_stack[0]
+        use.start_thread(_target=nomad.send, args=(peer_sock, content))
         return True
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -45,10 +46,10 @@ async def send_file(_path):
     if not len(focus_user_stack):
         return False
     try:
-        peer_remote_sock:socket.socket = focus_user_stack[0]
+        peer_remote_sock: socket.socket = focus_user_stack[0]
         peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_file : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
-        use.start_thread(_target=filemanager.file_sender,args=(peer_remote_obj,_path))
+        use.start_thread(_target=filemanager.file_sender, args=(peer_remote_obj, _path))
         return True
     except socket.error as exp:
         error_log(f"got error at handle/send_message :{exp}")
@@ -156,14 +157,14 @@ def initiate_control():
     with const.PRINT_LOCK:
         print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
     # os.system(f'cd {const.PAGE_PATH} && index.html')
-    webbrowser.open(os.path.join(const.PAGE_PATH,"index.html"))
+    webbrowser.open(os.path.join(const.PAGE_PATH, "index.html"))
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
 
-async def feed_user_data(_data: str, ip):
+async def feed_user_data_to_page(_data: str, ip):
     global web_socket
     _data = datawrap(header="thisismessage",
                      content=f"{_data}",
@@ -174,10 +175,19 @@ async def feed_user_data(_data: str, ip):
     except Exception as e:
         error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
         return
-    pass
 
 
-async def feed_server_data(peer: avails.remotepeer.RemotePeer):
+async def feed_core_data_to_page(data: datawrap):
+    global web_socket
+    try:
+        print(f"::Sending data :{data} \n to page")
+        await web_socket.send(data.dump())
+    except Exception as e:
+        error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
+        return
+
+
+async def feed_server_data_to_page(peer: avails.remotepeer.RemotePeer):
     global web_socket, server_data_lock
     with server_data_lock:
         _data = datawrap(header=const.HANDLE_COMMAND,
@@ -199,5 +209,6 @@ def end():
         return None
     SafeEnd.set()
     asyncio.get_event_loop().stop()
+    asyncio.get_running_loop().close()
     use.echo_print(True, "::Handle Ended")
     return

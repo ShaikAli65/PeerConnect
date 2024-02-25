@@ -1,39 +1,47 @@
 import os
 import sys
 import tqdm
+from pathlib import Path
 from core import *
 from avails.textobject import PeerText
 
 
 class PeerFile:
-
-    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 1024*512,
+    def __init__(self, path: str = '', obj=None, recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
         self._lock = threading.Lock()
         self.chunk_size = chunk_size
         self.error_extension = error_ext
         self.sock = None
-        path = path.replace('\n', '').replace('\"', '').strip()
-        if path == '':
+
+        self.path = Path(path).resolve()
+
+        if not self.path.exists():
+            raise FileNotFoundError(f"File not found: {self.path}")
+
+        if self.path.is_dir():
+            raise NotADirectoryError(f"Cannot send a directory: {self.path}")
+
+        if not self.path.is_file():
+            raise IsADirectoryError(f"Not a regular file: {self.path}")
+
+        if self.path.name == '':
             self.sock = recv_soc
-            self.path = ''
             self.filename = ''
-            self.name_length = len(self.filename)
             self.file_size = 0
-            return
-        self.path = path
-        self.filename = os.path.basename(path)
-        self.raw_size = struct.pack('!Q', os.path.getsize(path))
+        else:
+            self.filename = self.path.name
+            self.file_size = self.path.stat().st_size
+        self.raw_size = struct.pack('!Q', self.file_size)
 
     def send_meta_data(self) -> bool:
 
         with self._lock:
             self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
 
-            # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-            #
-            # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
             try:
                 self.sock.connect(self.reciever_obj.uri)
                 PeerText(self.sock, const.CMD_RECV_FILE, byteable=False).send()
@@ -51,8 +59,8 @@ class PeerFile:
             try:
                 self.filename = PeerText(self.sock).receive().decode(const.FORMAT)
                 self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
-                # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-                # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
                 return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
                 print(f'::got {e} at avails\\fileobject.py from self.recv_meta_data() closing connection')
@@ -69,7 +77,7 @@ class PeerFile:
         with self._lock:
             try:
                 with open(self.path, 'rb') as file:
-                    while data := file.read(self.chunk_size):
+                    for data in self.__chunkify__():
                         self.sock.sendall(data)
                 # activity_log(f'::sent file to {self.sock.getpeername()}')
                 print("::file sent: ", self.filename, " to ", self.sock.getpeername())
@@ -90,9 +98,9 @@ class PeerFile:
         with self._lock:
             try:
                 # received_bytes = 0
-                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]} ... ", unit="B", unit_scale=True,
+                progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]}... ", unit="B", unit_scale=True,
                                      unit_divisor=1024)
-                with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename(self.filename)), 'wb') as file:
+                with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename__(self.filename)), 'wb') as file:
                     while data := self.sock.recv(self.chunk_size):
                         file.write(data)
                         # received_bytes += len(data)
@@ -107,10 +115,10 @@ class PeerFile:
             except Exception as e:
                 error_log(f'::got {e} at avails\\fileobject.py from self.recv_file() closing connection')
                 self.sock.close()
-                self.__file_error()
+                self.__file_error__()
                 return False
 
-    def __file_error(self):
+    def __file_error__(self):
         """
             Handles file errors by renaming the file with an error extension.
         """
@@ -119,7 +127,12 @@ class PeerFile:
             self.filename += self.error_extension
         return True
 
-    def __validatename(self, file_addr: str):
+    def __chunkify__(self):
+        with open(self.path,'rb') as file:
+            while chunk := file.read(self.chunk_size):
+                yield chunk
+
+    def __validatename__(self, file_addr: str):
         """
             Ensures a unique filename if a file with the same name already exists.
 
@@ -152,6 +165,8 @@ class PeerFile:
         return self.filename
 
 # -----------------------------------------------------------------------------------------------
+
+
 def calculate_buffer_size(file_size):
     # Define the minimum and maximum buffer sizes
     min_buffer_size = 64 * 1024  # 64 KB
