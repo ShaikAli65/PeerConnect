@@ -2,6 +2,9 @@ import timeit
 
 from core import *
 from logs import *
+from avails.textobject import PeerText
+import avails.useables as use
+from avails.remotepeer import RemotePeer
 from webpage import handle
 from managers import filemanager
 

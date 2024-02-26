@@ -5,6 +5,7 @@ import json
 import asyncio
 import struct
 import select
+import os
 from collections.abc import MutableSet
 from typing import Union
 
@@ -12,11 +13,6 @@ import avails.constants as const
 from logs import error_log
 from logs import activity_log
 from logs import server_log
-from avails import useables as use
-from avails.fileobject import PeerFile
-from avails.remotepeer import RemotePeer
-from avails.textobject import PeerText
-import avails.remotepeer as remote_peer
 
 
 class Fluxuant(MutableSet):

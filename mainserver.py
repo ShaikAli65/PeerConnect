@@ -1,3 +1,4 @@
+import socket
 import socket as soc
 import threading
 import signal
@@ -11,13 +12,14 @@ import avails.remotepeer as rp
 import avails.constants as const
 
 SAFE = threading.Lock()
-SERVEROBJ = None
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
 LIST: set[rp.RemotePeer] = set()
+
+SERVEROBJ = socket.socket(IPVERSION, PROTOCOL)
 
 
 # LIST.add(rp.RemotePeer(username='temp',port=25006,ip='1.1.1.1',status=1))
@@ -121,30 +123,28 @@ def getip():
 
 def start_server():
     global SERVEROBJ
-    _server = soc.socket(IPVERSION, PROTOCOL)
-    _server.bind(getip())
-    _server.listen()
-    SERVEROBJ = _server
-    print("Server started at:\n>>", _server.getsockname())
+    SERVEROBJ.bind(getip())
+    SERVEROBJ.listen()
+    print("Server started at:\n>>", SERVEROBJ.getsockname())
     while not EXIT.is_set():
-        readable, _, _ = select.select([_server], [], [], 0.001)
-        if _server in readable:
-            client, addr = _server.accept()
+        readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
+        if SERVEROBJ in readable:
+            client, addr = SERVEROBJ.accept()
             validate(client)
 
 
 def endserver(signum, frame):
-    print("\nExiting from application...")
+    print("\nExiting from server...")
     EXIT.set()
     SERVEROBJ.close()
     return
 
 
-def getlist(lis):
-    for i in range(len(lis)):
-        l = lis[i]
-        lis[i] += 1
-    return
+# def getlist(lis):
+#     for i in range(len(lis)):
+#         l = lis[i]
+#         lis[i] += 1
+#     return
 
 
 if __name__ == '__main__':

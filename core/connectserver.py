@@ -1,8 +1,12 @@
 import queue
+
 from core import *
 from core import requestshandler
 from webpage import handle
 from logs import *
+from avails.textobject import PeerText
+import avails.useables as use
+import avails.remotepeer as remote_peer
 
 End_Safe = threading.Event()
 Error_Calls = 0
@@ -104,13 +108,13 @@ def initiate_connection():
             if call_count >= const.MAX_CALL_BACKS:
                 time.sleep(const.anim_delay)
                 print("\n::Ending program server refused connection")
-                return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
-            # time.sleep(1)
+            if End_Safe.is_set():
+                return False
         except Exception as exp:
             server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
-            return False
+    return False
 
 
 def end_connection_with_server():

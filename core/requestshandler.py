@@ -1,8 +1,10 @@
 import queue
+
 from avails import remotepeer
 from core import *
-
+from avails import useables as use
 from webpage import handle
+from avails.textobject import PeerText
 
 safe_stop = threading.Event()
 
@@ -102,7 +104,7 @@ def signal_active_status(queue_in: queue.Queue,lock:threading.Lock):
             _id = queue_in.get()
             print(f"::at signal_active_status with {_id} :",threading.get_native_id())
         try:
-            with socket.socket(const.IP_VERSION, const.PROTOCOL)as  _conn:
+            with socket.socket(const.IP_VERSION, const.PROTOCOL)as _conn:
                 _conn.connect(const.LIST_OF_PEERS[_id].req_uri)
                 PeerText(_conn, const.CMD_NOTIFY_USER,byteable=False).send()
                 const.REMOTE_OBJECT.serialize(_conn)

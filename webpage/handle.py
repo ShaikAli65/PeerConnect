@@ -1,10 +1,8 @@
 import webbrowser
 import websockets
-import os
 from collections import deque
 
 import avails.textobject
-import managers.filemanager
 from core import *
 import core.nomad as nomad
 from avails import remotepeer
@@ -115,7 +113,7 @@ async def control_data_flow(data_in: datawrap):
     """
     if data_in.match(_header=const.HANDLE_COMMAND):
         if data_in.match(_content=const.HANDLE_END):
-            await asyncio.create_task(use.end_session())
+            use.end_session()
         elif data_in.match(_content=const.HANDLE_CONNECT_USER):
             await handle_connection(addr_id=data_in.id)
         elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
@@ -241,7 +239,9 @@ def end():
     if web_socket is None:
         return None
     SafeEnd.set()
-    asyncio.get_event_loop().stop()
-    asyncio.get_running_loop().close()
+    asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else None
+    if asyncio.get_event_loop().is_running():
+        asyncio.get_running_loop().stop()
+        asyncio.get_running_loop().close()
     use.echo_print(True, "::Handle Ended")
     return

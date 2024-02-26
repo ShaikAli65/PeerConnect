@@ -1,9 +1,8 @@
 import socket as soc
-import threading
 import configparser
 import time
-
 import requests
+
 from logs import *
 import avails.constants as const  # <--- This is the only import from avails/constants.py
 
@@ -61,16 +60,6 @@ def validate_ports() -> None:
             error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.THIS_PORT, const.PAGE_PORT, const.REQ_PORT, const.FILE_PORT = ports_list
     return None
-
-
-def clear_logs():
-    with open(os.path.join(const.LOG_DIR, 'error.logs'), 'w') as e:
-        e.write('')
-    with os.path.join(const.LOG_DIR, 'activity.logs', 'w') as a:
-        a.write('')
-    with os.path.join(const.LOG_DIR, 'server.logs', 'w') as s:
-        s.write('')
-    return
 
 
 def print_constants():
@@ -148,3 +137,16 @@ def set_constants() -> bool:
         return False
 
     return True
+
+
+def clear_logs():
+    with open(os.path.join('..', 'logs', 'error.logs'), 'w') as e:
+        e.write('')
+    with open(os.path.join('..', 'logs', 'activity.logs'), 'w') as a:
+        a.write('')
+    with open(os.path.join('..', 'logs', 'server.logs'), 'w') as s:
+        s.write('')
+    return
+
+
+clear_logs()

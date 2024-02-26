@@ -1,10 +1,9 @@
-import os
-import threading
-
 import tqdm
 from pathlib import Path
+
 from core import *
 from avails.textobject import PeerText
+from avails.remotepeer import RemotePeer
 
 
 class PeerFile:

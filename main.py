@@ -8,7 +8,6 @@ from core import nomad as nomad
 from core import configure_app
 from core import connectserver as connect_server
 from core import requestshandler as manage_requests
-from webpage import handle
 from logs import *
 
 
@@ -33,7 +32,7 @@ def initiate() -> int:
         const.OBJ.end()
         manage_requests.end_connection()
         return -1
-    use.start_thread(handle.initiate_control).join()
+    # use.start_thread(handle.initiate_control).join()
     # except Exception as e:
     #     e.with_traceback(None)
     #     error_log(f"::Exception in main.py: {e}")
