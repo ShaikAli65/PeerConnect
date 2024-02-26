@@ -1,7 +1,7 @@
 import queue
 
 from core import *
-from core import requestshandler
+from core import requests_handler
 from webpage import handle
 from logs import *
 from avails.textobject import PeerText
@@ -22,7 +22,7 @@ def initial_list(no_of_users: int, initiate_socket):
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
             if i % const.MAX_CALL_BACKS == 0:
-                use.start_thread(_target=requestshandler.signal_active_status, args=(ping_queue,queue_lock))
+                use.start_thread(_target=requests_handler.signal_active_status, args=(ping_queue,queue_lock))
             if initiate_socket not in readable:
                 continue
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
@@ -41,7 +41,7 @@ def initial_list(no_of_users: int, initiate_socket):
                     list_error_handler()
                 return False
     if not ping_queue.empty():
-        use.start_thread(_target=requestshandler.signal_active_status, args=(ping_queue,queue_lock))
+        use.start_thread(_target=requests_handler.signal_active_status, args=(ping_queue,queue_lock))
     initiate_socket.close()
     return True
 

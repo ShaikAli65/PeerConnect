@@ -7,7 +7,7 @@ import avails.useables as use
 from core import nomad as nomad
 from core import configure_app
 from core import connectserver as connect_server
-from core import requestshandler as manage_requests
+from core import requests_handler as manage_requests
 from logs import *
 
 
@@ -56,9 +56,11 @@ if __name__ == "__main__":
     #     exit(0)
 
 """
-    pip install --upgrade pip
+
+    python -m pip install --upgrade pip
     pip install websockets
     pip install requests
     pip install asyncio
-    pip install threading
+    pip install tqdm
+    
 """

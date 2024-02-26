@@ -1,6 +1,6 @@
 from core import *
 from core import connectserver as connect_server
-from core import requestshandler as manage_requests
+from core import requests_handler as manage_requests
 from webpage import handle
 import subprocess
 import tkinter as tk
@@ -40,6 +40,7 @@ def end_session() -> Union[bool, None]:
     Returns:
         bool: True if cleanup was successful, False otherwise.
     """
+
     print("::Initiating End Sequence")
     # activity_log("::Initiating End Sequence")
     connect_server.end_connection_with_server()
