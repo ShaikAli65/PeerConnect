@@ -38,7 +38,7 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
     def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
         src_path = Path(source_dir).expanduser().resolve(strict=True)
         with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
-            progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping", unit="files")
+            progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
             for file in src_path.rglob('*'):
                 zf.write(file, file.relative_to(src_path.parent))
                 progress.update(1)

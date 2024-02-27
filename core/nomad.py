@@ -69,16 +69,17 @@ def send(_to_user_soc: socket.socket, _data: str):
     try:
         return PeerText(_to_user_soc, _data).send()
     except socket.error as err:
-        with const.PRINT_LOCK:
-            print(f"Error in sending data retrying... {err}")
+        use.echo_print(f"Error in sending data retrying... {err}")
 
     return False
 
 
 def connectNew(_conn: socket.socket):
     while Nomad.currently_in_connection.get(_conn):
-        readable, _, _ = select.select([_conn], [], [], 0.001)
+        readable, _, _ = select.select([_conn], [], [], 592)
         if _conn not in readable:
+            print("::Connection timed out :", _conn.getpeername())
+            disconnect_user(_conn)
             continue
         connectNew_data = PeerText(_conn)
         connectNew_data.receive()
@@ -91,18 +92,8 @@ def connectNew(_conn: socket.socket):
             disconnect_user(_conn)
             return True
         elif connectNew_data.compare(const.CMD_RECV_FILE):
-
-            # threading.Thread(target=filemanager.file_reciever,args=(_conn,)).start()
-            filename = ""
-
-            def wrapper():
-                nonlocal filename
-                filename = filemanager.file_reciever(_conn)
-
-            recieve_time = timeit.timeit(wrapper, number=1)
+            filename = filemanager.file_reciever(_conn)
             asyncio.run(handle.feed_user_data_to_page("sent u a file : " + filename, _conn.getpeername()[0]))
-
-            print("::recieving time: ", recieve_time)
             disconnect_user(_conn)
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
@@ -117,5 +108,6 @@ def connectNew(_conn: socket.socket):
 
 
 def disconnect_user(_conn):
+    PeerText(_conn, const.CMD_CLOSING_HEADER,byteable=False).send()
     _conn.close()
-    print("::Closing connection from disconnect_user() from core/nomad at line 153")
+    use.echo_print("::Closing connection from disconnect_user() from core/nomad at line 153")

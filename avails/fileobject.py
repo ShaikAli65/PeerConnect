@@ -7,7 +7,7 @@ from avails.remotepeer import RemotePeer
 
 
 class PeerFile:
-    def __init__(self, controlflag=threading.Event(), path: str = '',is_dir=False, obj=None,
+    def __init__(self, controlflag=threading.Event(), path: str = '', is_dir=False, obj=None,
                  recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'):
         self.reciever_obj: RemotePeer = obj
@@ -81,9 +81,12 @@ class PeerFile:
         """
         with self._lock:
             try:
-                with open(self.path, 'rb') as file:
-                    for data in self.__chunkify__():
-                        self.sock.sendall(data)
+                send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B"
+                                          , unit_scale=True, unit_divisor=1024)
+                for data in self.__chunkify__():    # send the file in chunks
+                    self.sock.sendall(data)
+                    send_progress.update(len(data))
+                send_progress.close()
                 # activity_log(f'::sent file to {self.sock.getpeername()}')
                 print("::file sent: ", self.filename, " to ", self.sock.getpeername())
                 return True
@@ -194,5 +197,5 @@ def calculate_buffer_size(file_size):
     else:
         # Linear scaling between min and max buffer sizes
         buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (
-                    max_file_size - min_file_size)
+                max_file_size - min_file_size)
         return int(buffer_size)

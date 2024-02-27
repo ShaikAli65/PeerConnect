@@ -226,7 +226,7 @@ function createmessage()
         focusedUser.appendChild(wrapperdiv_); 
         return JSON.stringify({
                 "header":"thisisafile",
-                "content":Content_.split("file::")[1].trim(),
+                "content":Content_.split("file::")[1].trim().replaceAll('\"',''),
                 "id":focusedUser.id.split("_")[1]
             });
     }
@@ -249,13 +249,13 @@ function createmessage()
             document.getElementById("litestatus").checked = false;
             return JSON.stringify({
                 "header":"thisisadirlite",
-                "content":Content_.split("dir::")[1].trim(),
+                "content":Content_.split("dir::")[1].trim().replaceAll('\"',''),
                 "id":focusedUser.id.split("_")[1]
             });
         }
         return JSON.stringify({
                 "header":"thisisadir",
-                "content":Content_.split("dir::")[1].trim(),
+                "content":Content_.split("dir::")[1].trim().replaceAll('\"',''),
                 "id":focusedUser.id.split("_")[1]
             });
     }

@@ -43,6 +43,7 @@ REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 CMD_NOTIFY_USER = b'thisisacommandtocore_/!_notifyuser'
 CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
 CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
+SERVER_PING = b'thisisacommandfromserver_/!_ping'
 
 CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
 CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'

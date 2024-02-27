@@ -30,7 +30,7 @@ def initial_list(no_of_users: int, initiate_socket):
                 const.LIST_OF_PEERS[_nomad.id] = _nomad
                 ping_queue.put(_nomad.id)
             asyncio.run(handle.feed_server_data_to_page(_nomad))
-            print(f"user {_nomad.id} name {_nomad.uri} added to list")
+            print(f"user {_nomad.id} name {_nomad.username} added to list")
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))
             if e.errno == 10054:
@@ -63,7 +63,7 @@ def get_list_from(initiate_socket: socket.socket):
             break
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/get_list_from ' + str(e))
-            print(f"::Exception while receiving list of users: retrying... {e}")
+            use.echo_print(f"::Exception while receiving list of users: retrying... {e}")
             end_connection_with_server()
             initiate_connection()
         except Exception as e:
