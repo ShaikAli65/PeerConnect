@@ -1,7 +1,4 @@
 from core import *
-from core import connectserver as connect_server
-from core import requests_handler as manage_requests
-from webpage import handle
 import subprocess
 import tkinter as tk
 import platform
@@ -32,35 +29,6 @@ def echo_print(delay_status=False, *args) -> None:
     with const.PRINT_LOCK:
         time.sleep(const.anim_delay) if delay_status else None
         print(*args)
-
-
-def end_session() -> Union[bool, None]:
-    """Asynchronously performs cleanup tasks for ending the application session.
-
-    Returns:
-        bool: True if cleanup was successful, False otherwise.
-    """
-
-    print("::Initiating End Sequence")
-    # activity_log("::Initiating End Sequence")
-    connect_server.end_connection_with_server()
-    if not const.PAGE_HANDLE_CALL.is_set():
-        return None
-    if const.OBJ:
-        const.OBJ.end()
-    manage_requests.end_connection()
-    handle.end()
-    const.LIST_OF_PEERS.clear()
-    # threadmanager.end_all_threads()
-    # filemanager.end_file_threads()
-    return True
-
-
-def endSequenceWrapper() -> None:
-    """Handles ending the application session gracefully upon receiving SIGTERM or SIGINT signals.
-    """
-
-    end_session()
 
 
 class NotInUse(DeprecationWarning):

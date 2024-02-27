@@ -1,6 +1,6 @@
 import logging
 import os
-from avails import constants
+from avails import constants as const
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 """
@@ -13,8 +13,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 def server_log(status_string: str, status: int):
-    os.makedirs(constants.LOG_DIR, exist_ok=True)
-    file_path = os.path.join(constants.LOG_DIR, 'server.logs')
+    os.makedirs(const.PATH_LOG, exist_ok=True)
+    file_path = os.path.join(const.PATH_LOG, 'server.logs')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -38,8 +38,8 @@ def server_log(status_string: str, status: int):
 
 
 def activity_log(status_string: str):
-    os.makedirs(constants.LOG_DIR, exist_ok=True)
-    file_path = os.path.join(constants.LOG_DIR, 'activity.logs')
+    os.makedirs(const.PATH_LOG, exist_ok=True)
+    file_path = os.path.join(const.PATH_LOG, 'activity.logs')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -54,10 +54,8 @@ def activity_log(status_string: str):
 
 
 def error_log(status_string: str):
-    os.makedirs(constants.LOG_DIR, exist_ok=True)
-    file_path = os.path.join(constants.LOG_DIR, 'error.logs')
-    # with open(file_path, 'w') as f:
-    #     f.write('')
+    os.makedirs(const.PATH_LOG, exist_ok=True)
+    file_path = os.path.join(const.PATH_LOG, 'error.logs')
     file_handler = logging.FileHandler(file_path)
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

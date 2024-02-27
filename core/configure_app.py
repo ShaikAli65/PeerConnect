@@ -3,8 +3,8 @@ import configparser
 import time
 import requests
 
-from logs import *
 import avails.constants as const  # <--- This is the only import from avails/constants.py
+from logs import *
 
 
 def get_ip() -> str:
@@ -99,10 +99,10 @@ def set_paths():
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
 
-    # const.DOWNLOAD_PATH = os.path.join(const.CURRENT_DIR, 'downloads')
-    # # clear_logs()
-    # if not os.path.exists(const.DOWNLOAD_PATH):
-    #     os.makedirs(const.DOWNLOAD_PATH)
+    print("download path :",const.PATH_DOWNLOAD)
+    print("config path   :",const.PATH_CONFIG)
+    print("log path      :",const.PATH_LOG)
+    print("page path     :",const.PATH_PAGE)
 
 
 def set_constants() -> bool:
@@ -115,6 +115,7 @@ def set_constants() -> bool:
         bool: True if configuration values were set successfully, False otherwise.
     """
     set_paths()
+    clear_logs()
     config_map = configparser.ConfigParser()
     config_map.read(const.PATH_CONFIG)
     # print(config_map.sections())
@@ -140,13 +141,14 @@ def set_constants() -> bool:
 
 
 def clear_logs():
-    with open(os.path.join('..', 'logs', 'error.logs'), 'w') as e:
+    with open(os.path.join(const.PATH_LOG, 'error.logs'), 'w') as e:
+        # print(os.path.join(const.PATH_LOG, 'error.logs'))
         e.write('')
-    with open(os.path.join('..', 'logs', 'activity.logs'), 'w') as a:
+    with open(os.path.join(const.PATH_LOG, 'activity.logs'), 'w') as a:
+        # print(os.path.join(const.PATH_LOG, 'activity.logs'))
         a.write('')
-    with open(os.path.join('..', 'logs', 'server.logs'), 'w') as s:
+    with open(os.path.join(const.PATH_LOG, 'server.logs'), 'w') as s:
+        # print(os.path.join(const.PATH_LOG, 'server.logs'))
         s.write('')
     return
 
-
-clear_logs()

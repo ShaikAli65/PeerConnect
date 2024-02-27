@@ -3,13 +3,13 @@ import websockets
 from collections import deque
 
 import avails.textobject
+import managers.endmanager
 from core import *
 import core.nomad as nomad
 from avails import remotepeer
 from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
 from managers import filemanager
-
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -113,7 +113,7 @@ async def control_data_flow(data_in: datawrap):
     """
     if data_in.match(_header=const.HANDLE_COMMAND):
         if data_in.match(_content=const.HANDLE_END):
-            use.end_session()
+            managers.endmanager.end_session()
         elif data_in.match(_content=const.HANDLE_CONNECT_USER):
             await handle_connection(addr_id=data_in.id)
         elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):

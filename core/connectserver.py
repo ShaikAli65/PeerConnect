@@ -108,10 +108,13 @@ def initiate_connection():
             if call_count >= const.MAX_CALL_BACKS:
                 time.sleep(const.anim_delay)
                 print("\n::Ending program server refused connection")
+                return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
             if End_Safe.is_set():
                 return False
+        except KeyboardInterrupt:
+            return False
         except Exception as exp:
             server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
     return False

@@ -14,27 +14,27 @@ every_file = {}
 count = 0
 
 
-def file_sender(_to_user: remote_peer.RemotePeer, _data: str, isdir=False):
+def file_sender(receiver_obj: remote_peer.RemotePeer, _data: str, isdir=False):
     prompt_data, file = None, None
     try:
-        file = PeerFile(path=_data, obj=_to_user, is_dir=isdir)
-        _to_user.increment_file_count()
-        every_file[f"{_to_user.id }(^){_to_user.get_file_count()}"] = file
+        file = PeerFile(path=_data, obj=receiver_obj, is_dir=isdir)
+        receiver_obj.increment_file_count()
+        every_file[f"{receiver_obj.id }(^){receiver_obj.get_file_count()}"] = file
         if file.send_meta_data():
             file.send_file()
-            prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=file.filename, _id=_to_user.id)
+            prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=file.filename, _id=receiver_obj.id)
             return file.filename
         return False
     except NotADirectoryError as nde:
-        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=_to_user.id)
-        directory_sender(_to_user, _data)
+        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
+        directory_sender(receiver_obj, _data)
     except FileNotFoundError as fne:
-        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=_to_user.id)
+        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
     finally:
         asyncio.run(handle.feed_core_data_to_page(prompt_data))
 
 
-def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
+def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
     def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
         src_path = Path(source_dir).expanduser().resolve(strict=True)
         with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
@@ -44,10 +44,10 @@ def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
                 progress.update(1)
             progress.close()
         return
-    provisional_name = f"temp{_to_user_soc.get_file_count()}!!{_to_user_soc.id}.zip"
+    provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
     zip_dir(provisional_name, _data)
     print("generated zip file: ", provisional_name)
-    file_sender(_to_user_soc, provisional_name, isdir=True)
+    file_sender(receiver_obj, provisional_name, isdir=True)
     print("sent zip file: ", provisional_name)
     os.remove(provisional_name)
     pass

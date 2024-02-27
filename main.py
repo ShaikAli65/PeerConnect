@@ -1,14 +1,19 @@
 """Main entry point for the application."""
 
-import signal
 import tracemalloc
-from avails import constants as const
-import avails.useables as use
-from core import nomad as nomad
+from core import *
 from core import configure_app
+
+if not configure_app.set_constants():
+    with const.PRINT_LOCK:
+        print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
+    error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
+    exit(0)
+
+from core import nomad as nomad
 from core import connectserver as connect_server
 from core import requests_handler as manage_requests
-from logs import *
+import avails.useables as use
 from webpage import handle
 
 
@@ -19,10 +24,7 @@ def initiate() -> int:
         int: 1 on successful initialization, -1 on failure.
     """
 
-    if not configure_app.set_constants():
-        with const.PRINT_LOCK:
-            print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
-        error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
+
     # try:
     const.OBJ = nomad.Nomad(const.THIS_IP, const.THIS_PORT)
     const.OBJ_THREAD = use.start_thread(const.OBJ.commence)
@@ -47,8 +49,6 @@ if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     # try:
     tracemalloc.start()
-    signal.signal(signal.SIGTERM, lambda signum, frame: use.endSequenceWrapper())
-    signal.signal(signal.SIGINT, lambda signum, frame: use.endSequenceWrapper())
     initiate()
     activity_log("::End Sequence Complete")
     # except RuntimeError as re:

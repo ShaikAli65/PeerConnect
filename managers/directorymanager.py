@@ -1,7 +1,12 @@
-from core import *
+import pickle
+import socket
+import time
 from pathlib import Path
+
+from core import *
 from zipfile import ZIP_DEFLATED, ZipFile
 from avails import useables as use
+from avails import remotepeer as remote_peer
 
 
 def make_directory_structure(path: Path):
@@ -22,12 +27,23 @@ def make_directory_structure(path: Path):
     use.echo_print(True, f"::Created directory structure at {parent}")
 
 
-def directory_sender():
+def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
+    dir_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+    dir_socket.connect(receiver_obj.uri)
+    dir_socket.sendall(const.CMD_RECV_DIR_LITE)
+    dir_path = Path(dir_path)
+    serialized_path = pickle.dumps(dir_path)
+    dir_socket.sendall(struct.pack('!Q', len(serialized_path)))
+    dir_socket.sendall(serialized_path)
+    time.sleep(0.02)
+
     pass
 
 
 def directory_reciever(_conn):
     sender_obj = const.LIST_OF_PEERS[_conn.getpeername()[0]]
     sender_obj.increment_file_count()
-
+    dir_len = struct.unpack('!Q', _conn.recv(8))[0]
+    dir_path:Path = Path(_conn.recv(dir_len))
+    make_directory_structure(dir_path)
     return None
