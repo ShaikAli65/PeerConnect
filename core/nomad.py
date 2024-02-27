@@ -103,14 +103,14 @@ def connectNew(_conn: socket.socket):
             asyncio.run(handle.feed_user_data_to_page("sent u a file : " + filename, _conn.getpeername()[0]))
 
             print("::recieving time: ", recieve_time)
-            _conn.close()
+            disconnect_user(_conn)
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
             dir_name = filemanager.directory_reciever(_conn)
             asyncio.run(handle.feed_user_data_to_page("sent u a directory : " + dir_name, _conn.getpeername()[0]))
         elif connectNew_data.compare(const.CMD_RECV_DIR_LITE):
             dir_name = directorymanager.directory_reciever(_conn)
-            asyncio.run(handle.feed_user_data_to_page("sent u a directory : " + dir_name, _conn.getpeername()[0]))
+            asyncio.run(handle.feed_user_data_to_page("sent u a directory through lite : " + dir_name, _conn.getpeername()[0]))
         elif connectNew_data.raw_text:
             asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
     return True

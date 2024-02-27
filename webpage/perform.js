@@ -40,7 +40,7 @@ function eventlisteners()
     EventListeners.push(document.getElementById("message"));
     window.addEventListener('beforeunload', function(event) {
         event.preventDefault();
-        event.returnValue = '';
+        event.returnValue = 'Are you sure you want to leave?';
         endsession(Connection);
         return 'Are you sure you want to leave?'; // Uncomment this line to show a confirmation dialog
     });
@@ -244,6 +244,15 @@ function createmessage()
         wrapperdiv_.appendChild(subDiv_);
         wrapperdiv_.className = "messagewrapper right";
         focusedUser.appendChild(wrapperdiv_); 
+        if (document.getElementById("litestatus").checked)
+        {
+            document.getElementById("litestatus").checked = false;
+            return JSON.stringify({
+                "header":"thisisadirlite",
+                "content":Content_.split("dir::")[1].trim(),
+                "id":focusedUser.id.split("_")[1]
+            });
+        }
         return JSON.stringify({
                 "header":"thisisadir",
                 "content":Content_.split("dir::")[1].trim(),

@@ -19,12 +19,22 @@ def make_directory_structure(path: Path):
                 d = const.PATH_DOWNLOAD / f.relative_to(path)
                 d.mkdir(parents=True, exist_ok=True)
                 _fill_in(f)
-            else:
-                pass
+        return
     parent = const.PATH_DOWNLOAD / path.name
+    balancer = 0
+    while parent.exists():
+        parent = const.PATH_DOWNLOAD / f"{path.name}({balancer})"
+        balancer += 1
     parent.mkdir(parents=True, exist_ok=True)
     _fill_in(path)
     use.echo_print(True, f"::Created directory structure at {parent}")
+
+
+def send_files(dir_socket, dir_path):
+    for x in dir_path.glob('**/*'):
+        if x.is_file():
+            pass
+    pass
 
 
 def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
@@ -36,7 +46,7 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
     dir_socket.sendall(struct.pack('!Q', len(serialized_path)))
     dir_socket.sendall(serialized_path)
     time.sleep(0.02)
-
+    send_files(dir_socket, dir_path)
     pass
 
 
@@ -46,4 +56,4 @@ def directory_reciever(_conn):
     dir_len = struct.unpack('!Q', _conn.recv(8))[0]
     dir_path:Path = Path(_conn.recv(dir_len))
     make_directory_structure(dir_path)
-    return None
+    return dir_path.name

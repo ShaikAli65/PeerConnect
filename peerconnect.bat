@@ -5,3 +5,4 @@ pip install requests
 pip install asyncio
 pip install tqdm
 python3 main.py
+exit

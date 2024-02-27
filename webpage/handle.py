@@ -9,7 +9,8 @@ import core.nomad as nomad
 from avails import remotepeer
 from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
-from managers import filemanager
+from managers import filemanager, directorymanager
+
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -130,6 +131,10 @@ async def control_data_flow(data_in: datawrap):
     # --
     elif data_in.match(_header=const.HANDLE_FILE_HEADER):
         await send_file(_path=data_in.content)
+    elif data_in.match(_header=const.HANDLE_DIR_HEADER):
+        await send_file(_path=data_in.content)
+    elif data_in.match(_header=const.HANDLE_DIR_HEADER_LITE):
+        await directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[data_in.id], dir_path=data_in.content)
     # --
 
 
