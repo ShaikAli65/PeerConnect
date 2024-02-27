@@ -9,11 +9,11 @@ SERVER_PORT = 0
 SERVER_IP = ''
 FILE_PORT = 45210
 REQ_PORT = 35896
-CURRENT_DIR = ''
-LOG_DIR = ''
-CONFIG_PATH = ''
-PAGE_PATH = ''
-DOWNLOAD_PATH = ''
+PATH_CURRENT = ''
+PATH_LOG = ''
+PATH_CONFIG = ''
+PATH_PAGE = ''
+PATH_DOWNLOAD = ''
 THIS_IP = ''
 
 IP_VERSION = soc.AF_INET
@@ -42,10 +42,11 @@ TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 CMD_NOTIFY_USER = b'thisisacommandtocore_/!_notifyuser'
 CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
+CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
 
 CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
-FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
+FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 SERVER_OK = 'connectionaccepted'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'
 HANDLE_END = 'endprogram'
@@ -57,3 +58,5 @@ HANDLE_DIR_HEADER = 'thisisadir'
 HANDLE_POP_DIR_SELECTOR = 'popdirselector'
 HANDLE_PUSH_FILE_SELECTOR = 'pushfileselector'
 HANDLE_OPEN_FILE = 'openfile'
+
+

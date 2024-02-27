@@ -1,6 +1,7 @@
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 from os import PathLike
+import tqdm
 
 from core import *
 import core.nomad as nomad
@@ -37,8 +38,11 @@ def directory_sender(_to_user_soc: remote_peer.RemotePeer, _data: str):
     def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
         src_path = Path(source_dir).expanduser().resolve(strict=True)
         with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
+            progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping", unit="files")
             for file in src_path.rglob('*'):
                 zf.write(file, file.relative_to(src_path.parent))
+                progress.update(1)
+            progress.close()
         return
     provisional_name = f"temp{_to_user_soc.get_file_count()}!!{_to_user_soc.id}.zip"
     zip_dir(provisional_name, _data)
@@ -59,10 +63,10 @@ def directory_reciever(_conn: socket.socket):
     if recv_file.recv_meta_data():
         recv_file.recv_file()
 
-    zip_path = str(os.path.join(const.DOWNLOAD_PATH, recv_file.filename))
+    zip_path = str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename))
     with ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(const.DOWNLOAD_PATH)
-    print(f"::Extracted {zip_path} to {const.DOWNLOAD_PATH}")
+        zip_ref.extractall(const.PATH_DOWNLOAD)
+    print(f"::Extracted {zip_path} to {const.PATH_DOWNLOAD}")
     os.remove(zip_path)
     return recv_file.filename
 

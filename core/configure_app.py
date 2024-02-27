@@ -89,15 +89,15 @@ def print_constants():
 
 
 def set_paths():
-    const.CURRENT_DIR = os.path.join(os.getcwd())
+    const.PATH_CURRENT = os.path.join(os.getcwd())
     # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    const.CONFIG_PATH = os.path.join(const.CURRENT_DIR, 'avails', 'config.ini')
-    const.LOG_DIR = os.path.join(const.CURRENT_DIR, 'logs')
-    const.PAGE_PATH = os.path.join(const.CURRENT_DIR, 'webpage')
+    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'avails', 'config.ini')
+    const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
+    const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'webpage')
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-    const.DOWNLOAD_PATH = os.path.join(downloads_path, 'PeerConnect')
-    if not os.path.exists(const.DOWNLOAD_PATH):
-        os.makedirs(const.DOWNLOAD_PATH)
+    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
+    if not os.path.exists(const.PATH_DOWNLOAD):
+        os.makedirs(const.PATH_DOWNLOAD)
 
     # const.DOWNLOAD_PATH = os.path.join(const.CURRENT_DIR, 'downloads')
     # # clear_logs()
@@ -116,7 +116,7 @@ def set_constants() -> bool:
     """
     set_paths()
     config_map = configparser.ConfigParser()
-    config_map.read(const.CONFIG_PATH)
+    config_map.read(const.PATH_CONFIG)
     # print(config_map.sections())
     const.USERNAME = config_map["CONFIGURATIONS"]['username']
     const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']

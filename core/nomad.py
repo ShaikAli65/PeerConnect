@@ -6,7 +6,7 @@ from avails.textobject import PeerText
 import avails.useables as use
 from avails.remotepeer import RemotePeer
 from webpage import handle
-from managers import filemanager
+from managers import *
 
 
 class Nomad:
@@ -107,8 +107,11 @@ def connectNew(_conn: socket.socket):
             _conn.close()
             return True
         elif connectNew_data.compare(const.CMD_RECV_DIR):
-            asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
-            filemanager.directory_reciever(_conn)
+            dir_name = filemanager.directory_reciever(_conn)
+            asyncio.run(handle.feed_user_data_to_page("sent u a directory : " + dir_name, _conn.getpeername()[0]))
+        elif connectNew_data.compare(const.CMD_RECV_DIR_LITE):
+            dir_name = directory_manager.directory_reciever(_conn)
+            asyncio.run(handle.feed_user_data_to_page("sent u a directory : " + dir_name, _conn.getpeername()[0]))
         elif connectNew_data.raw_text:
             asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
     return True

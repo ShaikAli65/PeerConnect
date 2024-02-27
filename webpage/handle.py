@@ -135,7 +135,7 @@ async def control_data_flow(data_in: datawrap):
 
 # @NotInUse
 async def set_name(new_username):
-    _config_file_path = const.CONFIG_PATH
+    _config_file_path = const.PATH_CONFIG
     const.USERNAME = new_username
     with open(_config_file_path, 'r') as file:
         _lines = file.readlines()
@@ -186,9 +186,9 @@ async def handler(_websocket):
 
 def initiate_control():
     with const.PRINT_LOCK:
-        print('::Initiate_control called at handle.py :', const.PAGE_PATH, const.PAGE_PORT)
+        print('::Initiate_control called at handle.py :', const.PATH_PAGE, const.PAGE_PORT)
     # os.system(f'cd {const.PAGE_PATH} && index.html')
-    webbrowser.open(os.path.join(const.PAGE_PATH, "index.html"))
+    webbrowser.open(os.path.join(const.PATH_PAGE, "index.html"))
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
     asyncio.get_event_loop().run_until_complete(start_server)

@@ -106,7 +106,7 @@ class PeerFile:
                 progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]}... ", unit="B",
                                      unit_scale=True,
                                      unit_divisor=1024)
-                with open(os.path.join(const.DOWNLOAD_PATH, self.__validatename__(self.filename)), 'wb') as file:
+                with open(os.path.join(const.PATH_DOWNLOAD, self.__validatename__(self.filename)), 'wb') as file:
                     while (not self.control_flag.is_set()) and (data := self.sock.recv(self.chunk_size)):
                         file.write(data)
                         # received_bytes += len(data)
@@ -151,7 +151,7 @@ class PeerFile:
         base, ext = os.path.splitext(file_addr)
         counter = 1
         new_file_name = file_addr
-        while os.path.exists(os.path.join(const.DOWNLOAD_PATH, new_file_name)):
+        while os.path.exists(os.path.join(const.PATH_DOWNLOAD, new_file_name)):
             new_file_name = f"{base}({counter}){ext}"
             counter += 1
         self.filename = os.path.basename(new_file_name)
