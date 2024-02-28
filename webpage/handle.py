@@ -1,3 +1,4 @@
+import asyncio
 import webbrowser
 import websockets
 from collections import deque
@@ -257,7 +258,7 @@ def end():
         return None
     SafeEnd.set()
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else None
-    if asyncio.get_event_loop().is_running():
+    if asyncio.get_running_loop().is_running():
         asyncio.get_running_loop().stop()
         asyncio.get_running_loop().close()
     use.echo_print(True, "::Handle Ended")
