@@ -84,8 +84,7 @@ def connectNew(_conn: socket.socket):
         if connectNew_data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
             _conn.close() if _conn else None
             return
-        with const.LOCK_PRINT:
-            print('data from peer :', connectNew_data)
+        use.echo_print(False,print('data from peer :', connectNew_data))
         if connectNew_data.compare(const.CMD_CLOSING_HEADER):
             disconnect_user(_conn)
             return True

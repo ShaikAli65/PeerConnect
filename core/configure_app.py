@@ -20,6 +20,7 @@ def get_ip() -> str:
         soc.error: If a socket error occurs during connection.
     """
     config_soc = soc.socket(const.IP_VERSION, const.PROTOCOL)
+    config_soc.settimeout(1)
     config_ip = 'localhost'
     try:
         if const.IP_VERSION == soc.AF_INET:
@@ -99,10 +100,10 @@ def set_paths():
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
 
-    print("download path :",const.PATH_DOWNLOAD)
-    print("config path   :",const.PATH_CONFIG)
-    print("log path      :",const.PATH_LOG)
-    print("page path     :",const.PATH_PAGE)
+    # print("download path :",const.PATH_DOWNLOAD)
+    # print("config path   :",const.PATH_CONFIG)
+    # print("log path      :",const.PATH_LOG)
+    # print("page path     :",const.PATH_PAGE)
 
 
 def set_constants() -> bool:

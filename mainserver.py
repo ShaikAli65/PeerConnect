@@ -1,30 +1,33 @@
-import socket
 import socket as soc
 import threading
 import signal
 import struct
 import pickle
+import time
 import requests
 import select
-import queue
 from avails.textobject import PeerText
 import avails.remotepeer as rp
 import avails.constants as const
 
-SAFE = threading.Lock()
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
+
+SAFE = threading.Lock()
+SERVERPORT = 45000
+SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
 handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
 LIST: set[rp.RemotePeer] = set()
+LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.1.1', status=1))
+ip = ""
 
-SERVEROBJ = socket.socket(IPVERSION, PROTOCOL)
 
-
-# LIST.add(rp.RemotePeer(username='temp',port=25006,ip='1.1.1.1',status=1))
 def get_local_ip():
+    global ip
     s = soc.socket(IPVERSION, PROTOCOL)
+    s.settimeout(0.5)
     try:
         s.connect(("1.1.1.1", 80))
         ip = s.getsockname()[0]
@@ -38,7 +41,7 @@ def get_local_ip():
 
 
 LeftPeerSafe = threading.Lock()
-LeftPeer = queue.Queue()
+synclist: set[rp.RemotePeer] = set()
 
 
 def givelist(client: soc.socket, userobj: rp.RemotePeer):
@@ -54,7 +57,7 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
     return
 
 
-def sendlist(client: soc.socket):
+def sendlist(client: soc.socket, ):
     """Another implementation of sending a list not in use currently"""
     with SAFE:
         _l = struct.pack('!I', len(LIST))
@@ -71,32 +74,10 @@ def validate(client: soc.socket):
             if _newuser.status == 0:
                 print('::removing user :', _newuser)
                 LIST.discard(_newuser)
+                synclist.add(_newuser)
                 print("new list :", LIST)
                 return True
         PeerText(client, const.SERVER_OK).send()
-        threading.Thread(target=givelist, args=(client, _newuser)).start()
-        return True
-    except soc.error as e:
-        print(f'::got {e} closing connection')
-        client.close() if client else None
-        return False
-
-
-def validate2(client: soc.socket):
-    global handshakemessage
-    try:
-        _newuser = rp.deserialize(client)
-        print('::got new user :', _newuser, 'status :', _newuser.status)
-        with SAFE:
-            if _newuser.status == 0:
-                print('::removing user :', _newuser)
-                LIST.discard(_newuser)
-                print("new list :", LIST)
-                return True
-        # PeerText(client,const.SERVEROK).send()
-        PeerText(client, "getanother").send()
-        _toget = rp.RemotePeer('babu', getip()[0], 12000, 56823, 1)
-        _toget.serialize(client)
         threading.Thread(target=givelist, args=(client, _newuser)).start()
         return True
     except soc.error as e:
@@ -113,38 +94,68 @@ def getip():
         if response.status_code == 200:
             data = response.json()
             config_ip = data['ip']
-            return config_ip, 45000
-    config_PUBILC_DNS = "1.1.1.1"
-    config_soc.connect((config_PUBILC_DNS, 80))
-    config_ip = config_soc.getsockname()[0]
+            return config_ip, SERVERPORT
+    config_ip = get_local_ip()
+    return config_ip, SERVERPORT
 
-    return config_ip, 45000
+
+def sync_users():
+    while not EXIT.is_set():
+        if len(LIST) == 0:
+            time.sleep(5)
+            continue
+        try:
+            for peer in LIST:
+
+                active_user_sock = soc.socket(IPVERSION, PROTOCOL)
+                active_user_sock.settimeout(0.5)
+                try:
+                    active_user_sock.connect(peer.req_uri)
+                    PeerText(active_user_sock, const.SERVER_PING, byteable=False).send()
+                except soc.error as e:
+                    print(f'::got EXCEPTION closing connection with :', peer)
+                    print('::new list :', LIST)
+                    LIST.discard(peer)
+                    peer.status = 0
+                    synclist.add(peer)
+                    continue
+                # print(f'::sending size of {len(synclist)} list to :', peer)
+                active_user_sock.send(struct.pack('!I', len(synclist)))
+                for peers in synclist:
+                    peers.serialize(active_user_sock)
+                active_user_sock.close()
+            print('::synced list :', LIST)
+            synclist.clear()
+        except RuntimeError as e:
+            print(f'::got {e} trying again')
+            continue
+        time.sleep(5)
 
 
 def start_server():
     global SERVEROBJ
+    SERVEROBJ.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
     SERVEROBJ.bind(getip())
     SERVEROBJ.listen()
     print("Server started at:\n>>", SERVEROBJ.getsockname())
+    threading.Thread(target=sync_users).start()
     while not EXIT.is_set():
         readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
         if SERVEROBJ in readable:
             client, addr = SERVEROBJ.accept()
+            print("A connection from :", addr)
             validate(client)
 
 
 def endserver(signum, frame):
-    print("\nExiting from server...")
+    print("\nExiting from application...")
     EXIT.set()
     SERVEROBJ.close()
     return
 
 
-# def getlist(lis):
-#     for i in range(len(lis)):
-#         l = lis[i]
-#         lis[i] += 1
-#     return
+def getlist(lis):
+    return
 
 
 if __name__ == '__main__':

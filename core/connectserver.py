@@ -2,7 +2,6 @@ import queue
 
 from core import *
 from core import requests_handler
-from webpage import handle
 from logs import *
 from avails.textobject import PeerText
 import avails.useables as use
@@ -80,6 +79,7 @@ def initiate_connection():
     while not End_Safe.is_set():
         try:
             server_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+            server_connection_socket.settimeout(const.SERVER_TIMEOUT)
             server_connection_socket.connect((const.SERVER_IP, const.SERVER_PORT))
             const.REMOTE_OBJECT.serialize(server_connection_socket)
 
