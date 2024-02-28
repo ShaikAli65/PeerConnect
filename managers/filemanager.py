@@ -34,23 +34,37 @@ def file_sender(receiver_obj: remote_peer.RemotePeer, _data: str, isdir=False):
         asyncio.run(handle.feed_core_data_to_page(prompt_data))
 
 
+def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
+    src_path = Path(source_dir).expanduser().resolve(strict=True)
+    with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
+        progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
+        for file in src_path.rglob('*'):
+            zf.write(file, file.relative_to(src_path.parent))
+            progress.update(1)
+        progress.close()
+    return
+
+
 def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
-    def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
-        src_path = Path(source_dir).expanduser().resolve(strict=True)
-        with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
-            progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
-            for file in src_path.rglob('*'):
-                zf.write(file, file.relative_to(src_path.parent))
-                progress.update(1)
-            progress.close()
-        return
+
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
-    zip_dir(provisional_name, _data)
+    zipper_process = Process(target=zip_dir, args=(provisional_name, _data))
+    zipper_process.start()
+    zipper_process.join()
+    # zip_dir(provisional_name, _data)
     print("generated zip file: ", provisional_name)
     file_sender(receiver_obj, provisional_name, isdir=True)
     print("sent zip file: ", provisional_name)
     os.remove(provisional_name)
     pass
+
+
+def unzipper(zip_path: str, dest_path: str):
+    with ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(dest_path)
+    print(f"::Extracted {zip_path} to {dest_path}")
+    os.remove(zip_path)
+    return
 
 
 def directory_reciever(_conn: socket.socket):
@@ -62,12 +76,9 @@ def directory_reciever(_conn: socket.socket):
     recv_file = PeerFile(recv_soc=_conn)
     if recv_file.recv_meta_data():
         recv_file.recv_file()
-
-    zip_path = str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename))
-    with ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(const.PATH_DOWNLOAD)
-    print(f"::Extracted {zip_path} to {const.PATH_DOWNLOAD}")
-    os.remove(zip_path)
+    unzip_process = Process(target=unzipper,args=(str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename)), const.PATH_DOWNLOAD))
+    unzip_process.start()
+    unzip_process.join()
     return recv_file.filename
 
 
