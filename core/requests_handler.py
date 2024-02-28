@@ -72,6 +72,27 @@ def sync_users(_conn: socket.socket):
     return
 
 
+def notify_user_connection(_conn_socket: socket.socket):
+    try:
+        new_peer_object: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
+        if not new_peer_object:
+            return False
+    except Exception as e:
+        error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
+        return None
+    return add_peer_accordingly(new_peer_object)
+    pass
+
+
+function_map = {
+    const.REQ_FOR_LIST: send_list,
+    const.I_AM_ACTIVE: notify_user_connection,
+    const.SERVER_PING: sync_users,
+    const.ACTIVE_PING: None,
+    const.LIST_SYNC: None
+}
+
+
 def control_connection(_conn: socket.socket):
     while safe_stop.is_set():
         try:
@@ -85,37 +106,8 @@ def control_connection(_conn: socket.socket):
             except (socket.error, OSError) as e:
                 error_log(f"Socket error at manage requests/control_connection exp:{e}")
                 return
-            if data.compare(const.REQ_FOR_LIST):
-                send_list(_conn)
-            elif data.compare(const.I_AM_ACTIVE):
-                notify_user_connection(_conn)
-            elif data.compare(const.SERVER_PING):
-                sync_users(_conn)
-            elif data.compare(const.ACTIVE_PING):
-                pass
-            elif data.compare(const.LIST_SYNC):
-                pass
+            function_map[data.raw_text](_conn) if function_map.get(data.raw_text) else None
             return
-
-
-def notify_user_connection(_conn_socket: socket.socket):
-    try:
-        new_peer_object: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
-        if not new_peer_object:
-            return
-        with const.LOCK_LIST_PEERS:
-            if new_peer_object.status == 1:
-                const.LIST_OF_PEERS[new_peer_object.uri[0]] = new_peer_object
-                use.echo_print(False, f"{new_peer_object} said i came ...")
-            else:
-                const.LIST_OF_PEERS.pop(new_peer_object.uri[0], None)
-                use.echo_print(False, f"{new_peer_object} said i am going ...")
-        asyncio.run(handle.feed_server_data_to_page(new_peer_object))
-        return None
-    except Exception as e:
-        error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
-        return None
-    pass
 
 
 def add_peer_accordingly(_peer: remotepeer.RemotePeer):
@@ -124,8 +116,10 @@ def add_peer_accordingly(_peer: remotepeer.RemotePeer):
     with const.LOCK_LIST_PEERS:
         if _peer.status == 1:
             const.LIST_OF_PEERS[_peer.uri[0]] = _peer
+            use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
         else:
             const.LIST_OF_PEERS.pop(_peer.uri[0], None)
+            use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
     asyncio.run(handle.feed_server_data_to_page(_peer))
     return True
 
@@ -139,25 +133,22 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
                 _conn.connect(peer_object.req_uri)
                 PeerText(_conn, const.I_AM_ACTIVE, byteable=False).send()
                 const.REMOTE_OBJECT.serialize(_conn)
-        except socket.error as e:
-            pass
-        if add_peer_accordingly(peer_object):
-            use.echo_print(False,f"user {peer_object.id} name {peer_object.username} added to list")
-        else:
-            use.echo_print(False,f"user {peer_object.id} name {peer_object.username} not added to list")
-    return None
+        except socket.error:
+            continue
+        add_peer_accordingly(peer_object)
 
 
 def notify_users():
     const.LOCK_LIST_PEERS.acquire()
+    const.REMOTE_OBJECT.status = 0
     for peer in const.LIST_OF_PEERS.values():
         if not peer:
             continue
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
+                notify_soc.settimeout(0.3)
                 notify_soc.connect(peer.req_uri)
                 PeerText(notify_soc, const.I_AM_ACTIVE, byteable=False).send()
-                const.REMOTE_OBJECT.status = 0
                 const.REMOTE_OBJECT.serialize(notify_soc)
         except socket.error as e:
             error_log(f"Error sending leaving status at manager_requests.py/notify_users exp :  {e}")

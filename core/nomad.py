@@ -67,9 +67,17 @@ def send(_to_user_soc: socket.socket, _data: str):
     try:
         return PeerText(_to_user_soc, _data).send()
     except socket.error as err:
-        use.echo_print(False,f"Error in sending data retrying... {err}")
+        use.echo_print(False, f"Error in sending data retrying... {err}")
 
     return False
+
+
+function_map = {
+    const.CMD_CLOSING_HEADER: lambda x: disconnect_user(x),
+    const.CMD_RECV_DIR: lambda x: "sent you a dir : " + filemanager.directory_reciever(x),
+    const.CMD_RECV_FILE: lambda x: "sent you a file : " + filemanager.file_reciever(x),
+    const.CMD_RECV_DIR_LITE: lambda x: "sent you a directory through lite : " + directorymanager.directory_reciever(x),
+}
 
 
 def connectNew(_conn: socket.socket):
@@ -79,33 +87,24 @@ def connectNew(_conn: socket.socket):
             print("::Connection timed out :", _conn.getpeername())
             disconnect_user(_conn)
             return
-        connectNew_data = PeerText(_conn)
-        connectNew_data.receive()
-        if connectNew_data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
+        try:
+            _data = PeerText(_conn)
+            _data.receive()
+        except socket.error:
+            return
+        if _data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
             _conn.close() if _conn else None
             return
-        use.echo_print(False,print('data from peer :', connectNew_data))
-        if connectNew_data.compare(const.CMD_CLOSING_HEADER):
-            disconnect_user(_conn)
-            return True
-        elif connectNew_data.compare(const.CMD_RECV_FILE):
-            filename = filemanager.file_reciever(_conn)
-            asyncio.run(handle.feed_user_data_to_page("sent u a file : " + filename, _conn.getpeername()[0]))
-            disconnect_user(_conn)
-            return True
-        elif connectNew_data.compare(const.CMD_RECV_DIR):
-            dir_name = filemanager.directory_reciever(_conn)
-            asyncio.run(handle.feed_user_data_to_page("sent u a directory : " + dir_name, _conn.getpeername()[0]))
-        elif connectNew_data.compare(const.CMD_RECV_DIR_LITE):
-            dir_name = directorymanager.directory_reciever(_conn)
-            asyncio.run(handle.feed_user_data_to_page("sent u a directory through lite : " + dir_name, _conn.getpeername()[0]))
-        elif connectNew_data.raw_text:
-            asyncio.run(handle.feed_user_data_to_page(connectNew_data.decode(), _conn.getpeername()[0]))
+
+        use.echo_print(False, print('data from peer :', _data))
+
+        message = function_map.get(_data.raw_text, lambda x: _data.decode())(_conn)
+        asyncio.run(handle.feed_user_data_to_page(message, _conn.getpeername()[0]))
+
     return True
 
 
 def disconnect_user(_conn):
-    PeerText(_conn, const.CMD_CLOSING_HEADER,byteable=False).send()
+    PeerText(_conn, const.CMD_CLOSING_HEADER, byteable=False).send()
     _conn.close()
-    use.echo_print(False,"::Closing connection from disconnect_user() from core/nomad at line 153")
-
+    use.echo_print(False, "::Closing connection from disconnect_user() from core/nomad at line 153")

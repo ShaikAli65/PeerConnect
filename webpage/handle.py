@@ -13,7 +13,6 @@ from avails.dataweaver import DataWeaver as datawrap
 from managers import filemanager, directorymanager
 from core import requests_handler as reqhandler
 
-
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -113,41 +112,56 @@ async def handle_connection(addr_id):
     return True
 
 
+async def command_flow_handler(data_in: datawrap):
+    if data_in.match(_content=const.HANDLE_END):
+        managers.endmanager.end_session()
+    elif data_in.match(_content=const.HANDLE_CONNECT_USER):
+        await handle_connection(addr_id=data_in.id)
+    elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
+        await send_dir_with_window(_path=data_in.content, user_id=data_in.id)
+    elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
+        await send_file_with_window(_path=data_in.content, user_id=data_in.id)
+    elif data_in.match(_content=const.HANDLE_OPEN_FILE):
+        use.open_file(data_in.content)
+    elif data_in.match(const.HANDLE_RELOAD):
+        use.reload_protocol()
+        return
+    elif data_in.match(const.HANDLE_SYNC_USERS):
+        use.start_thread(_target=reqhandler.sync_list)
+
+
 async def control_data_flow(data_in: datawrap):
     """
     A function to control the data flow from the page
     :param data_in:
     :return:
     """
-    if data_in.match(_header=const.HANDLE_COMMAND):
-        if data_in.match(_content=const.HANDLE_END):
-            managers.endmanager.end_session()
-        elif data_in.match(_content=const.HANDLE_CONNECT_USER):
-            await handle_connection(addr_id=data_in.id)
-        elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
-            await send_dir_with_window(_path=data_in.content, user_id=data_in.id)
-        elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
-            await send_file_with_window(_path=data_in.content, user_id=data_in.id)
-        elif data_in.match(_content=const.HANDLE_OPEN_FILE):
-            use.open_file(data_in.content)
-        elif data_in.match(const.HANDLE_RELOAD):
-            use.reload_protocol()
-            return
-        elif data_in.match(const.HANDLE_SYNC_USERS):
-            use.start_thread(_target=reqhandler.sync_list)
-    # --
-    elif data_in.match(_header=const.HANDLE_MESSAGE_HEADER):
-        await send_message(content=data_in.content)
-    # --
-    elif data_in.match(_header=const.HANDLE_FILE_HEADER):
-        await send_file(_path=data_in.content)
-    # --
-    elif data_in.match(_header=const.HANDLE_DIR_HEADER):
-        await send_file(_path=data_in.content)
-    # --
-    elif data_in.match(_header=const.HANDLE_DIR_HEADER_LITE):
-        with const.LOCK_LIST_PEERS:
-            directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[data_in.id], dir_path=data_in.content)
+    function_map = {
+        const.HANDLE_COMMAND: lambda x: command_flow_handler(x),
+        const.HANDLE_MESSAGE_HEADER: lambda x: send_message(x.content),
+        const.HANDLE_FILE_HEADER: lambda x: send_file(x.content),
+        const.HANDLE_DIR_HEADER: lambda x: send_file(x.content),
+        const.HANDLE_DIR_HEADER_LITE: lambda x: directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
+    }
+    try:
+        await function_map.get(data_in.header,lambda x: None)(data_in)
+    except TypeError as exp:
+        error_log(f"Error at handle/control_data_flow : {exp}")
+    # if data_in.match(_header=const.HANDLE_COMMAND):
+    #     await command_flow_handler(data_in)
+    # # --
+    # elif data_in.match(_header=const.HANDLE_MESSAGE_HEADER):
+    #     await send_message(content=data_in.content)
+    # # --
+    # elif data_in.match(_header=const.HANDLE_FILE_HEADER):
+    #     await send_file(_path=data_in.content)
+    # # --
+    # elif data_in.match(_header=const.HANDLE_DIR_HEADER):
+    #     await send_file(_path=data_in.content)
+    # # --
+    # elif data_in.match(_header=const.HANDLE_DIR_HEADER_LITE):
+    #     with const.LOCK_LIST_PEERS:
+    #         directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[data_in.id], dir_path=data_in.content)
     # --
 
 
