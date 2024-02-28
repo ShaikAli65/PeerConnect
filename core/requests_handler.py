@@ -74,7 +74,10 @@ def sync_users(_conn: socket.socket):
 
 def control_connection(_conn: socket.socket):
     while safe_stop.is_set():
-        readable, _, _ = select.select([_conn], [], [], 0.001)
+        try:
+            readable, _, _ = select.select([_conn], [], [], 0.001)
+        except OSError as e:
+            return
         if _conn in readable:
             try:
                 data = PeerText(_conn)
