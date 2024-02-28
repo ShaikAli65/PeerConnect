@@ -18,17 +18,17 @@ def send_list(_conn: socket.socket):
     for _nomad in peer_list.values():
         if not safe_stop.is_set():
             return
-        if _nomad.status == 1:
-            try:
-                _nomad.serialize(_conn)
-            except socket.error as e:
-                error_log(f"::Exception while giving list of users at manage requests/send_list, exp : {e}")
-                error_call += 1
-                with const.LOCK_PRINT:
-                    print(
-                        f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {e}")
-                if error_call > const.MAX_CALL_BACKS:
-                    return False
+        if not _nomad.status == 1:
+            continue
+        try:
+            _nomad.serialize(_conn)
+        except socket.error as e:
+            error_log(f"::Exception while giving list of users at manage requests/send_list, exp : {e}")
+            error_call += 1
+            with const.LOCK_PRINT:
+                print(f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {e}")
+            if error_call > const.MAX_CALL_BACKS:
+                return False
     return
 
 
@@ -79,12 +79,13 @@ def control_connection(_conn: socket.socket):
             continue
         try:
             data = PeerText(_conn)
+
             data.receive()
             # print(f"{_conn.getpeername()} said {data} at manage requests.py/control_connected_user")
             if data.compare(const.REQ_FOR_LIST):
                 send_list(_conn)
                 break
-            elif data.compare(const.CMD_NOTIFY_USER):
+            elif data.compare(const.I_AM_ACTIVE):
                 notify_user_connection(_conn)
                 break
             elif data.compare(const.SERVER_PING):
@@ -124,31 +125,33 @@ def notify_user_connection(_conn_socket: socket.socket):
     pass
 
 
-def re_verify_peer(_peer: remotepeer.RemotePeer):
-    if _peer.status == 1:
-        with const.LOCK_LIST_PEERS:
-            const.LIST_OF_PEERS[_peer.id] = _peer
-        asyncio.run(handle.feed_server_data_to_page(_peer))
-    else:
-        with const.LOCK_LIST_PEERS:
-            const.LIST_OF_PEERS.pop(_peer.id, None)
-        asyncio.run(handle.feed_server_data_to_page(_peer))
-    use.echo_print(False,f"user {_peer.id} name {_peer.username} added to list")
-    pass
+def add_peer_accordingly(_peer: remotepeer.RemotePeer):
+    if not _peer:
+        return False
+    with const.LOCK_LIST_PEERS:
+        if _peer.status == 1:
+            const.LIST_OF_PEERS[_peer.uri[0]] = _peer
+        else:
+            const.LIST_OF_PEERS.pop(_peer.uri[0], None)
+    asyncio.run(handle.feed_server_data_to_page(_peer))
+    return True
 
 
 def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
-
     while safe_stop.is_set() and (not queue_in.empty()):
         peer_object = queue_in.get()
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
+                _conn.settimeout(0.1)
                 _conn.connect(peer_object.req_uri)
-                if PeerText(_conn, const.CMD_NOTIFY_USER, byteable=False).send():
-                    const.REMOTE_OBJECT.serialize(_conn)
-                    re_verify_peer(peer_object)
+                PeerText(_conn, const.I_AM_ACTIVE, byteable=False).send()
+                const.REMOTE_OBJECT.serialize(_conn)
         except socket.error as e:
-            error_log(f"Error sending active status at manager_requests.py/signal_active_status exp :  {e}")
+            pass
+        if add_peer_accordingly(peer_object):
+            use.echo_print(False,f"user {peer_object.id} name {peer_object.username} added to list")
+        else:
+            use.echo_print(False,f"user {peer_object.id} name {peer_object.username} not added to list")
     return None
 
 
@@ -160,20 +163,11 @@ def notify_users():
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
                 notify_soc.connect(peer.req_uri)
-                PeerText(notify_soc, const.CMD_NOTIFY_USER, byteable=False).send()
+                PeerText(notify_soc, const.I_AM_ACTIVE, byteable=False).send()
                 const.REMOTE_OBJECT.status = 0
                 const.REMOTE_OBJECT.serialize(notify_soc)
         except socket.error as e:
             error_log(f"Error sending leaving status at manager_requests.py/notify_users exp :  {e}")
-    return None
-
-
-def end_connection():
-    global safe_stop
-    safe_stop.set()
-    const.REMOTE_OBJECT.status = 0
-    notify_users()
-    print("::Requests connections ended")
     return None
 
 
@@ -191,6 +185,14 @@ def sync_list():
         except socket.error as e:
             use.echo_print(False, f"Looks like the user is inactive {peer_obj.username}({peer_obj.uri}) at manager_requests.py/sync_list exp :  {e}")
             peer_obj.status = 0
-            re_verify_peer(peer_obj)
+            add_peer_accordingly(peer_obj)
             return None
+    return None
+
+def end_connection():
+    global safe_stop
+    safe_stop.set()
+    const.REMOTE_OBJECT.status = 0
+    notify_users()
+    print("::Requests connections ended")
     return None

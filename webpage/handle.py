@@ -11,6 +11,8 @@ from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
 from managers import filemanager, directorymanager
 from core import requests_handler as reqhandler
+
+
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -216,7 +218,7 @@ async def feed_user_data_to_page(_data: str, ip):
                      content=f"{_data}",
                      _id=f"{ip}")
     try:
-        print(f"::Sending data :{_data} \n to page: {ip}")
+        print(f"::Sending data :{_data} to page: {ip}")
         await web_socket.send(_data.dump())
     except Exception as e:
         error_log(f"Error sending data handle.py/feed_user_data exp: {e}")
