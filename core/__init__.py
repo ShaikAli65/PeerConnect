@@ -15,39 +15,112 @@ from logs import activity_log
 from logs import server_log
 
 
-class Fluxuant(MutableSet):
-    def __init__(self):
-        self._data = set()
-        self._changes = set()  # Track changes since the last synchronization
+class CustomDict:
+    def __init__(self, **kwargs):
+        self._data = dict(kwargs)
         self._lock = threading.Lock()
 
-    def add(self, item):
+    def __getitem__(self, key):
         with self._lock:
-            self._data.add(item)
-            self._changes.add(('1', item))
+            return self._data[key]
 
-    def discard(self, item):
+    def __setitem__(self, key, value):
         with self._lock:
-            self._data.discard(item)
-            self._changes.add(('0', item))
+            self._data[key] = value
 
-    def get_changes(self):
+    def __delitem__(self, key):
         with self._lock:
-            changes = list(self._changes)
-            self._changes.clear()  # Clear the changes after synchronization
-            return changes
+            del self._data[key]
 
-    def __contains__(self, item):
+    def keys(self):
         with self._lock:
-            return item in self._data
+            return self._data.keys()
+
+    def values(self):
+        with self._lock:
+            return self._data.values()
+
+    def items(self):
+        with self._lock:
+            return self._data.items()
+
+    def get(self, key, default=None):
+        with self._lock:
+            return self._data.get(key, default)
+
+    def __str__(self):
+        with self._lock:
+            return str(self._data)
+
+    def __repr__(self):
+        with self._lock:
+            return repr(self._data)
 
     def __iter__(self):
         with self._lock:
             return iter(self._data)
 
+    def __next__(self):
+        with self._lock:
+            return next(self._data.__iter__())
+
     def __len__(self):
         with self._lock:
             return len(self._data)
 
-    def __str__(self) -> str:
-        return super().__str__()
+    def __eq__(self, other):
+        with self._lock:
+            return self._data == other
+
+    def __ne__(self, other):
+        with self._lock:
+            return self._data != other
+
+    def __lt__(self, other):
+        with self._lock:
+            return self._data < other
+
+    def __le__(self, other):
+        with self._lock:
+            return self._data <= other
+
+    def __gt__(self, other):
+        with self._lock:
+            return self._data > other
+
+    def __ge__(self, other):
+        with self._lock:
+            return self._data >= other
+
+    def copy(self):
+        with self._lock:
+            return self._data.copy()
+
+    def pop(self, key, default=None):
+        with self._lock:
+            return self._data.pop(key, default)
+
+    def popitem(self):
+        with self._lock:
+            return self._data.popitem()
+
+    def clear(self):
+        with self._lock:
+            self._data.clear()
+
+    def update(self, *args, **kwargs):
+        with self._lock:
+            self._data.update(*args, **kwargs)
+
+    def __contains__(self, key):
+        with self._lock:
+            return key in self._data
+
+    def setdefault(self, key, default=None):
+        with self._lock:
+            return self._data.setdefault(key, default)
+
+    @classmethod
+    def fromkeys(cls, seq, value=None):
+        return dict.fromkeys(seq, value)
+

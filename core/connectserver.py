@@ -14,7 +14,6 @@ Error_Calls = 0
 
 def initial_list(no_of_users: int, initiate_socket):
     global End_Safe, Error_Calls
-    queue_lock = threading.Lock()
     ping_queue = queue.Queue()
     if no_of_users == 0:
         return None
@@ -22,10 +21,13 @@ def initial_list(no_of_users: int, initiate_socket):
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
             if i % const.MAX_CALL_BACKS == 0:
-                use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue, queue_lock))
+                use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue,))
+                ping_queue = queue.Queue()
             if initiate_socket not in readable:
                 continue
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
+            ping_queue.put(_nomad)
+            # use.echo_print(False, f"::User received from server : {_nomad}")
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))
             if e.errno == 10054:
@@ -35,8 +37,8 @@ def initial_list(no_of_users: int, initiate_socket):
                     server_log(f"::Server disconnected recieved some users retrying ...", 4)
                     list_error_handler()
                 return False
-    if not ping_queue.empty():
-        use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue, queue_lock))
+    use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue,))
+    use.echo_print(False, "::List received from server", const.LIST_OF_PEERS)
     initiate_socket.close()
     return True
 
@@ -47,6 +49,7 @@ def list_error_handler():
 
 def get_list_from(initiate_socket: socket.socket):
     const.PAGE_HANDLE_CALL.wait()
+    # use.echo_print(False,"::Getting list from server")
     global End_Safe, Error_Calls
     raw_length = 0
     for _ in range(const.MAX_CALL_BACKS):
@@ -64,7 +67,8 @@ def get_list_from(initiate_socket: socket.socket):
         except Exception as e:
             print(f"::Exception fatal... exp:{e}")
             return False
-    return initial_list(struct.unpack('!Q', raw_length)[0], initiate_socket)
+    leng = struct.unpack('!Q', raw_length)[0]
+    return initial_list(leng, initiate_socket)
 
 
 def list_from_forward_control(list_owner_remote:remote_peer.RemotePeer):
@@ -91,7 +95,7 @@ def initiate_connection():
             const.REMOTE_OBJECT.serialize(server_connection_socket)
 
             if PeerText(server_connection_socket).receive(cmpstring=const.SERVER_OK):
-                server_log('::Connection accepted by server connect', 2)
+                server_log('::Connection accepted by server at initiate_connection/connectserver.py ', 2)
                 with const.LOCK_PRINT:
                     print('::Connection accepted by server')
                 use.start_thread(_target=get_list_from, _args=(server_connection_socket,))

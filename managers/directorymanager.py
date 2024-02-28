@@ -57,7 +57,8 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
 
 
 def directory_reciever(_conn):
-    sender_obj = const.LIST_OF_PEERS[_conn.getpeername()[0]]
+    with const.LOCK_LIST_PEERS:
+        sender_obj = const.LIST_OF_PEERS[_conn.getpeername()[0]]
     sender_obj.increment_file_count()
     dir_len = struct.unpack('!Q', _conn.recv(8))[0]
     dir_path = pickle.loads(_conn.recv(dir_len))

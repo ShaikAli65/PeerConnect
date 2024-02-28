@@ -21,7 +21,8 @@ def end_session() -> Union[bool, None]:
         const.OBJ.end()
     manage_requests.end_connection()
     handle.end()
-    const.LIST_OF_PEERS.clear()
+    with const.LOCK_LIST_PEERS:
+        const.LIST_OF_PEERS.clear()
     # threadmanager.end_all_threads()
     # filemanager.end_file_threads()
     return True

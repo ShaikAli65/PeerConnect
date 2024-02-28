@@ -70,7 +70,7 @@ class PeerText:
     def compare(self, cmp_string: bytes) -> bool:
         """
         Compare the stored text to a provided string.
-
+        accepts both byte string and normal string and checks accordingly.
         Parameters:
         - cmp_string (str): The string to compare to the stored text.
 

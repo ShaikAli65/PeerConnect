@@ -46,7 +46,8 @@ async def send_file(_path):
         return False
     try:
         peer_remote_sock: socket.socket = focus_user_stack[0]
-        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
+        with const.LOCK_LIST_PEERS:
+            peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_file : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
         use.start_thread(_target=filemanager.file_sender, _args=(peer_remote_obj, _path))
         return True
@@ -60,7 +61,8 @@ async def send_file_with_window(_path, user_id):
         return False
     try:
         peer_remote_sock: socket.socket = focus_user_stack[0]
-        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
+        with const.LOCK_LIST_PEERS:
+            peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_file_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
         use.start_thread(_target=filemanager.pop_file_selector_and_send, _args=(peer_remote_obj,))
         return True
@@ -74,7 +76,8 @@ async def send_dir_with_window(_path, user_id):
         return False
     try:
         peer_remote_sock: socket.socket = focus_user_stack[0]
-        peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
+        with const.LOCK_LIST_PEERS:
+            peer_remote_obj = const.LIST_OF_PEERS[peer_remote_sock.getpeername()[0]]
         print("at send_dir_with_window : ", peer_remote_obj, peer_remote_sock.getpeername(), _path)
         use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
         return True
@@ -88,7 +91,8 @@ async def handle_connection(addr_id):
     if not addr_id:
         return False
     try:
-        _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
+        with const.LOCK_LIST_PEERS:
+            _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
         conn_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
         conn_socket.connect(_nomad.uri)
     except KeyError:
@@ -139,7 +143,8 @@ async def control_data_flow(data_in: datawrap):
         await send_file(_path=data_in.content)
     # --
     elif data_in.match(_header=const.HANDLE_DIR_HEADER_LITE):
-        directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[data_in.id], dir_path=data_in.content)
+        with const.LOCK_LIST_PEERS:
+            directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[data_in.id], dir_path=data_in.content)
     # --
 
 

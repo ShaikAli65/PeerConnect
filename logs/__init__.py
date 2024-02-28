@@ -67,3 +67,4 @@ def error_log(status_string: str):
     root_logger.addHandler(file_handler)
     logging.info(status_string)
     pass
+
