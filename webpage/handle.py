@@ -146,7 +146,7 @@ async def control_data_flow(data_in: datawrap):
     try:
         await function_map.get(data_in.header,lambda x: None)(data_in)
     except TypeError as exp:
-        error_log(f"Error at handle/control_data_flow : {exp}")
+        error_log(f"Error at handle/control_data_flow : {exp} due to {data_in.header}")
     # if data_in.match(_header=const.HANDLE_COMMAND):
     #     await command_flow_handler(data_in)
     # # --
