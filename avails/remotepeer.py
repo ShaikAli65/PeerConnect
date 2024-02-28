@@ -3,7 +3,8 @@ import pickle
 
 
 class RemotePeer:
-    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, report:int = 35896, status: int = 0):
+    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, report: int = 35896,
+                 status: int = 0):
         self.username = username
         self.uri = (ip, port)
         self.status = status
@@ -33,12 +34,13 @@ class RemotePeer:
         return self.file_count
 
     def __str__(self):
-        return f"""\n
----------------------------\n
-Username: {self.username[0:18]}\n
-IP      : {self.id}
-\n---------------------------
-        """
+        return (
+            "\n"
+            "---------------------------\n"
+            f"Username: {self.username[0:18]}\n"
+            f"IP      : {self.id}\n"
+            "---------------------------\n"
+        )
 
     def __hash__(self) -> int:
         return hash(self.uri)
