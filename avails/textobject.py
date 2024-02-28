@@ -38,7 +38,8 @@ class PeerText:
                 continue
             if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER:
                 return True
-        return False
+            else:
+                return False
 
     def receive(self, cmpstring='') -> [bool, bytes]:
         """

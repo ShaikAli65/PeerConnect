@@ -2,7 +2,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 from os import PathLike
 import tqdm
-
+from multiprocessing import Process
 from core import *
 import core.nomad as nomad
 from avails import dataweaver
@@ -56,7 +56,7 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
 def directory_reciever(_conn: socket.socket):
     nomad.Nomad.currently_in_connection[_conn] = True
     if not _conn:
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             print("::Closing connection from recv_file() from core/nomad at line 100")
         return
     recv_file = PeerFile(recv_soc=_conn)
@@ -74,7 +74,7 @@ def directory_reciever(_conn: socket.socket):
 def file_reciever(_conn: socket.socket):
     nomad.Nomad.currently_in_connection[_conn] = True
     if not _conn:
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             print("::Closing connection from recv_file() from core/nomad at line 100")
         return
     getdata_file = PeerFile(recv_soc=_conn)

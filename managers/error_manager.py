@@ -49,7 +49,7 @@ class ErrorManager:
         Args:
             *args: The error message to log.
         """
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             print(*args)
 
     @staticmethod
@@ -59,6 +59,6 @@ class ErrorManager:
         Args:
             *args: The activity message to log.
         """
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             print(*args)
 

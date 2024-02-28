@@ -1,5 +1,3 @@
-import timeit
-
 from core import *
 from avails.textobject import PeerText
 import avails.useables as use
@@ -13,7 +11,7 @@ class Nomad:
     LOOP_FLAG = True
 
     def __init__(self, ip='localhost', port=8088):
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             time.sleep(const.anim_delay)
             print("::Initiating Nomad Object", ip, port)
         self.address = (ip, port)
@@ -39,10 +37,10 @@ class Nomad:
             try:
                 initiate_conn, _ = self.main_socket.accept()
                 activity_log(f'New connection from {_[0]}:{_[1]}')
-                with const.PRINT_LOCK:
+                with const.LOCK_PRINT:
                     print(f"New connection from {_[0]}:{_[1]}")
                 Nomad.currently_in_connection[initiate_conn] = True
-                use.start_thread(connectNew, args=(initiate_conn,))
+                use.start_thread(connectNew, _args=(initiate_conn,))
             except (socket.error, OSError) as e:
                 error_log(f"Socket error: {e}")
 
@@ -69,7 +67,7 @@ def send(_to_user_soc: socket.socket, _data: str):
     try:
         return PeerText(_to_user_soc, _data).send()
     except socket.error as err:
-        use.echo_print(f"Error in sending data retrying... {err}")
+        use.echo_print(False,f"Error in sending data retrying... {err}")
 
     return False
 
@@ -80,13 +78,13 @@ def connectNew(_conn: socket.socket):
         if _conn not in readable:
             print("::Connection timed out :", _conn.getpeername())
             disconnect_user(_conn)
-            continue
+            return
         connectNew_data = PeerText(_conn)
         connectNew_data.receive()
         if connectNew_data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
             _conn.close() if _conn else None
             return
-        with const.PRINT_LOCK:
+        with const.LOCK_PRINT:
             print('data from peer :', connectNew_data)
         if connectNew_data.compare(const.CMD_CLOSING_HEADER):
             disconnect_user(_conn)
@@ -110,4 +108,5 @@ def connectNew(_conn: socket.socket):
 def disconnect_user(_conn):
     PeerText(_conn, const.CMD_CLOSING_HEADER,byteable=False).send()
     _conn.close()
-    use.echo_print("::Closing connection from disconnect_user() from core/nomad at line 153")
+    use.echo_print(False,"::Closing connection from disconnect_user() from core/nomad at line 153")
+

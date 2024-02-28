@@ -64,7 +64,7 @@ def validate_ports() -> None:
 
 def print_constants():
     line_format = "{:<15} {:<10}"
-    with const.PRINT_LOCK:
+    with const.LOCK_PRINT:
         print(':configuration choices=========================')
         time.sleep(const.anim_delay)
         print(line_format.format("USERNAME   :", const.USERNAME))

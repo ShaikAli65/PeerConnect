@@ -1,7 +1,6 @@
 import socket as soc
 import threading
 
-
 USERNAME = ''
 THIS_PORT = 0
 PAGE_PORT = 0
@@ -20,7 +19,11 @@ IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 FORMAT = 'utf-8'
 count_of_user_id = 0
-user_id_lock = threading.Lock()
+LOCK_USER_ID = threading.Lock()
+LOCK_PRINT = threading.Lock()
+LOCK_LIST_PEERS = threading.Lock()
+ACTIVE_PEERS = []
+LIST_OF_PEERS: dict = {}
 anim_delay = 0
 MAX_CALL_BACKS = 6
 
@@ -29,12 +32,9 @@ OBJ_THREAD = None
 REQUESTS_THREAD = None
 REMOTE_OBJECT = None
 SERVER_THREAD = None
-ACTIVE_PEERS = []
 PAGE_HANDLE_CALL = threading.Event()
 SAFE_LOCK_FOR_PAGE = False
-PRINT_LOCK = threading.Lock()
 WEB_SOCKET = None
-LIST_OF_PEERS: dict = {}
 
 CMD_RECV_FILE = b'thisisacommandtocore_/!_recvafile'
 CMD_CLOSING_HEADER = b'thisisacommandtocore_/!_closeconnection'
@@ -49,6 +49,7 @@ CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
 CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
 FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 SERVER_OK = 'connectionaccepted'
+LIST_SYNC = 'synclist'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'
 HANDLE_END = 'endprogram'
 HANDLE_COMMAND = 'thisisacommand'
@@ -60,3 +61,6 @@ HANDLE_POP_DIR_SELECTOR = 'popdirselector'
 HANDLE_PUSH_FILE_SELECTOR = 'pushfileselector'
 HANDLE_OPEN_FILE = 'openfile'
 HANDLE_DIR_HEADER_LITE = 'thisisadirlite'
+HANDLE_SYNC_USERS = 'syncusers'
+
+

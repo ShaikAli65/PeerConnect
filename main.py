@@ -5,7 +5,7 @@ from core import *
 from core import configure_app
 
 if not configure_app.set_constants():
-    with const.PRINT_LOCK:
+    with const.LOCK_PRINT:
         print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
     error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
     exit(0)

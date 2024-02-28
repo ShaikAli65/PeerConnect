@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
+const addr = 'ws://localhost:12260';
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
@@ -50,7 +50,7 @@ function eventlisteners()
 function initiate()
 {
     let connectToCode_;
-    connectToCode_ = new WebSocket('ws://localhost:12260');
+    connectToCode_ = new WebSocket(addr);
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
@@ -72,7 +72,17 @@ function initiate()
         });
     });
     document.getElementById("Close Application").addEventListener("click",()=>{
-        endsession(connectToCode_);
+        try {
+            connect_r = new WebSocket(addr);
+            connect_r.send(JSON.stringify({
+                "header":" 'thisiscommandtocore",
+                "content":"thisiscommandtocore_/!_reload",
+                "id":""
+            }));
+            connectToCode_ = connect_r;
+        } catch (error) {
+            endsession(connectToCode_);
+        }
     });
     connectToCode_.addEventListener('close', (event) => {
         endsession(connectToCode_);

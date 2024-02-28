@@ -5,9 +5,9 @@ import platform
 from tkinter import filedialog
 
 
-def start_thread(_target, args=()):
-    if len(args) != 0:
-        thread_recv = threading.Thread(target=_target, args=args)
+def start_thread(_target, _args=()):
+    if len(_args) != 0:
+        thread_recv = threading.Thread(target=_target, args=_args)
     else:
         thread_recv = threading.Thread(target=_target, daemon=True)
     thread_recv.start()
@@ -19,14 +19,14 @@ def is_socket_connected(sock):
     return error == 0
 
 
-def echo_print(delay_status=False, *args) -> None:
+def echo_print(delay_status, *args) -> None:
     """Prints the given arguments to the console.
 
     Args:
         *args: The arguments to print.
         :param delay_status:
     """
-    with const.PRINT_LOCK:
+    with const.LOCK_PRINT:
         time.sleep(const.anim_delay) if delay_status else None
         print(*args)
 
