@@ -46,8 +46,8 @@ CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
 SERVER_PING = b'thisisacommandfromserver_/!_ping'
 
 CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
-CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
-FILESEND_INTITATE_HEADER = 'inititatefilesequence'
+# CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
+# FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 SERVER_OK = 'connectionaccepted'
 LIST_SYNC = 'synclist'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'
@@ -63,4 +63,4 @@ HANDLE_OPEN_FILE = 'openfile'
 HANDLE_DIR_HEADER_LITE = 'thisisadirlite'
 HANDLE_SYNC_USERS = 'syncusers'
 ACTIVE_PING = b"why_s ur facelikethat"
-ACTIVE_PONG = b"my face_s like that only what??"
+# ACTIVE_PONG = b"my face_s like that only what??"

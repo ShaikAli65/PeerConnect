@@ -33,7 +33,7 @@ class RemotePeer:
         return self.file_count
 
     def __str__(self):
-        return f"""
+        return f"""\
 ---------------------------
 Username: {self.username[0:18]}
 IP      : {self.id}

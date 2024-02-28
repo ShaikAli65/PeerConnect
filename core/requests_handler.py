@@ -75,34 +75,24 @@ def sync_users(_conn: socket.socket):
 def control_connection(_conn: socket.socket):
     while safe_stop.is_set():
         readable, _, _ = select.select([_conn], [], [], 0.001)
-        if _conn not in readable:
-            continue
-        try:
-            data = PeerText(_conn)
-
-            data.receive()
-            # print(f"{_conn.getpeername()} said {data} at manage requests.py/control_connected_user")
+        if _conn in readable:
+            try:
+                data = PeerText(_conn)
+                data.receive()
+            except (socket.error, OSError) as e:
+                error_log(f"Socket error at manage requests/control_connection exp:{e}")
+                return
             if data.compare(const.REQ_FOR_LIST):
                 send_list(_conn)
-                break
             elif data.compare(const.I_AM_ACTIVE):
                 notify_user_connection(_conn)
-                break
             elif data.compare(const.SERVER_PING):
-                # PeerText(_conn, const.SERVER_OK).send()
-                # use.echo_print(False, f"connection from server said i am alive ...")
                 sync_users(_conn)
-                break
             elif data.compare(const.ACTIVE_PING):
-                return
+                pass
             elif data.compare(const.LIST_SYNC):
                 pass
-        except (socket.error, OSError) as e:
-            error_log(f"Socket error at manage requests/control_new_user exp:{e}")
             return
-        finally:
-            _conn.close()
-    return
 
 
 def notify_user_connection(_conn_socket: socket.socket):
@@ -189,7 +179,8 @@ def sync_list():
             return None
     return None
 
-def end_connection():
+
+def end_requests_connection():
     global safe_stop
     safe_stop.set()
     const.REMOTE_OBJECT.status = 0

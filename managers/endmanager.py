@@ -19,7 +19,7 @@ def end_session() -> Union[bool, None]:
         return None
     if const.OBJ:
         const.OBJ.end()
-    manage_requests.end_connection()
+    manage_requests.end_requests_connection()
     handle.end()
     with const.LOCK_LIST_PEERS:
         const.LIST_OF_PEERS.clear()

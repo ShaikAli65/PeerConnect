@@ -33,7 +33,7 @@ def initiate() -> int:
         # error = error_manager.ErrorManager(ConnectionError, "Connection to server failed", 0, __file__)
         # error.resolve()
         const.OBJ.end()
-        manage_requests.end_connection()
+        manage_requests.end_requests_connection()
         return -1
     use.start_thread(handle.initiate_control).join()
     # except Exception as e:
