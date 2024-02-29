@@ -9,7 +9,7 @@ from avails.textobject import PeerText
 safe_stop = threading.Event()
 
 
-def send_list(_conn: socket.socket):
+def send_list(_conn: socket.socket) -> Union[None, bool]:
     with const.LOCK_LIST_PEERS:
         peer_list = const.LIST_OF_PEERS.copy()
     byte_length = struct.pack('!Q', len(const.LIST_OF_PEERS))
@@ -26,7 +26,8 @@ def send_list(_conn: socket.socket):
             error_log(f"::Exception while giving list of users at manage requests/send_list, exp : {e}")
             error_call += 1
             with const.LOCK_PRINT:
-                print(f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {e}")
+                print(
+                    f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {e}")
             if error_call > const.MAX_CALL_BACKS:
                 return False
     return
@@ -60,7 +61,7 @@ def control_user_manager(_control_sock: socket.socket):
 
 def sync_users(_conn: socket.socket):
     with const.LOCK_LIST_PEERS:
-        use.echo_print(False, "::Syncing list with server",const.LIST_OF_PEERS)
+        use.echo_print(False, "::Syncing list with server", const.LIST_OF_PEERS)
     with _conn:
         raw_data = _conn.recv(4)
         diff_length = struct.unpack('!I', raw_data)[0]
@@ -81,7 +82,6 @@ def notify_user_connection(_conn_socket: socket.socket):
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
         return None
     return add_peer_accordingly(new_peer_object)
-    pass
 
 
 function_map = {
@@ -97,7 +97,7 @@ def control_connection(_conn: socket.socket):
     while safe_stop.is_set():
         try:
             readable, _, _ = select.select([_conn], [], [], 0.001)
-        except OSError as e:
+        except OSError:
             return
         if _conn in readable:
             try:
@@ -155,23 +155,26 @@ def notify_users():
     return None
 
 
-def sync_list():
+def sync_list() -> None:
     with const.LOCK_LIST_PEERS:
         list_copy = const.LIST_OF_PEERS.copy()
-    for peer_obj in list_copy.values():
+    for peer_obj in list_copy.values() and True:
         if not peer_obj:
             continue
+        if safe_stop.is_set():
+            return
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as sever_conn:
                 sever_conn.settimeout(0.3)
                 sever_conn.connect(peer_obj.req_uri)
-                PeerText(sever_conn, const.ACTIVE_PING,byteable=False).send()
+                PeerText(sever_conn, const.ACTIVE_PING, byteable=False).send()
         except socket.error as e:
-            use.echo_print(False, f"Looks like the user is inactive {peer_obj.username}({peer_obj.uri}) at manager_requests.py/sync_list exp :  {e}")
+            use.echo_print(False,
+                           f"Looks like the user is inactive {peer_obj.username}({peer_obj.uri}) at manager_requests.py/sync_list exp :  {e}")
             peer_obj.status = 0
             add_peer_accordingly(peer_obj)
-            return None
-    return None
+            return
+    return
 
 
 def end_requests_connection():

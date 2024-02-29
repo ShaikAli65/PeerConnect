@@ -152,4 +152,3 @@ def clear_logs():
         # print(os.path.join(const.PATH_LOG, 'server.logs'))
         s.write('')
     return
-

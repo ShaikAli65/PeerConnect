@@ -48,7 +48,7 @@ class RemotePeer:
     def __eq__(self, obj) -> bool:
         if not isinstance(obj, RemotePeer):
             return NotImplemented
-        return self.uri == obj.uri
+        return self.uri == obj.uri and self.username == obj.username
 
     def increment_file_count(self):
         self.file_count += 1

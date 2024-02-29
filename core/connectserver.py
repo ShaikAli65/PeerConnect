@@ -31,7 +31,7 @@ def initial_list(no_of_users: int, initiate_socket):
                 end_connection_with_server()
                 time.sleep(5)
                 if not ping_queue.empty():
-                    server_log(f"::Server disconnected recieved some users retrying ...", 4)
+                    server_log(f"::Server disconnected received some users retrying ...", 4)
                     list_error_handler()
                 return False
     initiate_socket.close()
@@ -53,7 +53,7 @@ def get_list_from(initiate_socket: socket.socket):
                 continue
             raw_length = initiate_socket.recv(8)
             break
-        except socket.error as e:
+        except socket.error:
             pass
         except Exception as e:
             print(f"::Exception fatal... exp:{e}")
@@ -84,7 +84,7 @@ def initiate_connection():
             const.REMOTE_OBJECT.serialize(server_connection_socket)
 
             if PeerText(server_connection_socket).receive(cmpstring=const.SERVER_OK):
-                server_log('::Connection accepted by server at initiate_connection/connectserver.py ', 2)
+                server_log('::Connection accepted by server at initiate_connection/connect server.py ', 2)
                 use.echo_print(False, '::Connection accepted by server')
                 use.start_thread(_target=get_list_from, _args=(server_connection_socket,))
             else:
