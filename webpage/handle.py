@@ -1,6 +1,8 @@
 import webbrowser
 import websockets
 import configparser
+
+
 from collections import deque
 
 import avails.textobject
@@ -10,7 +12,7 @@ import core.nomad as nomad
 from avails import remotepeer
 from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
-from managers import filemanager, directorymanager
+from managers import filemanager, directorymanager, HTTPmanager
 from core import requests_handler as reqhandler
 
 web_socket: websockets.WebSocketServerProtocol = None
@@ -131,10 +133,11 @@ async def control_data_flow(data_in: datawrap):
         const.HANDLE_MESSAGE_HEADER: lambda x: send_message(x.content),
         const.HANDLE_FILE_HEADER: lambda x: send_file(x.content),
         const.HANDLE_DIR_HEADER: lambda x: send_file(x.content),
-        const.HANDLE_DIR_HEADER_LITE: lambda x: directorymanager.directory_sender(receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
+        const.HANDLE_DIR_HEADER_LITE: lambda x: directorymanager.directory_sender(
+            receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
     }
     try:
-        await function_map.get(data_in.header,lambda x: None)(data_in)
+        await function_map.get(data_in.header, lambda x: None)(data_in)
     except TypeError as exp:
         error_log(f"Error at handle/control_data_flow : {exp} due to {data_in.header}")
 
@@ -178,7 +181,7 @@ async def handler(_websocket):
     const.WEB_SOCKET = web_socket
     const.PAGE_HANDLE_CALL.set()
     await getdata()
-    use.echo_print(True,'::handler ended')
+    use.echo_print(True, '::handler ended')
 
 
 def initiate_control():

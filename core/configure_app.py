@@ -122,11 +122,13 @@ def set_constants() -> bool:
     const.USERNAME = config_map["CONFIGURATIONS"]['username']
     const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']
 
+    const.PAGE_SERVE_PORT = int(config_map['CONFIGURATIONS']['page_serve_port'])
     const.SERVER_PORT = int(config_map['CONFIGURATIONS']['server_port'])
     const.THIS_PORT = int(config_map['NERD_OPTIONS']['this_port'])
     const.PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])
     const.REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
     const.FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
+
     validate_ports()
     time.sleep(0.04)
     const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
