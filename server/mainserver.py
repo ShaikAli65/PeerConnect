@@ -41,7 +41,6 @@ def get_local_ip():
         return ip
 
 
-
 def givelist(client: soc.socket, userobj: rp.RemotePeer):
     if not isinstance(client, soc.socket):
         raise TypeError('client must be a socket')
@@ -84,8 +83,6 @@ def validate(client: soc.socket):
 
 
 def getip():
-    config_soc = soc.socket(IPVERSION, PROTOCOL)
-    config_ip = ''
     if IPVERSION == soc.AF_INET6:
         response = requests.get('https://api64.ipify.org?format=json')
         if response.status_code == 200:
@@ -110,15 +107,15 @@ def sync_users():
                 try:
                     active_user_sock.connect(peer.req_uri)
                     PeerText(active_user_sock, const.SERVER_PING, byteable=False).send()
-                except soc.error as e:
+                except soc.error:
                     print(f'::got EXCEPTION closing connection with :', peer)
                     print('::new list :', LIST)
                     LIST.discard(peer)
                     peer.status = 0
                     continue
                 active_user_sock.send(struct.pack('!I', len(LIST.removedchanges())))
-                for peer in LIST.removes:
-                    peer.serialize(active_user_sock)
+                for _peer in LIST.removes:
+                    _peer.serialize(active_user_sock)
                 active_user_sock.close()
 
         except RuntimeError as e:
@@ -144,14 +141,13 @@ def start_server():
 
 
 def endserver(signum, frame):
-    print("\nExiting from application...")
+    print("\nExiting from application...",signum,frame)
     EXIT.set()
     SERVEROBJ.close()
     return
 
 
-def getlist(lis):
-    return
+def getlist():...
 
 
 if __name__ == '__main__':
