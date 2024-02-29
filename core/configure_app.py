@@ -122,7 +122,7 @@ def set_constants() -> bool:
     const.USERNAME = config_map["CONFIGURATIONS"]['username']
     const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']
 
-    const.PAGE_SERVE_PORT = int(config_map['CONFIGURATIONS']['page_serve_port'])
+    const.PAGE_SERVE_PORT = int(config_map['NERD_OPTIONS']['page_serve_port'])
     const.SERVER_PORT = int(config_map['CONFIGURATIONS']['server_port'])
     const.THIS_PORT = int(config_map['NERD_OPTIONS']['this_port'])
     const.PAGE_PORT = int(config_map['NERD_OPTIONS']['page_port'])

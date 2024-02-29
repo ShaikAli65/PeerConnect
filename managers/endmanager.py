@@ -3,6 +3,7 @@ from avails import constants as const
 
 from core import connectserver as connect_server, requests_handler as manage_requests
 from webpage import handle
+from webpage import httphandler
 
 
 def end_session() -> Union[bool, None]:
@@ -23,6 +24,7 @@ def end_session() -> Union[bool, None]:
     handle.end()
     with const.LOCK_LIST_PEERS:
         const.LIST_OF_PEERS.clear()
+    httphandler.end_serving()
     # threadmanager.end_all_threads()
     # filemanager.end_file_threads()
     return True

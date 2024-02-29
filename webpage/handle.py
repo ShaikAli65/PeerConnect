@@ -4,7 +4,7 @@ import configparser
 
 
 from collections import deque
-
+from webpage import httphandler
 import avails.textobject
 import managers.endmanager
 from core import *
@@ -12,7 +12,7 @@ import core.nomad as nomad
 from avails import remotepeer
 from avails import useables as use
 from avails.dataweaver import DataWeaver as datawrap
-from managers import filemanager, directorymanager, HTTPmanager
+from managers import filemanager, directorymanager
 from core import requests_handler as reqhandler
 
 web_socket: websockets.WebSocketServerProtocol = None
@@ -186,6 +186,8 @@ async def handler(_websocket):
 
 def initiate_control():
     use.echo_print(True, '::Initiate_control called at handle.py :', const.PATH_PAGE, const.PAGE_PORT)
+    # use.start_thread(_target=httphandler.start_serving, _args=())
+    # webbrowser.open(f"http://localhost:{const.PAGE_SERVE_PORT}")
     webbrowser.open(os.path.join(const.PATH_PAGE, "index.html"))
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PAGE_PORT)
