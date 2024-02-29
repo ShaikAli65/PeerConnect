@@ -20,7 +20,7 @@ handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
 LIST: set[rp.RemotePeer] = set()
-LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.1.1', status=1))
+# LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.1.1', status=1))
 ip = ""
 
 
@@ -138,7 +138,7 @@ def start_server():
     SERVEROBJ.bind(getip())
     SERVEROBJ.listen()
     print("Server started at:\n>>", SERVEROBJ.getsockname())
-    threading.Thread(target=sync_users).start()
+    # threading.Thread(target=sync_users).start()
     while not EXIT.is_set():
         readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
         if SERVEROBJ in readable:

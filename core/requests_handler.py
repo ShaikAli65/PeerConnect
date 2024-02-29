@@ -129,12 +129,11 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
         peer_object = queue_in.get()
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
-                _conn.settimeout(0.1)
                 _conn.connect(peer_object.req_uri)
                 PeerText(_conn, const.I_AM_ACTIVE, byteable=False).send()
                 const.REMOTE_OBJECT.serialize(_conn)
         except socket.error:
-            continue
+            use.echo_print(False, f"Error sending active status at manager_requests.py/signal_active_status")
         add_peer_accordingly(peer_object)
 
 
