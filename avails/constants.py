@@ -1,6 +1,7 @@
 import socket as soc
 import threading
 
+CLEARLOGSFLAG = 1
 USERNAME = ''
 THIS_PORT = 0
 PAGE_PORT = 0

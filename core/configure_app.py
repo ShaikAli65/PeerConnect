@@ -100,11 +100,6 @@ def set_paths():
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
 
-    # print("download path :",const.PATH_DOWNLOAD)
-    # print("config path   :",const.PATH_CONFIG)
-    # print("log path      :",const.PATH_LOG)
-    # print("page path     :",const.PATH_PAGE)
-
 
 def set_constants() -> bool:
     """Sets global constants from values in the configuration file and directories.
@@ -116,9 +111,13 @@ def set_constants() -> bool:
         bool: True if configuration values were set successfully, False otherwise.
     """
     set_paths()
-    clear_logs()
-    config_map = configparser.ConfigParser()
-    config_map.read(const.PATH_CONFIG)
+    clear_logs() if const.CLEARLOGSFLAG else None
+    try:
+        config_map = configparser.ConfigParser()
+        config_map.read(const.PATH_CONFIG)
+    except Exception as e:
+        error_log(f"Error reading config.ini: {e} from set_constants() at line 75 in core/constants.py")
+        return False
     # print(config_map.sections())
     const.USERNAME = config_map["CONFIGURATIONS"]['username']
     const.SERVER_IP = config_map['CONFIGURATIONS']['serverip']
@@ -129,7 +128,7 @@ def set_constants() -> bool:
     const.REQ_PORT = int(config_map['NERD_OPTIONS']['req_port'])
     const.FILE_PORT = int(config_map['NERD_OPTIONS']['file_port'])
     validate_ports()
-    time.sleep(0.1)
+    time.sleep(0.04)
     const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
     const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
     const.THIS_IP = get_ip()
@@ -143,12 +142,9 @@ def set_constants() -> bool:
 
 def clear_logs():
     with open(os.path.join(const.PATH_LOG, 'error.logs'), 'w') as e:
-        # print(os.path.join(const.PATH_LOG, 'error.logs'))
         e.write('')
     with open(os.path.join(const.PATH_LOG, 'activity.logs'), 'w') as a:
-        # print(os.path.join(const.PATH_LOG, 'activity.logs'))
         a.write('')
     with open(os.path.join(const.PATH_LOG, 'server.logs'), 'w') as s:
-        # print(os.path.join(const.PATH_LOG, 'server.logs'))
         s.write('')
     return

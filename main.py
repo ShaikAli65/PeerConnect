@@ -1,5 +1,7 @@
 """Main entry point for the application."""
 
+# print("maining")
+
 import tracemalloc
 from core import *
 from core import configure_app

@@ -68,15 +68,16 @@ def unzipper(zip_path: str, dest_path: str):
 
 
 def directory_reciever(_conn: socket.socket):
-    nomad.Nomad.currently_in_connection[_conn] = True
-    if not _conn:
-        with const.LOCK_PRINT:
-            print("::Closing connection from recv_file() from core/nomad at line 100")
+    try:
+        _conn.getpeername()
+    except OSError as oe:
+        use.echo_print(False, f"::Closing connection from recv_file() from core/nomad at line 100 because of OSError:{oe}")
         return
     recv_file = PeerFile(recv_soc=_conn)
     if recv_file.recv_meta_data():
         recv_file.recv_file()
-    unzip_process = Process(target=unzipper,args=(str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename)), const.PATH_DOWNLOAD))
+    file_unzip_path = str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename))
+    unzip_process = Process(target=unzipper,args=(file_unzip_path, const.PATH_DOWNLOAD))
     unzip_process.start()
     unzip_process.join()
     return recv_file.filename
@@ -85,8 +86,7 @@ def directory_reciever(_conn: socket.socket):
 def file_reciever(_conn: socket.socket):
     nomad.Nomad.currently_in_connection[_conn] = True
     if not _conn:
-        with const.LOCK_PRINT:
-            print("::Closing connection from recv_file() from core/nomad at line 100")
+        use.echo_print(False, "::Closing connection from recv_file() from core/nomad at line 100")
         return
     getdata_file = PeerFile(recv_soc=_conn)
     if getdata_file.recv_meta_data():
