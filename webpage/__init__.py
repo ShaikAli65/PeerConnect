@@ -1,8 +1,6 @@
-import socket
 from collections import deque
 import threading
 import socket
-import asyncio
 
 
 class RecentsCacheQueue(deque):
@@ -15,9 +13,9 @@ class RecentsCacheQueue(deque):
         with self._lock:
             if len(self) >= self.max_cache_size:
                 xt = self.popleft()
+                if isinstance(xt, socket.socket):
+                    self.remove_socket(xt)
             super().append(x)
-        if isinstance(x, socket.socket):
-            self.remove_socket(x)
         return
 
     def remove_socket(self, x):

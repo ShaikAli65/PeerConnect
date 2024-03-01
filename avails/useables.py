@@ -1,6 +1,5 @@
 from core import *
 import subprocess
-import tkinter as tk
 import platform
 from PyQt5.QtWidgets import QApplication, QFileDialog
 
