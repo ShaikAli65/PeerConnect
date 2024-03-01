@@ -59,15 +59,15 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
     pass
 
 
-def unzipper(zip_path: str, dest_path: str):
+def unzipper(zip_path: str, destination_path: str):
     with ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(dest_path)
-    print(f"::Extracted {zip_path} to {dest_path}")
+        zip_ref.extractall(destination_path)
+    print(f"::Extracted {zip_path} to {destination_path}")
     os.remove(zip_path)
     return
 
 
-def directory_reciever(_conn: socket.socket):
+def directory_receiver(_conn: socket.socket):
     try:
         _conn.getpeername()
     except OSError as oe:
@@ -83,7 +83,7 @@ def directory_reciever(_conn: socket.socket):
     return recv_file.filename
 
 
-def file_reciever(_conn: socket.socket):
+def file_receiver(_conn: socket.socket):
     nomad.Nomad.currently_in_connection[_conn] = True
     if not _conn:
         use.echo_print(False, "::Closing connection from recv_file() from core/nomad at line 100")

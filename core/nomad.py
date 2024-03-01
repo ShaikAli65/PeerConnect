@@ -74,8 +74,8 @@ def send(_to_user_soc: socket.socket, _data: str):
 
 function_map = {
     const.CMD_CLOSING_HEADER: lambda x: disconnect_user(x),
-    const.CMD_RECV_DIR: lambda x: "sent you a dir : " + filemanager.directory_reciever(x),
-    const.CMD_RECV_FILE: lambda x: "sent you a file : " + filemanager.file_reciever(x),
+    const.CMD_RECV_DIR: lambda x: "sent you a dir : " + filemanager.directory_receiver(x),
+    const.CMD_RECV_FILE: lambda x: "sent you a file : " + filemanager.file_receiver(x),
     const.CMD_RECV_DIR_LITE: lambda x: "sent you a directory through lite : " + directorymanager.directory_reciever(x),
 }
 

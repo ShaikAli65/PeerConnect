@@ -2,7 +2,19 @@ from core import *
 import subprocess
 import tkinter as tk
 import platform
-from tkinter import filedialog
+from PyQt5.QtWidgets import QApplication, QFileDialog
+
+# def open_file():
+#   """Opens the system-like file picker dialog."""
+#   filepath, _ = QFileDialog.getOpenFileName()
+#   if filepath:
+#     # Do something with the selected file
+#     print(f"You selected: {filepath}")
+
+# if __name__ == "__main__":
+#   app = QApplication([])
+#   open_file()
+#   app.exec_()
 
 
 def start_thread(_target, _args=()):
@@ -45,29 +57,18 @@ def reload_protocol():
 
 
 def open_file_dialog_window():
-    if platform.system() == "Windows":
-        powershell_script = """
-        Add-Type -AssemblyName System.Windows.Forms
-        $fileBrowser = New-Object System.Windows.Forms.OpenFileDialog
-        [void]$fileBrowser.ShowDialog()
-        echo $fileBrowser.FileName
-        """
-        result = subprocess.run(["powershell.exe", "-Command", powershell_script], stdout=subprocess.PIPE, text=True)
-        return result.stdout.strip()
-    root = tk.Tk()
-    root.withdraw()
-    file_path = filedialog.askopenfilename(title="Select a file")
+    """Opens the system-like file picker dialog."""
+    app = QApplication([])
+    file_path, _ = QFileDialog.getOpenFileName()
+    app.exec_()
     return file_path if file_path else None
 
 
 def open_directory_dialog_window():
-    root = tk.Tk()
-    root.withdraw()
-    directory_path = filedialog.askdirectory(title="Select a directory")
-    if directory_path:
-        print("Selected Directory:", directory_path)
-
-    return directory_path if directory_path else None
+    app = QApplication([])
+    dir_path = QFileDialog.getExistingDirectory()
+    app.exec_()
+    return dir_path if dir_path else None
 
 
 def open_file(content):
