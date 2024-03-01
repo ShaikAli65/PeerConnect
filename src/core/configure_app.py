@@ -3,8 +3,8 @@ import configparser
 import time
 import requests
 
-import avails.constants as const  # <--- This is the only import from avails/constants.py
-from logs import *
+import src.avails.constants as const  # <--- This is the only import from avails/constants.py
+from src.logs import *
 
 
 def get_ip() -> str:
@@ -92,13 +92,19 @@ def print_constants():
 def set_paths():
     const.PATH_CURRENT = os.path.join(os.getcwd())
     # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'avails', 'config.ini')
+    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'config.ini')
     const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
     const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'webpage')
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
     const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
+
+    print("current path: ", const.PATH_CURRENT)
+    print("config path: ", const.PATH_CONFIG)
+    print("log path: ", const.PATH_LOG)
+    print("page path: ", const.PATH_PAGE)
+    print("download path: ", const.PATH_DOWNLOAD)
 
 
 def set_constants() -> bool:
@@ -111,7 +117,7 @@ def set_constants() -> bool:
         bool: True if configuration values were set successfully, False otherwise.
     """
     set_paths()
-    clear_logs() if const.CLEARLOGSFLAG else None
+    # clear_logs() if const.CLEARLOGSFLAG else None
     try:
         config_map = configparser.ConfigParser()
         config_map.read(const.PATH_CONFIG)

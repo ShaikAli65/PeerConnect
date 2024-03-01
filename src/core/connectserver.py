@@ -1,11 +1,11 @@
 import queue
 
-from core import *
-from core import requests_handler
-from logs import *
-from avails.textobject import PeerText
-import avails.useables as use
-import avails.remotepeer as remote_peer
+from src.core import *
+from src.core import requests_handler
+from src.logs import *
+from src.avails.textobject import PeerText
+import src.avails.useables as use
+import src.avails.remotepeer as remote_peer
 
 End_Safe = threading.Event()
 Error_Calls = 0

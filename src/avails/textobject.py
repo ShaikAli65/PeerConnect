@@ -1,4 +1,4 @@
-from core import *
+from src.core import *
 
 
 class PeerText:

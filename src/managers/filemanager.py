@@ -3,13 +3,13 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from os import PathLike
 import tqdm
 from multiprocessing import Process
-from core import *
-import core.nomad as nomad
-from avails import dataweaver
-from webpage import handle
-from avails import remotepeer as remote_peer
-from avails import useables as use
-from avails.fileobject import PeerFile
+from src.core import *
+import src.core.nomad as nomad
+from src.avails import dataweaver
+from src.webpage import handle
+from src.avails import remotepeer as remote_peer
+from src.avails import useables as use
+from src.avails.fileobject import PeerFile
 every_file = {}
 count = 0
 

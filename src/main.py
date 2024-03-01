@@ -44,6 +44,7 @@ def initiate() -> int:
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     # try:
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     if not configure_app.set_constants():
         with const.LOCK_PRINT:
             print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")

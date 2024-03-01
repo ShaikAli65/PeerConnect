@@ -1,6 +1,6 @@
 
 # Importing the required modules.
-import avails.constants as const
+import src.avails.constants as const
 from typing import Any, Union
 from datetime import datetime
 from os import path
@@ -24,7 +24,7 @@ class ErrorManager:
 
     def resolve(self,*args):
         """
-            Resolves the error based on the todo value.
+            Resolves the error based on the .
             _todo = 0: to ignore.
             _todo = 1: to take action.
             _todo = 2: to log and take action.

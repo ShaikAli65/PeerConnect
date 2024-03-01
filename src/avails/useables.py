@@ -1,4 +1,4 @@
-from core import *
+from src.core import *
 import subprocess
 import platform
 from PyQt5.QtWidgets import QApplication, QFileDialog

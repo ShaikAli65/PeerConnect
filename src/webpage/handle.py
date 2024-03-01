@@ -3,17 +3,17 @@ import websockets
 import configparser
 from collections import deque
 
-from webpage import httphandler
-import avails.textobject
-import managers.endmanager
-from core import *
-import core.nomad as nomad
-from avails import remotepeer
-from avails import useables as use
-from avails.dataweaver import DataWeaver as datawrap
-from managers import filemanager, directorymanager
-from core import requests_handler as reqhandler
-
+from src.webpage import httphandler
+import src.avails.textobject
+import src.managers.endmanager
+from src.core import *
+import src.core.nomad as nomad
+from src.avails import remotepeer
+from src.avails import useables as use
+from src.avails.dataweaver import DataWeaver as datawrap
+from src.managers import filemanager, directorymanager
+from src.core import requests_handler as reqhandler
+from src import avails
 web_socket: websockets.WebSocketServerProtocol = None
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
@@ -101,7 +101,7 @@ async def handle_connection(addr_id):
 
 async def command_flow_handler(data_in: datawrap):
     if data_in.match(_content=const.HANDLE_END):
-        managers.endmanager.end_session()
+        src.managers.endmanager.end_session()
     elif data_in.match(_content=const.HANDLE_CONNECT_USER):
         await handle_connection(addr_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):

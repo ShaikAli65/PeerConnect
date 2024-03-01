@@ -1,9 +1,9 @@
-from core import *
-from avails.textobject import PeerText
-import avails.useables as use
-from avails.remotepeer import RemotePeer
-from webpage import handle
-from managers import *
+from src.core import *
+from src.avails.textobject import PeerText
+import src.avails.useables as use
+from src.avails.remotepeer import RemotePeer
+from src.webpage import handle
+from src.managers import *
 
 
 class Nomad:

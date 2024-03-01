@@ -1,9 +1,9 @@
 import tqdm
 from pathlib import Path
 
-from core import *
-from avails.textobject import PeerText
-from avails.remotepeer import RemotePeer
+from src.core import *
+from src.avails.textobject import PeerText
+from src.avails.remotepeer import RemotePeer
 
 
 class PeerFile:

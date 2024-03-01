@@ -1,9 +1,9 @@
 from typing import Union
-from avails import constants as const
+from src.avails import constants as const
 
-from core import connectserver as connect_server, requests_handler as manage_requests
-from webpage import handle
-from webpage import httphandler
+from src.core import connectserver as connect_server, requests_handler as manage_requests
+from src.webpage import handle
+from src.webpage import httphandler
 
 
 def end_session() -> Union[bool, None]:

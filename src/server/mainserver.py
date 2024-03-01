@@ -7,10 +7,10 @@ import time
 from collections import deque
 import requests
 import select
-from avails.textobject import PeerText
+from src.avails.textobject import PeerText
 import container
-import avails.remotepeer as rp
-import avails.constants as const
+import src.avails.remotepeer as rp
+import src.avails.constants as const
 
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM

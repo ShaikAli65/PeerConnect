@@ -3,11 +3,11 @@ import socket
 import time
 from pathlib import Path
 
-from core import *
+from src.core import *
 from zipfile import ZIP_DEFLATED, ZipFile
-from avails import useables as use
-from avails import remotepeer as remote_peer
-from avails.textobject import PeerText
+from src.avails import useables as use
+from src.avails import remotepeer as remote_peer
+from src.avails.textobject import PeerText
 
 
 def make_directory_structure(path: Path):

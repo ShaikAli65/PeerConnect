@@ -9,10 +9,10 @@ import os
 from collections.abc import MutableSet
 from typing import Union
 
-import avails.constants as const
-from logs import error_log
-from logs import activity_log
-from logs import server_log
+import src.avails.constants as const
+from src.logs import error_log
+from src.logs import activity_log
+from src.logs import server_log
 
 
 class CustomDict:
