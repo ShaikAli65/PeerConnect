@@ -55,11 +55,13 @@ class RemotePeer:
 
 
 def deserialize(to_recv: socket.socket) -> RemotePeer:
+
+
     try:
         raw_length = to_recv.recv(8)
         length = struct.unpack('!Q', raw_length)[0]
         serialized = to_recv.recv(length) if length else b''
         return pickle.loads(serialized)
     except Exception as e:
-        print(f"::Exception while deserializing: {e}")
+        print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
         return RemotePeer()

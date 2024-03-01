@@ -60,11 +60,12 @@ def control_user_manager(_control_sock: socket.socket):
 
 
 def sync_users(_conn: socket.socket):
-    with const.LOCK_LIST_PEERS:
-        use.echo_print(False, "::Syncing list with server", const.LIST_OF_PEERS)
+    # with const.LOCK_LIST_PEERS:
+        # use.echo_print(False, "::Syncing list with server", const.LIST_OF_PEERS)
     with _conn:
-        raw_data = _conn.recv(4)
-        diff_length = struct.unpack('!I', raw_data)[0]
+        raw_data = _conn.recv(8)
+        if not (diff_length := struct.unpack('!Q', raw_data)[0]):
+            return
         for _ in range(diff_length):
             try:
                 notify_user_connection(_conn)
@@ -103,6 +104,7 @@ def control_connection(_conn: socket.socket):
             try:
                 data = PeerText(_conn)
                 data.receive()
+                print(f"::Received {data.raw_text} from {_conn.getpeername()}")
             except (socket.error, OSError) as e:
                 error_log(f"Socket error at manage requests/control_connection exp:{e}")
                 return
@@ -113,13 +115,13 @@ def control_connection(_conn: socket.socket):
 def add_peer_accordingly(_peer: remotepeer.RemotePeer):
     if not _peer:
         return False
-    with const.LOCK_LIST_PEERS:
-        if _peer.status == 1:
-            const.LIST_OF_PEERS[_peer.uri[0]] = _peer
-            use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
-        else:
-            const.LIST_OF_PEERS.pop(_peer.uri[0], None)
-            use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
+    if _peer.status == 1:
+        with const.LOCK_LIST_PEERS:
+            const.LIST_OF_PEERS[_peer.id] = _peer
+        use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
+    else:
+        const.LIST_OF_PEERS.pop(_peer.id, None)
+        use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
     asyncio.run(handle.feed_server_data_to_page(_peer))
     return True
 
