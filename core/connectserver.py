@@ -104,6 +104,7 @@ def initiate_connection():
             return False
         except Exception as exp:
             server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
+        return False
     return False
 
 

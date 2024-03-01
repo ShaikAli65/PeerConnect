@@ -104,7 +104,7 @@ def control_connection(_conn: socket.socket):
             try:
                 data = PeerText(_conn)
                 data.receive()
-                print(f"::Received {data.raw_text} from {_conn.getpeername()}")
+                # print(f"::Received {data.raw_text} from {_conn.getpeername()}")
             except (socket.error, OSError) as e:
                 error_log(f"Socket error at manage requests/control_connection exp:{e}")
                 return

@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const addr = 'ws://localhost:12260/perform';
+const addr = 'ws://localhost:12260';
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
@@ -61,6 +61,7 @@ function initiate()
         {
             if (focusedUser == null)
             {
+                console.log("focused :",focusedUser)
                 document.getElementById("intial_view").textContent="Select a user to chat";
             }
             else
@@ -205,12 +206,16 @@ function showcurrent(user)
     {
         focuseduser_viewer_pane = document.getElementById("viewer_"+focusedUser.id.split("_")[1]);
         focuseduser_viewer_pane.style.display = "none";
+        console.log("line 209 focused :",focusedUser)
+
     }
     ping_currentuser_id_topython(user.id.split("_")[1]);
     user.style.display = "flex";
     user.style.backgroundColor = "";
     focusedUser = user;
     viewname.textContent = nametile_.textContent;
+    console.log("line 217 focused :",focusedUser)
+    
 }
 
 function createmessage()
@@ -290,30 +295,32 @@ function createmessage()
 
 function recievedmessage(recievedata)
 {
+    console.log("line 298 focused :",focusedUser)
+    
     console.log("::recievedata : ",recievedata);
     var reciever = recievedata.id.trim();
     recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
     var reciever_tile = document.getElementById("person_"+reciever);
+    var reciever_view = document.getElementById("viewer_"+reciever);
     if(reciever_tile == null)
     {
         reciever_tile = createUserTile("Unknown@"+reciever+"(^)"+reciever);
         reciever_tile.style.backgroundColor = "var(--dark)";
     }
-    if(reciever_tile != focusedUser)
+    if(reciever_view != focusedUser)
     {
         reciever_tile.style.backgroundColor = "var(--dark)";
     }
     var wrapperdiv_ = document.createElement("div");
     var subDiv_ = document.createElement("div");
-    var recieverview_ = document.getElementById("viewer_"+reciever);
-    recieverview_.scrollTo=recieverview_.scrollBy(0,100);
+    reciever_view.scrollTo=reciever_view.scrollBy(0,100);
     subDiv_.textContent =recievedata;
     subDiv_.className="message";
     subDiv_.id = "message_"+countMessage;
     wrapperdiv_.className="messagewrapper left";
     wrapperdiv_.appendChild(subDiv_);
-    recieverview_.appendChild(wrapperdiv_);
+    reciever_view.appendChild(wrapperdiv_);
     countMessage++;
 }
 function removeuser(idin)
@@ -325,15 +332,17 @@ function removeuser(idin)
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);
     initial_view.textContent = "Select a user to chat";
-    initial_view.style.display = "flex";
     if (focusedUser != userview_)
     {
         division_viewerpov.removeChild(userview_);
-        division_viewerpov.appendChild(initial_view);
+        console.log("line 340 focused :",focusedUser)
     }
     else
     {
-         division_viewerpov.appendChild(initial_view);
+        initial_view.style.display = "flex";
+        division_viewerpov.appendChild(initial_view);
+        console.log("line 346 focused :",focusedUser)
+
          userview_.textContent='User Lost !';
          focusedUser = null;
          division_viewerpov.removeChild(userview_);
