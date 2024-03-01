@@ -84,7 +84,6 @@ def directory_receiver(_conn: socket.socket):
 
 
 def file_receiver(_conn: socket.socket):
-    nomad.Nomad.currently_in_connection[_conn] = True
     if not _conn:
         use.echo_print(False, "::Closing connection from recv_file() from core/nomad at line 100")
         return

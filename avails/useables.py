@@ -60,7 +60,6 @@ def open_file_dialog_window():
     """Opens the system-like file picker dialog."""
     app = QApplication([])
     file_path, _ = QFileDialog.getOpenFileName()
-    app.exec_()
     return file_path if file_path else None
 
 

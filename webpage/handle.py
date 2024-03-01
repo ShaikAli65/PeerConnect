@@ -1,9 +1,8 @@
 import webbrowser
 import websockets
 import configparser
-
-
 from collections import deque
+
 from webpage import httphandler
 import avails.textobject
 import managers.endmanager
@@ -69,15 +68,11 @@ async def send_file_with_window(_path, user_id):
 
 
 async def send_dir_with_window(_path, user_id):
-    try:
-        with const.LOCK_LIST_PEERS:
-            peer_remote_obj = const.LIST_OF_PEERS[user_id]
-        use.echo_print(False, "at send_dir_with_window : ", peer_remote_obj, _path)
-        use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
-        return
-    except socket.error as exp:
-        error_log(f"got error at handle/send_message :{exp}")
-        return
+    with const.LOCK_LIST_PEERS:
+        peer_remote_obj = const.LIST_OF_PEERS[user_id]
+    use.echo_print(False, "at send_dir_with_window : ", peer_remote_obj, _path)
+    use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
+    return
 
 
 async def handle_connection(addr_id):

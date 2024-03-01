@@ -8,7 +8,6 @@ from managers import *
 
 class Nomad:
     currently_in_connection = {}
-    LOOP_FLAG = True
 
     def __init__(self, ip='localhost', port=8088):
         with const.LOCK_PRINT:
@@ -21,6 +20,12 @@ class Nomad:
         self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.main_socket.bind(self.address)
 
+    def _reset_socket(self):
+        self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
+        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.main_socket.bind(self.address)
+        self.main_socket.listen()
+
     def commence(self):
         self.main_socket.listen()
         const.PAGE_HANDLE_CALL.wait()
@@ -30,15 +35,11 @@ class Nomad:
             if self.main_socket not in readable:
                 continue
             if not isinstance(self.main_socket, socket.socket):
-                self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
-                self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                self.main_socket.bind(self.address)
-                self.main_socket.listen()
+                self._reset_socket()
             try:
                 initiate_conn, _ = self.main_socket.accept()
                 activity_log(f'New connection from {_[0]}:{_[1]}')
-                with const.LOCK_PRINT:
-                    print(f"New connection from {_[0]}:{_[1]}")
+                use.echo_print(False, f"New connection from {_[0]}:{_[1]}")
                 Nomad.currently_in_connection[initiate_conn] = True
                 use.start_thread(connectNew, _args=(initiate_conn,))
             except (socket.error, OSError) as e:
@@ -90,18 +91,16 @@ def connectNew(_conn: socket.socket):
         try:
             _data = PeerText(_conn)
             _data.receive()
+            if _data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
+                _conn.close() if _conn else None
+                break
         except socket.error:
             return
-        if _data.compare(b"") and _conn.recv(1, socket.MSG_PEEK) == b"":
-            _conn.close() if _conn else None
-            return
-
         use.echo_print(False, print('data from peer :', _data))
-
         message = function_map.get(_data.raw_text, lambda x: _data.decode())(_conn)
         asyncio.run(handle.feed_user_data_to_page(message, _conn.getpeername()[0]))
-
-    return True
+    disconnect_user(_conn)
+    return
 
 
 def disconnect_user(_conn):
