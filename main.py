@@ -5,11 +5,6 @@ import tracemalloc
 from core import *
 from core import configure_app
 
-if not configure_app.set_constants():
-    with const.LOCK_PRINT:
-        print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
-    error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
-    exit(0)
 
 from core import nomad as nomad
 from core import connectserver as connect_server
@@ -49,6 +44,12 @@ def initiate() -> int:
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     # try:
+    if not configure_app.set_constants():
+        with const.LOCK_PRINT:
+            print("::CONFIG AND CONSTANTS NOT SET EXITING ... {SUGGESTING TO CHECK ONCE}")
+        error_log("::CONFIG AND CONSTANTS NOT SET EXITING ...")
+        exit(0)
+
     tracemalloc.start()
     initiate()
     activity_log("::End Sequence Complete")
