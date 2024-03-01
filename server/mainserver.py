@@ -4,6 +4,7 @@ import signal
 import struct
 import pickle
 import time
+from collections import deque
 import requests
 import select
 from avails.textobject import PeerText
@@ -14,7 +15,7 @@ import avails.constants as const
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 
-SAFE = threading.Lock()
+SAFE_LOCK = threading.Lock()
 SERVERPORT = 45000
 SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
 handshakemessage = 'connectionaccepted'
@@ -46,7 +47,7 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
         raise TypeError('client must be a socket')
     client.send(struct.pack('!Q', len(LIST)))
     for peers in LIST:
-        with SAFE:
+        with SAFE_LOCK:
             peers.serialize(client)
     LIST.add(userobj)
     print('::sent list to client :', client.getpeername())
@@ -56,7 +57,7 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
 
 def sendlist(client: soc.socket, ):
     """Another implementation of sending a list not in use currently"""
-    with SAFE:
+    with SAFE_LOCK:
         _l = struct.pack('!I', len(LIST))
         client.send(_l)
         client.sendall(pickle.dumps(LIST))
@@ -67,7 +68,7 @@ def validate(client: soc.socket):
     try:
         _newuser = rp.deserialize(client)
         print('::got new user :', _newuser, "ip: ", client.getsockname(), 'status :', _newuser.status)
-        with SAFE:
+        with SAFE_LOCK:
             if _newuser.status == 0:
                 print('::removing user :', _newuser)
                 LIST.discard(_newuser)
@@ -83,6 +84,8 @@ def validate(client: soc.socket):
 
 
 def getip():
+    config_soc = soc.socket(IPVERSION, PROTOCOL)
+    config_ip = ''
     if IPVERSION == soc.AF_INET6:
         response = requests.get('https://api64.ipify.org?format=json')
         if response.status_code == 200:
@@ -94,41 +97,56 @@ def getip():
     return config_ip, SERVERPORT
 
 
+def give_chance(client: rp.RemotePeer):
+    with SAFE_LOCK:
+        if client not in LIST:
+            LIST.add(client)
+            return True
+    return False
+
+
 def sync_users():
     while not EXIT.is_set():
         if len(LIST) == 0:
             time.sleep(5)
             continue
-        try:
-            listcopy = LIST.copy()
-            for peer in listcopy:
-                active_user_sock = soc.socket(IPVERSION, PROTOCOL)
-                active_user_sock.settimeout(1)
-                try:
-                    active_user_sock.connect(peer.req_uri)
-                    PeerText(active_user_sock, const.SERVER_PING, byteable=False).send()
-                except soc.error:
-                    print(f'::got EXCEPTION closing connection with :', peer)
-                    print('::new list :', LIST)
-                    LIST.discard(peer)
-                    peer.status = 0
-                    continue
-                active_user_sock.send(struct.pack('!I', len(LIST.removedchanges())))
-                for _peer in LIST.removes:
-                    _peer.serialize(active_user_sock)
-                active_user_sock.close()
-
-        except RuntimeError as e:
-            print(f'::got {e} trying again')
-            continue
+        que = deque(LIST)
+        filtered_changes = LIST.getchanges()
+        while que:
+            peer: rp.RemotePeer = que.popleft()
+            active_user_sock = soc.socket(IPVERSION, PROTOCOL)
+            active_user_sock.settimeout(5)
+            try:
+                active_user_sock.connect(peer.req_uri)
+                PeerText(active_user_sock, const.SERVER_PING, byteable=False).send()
+            except soc.error as e:
+                print(f'::got EXCEPTION {e} closing connection with :', peer)
+                peer.status = 0
+                LIST.sync_remove(peer)
+                continue
+            if len(filtered_changes) == 0:
+                active_user_sock.send(struct.pack('!Q', 0))
+            else:
+                give_changes(active_user_sock, filtered_changes)
         time.sleep(5)
+
+
+def give_changes(active_user_sock: soc.socket, changes: deque):
+    # print(f'::give_changes called :{active_user_sock.getpeername()}', changes)
+    try:
+        with active_user_sock:
+            active_user_sock.send(struct.pack('!Q', len(changes)))
+            for _peer in changes:
+                _peer.serialize(active_user_sock)
+    except soc.error as e:
+        print(f'::got {e} for active user :', active_user_sock.getpeername())
 
 
 def start_server():
     global SERVEROBJ
     SERVEROBJ.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
-    const.THISIP, SERVERPORT_ = getip()
-    SERVEROBJ.bind((const.THIS_IP, SERVERPORT_))
+    const.THIS_IP, SERVERPORT = getip()
+    SERVEROBJ.bind((const.THIS_IP, SERVERPORT))
     SERVEROBJ.listen()
     print("Server started at:\n>>", SERVEROBJ.getsockname())
     threading.Thread(target=sync_users).start()
@@ -141,13 +159,14 @@ def start_server():
 
 
 def endserver(signum, frame):
-    print("\nExiting from application...",signum,frame)
+    print("\nExiting from application...")
     EXIT.set()
     SERVEROBJ.close()
     return
 
 
-def getlist():...
+def getlist(lis):
+    return
 
 
 if __name__ == '__main__':

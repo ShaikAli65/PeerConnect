@@ -14,18 +14,13 @@ class RemotePeer:
         self.file_count = 0
 
     def serialize(self, _to_send: socket.socket) -> bool:
-        if self.callbacks > const.MAX_CALL_BACKS:
-            return False
         try:
             serialized = pickle.dumps(self)
             _to_send.send(struct.pack('!Q', len(serialized)))
             _to_send.send(serialized)
             return True
         except socket.error as e:
-            print(f"::Exception while serializing retrying in 5sec: {e}")
-            time.sleep(5)
-            self.callbacks += 1
-            return self.serialize(_to_send)
+            print(f"::Exception while serializing... {e}")
 
     def __repr__(self):
         return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.status})'
@@ -55,8 +50,6 @@ class RemotePeer:
 
 
 def deserialize(to_recv: socket.socket) -> RemotePeer:
-
-
     try:
         raw_length = to_recv.recv(8)
         length = struct.unpack('!Q', raw_length)[0]
@@ -64,4 +57,4 @@ def deserialize(to_recv: socket.socket) -> RemotePeer:
         return pickle.loads(serialized)
     except Exception as e:
         print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
-        return RemotePeer()
+        return RemotePeer(username="N/A",ip=to_recv.getpeername()[0], port=to_recv.getpeername()[1],)

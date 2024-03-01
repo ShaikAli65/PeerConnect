@@ -1,51 +1,34 @@
 import threading
 
+from collections import deque
+
 
 class CustomSet:
     def __init__(self):
         self.__list = set()
         self.__lock = threading.Lock()
-        self.__changes = set()
-        self.removes = set()
-        self.__clear = False
-
-    def __iter__(self):
-        return self.__list.__iter__()
-
-    def __len__(self):
-        return len(self.__list)
-
-    def __str__(self):
-        return " ".join([str(i) for i in self.__list])
-
-    def __contains__(self, item):
-        return item in self.__list
+        self.changes = deque()
 
     def add(self, item):
         with self.__lock:
             self.__list.add(item)
-            self.__changes.add(item)
-            if item in self.removes:
-                self.removes.discard(item)
+        if item in self.changes:
+            self.changes.remove(item)
 
-    def removes(self, item):
+    def sync_remove(self, item):
+        # print('::sync_remove called :', item)
         with self.__lock:
             self.__list.discard(item)
-            self.removes.add(item)
-            self.__changes.add(item)
+            self.changes.appendleft(item)
 
     def discard(self, item):
         with self.__lock:
             self.__list.discard(item)
-            self.removes.add(item)
-            self.__changes.add(item)
+            self.changes.appendleft(item)
 
     def pop(self):
         with self.__lock:
-            item = self.__list.pop()
-            self.removes.add(item)
-            self.__changes.add(item)
-            return item
+            return self.__list.pop()
 
     def copy(self):
         with self.__lock:
@@ -54,23 +37,37 @@ class CustomSet:
     def clear(self):
         with self.__lock:
             self.__list.clear()
-            self.__clear = True
 
-    def changes(self):
+    def clear_changes(self):
         with self.__lock:
-            changes = self.__changes
-            self.__changes.clear()
-            return changes
+            self.changes.clear()
 
-    def removedchanges(self):
-        with self.__lock:
-            changes = self.removes
-            return changes
+    def getchanges(self):
+        # print('::getchanges called: ', self.changes)
+        r = self.changes.copy()
+        self.changes.clear()
+        return r
 
-    def clearchanges(self):
+    def __iter__(self):
         with self.__lock:
-            self.removes.clear()
+            return self.__list.__iter__()
 
-    def isclear(self):
+    def __getitem__(self, index):
         with self.__lock:
-            return self.__clear
+            return self.__list.__getattribute__(index)
+
+    def __len__(self):
+        with self.__lock:
+            return len(self.__list)
+
+    def __str__(self):
+        with self.__lock:
+            return " ".join([str(i) for i in self.__list])
+
+    def __contains__(self, item):
+        with self.__lock:
+            return item in self.__list
+
+    def __del__(self):
+        with self.__lock:
+            self.__list.clear()
