@@ -105,6 +105,9 @@ def connectNew(_conn: socket.socket):
 
 
 def disconnect_user(_conn):
-    PeerText(_conn, const.CMD_CLOSING_HEADER, byteable=False).send()
-    _conn.close()
-    use.echo_print(False, "::Closing connection from disconnect_user() from core/nomad at line 153")
+    try:
+        with _conn:
+            PeerText(_conn, const.CMD_CLOSING_HEADER, byteable=False).send()
+        use.echo_print(False, "::Closing connection from disconnect_user() from core/nomad at line 153")
+    except socket.error:
+        pass

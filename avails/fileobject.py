@@ -112,10 +112,6 @@ class PeerFile:
                 with open(os.path.join(const.PATH_DOWNLOAD, self.__validatename__(self.filename)), 'wb') as file:
                     while (not self.control_flag.is_set()) and (data := self.sock.recv(self.chunk_size)):
                         file.write(data)
-                        # received_bytes += len(data)
-                        # progress_percentage = (received_bytes / self.file_size) * 100
-                        # print(f"\r::file received: {progress_percentage:.2f}%", end="")
-                        # sys.stdout.flush()
                         progress.update(len(data))
                 progress.close()
                 print()

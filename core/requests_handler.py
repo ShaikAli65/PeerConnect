@@ -1,5 +1,5 @@
 import queue
-
+from collections import deque
 from avails import remotepeer
 from core import *
 from avails import useables as use
@@ -33,6 +33,23 @@ def send_list(_conn: socket.socket) -> Union[None, bool]:
     return
 
 
+def add_peer_accordingly(_peer: remotepeer.RemotePeer, include_ping=False):
+    if _peer.status == 1:
+        with const.LOCK_LIST_PEERS:
+            const.LIST_OF_PEERS[_peer.id] = _peer
+        use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
+    else:
+        if include_ping:
+            if ping_user(_peer):
+                return
+        with const.LOCK_LIST_PEERS:
+            const.LIST_OF_PEERS.pop(_peer.id, None)
+            _peer.status = 0
+        use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
+    asyncio.run(handle.feed_server_data_to_page(_peer))
+    return True
+
+
 def initiate():
     global safe_stop
     safe_stop.set()
@@ -59,22 +76,20 @@ def control_user_manager(_control_sock: socket.socket):
     return
 
 
-def sync_users(_conn: socket.socket):
-    # with const.LOCK_LIST_PEERS:
-        # use.echo_print(False, "::Syncing list with server", const.LIST_OF_PEERS)
+def sync_users_with_server(_conn: socket.socket):
     with _conn:
         raw_data = _conn.recv(8)
         if not (diff_length := struct.unpack('!Q', raw_data)[0]):
             return
         for _ in range(diff_length):
             try:
-                notify_user_connection(_conn)
+                notify_user_connection(_conn,True)
             except Exception as e:
                 error_log(f"Error syncing list at manager_requests.py/sync_list exp :  {e}")
     return
 
 
-def notify_user_connection(_conn_socket: socket.socket):
+def notify_user_connection(_conn_socket: socket.socket,ping_again=False):
     try:
         new_peer_object: remotepeer.RemotePeer = remotepeer.deserialize(_conn_socket)
         if not new_peer_object:
@@ -82,13 +97,13 @@ def notify_user_connection(_conn_socket: socket.socket):
     except Exception as e:
         error_log(f"Error sending data at manager_requests.py/notify_user_connection exp :  {e}")
         return None
-    return add_peer_accordingly(new_peer_object)
+    return add_peer_accordingly(new_peer_object,include_ping=ping_again)
 
 
 function_map = {
     const.REQ_FOR_LIST: send_list,
     const.I_AM_ACTIVE: notify_user_connection,
-    const.SERVER_PING: sync_users,
+    const.SERVER_PING: sync_users_with_server,
     const.ACTIVE_PING: None,
     const.LIST_SYNC: None
 }
@@ -112,18 +127,15 @@ def control_connection(_conn: socket.socket):
             return
 
 
-def add_peer_accordingly(_peer: remotepeer.RemotePeer):
-    if not _peer:
+def ping_user(remote_peer: remotepeer.RemotePeer):
+    try:
+        with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
+            _conn.settimeout(1)
+            _conn.connect(remote_peer.req_uri)
+            return True if PeerText(_conn, const.ACTIVE_PING, byteable=False).send() else False
+    except socket.error as e:
+        error_log(f"Error pinging user at requests_handler.py/ping_user exp :  {e}")
         return False
-    if _peer.status == 1:
-        with const.LOCK_LIST_PEERS:
-            const.LIST_OF_PEERS[_peer.id] = _peer
-        use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
-    else:
-        const.LIST_OF_PEERS.pop(_peer.id, None)
-        use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
-    asyncio.run(handle.feed_server_data_to_page(_peer))
-    return True
 
 
 def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
@@ -158,23 +170,15 @@ def notify_users():
 
 def sync_list() -> None:
     with const.LOCK_LIST_PEERS:
-        list_copy = const.LIST_OF_PEERS.copy()
-    for peer_obj in list_copy.values() and True:
-        if not peer_obj:
-            continue
+        list_copy = deque(const.LIST_OF_PEERS.values())
+    while list_copy:
         if safe_stop.is_set():
             return
-        try:
-            with socket.socket(const.IP_VERSION, const.PROTOCOL) as sever_conn:
-                sever_conn.settimeout(0.3)
-                sever_conn.connect(peer_obj.req_uri)
-                PeerText(sever_conn, const.ACTIVE_PING, byteable=False).send()
-        except socket.error as e:
-            use.echo_print(False,
-                           f"Looks like the user is inactive {peer_obj.username}({peer_obj.uri}) at manager_requests.py/sync_list exp :  {e}")
+        peer_obj = list_copy.popleft()
+        if not ping_user(peer_obj):
             peer_obj.status = 0
             add_peer_accordingly(peer_obj)
-            return
+            continue
     return
 
 
