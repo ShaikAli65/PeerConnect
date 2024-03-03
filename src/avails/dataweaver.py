@@ -1,7 +1,6 @@
-from core import *
+from src.core import *
 from collections import defaultdict
-
-
+ 
 class DataWeaver:
     def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
         self.data_lock = threading.Lock()

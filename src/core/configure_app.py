@@ -92,11 +92,11 @@ def print_constants():
 def set_paths():
     const.PATH_CURRENT = os.path.join(os.getcwd())
     # CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'config.ini')
-    const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
-    const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'webpage')
+    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'src','config.ini')
+    const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'src','logs')
+    const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'src','webpage')
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
+    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'src','PeerConnect')
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
 

@@ -1,10 +1,10 @@
 import queue
 from collections import deque
-from avails import remotepeer
-from core import *
-from avails import useables as use
-from webpage import handle
-from avails.textobject import PeerText
+from src.core import *
+from src.avails import remotepeer
+from src.avails import useables as use
+from src.webpage import handle
+from src.avails.textobject import PeerText
 
 safe_stop = threading.Event()
 
