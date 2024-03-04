@@ -96,7 +96,7 @@ def set_paths():
     const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'src','logs')
     const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'src','webpage')
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'src','PeerConnect')
+    const.PATH_DOWNLOAD = os.path.join(downloads_path,'PeerConnect')
     if not os.path.exists(const.PATH_DOWNLOAD):
         os.makedirs(const.PATH_DOWNLOAD)
 
