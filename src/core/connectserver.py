@@ -93,7 +93,6 @@ def initiate_connection():
             return True
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
             if call_count >= const.MAX_CALL_BACKS:
-                time.sleep(const.anim_delay)
                 print("\n::Ending program server refused connection")
                 return False
             call_count += 1
@@ -104,8 +103,6 @@ def initiate_connection():
             return False
         except Exception as exp:
             server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
-        return False
-    return False
 
 
 def end_connection_with_server():

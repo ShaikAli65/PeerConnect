@@ -31,7 +31,7 @@ def get_local_ip():
     s = soc.socket(IPVERSION, PROTOCOL)
     s.settimeout(0.5)
     try:
-        s.connect(("1.1.1.1", 80))
+        s.connect(("www.google.com", 80))
         ip = s.getsockname()[0]
     except soc.error as e:
         print(f"::got {e} trying another way")

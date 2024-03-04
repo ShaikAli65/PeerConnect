@@ -77,8 +77,6 @@ async def send_dir_with_window(_path, user_id):
 
 async def handle_connection(addr_id):
     global focus_user_stack
-    if len(focus_user_stack) and (focus_user_stack[0].getpeername()[0] == addr_id):
-        return True
     try:
         with const.LOCK_LIST_PEERS:
             _nomad: avails.remotepeer = const.LIST_OF_PEERS[addr_id]
