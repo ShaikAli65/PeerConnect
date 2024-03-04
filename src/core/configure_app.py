@@ -2,7 +2,7 @@ import socket as soc
 import configparser
 import time
 import requests
-
+import platform
 import src.avails.constants as const  # <--- This is the only import from avails/constants.py
 from src.logs import *
 
@@ -23,9 +23,12 @@ def get_ip() -> str:
     config_soc.settimeout(1)
     config_ip = 'localhost'
     try:
-        if const.IP_VERSION == soc.AF_INET:
+        if platform.system() == 'Windows' and const.IP_VERSION == soc.AF_INET:
             config_PUBILC_DNS = "1.1.1.1"
             config_soc.connect((config_PUBILC_DNS, 80))
+            config_ip = config_soc.getsockname()[0]
+        elif const.IP_VERSION == soc.AF_INET:
+            config_soc.connect(('www.google.com', 80))
             config_ip = config_soc.getsockname()[0]
         else:
             response = requests.get('https://api64.ipify.org?format=json')
