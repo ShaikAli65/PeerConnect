@@ -8,7 +8,7 @@ from collections import deque
 import requests
 import select
 from src.avails.textobject import PeerText
-import container
+from src.server.container import CustomSet
 import src.avails.remotepeer as rp
 import src.avails.constants as const
 
@@ -21,7 +21,7 @@ SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
 handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
-LIST = container.CustomSet()
+LIST = CustomSet()
 # LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.1.1', status=1))
 ip = ""
 
