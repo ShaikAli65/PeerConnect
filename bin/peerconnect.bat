@@ -1,5 +1,4 @@
 @echo off
-
 set "FLAG_FILE=setup_completed.txt"
 
 if not exist "%FLAG_FILE%" (
@@ -11,5 +10,6 @@ if not exist "%FLAG_FILE%" (
     echo Setup completed. > "%FLAG_FILE%"
 )
 
+cd ..
 python3 main.py
 exit
