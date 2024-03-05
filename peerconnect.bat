@@ -1,10 +1,15 @@
 @echo off
 
-python -m pip install --upgrade pip
-pip install websockets
-pip install requests
-pip install asyncio
-pip install PyQt5
-pip install tqdm
+set "FLAG_FILE=setup_completed.txt"
+
+if not exist "%FLAG_FILE%" (
+    echo Setting up...
+    python -m pip install --upgrade pip
+    pip install websockets
+    pip install requests
+    pip install PyQt5
+    echo Setup completed. > "%FLAG_FILE%"
+)
+
 python3 main.py
 exit
