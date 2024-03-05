@@ -148,6 +148,7 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
                 const.REMOTE_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(False, f"Error sending active status at manager_requests.py/signal_active_status")
+            peer_object.status = 0
         add_peer_accordingly(peer_object)
 
 
