@@ -5,9 +5,11 @@ FLAG_FILE="setup_completed.txt"
 if [ ! -f "$FLAG_FILE" ]; then
     echo "Setting up..."
     python3 -m pip install --upgrade pip
+    python3 -m venv env
     pip install websockets
     pip install requests
     pip install PyQt5
+    pip install tqdm
     echo "Setup completed." > "$FLAG_FILE"
 fi
 
