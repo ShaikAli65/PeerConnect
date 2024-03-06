@@ -12,7 +12,7 @@ if [ ! -f "$FLAG_FILE" ]; then
     pip install tqdm
     echo "Setup completed." > "$FLAG_FILE"
 fi
-
+cd ..
 python3 main.py
 
 

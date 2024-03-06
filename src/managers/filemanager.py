@@ -61,7 +61,11 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
 
 def unzipper(zip_path: str, destination_path: str):
     with ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(destination_path)
+        try:
+            zip_ref.extractall(destination_path)
+        except PermissionError as pe:
+                error_log(f"::PermissionError in unzipper() from core/nomad at line 68: {pe}")
+            
     print(f"::Extracted {zip_path} to {destination_path}")
     os.remove(zip_path)
     return
