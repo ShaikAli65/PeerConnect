@@ -1,24 +1,27 @@
+from collections import defaultdict
+
 from src.core import *
+from typing import Union
 
 
-class PeerText:
+class SimplePeerText:
     """
     Encapsulates text operations for peer-to-peer file transfer.
-
+    Accepts A connected socket
     Allows sending and receiving text/strings over sockets, managing text information,
     handling potential conflicts with sending/receiving texts, and providing string-like
     behavior for iteration and size retrieval.
-    The text is encoded in UTF-8 format, and stored as bytes,
+    The text is encoded in UTF-8 format(if not changed), and stored as bytes,
     all comparisons are done on the stored bytes.
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
 
-    def __init__(self, refer_sock: socket.socket, text: str = '', byteable=True):
-        self.raw_text = text.encode(const.FORMAT) if byteable else text
+    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True):
+        self.raw_text = text.encode(const.FORMAT) if byte_able else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.sock = refer_sock
         self.id = ''
-        self.byte_able = byteable
+        self.byte_able = byte_able
 
     def send(self) -> bool:
         """
@@ -41,15 +44,15 @@ class PeerText:
             else:
                 return False
 
-    def receive(self, cmpstring='') -> [bool, bytes]:
+    def receive(self, cmp_string='') -> Union[bool, bytes]:
         """
         Receive text over the socket.
 
         Parameters:
-        - cmpstring (bytes): Optional comparison string for validation.
+        - cmp_string (bytes): Optional comparison string for validation.
 
         Returns:
-        - [bool, bytes]: If cmpstring is provided, returns True if received text matches cmpstring,
+        - [bool, bytes]: If cmp_string is provided, returns True if received text matches cmp_string,
                         otherwise returns the received text as bytes.
 
         """
@@ -59,10 +62,10 @@ class PeerText:
         if self.raw_text:
             self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
             self.sock.sendall(const.TEXT_SUCCESS_HEADER)
-            if cmpstring:
+            if cmp_string:
                 return True if self.raw_text == (
-                    cmpstring.encode(const.FORMAT) if isinstance(cmpstring, str) else cmpstring) else False
-        return self.raw_text if self.raw_text else False
+                    cmp_string.encode(const.FORMAT) if isinstance(cmp_string, str) else cmp_string) else False
+        return self.raw_text
 
     def decode(self):
         return self.raw_text.decode(const.FORMAT)
@@ -128,3 +131,59 @@ class PeerText:
 
     def __hash__(self):
         return hash(self.raw_text)
+
+
+class DataWeaver:
+    def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
+        self.data_lock = threading.Lock()
+        if byte_data:
+            self.__data: dict = json.loads(byte_data)
+        else:
+            self.__data: dict = defaultdict(str)
+            self.__data['header'] = header
+            self.__data['content'] = content
+            self.__data['id'] = _id
+        self.header = self.__data['header']
+        self.content = self.__data['content']
+        self.id = self.__data['id']
+
+    def dump(self) -> str:
+        with self.data_lock:
+            return json.dumps(self.__data)
+
+    def match(self,_header: str = None,_content: str = None,_id: str = None) -> bool:
+        with self.data_lock:
+            if _header:
+                return self.__data['header'] == _header
+            elif _content:
+                return self.__data['content'] == _content
+            elif _id:
+                return self.__data['id'] == _id
+
+    def send(self, receiver_sock):
+        return SimplePeerText(text=self.dump(),refer_sock=receiver_sock).send()
+
+    def receive(self, sender_sock):
+        text_string = SimplePeerText(refer_sock=sender_sock)
+        text_string.receive()
+        self.__set_values(json.loads(text_string.decode()))
+        return self
+
+    def __set_values(self, data_value: dict):
+        self.__data = data_value
+        self.header = self.__data['header']
+        self.content = self.__data['content']
+        self.id = self.__data['id']
+
+    def __getitem__(self, key):
+        return self.__data[key]
+
+    def __setitem__(self, key, value):
+        with self.data_lock:
+            self.__data[key] = value
+
+    def __str__(self):
+        return self.__data.__str__()
+
+    def __repr__(self):
+        return f'DataWeaver({self.__data})'

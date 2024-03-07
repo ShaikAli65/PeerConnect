@@ -3,7 +3,7 @@ import socketserver
 import threading
 import time
 
-from core import *
+from src.core import *
 safe_stop = True
 
 

@@ -2,25 +2,23 @@ import tqdm
 from pathlib import Path
 
 from src.core import *
-from src.avails.textobject import PeerText
-from src.avails.remotepeer import RemotePeer
+from src.avails.textobject import SimplePeerText
+from src.avails import useables as use
 
 
 class PeerFile:
-    def __init__(self, controlflag=threading.Event(), path: str = '', is_dir=False, obj=None,
-                 recv_soc: socket.socket = None, chunk_size: int = 1024 * 512,
-                 error_ext: str = '.invalid'):
-        self.reciever_obj: RemotePeer = obj
+    def __init__(self,
+                 uri:tuple[str,int],
+                 path: str = '',
+                 controlflag=threading.Event(), chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
+
         self._lock = threading.Lock()
-        self.control_flag: threading.Event = controlflag
-        self.chunk_size = chunk_size
-        self.is_dir = is_dir
-        self.error_extension = error_ext
-        self.sock = None
+        self.__control_flag: threading.Event = controlflag
+        self.__chunk_size = chunk_size
+        self.__error_extension = error_ext
+        self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
+        self.uri = uri
         if path == '':
-            self.sock = recv_soc
-            self.filename = ''
-            self.file_size = 0
             return
 
         self.path = Path(path).resolve()
@@ -36,37 +34,32 @@ class PeerFile:
 
         self.filename = self.path.name
         self.file_size = self.path.stat().st_size
+        self.type = self.path.suffix
         self.raw_size = struct.pack('!Q', self.file_size)
 
     def send_meta_data(self) -> Union[bool, None]:
-
         with self._lock:
-            self.sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
-
-            try:
-                if self.control_flag.is_set():
-                    return
-                self.sock.connect(self.reciever_obj.uri)
-                PeerText(self.sock, (const.CMD_RECV_DIR if self.is_dir else const.CMD_RECV_FILE), byteable=False).send()
-                PeerText(self.sock, self.filename).send()
-                self.sock.sendall(self.raw_size)
-                return PeerText(self.sock, const.CMD_FILESOCKET_HANDSHAKE).send()
-            except Exception as e:
-                print(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
-                # error_log(f'::got {e} at core\\__init__.py from self.send_meta_data() closing connection')
+            if not self.set_up_socket_connection():
                 return False
+            if self.__control_flag.is_set():
+                return False
+            self.__sock.sendall(self.raw_size)
+            return SimplePeerText(self.__sock, const.CMD_FILESOCKET_HANDSHAKE).send()
 
     def recv_meta_data(self) -> bool:
 
         with self._lock:
             try:
-                self.filename = PeerText(self.sock).receive().decode(const.FORMAT)
-                self.file_size = struct.unpack('!Q', self.sock.recv(8))[0]
-                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.chunk_size)
-                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.chunk_size)
-                return PeerText(self.sock).receive(cmpstring=const.CMD_FILESOCKET_HANDSHAKE)
+
+                self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
+                self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.__chunk_size)
+                try:
+                    self.__sock.connect(self.uri)
+                except socket.error as e:
+                    error_log(f"got error : {e} at fileobject :{self} from recv_meta_data(self)/fileobject.py")
+
+                self.file_size = struct.unpack('!Q', self.__sock.recv(8))[0]
+                return SimplePeerText(self.__sock).receive(cmp_string=const.CMD_FILESOCKET_HANDSHAKE)
             except Exception as e:
                 print(f'::got {e} at avails\\fileobject.py from self.recv_meta_data() closing connection')
                 # error_log(f'::got {e} at core\\__init__.py from self.recv_meta_data() closing connection')
@@ -83,18 +76,17 @@ class PeerFile:
             try:
                 send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B"
                                           , unit_scale=True, unit_divisor=1024)
-                for data in self.__chunkify__():    # send the file in chunks
-                    self.sock.sendall(data)
+                for data in self.__chunkify__():  # send the file in chunks
+                    self.__sock.sendall(data)
                     send_progress.update(len(data))
                 send_progress.close()
                 # activity_log(f'::sent file to {self.sock.getpeername()}')
-                print("::file sent: ", self.filename, " to ", self.sock.getpeername())
                 return True
             except Exception as e:
                 error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
                 return False
             finally:
-                self.sock.close()
+                self.__sock.close()
 
     def recv_file(self):
         """
@@ -110,16 +102,16 @@ class PeerFile:
                                      unit_scale=True,
                                      unit_divisor=1024)
                 with open(os.path.join(const.PATH_DOWNLOAD, self.__validatename__(self.filename)), 'wb') as file:
-                    while (not self.control_flag.is_set()) and (data := self.sock.recv(self.chunk_size)):
+                    while (not self.__control_flag.is_set()) and (data := self.__sock.recv(self.__chunk_size)):
                         file.write(data)
                         progress.update(len(data))
                 progress.close()
                 print()
-                activity_log(f'::received file {self.filename} :: from {self.sock.getpeername()}')
+                activity_log(f'::received file {self.filename} :: from {self.__sock.getpeername()}')
                 return True
             except Exception as e:
                 error_log(f'::got {e} at avails\\fileobject.py from self.recv_file() closing connection')
-                self.sock.close()
+                self.__sock.close()
                 self.__file_error__()
                 return False
 
@@ -128,14 +120,45 @@ class PeerFile:
             Handles file errors by renaming the file with an error extension.
         """
         with self._lock:
-            os.rename(self.filename, self.filename + self.error_extension)
-            self.filename += self.error_extension
+            os.rename(self.filename, self.filename + self.__error_extension)
+            self.filename += self.__error_extension
         return True
 
     def __chunkify__(self):
         with open(self.path, 'rb') as file:
-            while (not self.control_flag.is_set()) and (chunk := file.read(self.chunk_size)):
+            while (not self.__control_flag.is_set()) and (chunk := file.read(self.__chunk_size)):
                 yield chunk
+
+    def get_meta_data(self) -> str:
+        """Returns metadata as json string in format {name:'',size:'',type:''}"""
+        return json.dumps({
+            'name':self.filename,
+            'size':self.file_size,
+            'type':self.type
+        })
+
+    def set_up_socket_connection(self):
+        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__chunk_size)
+        self.__sock.settimeout(5)
+        self.__sock.bind(self.uri)
+        self.__sock.listen(1)
+        try:
+            while True:
+                readables, _, _ = select.select([self.__sock], [], [], 0.001)
+                if self.__sock in readables:
+                    self.__sock, _ = self.__sock.accept()
+                    return True
+        except Exception as e:
+            use.echo_print(False, f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
+            # error_log(f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
+            return False
+
+    def set_meta_data(self,filename,filesize=0,controlflag=threading.Event(), chunk_size: int = 1024 * 512,error_ext: str = '.invalid'):
+        self.filename = filename
+        self.file_size = filesize
+        self.__control_flag = controlflag
+        self.__chunk_size = chunk_size
+        self.__error_extension = error_ext
 
     def __validatename__(self, file_addr: str):
         """
@@ -167,10 +190,15 @@ class PeerFile:
         """
             Returns the filename.
         """
-        return self.filename
+        return (
+            f"file name {self.filename}",
+            f"file size {self.file_size}"
+            f"sending to {self.__sock.getpeername()}"
+            f"receiving from --"
+        )
 
     def hold(self):
-        self.control_flag.set()
+        self.__control_flag.set()
 
 
 # ++++++++++++++++--------------------------------------------------------------------------------------------------++++++++++++++++

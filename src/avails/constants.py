@@ -8,12 +8,12 @@ SERVER_IP = ''
 THIS_IP = ''
 SERVER_TIMEOUT = 5
 
-THIS_PORT = 0
-PAGE_PORT = 0
-SERVER_PORT = 0
-FILE_PORT = 45210
-REQ_PORT = 35896
-PAGE_SERVE_PORT = 40000
+PORT_THIS = 0
+PORT_PAGE = 0
+PORT_SERVER = 0
+PORT_FILE = 45210
+PORT_REQ = 35896
+PORT_PAGE_SERVE = 40000
 
 PATH_CURRENT = ''
 PATH_LOG = ''
@@ -28,32 +28,32 @@ count_of_user_id = 0
 LOCK_USER_ID = threading.Lock()
 LOCK_PRINT = threading.Lock()
 LOCK_LIST_PEERS = threading.Lock()
+LOCK_FOR_PAGE = False
 ACTIVE_PEERS = []
 LIST_OF_PEERS: dict = {}
-anim_delay = 0
+anim_delay = 0.1
 MAX_CALL_BACKS = 6
 
 OBJ = None
 OBJ_THREAD = None
 REQUESTS_THREAD = None
-REMOTE_OBJECT = None
+THIS_OBJECT= None
 SERVER_THREAD = None
 PAGE_HANDLE_CALL = threading.Event()
-SAFE_LOCK_FOR_PAGE = False
 WEB_SOCKET = None
 
-CMD_RECV_FILE = b'thisisacommandtocore_/!_recvafile'
-CMD_CLOSING_HEADER = b'thisisacommandtocore_/!_closeconnection'
+CMD_RECV_FILE = 'thisisacommandtocore_/!_recvafile'
+CMD_CLOSING_HEADER = 'thisisacommandtocore_/!_closeconnection'
+CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
+CMD_TEXT = "thisisamessage"
+CMD_RECV_DIR = 'thisisacommandtocore_/!_recvdir'
+CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
+
 TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 I_AM_ACTIVE = b'thisisacommandtocore_/!_notifyuser'
-CMD_RECV_DIR = b'thisisacommandtocore_/!_recvdir'
-CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
 SERVER_PING = b'thisisacommandfromserver_/!_ping'
 
-CMD_FILESOCKET_HANDSHAKE = 'thisisacommandtocore_/!_filesocketopen'
-# CMD_FILESOCKET_CLOSE = 'thisisacommandtocore_/!_closefilesocket'
-# FILESEND_INTITATE_HEADER = 'inititatefilesequence'
 SERVER_OK = 'connectionaccepted'
 LIST_SYNC = 'synclist'
 HANDLE_MESSAGE_HEADER = 'thisisamessage'

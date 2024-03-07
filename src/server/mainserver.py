@@ -7,7 +7,7 @@ import time
 from collections import deque
 import requests
 import select
-from src.avails.textobject import PeerText
+from src.avails.textobject import SimplePeerText
 import container
 import src.avails.remotepeer as rp
 import src.avails.constants as const
@@ -74,7 +74,7 @@ def validate(client: soc.socket):
                 LIST.discard(_newuser)
                 print("new list :", LIST)
                 return True
-        PeerText(client, const.SERVER_OK).send()
+        SimplePeerText(client, const.SERVER_OK).send()
         threading.Thread(target=givelist, args=(client, _newuser)).start()
         return True
     except soc.error as e:
@@ -118,7 +118,7 @@ def sync_users():
             active_user_sock.settimeout(5)
             try:
                 active_user_sock.connect(peer.req_uri)
-                PeerText(active_user_sock, const.SERVER_PING, byteable=False).send()
+                SimplePeerText(active_user_sock, const.SERVER_PING, byte_able=False).send()
             except soc.error as e:
                 print(f'::got EXCEPTION {e} closing connection with :', peer)
                 peer.status = 0

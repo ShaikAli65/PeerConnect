@@ -3,35 +3,62 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from os import PathLike
 import tqdm
 from multiprocessing import Process
+
 from src.core import *
-import src.core.nomad as nomad
-from src.avails import dataweaver
-from src.webpage import handle
-from src.avails import remotepeer as remote_peer
+from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.fileobject import PeerFile
+from src.webpage import handle_data
+from src.avails.textobject import DataWeaver
+
+
 every_file = {}
 count = 0
 
 
-def file_sender(receiver_obj: remote_peer.RemotePeer, _data: str, isdir=False):
-    prompt_data, file = None, None
+def set_file_id(file: PeerFile, receiver_obj: RemotePeer):
+    global every_file
+    receiver_obj.increment_file_count()
+    every_file[f"{receiver_obj.id}(^){receiver_obj.get_file_count()}"] = file
+
+
+def file_sender(_data: str, receiver_sock: socket.socket,is_dir=False):
+    receiver_obj,prompt_data = RemotePeer(), ''
     try:
-        file = PeerFile(path=_data, obj=receiver_obj, is_dir=isdir)
-        receiver_obj.increment_file_count()
-        every_file[f"{receiver_obj.id }(^){receiver_obj.get_file_count()}"] = file
+        receiver_obj: RemotePeer = use.get_peer_obj_from_sock(_conn=receiver_sock)
+        temp_port = use.get_free_port()
+        file = PeerFile(uri=(const.THIS_IP, temp_port), path=_data)
+        set_file_id(file, receiver_obj)
+        _header = (const.CMD_RECV_DIR if is_dir else const.CMD_RECV_FILE)
+        _id = f"{const.THIS_IP}(^){temp_port}"
+        DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
+        time.sleep(0.07)
         if file.send_meta_data():
             file.send_file()
-            prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=file.filename, _id=receiver_obj.id)
+            print("::file sent: ", file.filename, " to ", receiver_sock.getpeername())
+            prompt_data = DataWeaver(header="thisisaprompt", content=file.filename, _id=receiver_obj.id)
             return file.filename
         return False
     except NotADirectoryError as nde:
-        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
-        directory_sender(receiver_obj, _data)
+        prompt_data = DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
+        directory_sender(_data, receiver_sock)
     except FileNotFoundError as fne:
-        prompt_data = dataweaver.DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
+        prompt_data = DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
     finally:
-        asyncio.run(handle.feed_core_data_to_page(prompt_data))
+        asyncio.run(handle_data.feed_core_data_to_page(prompt_data))
+        pass
+
+
+def file_receiver(refer: DataWeaver):
+
+    tup = refer.id.split('(^)')
+    ip,port = tup[0], int(tup[1])
+    file = PeerFile(uri=(ip,port))
+    metadata = json.loads(refer.content.strip())
+    file.set_meta_data(filename=metadata['name'], filesize=int(metadata['size']))
+    if file.recv_meta_data():
+        file.recv_file()
+    return file.filename
 
 
 def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
@@ -45,58 +72,49 @@ def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
     return
 
 
-def directory_sender(receiver_obj: remote_peer.RemotePeer, _data: str):
-
-    provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
-    zipper_process = Process(target=zip_dir, args=(provisional_name, _data))
-    zipper_process.start()
-    zipper_process.join()
-    # zip_dir(provisional_name, _data)
-    print("generated zip file: ", provisional_name)
-    file_sender(receiver_obj, provisional_name, isdir=True)
-    print("sent zip file: ", provisional_name)
-    os.remove(provisional_name)
-    pass
-
-
 def unzipper(zip_path: str, destination_path: str):
     with ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(destination_path)
+        try:
+            zip_ref.extractall(destination_path)
+        except PermissionError as pe:
+            error_log(f"::PermissionError in unzipper() from core/nomad at line 68: {pe}")
     print(f"::Extracted {zip_path} to {destination_path}")
     os.remove(zip_path)
     return
 
 
-def directory_receiver(_conn: socket.socket):
-    try:
-        _conn.getpeername()
-    except OSError as oe:
-        use.echo_print(False, f"::Closing connection from recv_file() from core/nomad at line 100 because of OSError:{oe}")
-        return
-    recv_file = PeerFile(recv_soc=_conn)
-    if recv_file.recv_meta_data():
-        recv_file.recv_file()
-    file_unzip_path = str(os.path.join(const.PATH_DOWNLOAD, recv_file.filename))
+def directory_sender(_data: str,recv_sock:socket.socket):
+    receiver_obj: RemotePeer = use.get_peer_obj_from_sock(recv_sock)
+    provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
+    receiver_obj.increment_file_count()
+
+    zipper_process = Process(target=zip_dir, args=(provisional_name, _data))
+    zipper_process.start()
+    zipper_process.join()
+
+    file_sender(provisional_name, recv_sock,is_dir=True)
+    use.echo_print(False, "sent zip file: ", provisional_name)
+    os.remove(provisional_name)
+    pass
+
+
+def directory_receiver(refer: DataWeaver):
+    tup = refer.id.split('(^)')
+    ip,port = tup[0], int(tup[1])
+
+    file = PeerFile(uri=(ip,port))
+    metadata = json.loads(refer.content)
+    file.set_meta_data(filename=metadata['name'], filesize=int(metadata['size']))
+    if file.recv_meta_data():
+        file.recv_file()
+
+    file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
+
     unzip_process = Process(target=unzipper,args=(file_unzip_path, const.PATH_DOWNLOAD))
     unzip_process.start()
     unzip_process.join()
-    return recv_file.filename
 
-
-def file_receiver(_conn: socket.socket):
-    if not _conn:
-        use.echo_print(False, "::Closing connection from recv_file() from core/nomad at line 100")
-        return
-    getdata_file = PeerFile(recv_soc=_conn)
-    if getdata_file.recv_meta_data():
-        getdata_file.recv_file()
-    return getdata_file.filename
-
-
-# def compress_file(file_pa):
-#     with open(file_pa, 'rb') as file:
-#         compressed_data = zipfile.compress(file.read())
-#     return compressed_data
+    return file.filename
 
 
 def end_file_threads():
@@ -107,17 +125,13 @@ def end_file_threads():
     return True
 
 
-def pop_dir_selector_and_send(to_user_obj: remote_peer.RemotePeer):
+def pop_dir_selector_and_send(to_user_obj: RemotePeer):
     dir_path = use.open_directory_dialog_window()
-    send_file = PeerFile(path=dir_path, obj=to_user_obj)
-    if send_file.send_meta_data():
-        send_file.send_file()
+    pass
     return None
 
 
-def pop_file_selector_and_send(to_user_obj: remote_peer.RemotePeer):
+def pop_file_selector_and_send(to_user_obj: RemotePeer):
     file_path = use.open_file_dialog_window()
-    send_file = PeerFile(path=file_path, obj=to_user_obj)
-    if send_file.send_meta_data():
-        send_file.send_file()
+    pass
     return None

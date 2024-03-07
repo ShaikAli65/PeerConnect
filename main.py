@@ -1,16 +1,14 @@
 """Main entry point for the application."""
-
-
 import tracemalloc
-from core import *
-from core import configure_app
+from src.core import *
+from src.core import configure_app
 
 
-from core import nomad as nomad
-from core import connectserver as connect_server
-from core import requests_handler as manage_requests
-import avails.useables as use
-from webpage import handle
+from src.core import receivers as nomad
+from src.core import connectserver as connect_server
+from src.core import requests_handler as manage_requests
+import src.avails.useables as use
+from src.webpage import handle_data
 
 
 def initiate() -> int:
@@ -22,7 +20,7 @@ def initiate() -> int:
 
 
     # try:
-    const.OBJ = nomad.Nomad(const.THIS_IP, const.THIS_PORT)
+    const.OBJ = nomad.Nomad(const.THIS_IP, const.PORT_THIS)
     const.OBJ_THREAD = use.start_thread(const.OBJ.commence)
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     if connect_server.initiate_connection() is False:
@@ -31,7 +29,7 @@ def initiate() -> int:
         const.OBJ.end()
         manage_requests.end_requests_connection()
         return -1
-    use.start_thread(handle.initiate_control).join()
+    use.start_thread(handle_data.initiate_control).join()
     # except Exception as e:
     #     e.with_traceback(None)
     #     error_log(f"::Exception in main.py: {e}")

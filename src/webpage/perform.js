@@ -285,11 +285,10 @@ function createmessage()
     focusedUser.scrollBy(0,100);
     document.getElementById("message").value="";
     trimmed = focusedUser.id.split("_")[1].split("~")
-    idtopython = "('"+trimmed[0]+"',"+trimmed[1]+")"
     return JSON.stringify({
                 "header":"thisisamessage",
                 "content":Content_,
-                "id":idtopython
+                "id":focusedUser.id.split("_")[1]
             });
 }
 
@@ -302,7 +301,6 @@ function recievedmessage(recievedata)
     recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
     var reciever_tile = document.getElementById("person_"+reciever);
-    var reciever_view = document.getElementById("viewer_"+reciever);
     if(reciever_tile == null)
     {
         reciever_tile = createUserTile("Unknown@"+reciever+"(^)"+reciever);
@@ -312,6 +310,7 @@ function recievedmessage(recievedata)
     {
         reciever_tile.style.backgroundColor = "var(--dark)";
     }
+    var reciever_view = document.getElementById("viewer_"+reciever);
     var wrapperdiv_ = document.createElement("div");
     var subDiv_ = document.createElement("div");
     reciever_view.scrollTo=reciever_view.scrollBy(0,100);

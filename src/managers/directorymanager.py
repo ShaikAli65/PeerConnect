@@ -7,7 +7,7 @@ from src.core import *
 from zipfile import ZIP_DEFLATED, ZipFile
 from src.avails import useables as use
 from src.avails import remotepeer as remote_peer
-from src.avails.textobject import PeerText
+from src.avails.textobject import SimplePeerText
 
 
 def make_directory_structure(path: Path):
@@ -45,7 +45,7 @@ def send_files(dir_socket, dir_path):
 def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
     dir_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     dir_socket.connect(receiver_obj.uri)
-    PeerText(dir_socket, const.CMD_RECV_DIR_LITE, byteable=False).send()
+    SimplePeerText(dir_socket, const.CMD_RECV_DIR_LITE, byte_able=False).send()
     dir_path = Path(dir_path)
     print(f"sending directory{dir_path} to ", receiver_obj)
     serialized_path = pickle.dumps(dir_path)
