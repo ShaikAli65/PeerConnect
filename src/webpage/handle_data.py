@@ -27,7 +27,7 @@ async def handle_connection(addr_id):
     except KeyError:
         print("Looks like the user is not in the list can't connect to the user")
         return False
-    RecentConnections.addConnection(peer_obj=_nomad)
+    RecentConnections.connect_peer(peer_obj=_nomad)
 
 
 async def command_flow_handler(data_in: DataWeaver):

@@ -30,6 +30,7 @@ class RecentConnections:
     cache_size = 4
     connection_sockets: deque[socket.socket] = deque(maxlen=cache_size)
     peers = deque(maxlen=cache_size)
+    current_connected: socket.socket = None
 
     def __init__(self, function):
         self.function = function
@@ -46,44 +47,42 @@ class RecentConnections:
         Returns:
         - Any: The result of the decorated function.
         """
-        get_socket = self.giveValidSocket(argument)
-        return self.function(argument, get_socket)
+        return self.function(argument, RecentConnections.current_connected)
 
     @classmethod
-    def giveValidSocket(cls, datawrap):
-        """
-        Get a socket from the cache based on the ID in the data wrapper.
+    def connect_peer(cls, peer_obj: RemotePeer):
+        if cls.current_connected is None:
+            echo_print(False, "found nowhere adding user ", peer_obj.username, "queue:",cls.connection_sockets)
+            cls.current_connected = cls.addConnection(peer_obj)
+            return
 
-        Args:
-        - datawrap (DataWeaver): The data wrapper object containing the ID.
+        if cls.current_connected.getpeername()[0] == peer_obj.id:
+            if is_socket_connected(cls.current_connected):
+                # echo_print(False,"already connected ",peer_obj.username, "queue:",cls.connection_sockets)
+                return
+            # echo_print(False,"not connected ",peer_obj.username, "queue:",cls.connection_sockets)
+            connection = cls.addConnection(peer_obj)
+            if not connection:
+                # echo_print(False,"cannot connect ",peer_obj.username, "queue:",cls.connection_sockets)
+                pass  # handle error further (send data to page)
+            cls.current_connected = connection
+            return
 
-        Returns:
-        - socket or None: The cached socket, or None if not found.
-        """
-        try:
-            with cls.thread_safe:
-                for connected_socket in cls.connection_sockets:
-                    if connected_socket.getpeername()[0] == datawrap.id:
-                        return cls.addConnection(get_peer_obj_from_sock(connected_socket))
-        except socket.error:
-            pass
-        # --debug if the current socket expires
+        # echo_print(False,"not current connected ",peer_obj.username, "queue:",cls.connection_sockets)
+        for _soc in cls.connection_sockets.copy():
+            if _soc.getpeername()[0] == peer_obj.id:
+                if is_socket_connected(_soc):
+                    # echo_print(False,"found connected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
 
-    @classmethod
-    def checkConnection(cls, peer_obj:RemotePeer):
-        for _socket in cls.connection_sockets:
-            try:
-                if _socket.getpeername()[0] == peer_obj.id:
-                    if not is_socket_connected(_socket):
-                        print("found but not connected",_socket)
-                        cls.removeConnection(peer_obj,_socket)
-                        return False
-                    else:
-                        print("found but connected",_socket)
-                        return _socket
-            except OSError:
-                cls.removeConnection(peer_obj, _socket)
-                return False
+                    cls.current_connected = _soc
+                    return
+                else:
+                    # echo_print(False,"found disconnected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
+                    cls.removeConnection(peer_obj, _soc)
+                break
+
+        echo_print(False,"found nowhere adding user ",peer_obj.username, "queue:",cls.connection_sockets)
+        cls.addConnection(peer_obj)
 
     @classmethod
     def addConnection(cls, peer_obj: RemotePeer):
@@ -96,31 +95,26 @@ class RecentConnections:
         Returns:
         - bool: True if the connection was successful, False otherwise.
         """
-        try:
-            if peer_obj.id in cls.peers:
-                # echo_print(False, "cache hit ! !",peer_obj.username,cls.peers)
-                if conn := cls.checkConnection(peer_obj):
-                    return conn
-        except AttributeError:
-            cls.peers.clear()
-            cls.connection_sockets.clear()
         conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        conn.settimeout(4)
+        conn.settimeout(5)
         try:
             # print("Creating connection", peer_obj.uri)
             conn.connect(peer_obj.uri)
-            echo_print(False, "Connected :",peer_obj.username)
+            # echo_print(False, "Connected :",peer_obj.username, "queue:",cls.connection_sockets)
             cls.peers.append(peer_obj.id)
             cls.connection_sockets.append(conn)
         except socket.error:
-            echo_print(False, "Can't connect :",peer_obj.username)
-            pass  # handle error
+            # echo_print(False, "Can't connect :",peer_obj.username, "queue:",cls.connection_sockets)
+            pass  # handle error further (send data to page)
+            return False
         return conn
 
     @classmethod
     def removeConnection(cls,peer_obj:RemotePeer, _socket:socket.socket = None):
         cls.peers.remove(peer_obj.id)
-        cls.connection_sockets.remove(_socket) if _socket else None
+        cls.connection_sockets.remove(_socket)
+        if cls.current_connected == _socket:    
+            cls.current_connected = None
 
     @classmethod
     def end(cls):
@@ -158,6 +152,7 @@ async def sendMessage(data:DataWeaver, sock=None):
     except socket.error as exp:
         print(f"got error at handle/send_message :{exp}")
         error_log(f"got error at handle/send_message :{exp}")
+        RecentConnections.current_connected = None
     except AttributeError as exp:
         print(f"got error at handle/send_message :{exp}")
         error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
