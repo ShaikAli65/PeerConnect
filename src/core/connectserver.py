@@ -47,7 +47,7 @@ def list_error_handler():
 def get_list_from(initiate_socket: socket.socket):
     const.PAGE_HANDLE_CALL.wait()
     global End_Safe, Error_Calls
-    raw_length = 0
+    raw_length = bytes(0)
     for _ in range(const.MAX_CALL_BACKS):
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
