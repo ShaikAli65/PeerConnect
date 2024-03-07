@@ -134,6 +134,11 @@ class SimplePeerText:
 
 
 class DataWeaver:
+    """
+    A wrapper class purposely designed to store data as {header, content, id} format to use further
+    provides send and receive functions
+
+    """
     def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
@@ -148,6 +153,11 @@ class DataWeaver:
         self.id = self.__data['id']
 
     def dump(self) -> str:
+        """
+        Modifies data in json 's string format and,
+        returns json string representation of the data
+        :return str:
+        """
         with self.data_lock:
             return json.dumps(self.__data)
 
@@ -161,6 +171,12 @@ class DataWeaver:
                 return self.__data['id'] == _id
 
     def send(self, receiver_sock):
+        """
+        Sends data as json string to the provided socket,
+        uses SimplePeerText's send function
+        :param receiver_sock:
+        :return:
+        """
         return SimplePeerText(text=self.dump(),refer_sock=receiver_sock).send()
 
     def receive(self, sender_sock):
