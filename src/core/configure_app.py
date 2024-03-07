@@ -133,7 +133,6 @@ def set_constants() -> bool:
     const.PORT_FILE = int(config_map['NERD_OPTIONS']['file_port'])
 
     validate_ports()
-    time.sleep(0.04)
     const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
     const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
     const.THIS_IP = get_ip()
@@ -153,5 +152,3 @@ def clear_logs():
     with open(os.path.join(const.PATH_LOG, 'server.logs'), 'w') as s:
         s.write('')
     return
-
-

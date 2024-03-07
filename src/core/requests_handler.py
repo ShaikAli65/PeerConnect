@@ -105,8 +105,8 @@ function_map = {
     const.REQ_FOR_LIST: send_list,
     const.I_AM_ACTIVE: notify_user_connection,
     const.SERVER_PING: sync_users_with_server,
-    const.ACTIVE_PING: None,
-    const.LIST_SYNC: None
+    const.ACTIVE_PING: lambda x: None,
+    const.LIST_SYNC: lambda x: None
 }
 
 
@@ -116,16 +116,16 @@ def control_connection(_conn: socket.socket):
             readable, _, _ = select.select([_conn], [], [], 0.001)
         except OSError:
             return
-        if _conn in readable:
-            try:
-                data = SimplePeerText(_conn)
-                data.receive()
-                # print(f"::Received {data.raw_text} from {_conn.getpeername()}")
-            except (socket.error, OSError) as e:
-                error_log(f"Socket error at manage {__name__}/{__file__} exp:{e}")
-                return
-            function_map[data.raw_text](_conn) if function_map.get(data.raw_text) else None
+        if _conn not in readable:
+            continue
+        try:
+            data = SimplePeerText(_conn)
+            data.receive()
+            # print(f"::Received {data.raw_text} from {_conn}")
+        except (socket.error, OSError) as e:
+            error_log(f"Socket error at manage {__name__}/{__file__} exp:{e}")
             return
+        function_map.get(data.raw_text,lambda x: None)(_conn)
 
 
 def ping_user(remote_peer: remotepeer.RemotePeer):

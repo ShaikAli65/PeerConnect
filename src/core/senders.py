@@ -46,11 +46,11 @@ class RecentConnections:
         Returns:
         - Any: The result of the decorated function.
         """
-        get_socket = self.giveSocket(argument)
+        get_socket = self.giveValidSocket(argument)
         return self.function(argument, get_socket)
 
     @classmethod
-    def giveSocket(cls, datawrap):
+    def giveValidSocket(cls, datawrap):
         """
         Get a socket from the cache based on the ID in the data wrapper.
 
@@ -70,7 +70,7 @@ class RecentConnections:
         # --debug if the current socket expires
 
     @classmethod
-    def check_connection(cls,peer_obj:RemotePeer):
+    def checkConnection(cls, peer_obj:RemotePeer):
         for _socket in cls.connection_sockets:
             try:
                 if _socket.getpeername()[0] == peer_obj.id:
@@ -99,7 +99,7 @@ class RecentConnections:
         try:
             if peer_obj.id in cls.peers:
                 # echo_print(False, "cache hit ! !",peer_obj.username,cls.peers)
-                if conn := cls.check_connection(peer_obj):
+                if conn := cls.checkConnection(peer_obj):
                     return conn
         except AttributeError:
             cls.peers.clear()
@@ -118,9 +118,9 @@ class RecentConnections:
         return conn
 
     @classmethod
-    def removeConnection(cls,peer_obj:RemotePeer, _socket:socket.socket):
+    def removeConnection(cls,peer_obj:RemotePeer, _socket:socket.socket = None):
         cls.peers.remove(peer_obj.id)
-        cls.connection_sockets.remove(_socket)
+        cls.connection_sockets.remove(_socket) if _socket else None
 
     @classmethod
     def end(cls):
@@ -136,9 +136,13 @@ class RecentConnections:
         cls.connection_sockets.clear()
         cls.peers.clear()
 
+    @classmethod
+    def __getSocket(cls, peer_obj):
+        pass
+
 
 @RecentConnections
-async def send_message(data:DataWeaver, sock=None):
+async def sendMessage(data:DataWeaver, sock=None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -160,9 +164,9 @@ async def send_message(data:DataWeaver, sock=None):
 
 
 @RecentConnections
-async def send_file(_path,sock=None):
+async def sendFile(_path, sock=None):
     """
-    A Wrapper function to function at {filemanager.file_sender()}
+    A Wrapper function to function at {filemanager.fileSender()}
     Provides Error Handling And Ensures robustness of sending data.
     What is going on here??, can't be understood
     the thing with the decorator is different here, look into decorator's doc string for further reference
@@ -171,22 +175,22 @@ async def send_file(_path,sock=None):
     :return bool:
     """
     try:
-        use.start_thread(_target=filemanager.file_sender,_args=(_path['content'], sock))
+        use.start_thread(_target=filemanager.fileSender, _args=(_path['content'], sock))
     except socket.error:
         pass
     pass
 
 
-async def send_file_with_window(_path, user_id):
+async def sendFileWithWindow(_path, user_id):
     with const.LOCK_LIST_PEERS:
         peer_remote_obj = const.LIST_OF_PEERS[user_id]
-    use.echo_print(False, "at send_file_with_window : ", peer_remote_obj, _path)
+    use.echo_print(False, "at sendFileWithWindow : ", peer_remote_obj, _path)
     use.start_thread(_target=filemanager.pop_file_selector_and_send, _args=(peer_remote_obj,))
     return
 
 
-async def send_dir_with_window(_path, user_id):
+async def sendDirWithWindow(_path, user_id):
     peer_remote_obj = use.get_peer_obj_from_id(user_id)
-    use.echo_print(False, "at send_dir_with_window : ", peer_remote_obj, _path)
+    use.echo_print(False, "at sendDirWithWindow : ", peer_remote_obj, _path)
     use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
     return

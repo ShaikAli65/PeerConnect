@@ -6,7 +6,7 @@ import src.avails.textobject
 import src.core.senders
 import src.managers.endmanager
 from src.core import *
-from src.core.senders import RecentConnections, send_message, send_file, send_file_with_window, send_dir_with_window
+from src.core.senders import RecentConnections, sendMessage, sendFile, sendFileWithWindow, sendDirWithWindow
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
@@ -36,9 +36,9 @@ async def command_flow_handler(data_in: DataWeaver):
     elif data_in.match(_content=const.HANDLE_CONNECT_USER):
         await handle_connection(addr_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
-        await send_dir_with_window(_path=data_in.content, user_id=data_in.id)
+        await sendDirWithWindow(_path=data_in.content, user_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
-        await send_file_with_window(_path=data_in.content, user_id=data_in.id)
+        await sendFileWithWindow(_path=data_in.content, user_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_OPEN_FILE):
         use.open_file(data_in.content)
     elif data_in.match(const.HANDLE_RELOAD):
@@ -56,9 +56,9 @@ async def control_data_flow(data_in: DataWeaver):
     """
     function_map = {
         const.HANDLE_COMMAND: lambda x: command_flow_handler(x),
-        const.HANDLE_MESSAGE_HEADER: lambda x: send_message(x),
-        const.HANDLE_FILE_HEADER: lambda x: send_file(x),
-        const.HANDLE_DIR_HEADER: lambda x: send_file(x),
+        const.HANDLE_MESSAGE_HEADER: lambda x: sendMessage(x),
+        const.HANDLE_FILE_HEADER: lambda x: sendFile(x),
+        const.HANDLE_DIR_HEADER: lambda x: sendFile(x),
         const.HANDLE_DIR_HEADER_LITE: lambda x: directorymanager.directory_sender(
             receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
     }
@@ -111,8 +111,6 @@ async def handler(_websocket):
 
 def initiate_control():
     use.echo_print(True, '::Initiate_control called at handle_data.py :', const.PATH_PAGE, const.PORT_PAGE)
-    # use.start_thread(_target=httphandler.start_serving, _args=())
-    # webbrowser.open(f"http://localhost:{const.PAGE_SERVE_PORT}")
     webbrowser.open(os.path.join(const.PATH_PAGE, "index.html"))
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PORT_PAGE)

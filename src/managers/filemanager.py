@@ -16,19 +16,19 @@ every_file = {}
 count = 0
 
 
-def set_file_id(file: PeerFile, receiver_obj: RemotePeer):
+def __setFileId(file: PeerFile, receiver_obj: RemotePeer):
     global every_file
     receiver_obj.increment_file_count()
     every_file[f"{receiver_obj.id}(^){receiver_obj.get_file_count()}"] = file
 
 
-def file_sender(_data: str, receiver_sock: socket.socket,is_dir=False):
+def fileSender(_data: str, receiver_sock: socket.socket, is_dir=False):
     receiver_obj,prompt_data = RemotePeer(), ''
     try:
         receiver_obj: RemotePeer = use.get_peer_obj_from_sock(_conn=receiver_sock)
         temp_port = use.get_free_port()
         file = PeerFile(uri=(const.THIS_IP, temp_port), path=_data)
-        set_file_id(file, receiver_obj)
+        __setFileId(file, receiver_obj)
         _header = (const.CMD_RECV_DIR if is_dir else const.CMD_RECV_FILE)
         _id = f"{const.THIS_IP}(^){temp_port}"
         DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
@@ -41,7 +41,7 @@ def file_sender(_data: str, receiver_sock: socket.socket,is_dir=False):
         return False
     except NotADirectoryError as nde:
         prompt_data = DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
-        directory_sender(_data, receiver_sock)
+        directorySender(_data, receiver_sock)
     except FileNotFoundError as fne:
         prompt_data = DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
     finally:
@@ -49,19 +49,19 @@ def file_sender(_data: str, receiver_sock: socket.socket,is_dir=False):
         pass
 
 
-def file_receiver(refer: DataWeaver):
+def fileReceiver(refer: DataWeaver):
 
     tup = refer.id.split('(^)')
     ip,port = tup[0], int(tup[1])
     file = PeerFile(uri=(ip,port))
     metadata = json.loads(refer.content.strip())
-    file.set_meta_data(filename=metadata['name'], filesize=int(metadata['size']))
+    file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
     if file.recv_meta_data():
         file.recv_file()
     return file.filename
 
 
-def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
+def zipDir(zip_name: str, source_dir: Union[str, PathLike]):
     src_path = Path(source_dir).expanduser().resolve(strict=True)
     with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
         progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
@@ -72,7 +72,7 @@ def zip_dir(zip_name: str, source_dir: Union[str, PathLike]):
     return
 
 
-def unzipper(zip_path: str, destination_path: str):
+def unZipper(zip_path: str, destination_path: str):
     with ZipFile(zip_path, 'r') as zip_ref:
         try:
             zip_ref.extractall(destination_path)
@@ -83,41 +83,41 @@ def unzipper(zip_path: str, destination_path: str):
     return
 
 
-def directory_sender(_data: str,recv_sock:socket.socket):
+def directorySender(_data: str, recv_sock:socket.socket):
     receiver_obj: RemotePeer = use.get_peer_obj_from_sock(recv_sock)
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
     receiver_obj.increment_file_count()
 
-    zipper_process = Process(target=zip_dir, args=(provisional_name, _data))
+    zipper_process = Process(target=zipDir, args=(provisional_name, _data))
     zipper_process.start()
     zipper_process.join()
 
-    file_sender(provisional_name, recv_sock,is_dir=True)
+    fileSender(provisional_name, recv_sock, is_dir=True)
     use.echo_print(False, "sent zip file: ", provisional_name)
     os.remove(provisional_name)
     pass
 
 
-def directory_receiver(refer: DataWeaver):
+def directoryReceiver(refer: DataWeaver):
     tup = refer.id.split('(^)')
     ip,port = tup[0], int(tup[1])
 
     file = PeerFile(uri=(ip,port))
     metadata = json.loads(refer.content)
-    file.set_meta_data(filename=metadata['name'], filesize=int(metadata['size']))
+    file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
     if file.recv_meta_data():
         file.recv_file()
 
     file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
 
-    unzip_process = Process(target=unzipper,args=(file_unzip_path, const.PATH_DOWNLOAD))
+    unzip_process = Process(target=unZipper, args=(file_unzip_path, const.PATH_DOWNLOAD))
     unzip_process.start()
     unzip_process.join()
 
     return file.filename
 
 
-def end_file_threads():
+def endFileThreads():
     global every_file
     for file in every_file.values():
         file.hold()

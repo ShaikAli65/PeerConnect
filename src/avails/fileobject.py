@@ -10,10 +10,10 @@ class PeerFile:
     def __init__(self,
                  uri:tuple[str,int],
                  path: str = '',
-                 controlflag=threading.Event(), chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
+                 control_flag=threading.Event(), chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
 
         self._lock = threading.Lock()
-        self.__control_flag: threading.Event = controlflag
+        self.__control_flag: threading.Event = control_flag
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -74,13 +74,12 @@ class PeerFile:
         """
         with self._lock:
             try:
-                send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B"
-                                          , unit_scale=True, unit_divisor=1024)
+                send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B",
+                                          unit_scale=True, unit_divisor=1024)
                 for data in self.__chunkify__():  # send the file in chunks
                     self.__sock.sendall(data)
                     send_progress.update(len(data))
                 send_progress.close()
-                # activity_log(f'::sent file to {self.sock.getpeername()}')
                 return True
             except Exception as e:
                 error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
@@ -130,7 +129,7 @@ class PeerFile:
                 yield chunk
 
     def get_meta_data(self) -> str:
-        """Returns metadata as json string in format {name:'',size:'',type:''}"""
+        """Returns metadata as json string in format name:'',size:'',type:''"""
         return json.dumps({
             'name':self.filename,
             'size':self.file_size,
@@ -144,8 +143,8 @@ class PeerFile:
         self.__sock.listen(1)
         try:
             while True:
-                readables, _, _ = select.select([self.__sock], [], [], 0.001)
-                if self.__sock in readables:
+                read_ables, _, _ = select.select([self.__sock], [], [], 0.001)
+                if self.__sock in read_ables:
                     self.__sock, _ = self.__sock.accept()
                     return True
         except Exception as e:
@@ -153,10 +152,10 @@ class PeerFile:
             # error_log(f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
             return False
 
-    def set_meta_data(self,filename,filesize=0,controlflag=threading.Event(), chunk_size: int = 1024 * 512,error_ext: str = '.invalid'):
+    def set_meta_data(self, filename, file_size=0, control_flag=threading.Event(), chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
         self.filename = filename
-        self.file_size = filesize
-        self.__control_flag = controlflag
+        self.file_size = file_size
+        self.__control_flag = control_flag
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
 

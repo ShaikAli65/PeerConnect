@@ -20,13 +20,13 @@ class Nomad:
         self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.main_socket.bind(self.address)
 
-    def __reset_socket(self):
+    def __resetSocket(self):
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
         self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.main_socket.bind(self.address)
         self.main_socket.listen()
 
-    def __accept_connections(self):
+    def __acceptConnections(self):
         try:
             initiate_conn, _ = self.main_socket.accept()
             activity_log(f'New connection from {_[0]}:{_[1]}')
@@ -45,8 +45,8 @@ class Nomad:
             if self.main_socket not in readable:
                 continue
             if not isinstance(self.main_socket, socket.socket):
-                self.__reset_socket()
-            self.__accept_connections()
+                self.__resetSocket()
+            self.__acceptConnections()
         return
 
     def end(self):
@@ -61,9 +61,9 @@ class Nomad:
 
 
 function_map = {
-    const.CMD_CLOSING_HEADER: lambda connection_socket: disconnect_user(connection_socket),
-    const.CMD_RECV_DIR: lambda connection_socket: "sent you a dir : " + filemanager.directory_receiver(connection_socket),
-    const.CMD_RECV_FILE: lambda connection_socket: "sent you a file : " + filemanager.file_receiver(connection_socket),
+    const.CMD_CLOSING_HEADER: lambda connection_socket: disconnectUser(connection_socket),
+    const.CMD_RECV_DIR: lambda connection_socket: "sent you a dir : " + filemanager.directoryReceiver(connection_socket),
+    const.CMD_RECV_FILE: lambda connection_socket: "sent you a file : " + filemanager.fileReceiver(connection_socket),
     const.CMD_RECV_DIR_LITE: lambda connection_socket: "sent you a directory through lite : " + directorymanager.directory_reciever(connection_socket),
     const.CMD_TEXT:lambda data: data
 }
@@ -74,7 +74,7 @@ def connectNew(_conn: socket.socket):
         readable, _, _ = select.select([_conn], [], [], 592)
         if _conn not in readable:
             use.echo_print(False, "::Connection timed out :", _conn.getpeername())
-            disconnect_user(_conn)
+            disconnectUser(_conn)
             return
         try:
             if _conn.recv(1, socket.MSG_PEEK) == b'':
@@ -90,23 +90,23 @@ def connectNew(_conn: socket.socket):
             continue
 
         elif _data.header == const.CMD_RECV_FILE:
-            use.start_thread(_target=filemanager.file_receiver,_args=(_data,))
+            use.start_thread(_target=filemanager.fileReceiver, _args=(_data,))
 
         elif _data.header == const.CMD_RECV_DIR:
-            filemanager.directory_receiver(refer=_data)
+            filemanager.directoryReceiver(refer=_data)
 
         elif _data.header == const.CMD_CLOSING_HEADER:
-            disconnect_user(_conn)
+            disconnectUser(_conn)
 
-    disconnect_user(_conn)
+    disconnectUser(_conn)
     return
 
 
-def disconnect_user(_conn):
+def disconnectUser(_conn):
     Nomad.currently_in_connection[_conn] = False
     try:
         with _conn:
             DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
-        use.echo_print(False, "::Closing connection from disconnect_user() from core/nomad at line 153")
+        use.echo_print(False, "::Closing connection from disconnectUser() from core/nomad at line 153")
     except socket.error:
         return

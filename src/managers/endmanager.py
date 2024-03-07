@@ -27,5 +27,5 @@ def end_session() -> Union[bool, None]:
         const.LIST_OF_PEERS.clear()
     httphandler.end_serving()
     # threadmanager.end_all_threads()
-    # filemanager.end_file_threads()
+    # filemanager.endFileThreads()
     return True
