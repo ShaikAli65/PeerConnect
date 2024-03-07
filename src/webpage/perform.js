@@ -294,8 +294,6 @@ function createmessage()
 
 function recievedmessage(recievedata)
 {
-    console.log("line 298 focused :",focusedUser)
-    
     console.log("::recievedata : ",recievedata);
     var reciever = recievedata.id.trim();
     recievedata = recievedata.content;
