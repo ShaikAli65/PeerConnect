@@ -3,7 +3,6 @@ import tracemalloc
 from src.core import *
 from src.core import configure_app
 
-
 from src.core import receivers as nomad
 from src.core import connectserver as connect_server
 from src.core import requests_handler as manage_requests
@@ -17,7 +16,6 @@ def initiate() -> int:
     Returns:
         int: 1 on successful initialization, -1 on failure.
     """
-
 
     # try:
     const.OBJ = nomad.Nomad(const.THIS_IP, const.PORT_THIS)

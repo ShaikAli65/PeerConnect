@@ -1,6 +1,13 @@
+import os
 import pickle
 from multiprocessing import Process
+from os import PathLike
 from pathlib import Path
+from typing import Union
+from zipfile import ZipFile, ZIP_DEFLATED
+
+import tqdm
+from src.logs import error_log
 
 from src.avails.fileobject import PeerFile
 from src.avails.remotepeer import RemotePeer
@@ -8,7 +15,7 @@ from src.core import *
 from src.avails import useables as use
 from src.avails import remotepeer as remote_peer
 from src.avails.textobject import SimplePeerText, DataWeaver
-from src.managers.filemanager import zipDir, fileSender, unZipper
+from src.managers.filemanager import fileSender
 
 
 def make_directory_structure(path: Path):
@@ -98,3 +105,25 @@ def directoryReceiver(refer: DataWeaver):
     unzip_process.join()
 
     return file.filename
+
+
+def zipDir(zip_name: str, source_dir: Union[str, PathLike]):
+    src_path = Path(source_dir).expanduser().resolve(strict=True)
+    with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
+        progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
+        for file in src_path.rglob('*'):
+            zf.write(file, file.relative_to(src_path.parent))
+            progress.update(1)
+        progress.close()
+    return
+
+
+def unZipper(zip_path: str, destination_path: str):
+    with ZipFile(zip_path, 'r') as zip_ref:
+        try:
+            zip_ref.extractall(destination_path)
+        except PermissionError as pe:
+            error_log(f"::PermissionError in unzipper() from core/nomad at line 68: {pe}")
+    print(f"::Extracted {zip_path} to {destination_path}")
+    os.remove(zip_path)
+    return

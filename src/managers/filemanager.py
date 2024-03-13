@@ -1,14 +1,7 @@
-from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
-from os import PathLike
-import tqdm
-
 from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.fileobject import PeerFile
-from src.managers.directorymanager import directorySender
-from src.webpage import handle_data
 from src.avails.textobject import DataWeaver
 
 
@@ -41,11 +34,10 @@ def fileSender(_data: str, receiver_sock: socket.socket, is_dir=False):
         return False
     except NotADirectoryError as nde:
         prompt_data = DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
-        directorySender(_data, receiver_sock)
     except FileNotFoundError as fne:
         prompt_data = DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
     finally:
-        asyncio.run(handle_data.feed_core_data_to_page(prompt_data))
+        # asyncio.run(handle_data.feed_core_data_to_page(prompt_data))
         pass
 
 
@@ -60,28 +52,6 @@ def fileReceiver(refer: DataWeaver):
         file.recv_file()
 
     return file.filename
-
-
-def zipDir(zip_name: str, source_dir: Union[str, PathLike]):
-    src_path = Path(source_dir).expanduser().resolve(strict=True)
-    with ZipFile(zip_name, 'w', ZIP_DEFLATED) as zf:
-        progress = tqdm.tqdm(src_path.rglob('*'), desc="Zipping ", unit=" files")
-        for file in src_path.rglob('*'):
-            zf.write(file, file.relative_to(src_path.parent))
-            progress.update(1)
-        progress.close()
-    return
-
-
-def unZipper(zip_path: str, destination_path: str):
-    with ZipFile(zip_path, 'r') as zip_ref:
-        try:
-            zip_ref.extractall(destination_path)
-        except PermissionError as pe:
-            error_log(f"::PermissionError in unzipper() from core/nomad at line 68: {pe}")
-    print(f"::Extracted {zip_path} to {destination_path}")
-    os.remove(zip_path)
-    return
 
 
 def endFileThreads():
