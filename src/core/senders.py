@@ -44,7 +44,7 @@ class RecentConnections:
         Returns:
         - Any: The result of the decorated function.
         """
-        return self.function(argument, RecentConnections.current_connected)
+        use.start_thread(_target=self.function, _args=(RecentConnections.current_connected,))
 
     @classmethod
     def connect_peer(cls, peer_obj: RemotePeer):
