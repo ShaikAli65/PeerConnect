@@ -21,7 +21,7 @@ SafeEnd = asyncio.Event()
 stack_safe = threading.Lock()
 
 
-async def handle_connection(addr_id):
+def handle_connection(addr_id):
     try:
         _nomad: RemotePeer = use.get_peer_obj_from_id(addr_id)
     except KeyError:
@@ -30,15 +30,15 @@ async def handle_connection(addr_id):
     RecentConnections.connect_peer(peer_obj=_nomad)
 
 
-async def command_flow_handler(data_in: DataWeaver):
+def command_flow_handler(data_in: DataWeaver):
     if data_in.match(_content=const.HANDLE_END):
         src.managers.endmanager.end_session()
     elif data_in.match(_content=const.HANDLE_CONNECT_USER):
-        await handle_connection(addr_id=data_in.id)
+        handle_connection(addr_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_POP_DIR_SELECTOR):
-        await sendDirWithWindow(_path=data_in.content, user_id=data_in.id)
+        sendDirWithWindow(_path=data_in.content, user_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_PUSH_FILE_SELECTOR):
-        await sendFileWithWindow(_path=data_in.content, user_id=data_in.id)
+        sendFileWithWindow(_path=data_in.content, user_id=data_in.id)
     elif data_in.match(_content=const.HANDLE_OPEN_FILE):
         use.open_file(data_in.content)
     elif data_in.match(const.HANDLE_RELOAD):
@@ -48,7 +48,7 @@ async def command_flow_handler(data_in: DataWeaver):
         use.start_thread(_target=req_handler.sync_list)
 
 
-async def control_data_flow(data_in: DataWeaver):
+def control_data_flow(data_in: DataWeaver):
     """
     A function to control the data flow from the page
     :param data_in:
@@ -63,7 +63,7 @@ async def control_data_flow(data_in: DataWeaver):
             receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
     }
     try:
-        await function_map.get(data_in.header, lambda x: None)(data_in)
+        function_map.get(data_in.header, lambda x: None)(data_in)
     except TypeError as exp:
         error_log(f"Error at handle/control_data_flow : {exp} due to {data_in.header}")
 
@@ -84,7 +84,7 @@ async def getdata():
         data = DataWeaver(byte_data=raw_data)
         with const.LOCK_PRINT:
             print("data from page:", data)
-        await control_data_flow(data_in=data)
+        control_data_flow(data_in=data)
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data.py/getdata() ")
         #     break

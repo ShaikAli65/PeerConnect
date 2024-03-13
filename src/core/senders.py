@@ -44,7 +44,7 @@ class RecentConnections:
         Returns:
         - Any: The result of the decorated function.
         """
-        use.start_thread(_target=self.function, _args=(RecentConnections.current_connected,))
+        return self.function(argument, RecentConnections.current_connected)
 
     @classmethod
     def connect_peer(cls, peer_obj: RemotePeer):
@@ -137,7 +137,7 @@ class RecentConnections:
 
 
 @RecentConnections
-async def sendMessage(data:DataWeaver, sock=None):
+def sendMessage(data:DataWeaver, sock=None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -161,7 +161,7 @@ async def sendMessage(data:DataWeaver, sock=None):
 
 
 @RecentConnections
-async def sendFile(_path, sock=None):
+def sendFile(_path, sock=None):
     """
     A Wrapper function to function at {filemanager.fileSender()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -178,14 +178,14 @@ async def sendFile(_path, sock=None):
     pass
 
 
-async def sendFileWithWindow(_path, user_id):
+def sendFileWithWindow(_path, user_id):
     peer_remote_obj = use.get_peer_obj_from_id(user_id)
     use.echo_print(False, "at sendFileWithWindow : ", peer_remote_obj, _path)
     use.start_thread(_target=filemanager.pop_file_selector_and_send, _args=(peer_remote_obj,))
     return
 
 
-async def sendDirWithWindow(_path, user_id):
+def sendDirWithWindow(_path, user_id):
     peer_remote_obj = use.get_peer_obj_from_id(user_id)
     use.echo_print(False, "at sendDirWithWindow : ", peer_remote_obj, _path)
     use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
