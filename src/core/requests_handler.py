@@ -161,7 +161,6 @@ def notify_users():
             continue
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
-                notify_soc.settimeout(0.3)
                 notify_soc.connect(peer.req_uri)
                 SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(notify_soc)

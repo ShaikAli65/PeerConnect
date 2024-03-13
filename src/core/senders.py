@@ -154,6 +154,7 @@ async def sendMessage(data:DataWeaver, sock=None):
         print(f"got error at handle/send_message :{exp}")
         error_log(f"got error at handle/send_message :{exp}")
         RecentConnections.current_connected = None
+
     except AttributeError as exp:
         print(f"got error at handle/send_message :{exp}")
         error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
