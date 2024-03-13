@@ -1,3 +1,4 @@
+import src.managers.directorymanager
 from src.core import *
 import src.avails.useables as use
 from src.avails.remotepeer import RemotePeer
@@ -62,9 +63,9 @@ class Nomad:
 
 function_map = {
     const.CMD_CLOSING_HEADER: lambda connection_socket: disconnectUser(connection_socket),
-    const.CMD_RECV_DIR: lambda connection_socket: "sent you a dir : " + filemanager.directoryReceiver(connection_socket),
+    const.CMD_RECV_DIR: lambda connection_socket: "sent you a dir : " + src.managers.directorymanager.directoryReceiver(connection_socket),
     const.CMD_RECV_FILE: lambda connection_socket: "sent you a file : " + filemanager.fileReceiver(connection_socket),
-    const.CMD_RECV_DIR_LITE: lambda connection_socket: "sent you a directory through lite : " + directorymanager.directory_reciever(connection_socket),
+    const.CMD_RECV_DIR_LITE: lambda connection_socket: "sent you a directory through lite : " + directorymanager.directory_receiver(connection_socket),
     const.CMD_TEXT:lambda data: data
 }
 
@@ -93,7 +94,7 @@ def connectNew(_conn: socket.socket):
             use.start_thread(_target=filemanager.fileReceiver, _args=(_data,))
 
         elif _data.header == const.CMD_RECV_DIR:
-            filemanager.directoryReceiver(refer=_data)
+            src.managers.directorymanager.directoryReceiver(refer=_data)
 
         elif _data.header == const.CMD_CLOSING_HEADER:
             disconnectUser(_conn)

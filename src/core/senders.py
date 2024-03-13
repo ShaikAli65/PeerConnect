@@ -1,13 +1,10 @@
-import threading
 from collections import deque
-import socket
 
-from src.logs import error_log
-
+from src.core import *
 from src.avails.textobject import DataWeaver
 from src.avails import constants as const, useables as use
 from src.avails.remotepeer import RemotePeer
-from src.avails.useables import is_socket_connected, echo_print, get_peer_obj_from_sock
+from src.avails.useables import is_socket_connected, echo_print  # , get_peer_obj_from_sock
 from src.managers import filemanager
 
 
@@ -29,8 +26,8 @@ class RecentConnections:
     thread_safe = threading.Lock()
     cache_size = 4
     connection_sockets: deque[socket.socket] = deque(maxlen=cache_size)
-    peers = deque(maxlen=cache_size)
-    current_connected: socket.socket = None
+    connected_peers = deque(maxlen=cache_size)
+    current_connected = None
 
     def __init__(self, function):
         self.function = function
@@ -61,18 +58,16 @@ class RecentConnections:
                 # echo_print(False,"already connected ",peer_obj.username, "queue:",cls.connection_sockets)
                 return
             # echo_print(False,"not connected ",peer_obj.username, "queue:",cls.connection_sockets)
-            connection = cls.addConnection(peer_obj)
-            if not connection:
-                # echo_print(False,"cannot connect ",peer_obj.username, "queue:",cls.connection_sockets)
+            if connection := cls.addConnection(peer_obj) is False or None:
                 pass  # handle error further (send data to page)
             cls.current_connected = connection
             return
 
-        # echo_print(False,"not current connected ",peer_obj.username, "queue:",cls.connection_sockets)
+        echo_print(False,"not current connected ",peer_obj.username, "queue:",cls.connection_sockets)
         for _soc in cls.connection_sockets.copy():
             if _soc.getpeername()[0] == peer_obj.id:
                 if is_socket_connected(_soc):
-                    # echo_print(False,"found connected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
+                    echo_print(False,"found connected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
 
                     cls.current_connected = _soc
                     return
@@ -85,7 +80,7 @@ class RecentConnections:
         cls.addConnection(peer_obj)
 
     @classmethod
-    def addConnection(cls, peer_obj: RemotePeer):
+    def addConnection(cls, peer_obj: RemotePeer) -> Union[bool,socket.socket]:
         """
         Add a new connection to the cache.
         This needs to called before using any decorated function at every cost
@@ -98,10 +93,10 @@ class RecentConnections:
         conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
         conn.settimeout(5)
         try:
-            # print("Creating connection", peer_obj.uri)
+            print("Creating connection", peer_obj.uri)
             conn.connect(peer_obj.uri)
             # echo_print(False, "Connected :",peer_obj.username, "queue:",cls.connection_sockets)
-            cls.peers.append(peer_obj.id)
+            cls.connected_peers.append(peer_obj.id)
             cls.connection_sockets.append(conn)
         except socket.error:
             # echo_print(False, "Can't connect :",peer_obj.username, "queue:",cls.connection_sockets)
@@ -111,10 +106,16 @@ class RecentConnections:
 
     @classmethod
     def removeConnection(cls,peer_obj:RemotePeer, _socket:socket.socket = None):
-        cls.peers.remove(peer_obj.id)
+        cls.connected_peers.remove(peer_obj.id)
         cls.connection_sockets.remove(_socket)
         if cls.current_connected == _socket:    
             cls.current_connected = None
+        try:
+            _socket.settimeout(1)
+            DataWeaver(header=const.CMD_CLOSING_HEADER).send(_socket)
+            _socket.close()
+        except socket.error:
+            pass
 
     @classmethod
     def end(cls):
@@ -128,7 +129,7 @@ class RecentConnections:
             finally:
                 _socket.close() if _socket else None
         cls.connection_sockets.clear()
-        cls.peers.clear()
+        cls.connected_peers.clear()
 
     @classmethod
     def __getSocket(cls, peer_obj):
@@ -163,8 +164,8 @@ async def sendFile(_path, sock=None):
     """
     A Wrapper function to function at {filemanager.fileSender()}
     Provides Error Handling And Ensures robustness of sending data.
-    What is going on here??, can't be understood
-    the thing with the decorator is different here, look into decorator's doc string for further reference
+    What is going on here??
+    the thing with the decorator is different, look into decorator's doc string for further reference
     :param _path:
     :param sock:
     :return bool:
@@ -177,8 +178,7 @@ async def sendFile(_path, sock=None):
 
 
 async def sendFileWithWindow(_path, user_id):
-    with const.LOCK_LIST_PEERS:
-        peer_remote_obj = const.LIST_OF_PEERS[user_id]
+    peer_remote_obj = use.get_peer_obj_from_id(user_id)
     use.echo_print(False, "at sendFileWithWindow : ", peer_remote_obj, _path)
     use.start_thread(_target=filemanager.pop_file_selector_and_send, _args=(peer_remote_obj,))
     return

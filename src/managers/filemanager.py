@@ -2,12 +2,12 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 from os import PathLike
 import tqdm
-from multiprocessing import Process
 
 from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.fileobject import PeerFile
+from src.managers.directorymanager import directorySender
 from src.webpage import handle_data
 from src.avails.textobject import DataWeaver
 
@@ -50,14 +50,15 @@ def fileSender(_data: str, receiver_sock: socket.socket, is_dir=False):
 
 
 def fileReceiver(refer: DataWeaver):
-
     tup = refer.id.split('(^)')
-    ip,port = tup[0], int(tup[1])
-    file = PeerFile(uri=(ip,port))
+    file = PeerFile(uri=(tup[0], int(tup[1])))
+
     metadata = json.loads(refer.content.strip())
     file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
+
     if file.recv_meta_data():
         file.recv_file()
+
     return file.filename
 
 
@@ -83,44 +84,13 @@ def unZipper(zip_path: str, destination_path: str):
     return
 
 
-def directorySender(_data: str, recv_sock:socket.socket):
-    receiver_obj: RemotePeer = use.get_peer_obj_from_sock(recv_sock)
-    provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
-    receiver_obj.increment_file_count()
-
-    zipper_process = Process(target=zipDir, args=(provisional_name, _data))
-    zipper_process.start()
-    zipper_process.join()
-
-    fileSender(provisional_name, recv_sock, is_dir=True)
-    use.echo_print(False, "sent zip file: ", provisional_name)
-    os.remove(provisional_name)
-    pass
-
-
-def directoryReceiver(refer: DataWeaver):
-    tup = refer.id.split('(^)')
-    ip,port = tup[0], int(tup[1])
-
-    file = PeerFile(uri=(ip,port))
-    metadata = json.loads(refer.content)
-    file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
-    if file.recv_meta_data():
-        file.recv_file()
-
-    file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
-
-    unzip_process = Process(target=unZipper, args=(file_unzip_path, const.PATH_DOWNLOAD))
-    unzip_process.start()
-    unzip_process.join()
-
-    return file.filename
-
-
 def endFileThreads():
     global every_file
-    for file in every_file.values():
-        file.hold()
+    try:
+        for file in every_file.values():
+            file.hold()
+    except AttributeError as e:
+        error_log(f"::Error at endFileThreads() from  endFileThreads/filemanager at line 79: {e}")
     every_file.clear()
     return True
 
@@ -131,7 +101,7 @@ def pop_dir_selector_and_send(to_user_obj: RemotePeer):
     return None
 
 
-def pop_file_selector_and_send(to_user_obj: RemotePeer):
+def pop_file_selector_and_send(connected_socket: socket.socket):
     file_path = use.open_file_dialog_window()
-    pass
+    fileSender(file_path, connected_socket)
     return None

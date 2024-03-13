@@ -1,13 +1,14 @@
 import pickle
-import socket
-import time
+from multiprocessing import Process
 from pathlib import Path
 
+from src.avails.fileobject import PeerFile
+from src.avails.remotepeer import RemotePeer
 from src.core import *
-from zipfile import ZIP_DEFLATED, ZipFile
 from src.avails import useables as use
 from src.avails import remotepeer as remote_peer
-from src.avails.textobject import SimplePeerText
+from src.avails.textobject import SimplePeerText, DataWeaver
+from src.managers.filemanager import zipDir, fileSender, unZipper
 
 
 def make_directory_structure(path: Path):
@@ -56,7 +57,7 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
     pass
 
 
-def directory_reciever(_conn):
+def directory_receiver(_conn):
     with const.LOCK_LIST_PEERS:
         sender_obj = const.LIST_OF_PEERS[_conn.getpeername()[0]]
     sender_obj.increment_file_count()
@@ -65,3 +66,35 @@ def directory_reciever(_conn):
     dir_path: Path = Path(dir_path)
     make_directory_structure(dir_path)
     return dir_path.name
+
+
+def directorySender(_data: str, recv_sock:socket.socket):
+    receiver_obj: RemotePeer = use.get_peer_obj_from_sock(recv_sock)
+    provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
+    receiver_obj.increment_file_count()
+
+    zipper_process = Process(target=zipDir, args=(provisional_name, _data))
+    zipper_process.start()
+    zipper_process.join()
+
+    fileSender(provisional_name, recv_sock, is_dir=True)
+    use.echo_print(False, "sent zip file: ", provisional_name)
+    os.remove(provisional_name)
+    pass
+
+
+def directoryReceiver(refer: DataWeaver):
+    tup = refer.id.split('(^)')
+    file = PeerFile(uri=(tup[0], int(tup[1])))
+    metadata = json.loads(refer.content)
+    file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
+    if file.recv_meta_data():
+        file.recv_file()
+
+    file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
+
+    unzip_process = Process(target=unZipper, args=(file_unzip_path, const.PATH_DOWNLOAD))
+    unzip_process.start()
+    unzip_process.join()
+
+    return file.filename

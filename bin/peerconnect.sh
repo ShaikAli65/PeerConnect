@@ -13,6 +13,6 @@ if [ ! -f "$FLAG_FILE" ]; then
     echo "Setup completed." > "$FLAG_FILE"
 fi
 cd ..
-python3 main.py
+python main.py
 
 # chmod +x start_app.sh
