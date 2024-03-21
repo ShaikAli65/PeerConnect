@@ -6,10 +6,16 @@ CLEARLOGSFLAG = 1
 USERNAME = ''
 SERVER_IP = ''
 THIS_IP = ''
+
+
 SERVER_TIMEOUT = 5
+DEFAULT_CONFIG_FILE = 'default_config.ini'
+FORMAT = 'utf-8'
+
 
 PORT_THIS = 0
-PORT_PAGE = 0
+PORT_PAGE_SIGNALS = 42055
+PORT_PAGE_DATA = 12260
 PORT_SERVER = 0
 PORT_FILE = 45210
 PORT_REQ = 35896
@@ -17,30 +23,39 @@ PORT_PAGE_SERVE = 40000
 
 PATH_CURRENT = ''
 PATH_LOG = ''
-PATH_CONFIG = ''
+PATH_PROFILES = ''
 PATH_PAGE = ''
 PATH_DOWNLOAD = ''
 
+
 IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
-FORMAT = 'utf-8'
 count_of_user_id = 0
 LOCK_USER_ID = threading.Lock()
 LOCK_PRINT = threading.Lock()
 LOCK_LIST_PEERS = threading.Lock()
 LOCK_FOR_PAGE = False
+
+
 ACTIVE_PEERS = []
+PROFILE_LIST = []
 LIST_OF_PEERS: dict = {}
-anim_delay = 0.1
-MAX_CALL_BACKS = 6
+
+anim_delay = 0.07
+MAX_CALL_BACKS = 2
+REQ_URI_CONNECT = 12
+BASIC_URI_CONNECTOR = 13
+
 
 OBJ = None
 OBJ_THREAD = None
 REQUESTS_THREAD = None
-THIS_OBJECT= None
+THIS_OBJECT = None
 SERVER_THREAD = None
 PAGE_HANDLE_CALL = threading.Event()
+HOLD_PROFILE_SETUP = threading.Event()
 WEB_SOCKET = None
+
 
 CMD_RECV_FILE = 'thisisacommandtocore_/!_recvafile'
 CMD_CLOSING_HEADER = 'thisisacommandtocore_/!_closeconnection'
@@ -49,10 +64,12 @@ CMD_TEXT = "thisisamessage"
 CMD_RECV_DIR = 'thisisacommandtocore_/!_recvdir'
 CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
 
+
 TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 I_AM_ACTIVE = b'thisisacommandtocore_/!_notifyuser'
 SERVER_PING = b'thisisacommandfromserver_/!_ping'
+
 
 SERVER_OK = 'connectionaccepted'
 LIST_SYNC = 'synclist'
@@ -69,4 +86,3 @@ HANDLE_OPEN_FILE = 'openfile'
 HANDLE_DIR_HEADER_LITE = 'thisisadirlite'
 HANDLE_SYNC_USERS = 'syncusers'
 ACTIVE_PING = b"why_s ur facelikethat"
-# ACTIVE_PONG = b"my face_s like that only what??"

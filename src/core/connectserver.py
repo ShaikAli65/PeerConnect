@@ -2,7 +2,6 @@ import queue
 
 from src.core import *
 from src.core import requests_handler
-from src.logs import *
 from src.avails.textobject import SimplePeerText
 import src.avails.useables as use
 import src.avails.remotepeer as remote_peer
@@ -10,6 +9,7 @@ import src.avails.remotepeer as remote_peer
 
 End_Safe = threading.Event()
 Error_Calls = 0
+connection_status = False
 
 
 def initial_list(no_of_users: int, initiate_socket):
@@ -30,6 +30,7 @@ def initial_list(no_of_users: int, initiate_socket):
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))
             if not e.errno == 10054:
                 continue
+
             end_connection_with_server()
             time.sleep(5)
             if not ping_queue.empty():
@@ -75,7 +76,7 @@ def list_from_forward_control(list_owner:remote_peer.RemotePeer):
 
 
 def initiate_connection():
-    global End_Safe, Error_Calls
+    global End_Safe, Error_Calls,connection_status
     call_count = 0
     use.echo_print(True, "::Connecting to server")
     while not End_Safe.is_set():
@@ -84,6 +85,7 @@ def initiate_connection():
             if SimplePeerText(server_connection_socket).receive(cmp_string=const.SERVER_OK):
                 server_log('::Connection accepted by server at initiate_connection/connect server.py ', 2)
                 use.echo_print(False, '::Connection accepted by server')
+                connection_status = True
                 use.start_thread(_target=get_list_from, _args=(server_connection_socket,))
             else:
                 recv_list_user = remote_peer.deserialize(server_connection_socket)
@@ -91,8 +93,7 @@ def initiate_connection():
             return True
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
             if call_count >= const.MAX_CALL_BACKS:
-                time.sleep(const.anim_delay)
-                print("\n::Ending program server refused connection")
+                use.echo_print(True, "\n::Ending program server refused connection")
                 return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
@@ -120,6 +121,8 @@ def end_connection_with_server():
     End_Safe.set()
     try:
         const.THIS_OBJECT.status = 0
+        if connection_status is False:
+            return
         with socket.socket(const.IP_VERSION, const.PROTOCOL) as EndSocket:
             EndSocket.connect((const.SERVER_IP, const.PORT_SERVER))
             const.THIS_OBJECT.serialize(EndSocket)

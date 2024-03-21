@@ -1,143 +1,92 @@
-from collections import deque
-
 from src.core import *
 from src.avails.textobject import DataWeaver
 from src.avails import constants as const, useables as use
 from src.avails.remotepeer import RemotePeer
-from src.avails.useables import is_socket_connected, echo_print  # , get_peer_obj_from_sock
+from src.avails.useables import echo_print
 from src.managers import filemanager
 
 
+from collections import OrderedDict
+
+
+class SocketCache:
+    def __init__(self, max_limit=4):
+        self.cache: dict[str:socket.socket] = OrderedDict()
+        self.max_limit = max_limit
+        self.__thread_lock = threading.Lock()
+
+    def appendPeer(self, peer_id:str, peer_socket:socket.socket):
+        with self.__thread_lock:
+
+            if len(self.cache) >= self.max_limit:
+                self.cache.popitem(last=False)
+            self.cache[peer_id] = peer_socket
+        return peer_socket
+
+    def get_socket(self, peer_id) -> Union[socket.socket, None]:
+        with self.__thread_lock:
+
+            return self.cache.get(peer_id, None)
+
+    def remove(self, peer_id):
+        with self.__thread_lock:
+
+            if peer_id in self.cache:
+                del self.cache[peer_id]
+
+    def clear(self):
+        with self.__thread_lock:
+
+            self.cache.clear()
+
+    def __contains__(self, item:str):
+        return item in self.cache
+
+
 class RecentConnections:
-    """
-    Decorator class to manage a cache of recent connected sockets based on the IP address.
 
-    Attributes:
-    - cache_size (int): The maximum number of sockets to cache.
-    - connection_sockets (deque[socket.socket]): A deque to store the connected sockets.
-    - peers (deque): A deque to store the IDs of the remote peers.
-
-    Args:
-    - function (callable): The function to be decorated.
-
-    Returns:
-    - callable: The decorated function.
-    """
-    thread_safe = threading.Lock()
-    cache_size = 4
-    connection_sockets: deque[socket.socket] = deque(maxlen=cache_size)
-    connected_peers = deque(maxlen=cache_size)
-    current_connected = None
+    connected_sockets = SocketCache()
+    current_connected: socket.socket = socket.socket()
 
     def __init__(self, function):
         self.function = function
 
-    def __call__(self, argument, sock=None):
-        """
-        Call method to manage the cache and call the decorated function.
-        Determines the connected socket based on the dataweaver object(id)
-        retrieves it from cache and passes to function
-        Args:
-        - argument (DataWeaver): The data wrapper object containing the ID.
-        - sock (socket.socket): The connected socket to use, if available.
-
-        Returns:
-        - Any: The result of the decorated function.
-        """
+    def __call__(self, argument):
         return self.function(argument, RecentConnections.current_connected)
 
     @classmethod
-    def connect_peer(cls, peer_obj: RemotePeer):
-        if cls.current_connected is None:
-            echo_print(False, "found nowhere adding user ", peer_obj.username, "queue:",cls.connection_sockets)
-            cls.current_connected = cls.addConnection(peer_obj)
-            return
-
-        if cls.current_connected.getpeername()[0] == peer_obj.id:
-            if is_socket_connected(cls.current_connected):
-                # echo_print(False,"already connected ",peer_obj.username, "queue:",cls.connection_sockets)
-                return
-            # echo_print(False,"not connected ",peer_obj.username, "queue:",cls.connection_sockets)
-            if connection := cls.addConnection(peer_obj) is False or None:
-                pass  # handle error further (send data to page)
-            cls.current_connected = connection
-            return
-
-        echo_print(False,"not current connected ",peer_obj.username, "queue:",cls.connection_sockets)
-        for _soc in cls.connection_sockets.copy():
-            if _soc.getpeername()[0] == peer_obj.id:
-                if is_socket_connected(_soc):
-                    echo_print(False,"found connected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
-
-                    cls.current_connected = _soc
-                    return
-                else:
-                    # echo_print(False,"found disconnected in cache ",peer_obj.username, "queue:",cls.connection_sockets)
-                    cls.removeConnection(peer_obj, _soc)
-                break
-
-        echo_print(False,"found nowhere adding user ",peer_obj.username, "queue:",cls.connection_sockets)
-        cls.addConnection(peer_obj)
+    def addConnection(cls,peer_obj:RemotePeer):
+        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR,timeout=5)
+        cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
+        return connection_socket
 
     @classmethod
-    def addConnection(cls, peer_obj: RemotePeer) -> Union[bool,socket.socket]:
-        """
-        Add a new connection to the cache.
-        This needs to called before using any decorated function at every cost
-        Args:
-        - peer_obj (RemotePeer): The remote peer object to connect to.
-
-        Returns:
-        - bool: True if the connection was successful, False otherwise.
-        """
-        conn = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        conn.settimeout(5)
-        try:
-            print("Creating connection", peer_obj.uri)
-            conn.connect(peer_obj.uri)
-            # echo_print(False, "Connected :",peer_obj.username, "queue:",cls.connection_sockets)
-            cls.connected_peers.append(peer_obj.id)
-            cls.connection_sockets.append(conn)
-        except socket.error:
-            # echo_print(False, "Can't connect :",peer_obj.username, "queue:",cls.connection_sockets)
-            pass  # handle error further (send data to page)
-            return False
-        return conn
-
-    @classmethod
-    def removeConnection(cls,peer_obj:RemotePeer, _socket:socket.socket = None):
-        cls.connected_peers.remove(peer_obj.id)
-        cls.connection_sockets.remove(_socket)
-        if cls.current_connected == _socket:    
-            cls.current_connected = None
-        try:
-            _socket.settimeout(1)
-            DataWeaver(header=const.CMD_CLOSING_HEADER).send(_socket)
-            _socket.close()
-        except socket.error:
-            pass
-
-    @classmethod
-    def end(cls):
-        for _socket in cls.connection_sockets:
+    def connect_peer(cls, peer_obj:RemotePeer):
+        if peer_obj.id not in cls.connected_sockets:
             try:
-                _socket.settimeout(1)
-                DataWeaver(header=const.CMD_CLOSING_HEADER).send(_socket)
-                _socket.close()
+                cls.current_connected = cls.addConnection(peer_obj)
+                print("cache miss --current : ",cls.current_connected,peer_obj.username)
             except socket.error:
+                use.echo_print(False,"handle signal to page, that user might not be connected, or he is offline")
                 pass
-            finally:
-                _socket.close() if _socket else None
-        cls.connection_sockets.clear()
-        cls.connected_peers.clear()
+            return
+
+        supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
+        if use.is_socket_connected(supposed_to_be_connected_socket):
+            cls.current_connected = supposed_to_be_connected_socket
+            use.echo_print(False, "cache hit !! and socket is connected",supposed_to_be_connected_socket)
+        else:
+            cls.connected_sockets.remove(peer_id=peer_obj.id)
+            use.echo_print(False,"cache hit !! socket not connected")
+            cls.connect_peer(peer_obj)
 
     @classmethod
-    def __getSocket(cls, peer_obj):
-        pass
+    def force_remove(cls,peer_id:str):
+        cls.connected_sockets.remove(peer_id=peer_id)
 
 
 @RecentConnections
-def sendMessage(data:DataWeaver, sock=None):
+def sendMessage(data: DataWeaver, sock=None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -147,17 +96,17 @@ def sendMessage(data:DataWeaver, sock=None):
     :param sock:
     :return bool:
     """
-    try:
-        data['id'] = const.THIS_OBJECT.id
-        data.send(sock)
-    except socket.error as exp:
-        print(f"got error at handle/send_message :{exp}")
-        error_log(f"got error at handle/send_message :{exp}")
-        RecentConnections.current_connected = None
-
-    except AttributeError as exp:
-        print(f"got error at handle/send_message :{exp}")
-        error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
+    # try:
+    data['id'] = const.THIS_OBJECT.id
+    data.send(sock)
+    echo_print(False, "sent message to ", sock.getpeername())
+    # except socket.error as exp:
+    #     print(f"got error at handle/send_message :{exp}")
+    #     error_log(f"got error at handle/send_message :{exp}")
+    #
+    # except AttributeError as exp:
+    #     print(f"got error at handle/send_message :{exp}")
+    #     error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
 
 
 @RecentConnections
@@ -176,17 +125,3 @@ def sendFile(_path, sock=None):
     except socket.error:
         pass
     pass
-
-
-def sendFileWithWindow(_path, user_id):
-    peer_remote_obj = use.get_peer_obj_from_id(user_id)
-    use.echo_print(False, "at sendFileWithWindow : ", peer_remote_obj, _path)
-    use.start_thread(_target=filemanager.pop_file_selector_and_send, _args=(peer_remote_obj,))
-    return
-
-
-def sendDirWithWindow(_path, user_id):
-    peer_remote_obj = use.get_peer_obj_from_id(user_id)
-    use.echo_print(False, "at sendDirWithWindow : ", peer_remote_obj, _path)
-    use.start_thread(_target=filemanager.pop_dir_selector_and_send, _args=(peer_remote_obj,))
-    return

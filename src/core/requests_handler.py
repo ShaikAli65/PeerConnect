@@ -3,7 +3,7 @@ from collections import deque
 from src.avails import remotepeer
 from src.core import *
 from src.avails import useables as use
-from src.webpage import handle_data
+from src.core import handle_data
 from src.avails.textobject import SimplePeerText
 
 safe_stop = threading.Event()
@@ -131,7 +131,7 @@ def control_connection(_conn: socket.socket):
 def ping_user(remote_peer: remotepeer.RemotePeer):
     try:
         with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
-            _conn.settimeout(1)
+            _conn.settimeout(2)
             _conn.connect(remote_peer.req_uri)
             return True if SimplePeerText(_conn, const.ACTIVE_PING, byte_able=False).send() else False
     except socket.error as e:
@@ -153,7 +153,8 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
         add_peer_accordingly(peer_object)
 
 
-def notify_users():
+def notify_leaving_status_to_users():
+
     const.LOCK_LIST_PEERS.acquire()
     const.THIS_OBJECT.status = 0
     for peer in const.LIST_OF_PEERS.values():
@@ -161,6 +162,7 @@ def notify_users():
             continue
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
+                notify_soc.settimeout(4)
                 notify_soc.connect(peer.req_uri)
                 SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(notify_soc)
@@ -187,6 +189,6 @@ def end_requests_connection():
     global safe_stop
     safe_stop.set()
     const.THIS_OBJECT.status = 0
-    notify_users()
+    notify_leaving_status_to_users()
     print("::Requests connections ended")
     return None

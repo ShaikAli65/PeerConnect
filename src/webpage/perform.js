@@ -47,6 +47,14 @@ function eventlisteners()
     
 }
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+var wss = new WebSocket("ws://localhost:42055");
+var DATA = "";
+wss.addEventListener('message', (event) => {
+    DATA = JSON.parse(event.data);
+    console.log("profile data :", DATA)})
+wss.addEventListener('open', () => {})
+wss.addEventListener('close', () => {})
+
 function initiate()
 {
     let connectToCode_;
@@ -54,6 +62,13 @@ function initiate()
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
+    var selected_profile = {'content':{'admin':DATA.content.admin},'header':'selectedprofile','id':''};
+    selected_profile.content.admin.CONFIGURATIONS.server_port = '45000';
+    selected_profile.header = "selectedprofile";
+    selected_profile.id = "";
+    // selected_profile.content.admin.CONFIGURATIONS.server_port = '45000';
+    wss.send(JSON.stringify(selected_profile));
+
     connectToCode_.addEventListener('open', (event) => {
 
         document.getElementById("senderbutton").addEventListener("click",
@@ -155,21 +170,6 @@ function endsession(connection)
     document.body.style.justifyContent = "center";
     connection = null;
     document.title = "Chat Closed";
-    focusedUser        = null
-    initial_view       = null
-    main_division      = null
-    form_group         = null
-    display_name       = null
-    division_alive     = null
-    division_viewerpov = null
-    searchbox          = null
-    headertile         = null
-    viewname           = null
-    Usersviews         = null
-    countMessage       = null
-    users_list         = null
-    EventListeners     = null
-    Connection         = null
     if (typeof window.gc === 'function') {
         window.gc();
       }

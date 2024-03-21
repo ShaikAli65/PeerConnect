@@ -1,8 +1,8 @@
 from typing import Union
 from src.avails import constants as const
 
-from src.core import connectserver as connect_server, requests_handler as manage_requests, senders
-from src.webpage import handle_data
+from src.core import connectserver as connect_server, requests_handler as manage_requests, senders, handle_data, \
+    handle_signals
 from src.webpage import httphandler
 
 
@@ -23,9 +23,10 @@ def end_session() -> Union[bool, None]:
         const.OBJ.end()
     manage_requests.end_requests_connection()
     handle_data.end()
+    handle_signals.end()
     with const.LOCK_LIST_PEERS:
         const.LIST_OF_PEERS.clear()
     httphandler.end_serving()
+    exit(1)
     # threadmanager.end_all_threads()
     # filemanager.endFileThreads()
-    return True

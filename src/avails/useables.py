@@ -1,10 +1,12 @@
+import socket
 import subprocess
 import platform
 import random
 from PyQt5.QtWidgets import QApplication, QFileDialog
 
+import src.avails.remotepeer
 from src.core import *
-from src.core.configure_app import is_port_empty
+from src.configurations.bootup import is_port_empty
 
 
 def start_thread(_target, _args=()):
@@ -24,7 +26,7 @@ def is_socket_connected(sock: socket.socket):
         return False if data == b'' else True
     except BlockingIOError:
         return True
-    except (ConnectionResetError, ConnectionError, ConnectionAbortedError,OSError):
+    except (ConnectionResetError, ConnectionError, ConnectionAbortedError, OSError):
         return False
     finally:
         sock.setblocking(True)
@@ -91,16 +93,50 @@ def get_free_port() -> int:
     return random_port
 
 
-def get_peer_obj_from_sock(_conn:socket.socket):
+def get_peer_obj_from_sock(_conn: socket.socket):
     """Retrieves peer object from list using connected socket using ip address"""
     with const.LOCK_LIST_PEERS:
-        return const.LIST_OF_PEERS.get(_conn.getpeername()[0],None)
+        return const.LIST_OF_PEERS.get(_conn.getpeername()[0], None)
 
 
-def get_peer_obj_from_id(user_id:str):
+def get_peer_obj_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
     """
     Retrieves peer object from list given id
     :param user_id:
     """
     with const.LOCK_LIST_PEERS:
         return const.LIST_OF_PEERS[user_id]
+
+
+def get_profile_from_username(username: str):
+    """
+    Retrieves profile object from list given username
+    :param username:
+    """
+    for profile in const.PROFILE_LIST:
+        if profile.username == username:
+            return profile
+    return None
+
+
+def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR,timeout=0) -> socket.socket:
+    """
+    Creates a basic socket connection to peer id passed in,
+    or to the peer_obj passed in.
+    The another argument :param to_which: specifies to what uri should the connection made,
+    pass :param const.REQ_URI_CONNECT: to connect to req_uri of peer
+    :param timeout:
+    :param _peer_obj:
+    :param peer_id:
+    :param to_which:
+    :return:
+    """
+    peer_obj = _peer_obj if _peer_obj is not None else get_peer_obj_from_id(peer_id)
+    addr = peer_obj.req_uri if to_which == const.REQ_URI_CONNECT else peer_obj.uri
+
+    soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
+    if not timeout == 0:
+        soc.settimeout(timeout)
+    soc.connect(addr)
+
+    return soc

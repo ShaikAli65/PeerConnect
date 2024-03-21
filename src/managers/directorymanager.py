@@ -1,13 +1,11 @@
-import os
 import pickle
 from multiprocessing import Process
 from os import PathLike
 from pathlib import Path
-from typing import Union
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import tqdm
-from src.logs import error_log
+from src.core import *
 
 from src.avails.fileobject import PeerFile
 from src.avails.remotepeer import RemotePeer
@@ -95,7 +93,7 @@ def directoryReceiver(refer: DataWeaver):
     file = PeerFile(uri=(tup[0], int(tup[1])))
     metadata = json.loads(refer.content)
     file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
-    if file.recv_meta_data():
+    if file.recv_handshake():
         file.recv_file()
 
     file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
