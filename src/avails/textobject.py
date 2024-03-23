@@ -16,12 +16,12 @@ class SimplePeerText:
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
 
-    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True):
+    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512):
         self.raw_text = text.encode(const.FORMAT) if byte_able else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.sock = refer_sock
         self.id = ''
-        self.byte_able = byte_able
+        self.chunk_size = chunk_size
 
     def send(self) -> bool:
         """
@@ -31,7 +31,7 @@ class SimplePeerText:
         - bool: True if the text was successfully sent; False otherwise.
 
         """
-        self.sock.sendall(self.text_len_encoded)
+        self.sock.send(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
         send_raw_length = self.sock.recv(4)
         send_length = struct.unpack('!I', send_raw_length)[0] if send_raw_length else 0
@@ -58,7 +58,9 @@ class SimplePeerText:
         """
         receive_raw_length = self.sock.recv(4)
         receive_text_length = struct.unpack('!I', receive_raw_length)[0] if receive_raw_length else 0
-        self.raw_text = self.sock.recv(receive_text_length)  # if receive_text_length else b''
+        chunk_count = max(receive_text_length // self.chunk_size, 1)
+        for i in range(chunk_count):
+            self.raw_text += self.sock.recv(receive_text_length)  # if receive_text_length else b''
         if self.raw_text:
             self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
             self.sock.sendall(const.TEXT_SUCCESS_HEADER)

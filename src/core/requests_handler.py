@@ -133,7 +133,7 @@ def ping_user(remote_peer: remotepeer.RemotePeer):
         with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
             _conn.settimeout(2)
             _conn.connect(remote_peer.req_uri)
-            return True if SimplePeerText(_conn, const.ACTIVE_PING, byte_able=False).send() else False
+            return SimplePeerText(_conn, const.ACTIVE_PING, byte_able=False).send()
     except socket.error as e:
         error_log(f"Error pinging user at requests_handler.py/ping_user exp :  {e}")
         return False
@@ -144,12 +144,13 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
         peer_object = queue_in.get()
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
+                _conn.settimeout(5)
                 _conn.connect(peer_object.req_uri)
                 SimplePeerText(_conn, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
-            use.echo_print(False, f"Error sending active status at manager_requests.py/signal_active_status")
-            peer_object.status = 0
+            use.echo_print(False, f"Error sending active status at {signal_active_status.__name__}()/{signal_active_status.__code__.co_filename}")
+            # peer_object.status = 0
         add_peer_accordingly(peer_object)
 
 
@@ -167,7 +168,7 @@ def notify_leaving_status_to_users():
                 SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(notify_soc)
         except socket.error as e:
-            error_log(f"Error sending leaving status at manager_requests.py/notify_users exp :  {e}")
+            error_log(f"Error sending leaving status at {notify_leaving_status_to_users.__name__}()/{notify_leaving_status_to_users.__code__.co_filename} exp :  {e}")
     return None
 
 

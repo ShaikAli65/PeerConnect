@@ -49,6 +49,8 @@ class RecentConnections:
     current_connected: socket.socket = socket.socket()
 
     def __init__(self, function):
+        self.__code__ = function.__code__
+        self.__name__ = function.__name__
         self.function = function
 
     def __call__(self, argument):
@@ -84,6 +86,10 @@ class RecentConnections:
     def force_remove(cls,peer_id:str):
         cls.connected_sockets.remove(peer_id=peer_id)
 
+    @classmethod
+    def end(cls):
+        cls.connected_sockets.clear()
+
 
 @RecentConnections
 def sendMessage(data: DataWeaver, sock=None):
@@ -96,14 +102,14 @@ def sendMessage(data: DataWeaver, sock=None):
     :param sock:
     :return bool:
     """
-    # try:
-    data['id'] = const.THIS_OBJECT.id
-    data.send(sock)
-    echo_print(False, "sent message to ", sock.getpeername())
-    # except socket.error as exp:
-    #     print(f"got error at handle/send_message :{exp}")
-    #     error_log(f"got error at handle/send_message :{exp}")
-    #
+    try:
+        data['id'] = const.THIS_OBJECT.id
+        data.send(sock)
+        echo_print(False, "sent message to ", sock.getpeername())
+    except socket.error as exp:
+        print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}")
+        error_log(f"got error at handle/send_message :{exp}")
+
     # except AttributeError as exp:
     #     print(f"got error at handle/send_message :{exp}")
     #     error_log(f"got error at handle/send_message :{exp}")  # need to be handled more

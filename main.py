@@ -1,6 +1,6 @@
 """Main entry point for the application."""
 import tracemalloc
-
+import signal
 import src.avails.nomad
 from src.core import *
 from src.core import receivers as nomad, handle_data, handle_signals
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     pip install requests
     pip install asyncio
     pip install tqdm
-    {set_constants.__name__}()/{set_constants.__code__.co_filename}
+    {x.__name__}()/{os.path.relpath(x.__code__.co_filename)
 """
 """
 

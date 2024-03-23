@@ -58,9 +58,6 @@ def get_list_from(initiate_socket: socket.socket):
             break
         except socket.error:
             pass
-        except Exception as e:
-            print(f"::Exception fatal... at {__name__}/{__file__} exp:{e}")
-            return False
     length = struct.unpack('!Q', raw_length)[0]
     return initial_list(length, initiate_socket)
 
