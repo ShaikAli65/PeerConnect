@@ -141,6 +141,7 @@ class DataWeaver:
     provides send and receive functions
 
     """
+
     def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
@@ -150,9 +151,6 @@ class DataWeaver:
             self.__data['header'] = header
             self.__data['content'] = content
             self.__data['id'] = _id
-        self.header = self.__data['header']
-        self.content = self.__data['content']
-        self.id = self.__data['id']
 
     def dump(self) -> str:
         """
@@ -163,7 +161,7 @@ class DataWeaver:
         with self.data_lock:
             return json.dumps(self.__data)
 
-    def match(self,_header: str = None,_content: str = None,_id: str = None) -> bool:
+    def match(self, _header: str = None, _content: str = None, _id: str = None) -> bool:
         with self.data_lock:
             if _header:
                 return self.__data['header'] == _header
@@ -179,7 +177,7 @@ class DataWeaver:
         :param receiver_sock:
         :return:
         """
-        return SimplePeerText(text=self.dump(),refer_sock=receiver_sock).send()
+        return SimplePeerText(text=self.dump(), refer_sock=receiver_sock).send()
 
     def receive(self, sender_sock):
         text_string = SimplePeerText(refer_sock=sender_sock)
@@ -199,6 +197,30 @@ class DataWeaver:
     def __setitem__(self, key, value):
         with self.data_lock:
             self.__data[key] = value
+
+    @property
+    def content(self):
+        return self.__data['content']
+
+    @content.setter
+    def content(self, _content):
+        self.__data['content'] = _content
+
+    @property
+    def header(self):
+        return self.__data['header']
+
+    @header.setter
+    def header(self, _header):
+        self.__data['header'] = _header
+
+    @property
+    def id(self):
+        return self.__data['id']
+
+    @id.setter
+    def id(self, _id):
+        self.__data['id'] = _id
 
     def __str__(self):
         return self.__data.__str__()

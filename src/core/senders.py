@@ -4,7 +4,7 @@ from src.avails import constants as const, useables as use
 from src.avails.remotepeer import RemotePeer
 from src.avails.useables import echo_print
 from src.managers import filemanager
-
+from src.managers import directorymanager
 
 from collections import OrderedDict
 
@@ -58,7 +58,7 @@ class RecentConnections:
 
     @classmethod
     def addConnection(cls,peer_obj:RemotePeer):
-        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR,timeout=5)
+        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR)
         cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
@@ -100,7 +100,7 @@ def sendMessage(data: DataWeaver, sock=None):
     the thing with the decorator is different here, look into decorator's doc string for further reference
     :param data:
     :param sock:
-    :return bool:
+    :return bool:p
     """
     try:
         data['id'] = const.THIS_OBJECT.id
@@ -127,6 +127,11 @@ def sendFile(_path, sock=None):
     :return bool:
     """
     # try:
-    use.start_thread(_target=filemanager.fileSender, _args=(_path['content'], sock))
+    use.start_thread(_target=filemanager.fileSender, _args=(_path, sock))
     # except socket.error:
     #     pass
+
+
+@RecentConnections
+def sendDir(_path, sock=None):
+    use.start_thread(_target=directorymanager.directorySender, _args=(_path, sock))

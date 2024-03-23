@@ -15,14 +15,14 @@ def __setFileId(file: PeerFile, receiver_obj: RemotePeer):
     every_file[f"{receiver_obj.id}(^){receiver_obj.get_file_count()}"] = file
 
 
-def fileSender(_data: str, receiver_sock: socket.socket, is_dir=False):
+def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
     receiver_obj,prompt_data = RemotePeer(), ''
-    if _data == "":
-        _data = use.open_file_dialog_window() if is_dir is False else use.open_directory_dialog_window()
+    if _data.content == "":
+        _data = use.open_file_dialog_window()
     try:
-        receiver_obj: RemotePeer = use.get_peer_obj_from_sock(_conn=receiver_sock)
+        receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
         temp_port = use.get_free_port()
-        file = PeerFile(uri=(const.THIS_IP, temp_port), path=_data)
+        file = PeerFile(uri=(const.THIS_IP, temp_port), path=_data.content)
         __setFileId(file, receiver_obj)
         _header = (const.CMD_RECV_DIR if is_dir else const.CMD_RECV_FILE)
         _id = f"{const.THIS_IP}(^){temp_port}"

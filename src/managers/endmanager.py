@@ -19,8 +19,8 @@ def end_session() -> Union[bool, None]:
     senders.RecentConnections.end()
     if not const.PAGE_HANDLE_CALL.is_set():
         return None
-    if const.OBJ:
-        const.OBJ.end()
+    if const.HOST_OBJ:
+        const.HOST_OBJ.end()
     manage_requests.end_requests_connection()
     handle_data.end()
     handle_signals.end()

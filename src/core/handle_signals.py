@@ -31,7 +31,10 @@ async def getdata():
 async def handler(_websocket):
     global web_socket, SafeEnd
     web_socket = _websocket
-    await align_profiles(_websocket)
+    try:
+        await align_profiles(_websocket)
+    except websockets.exceptions.ConnectionClosedOK:
+        end()
     await getdata()
     use.echo_print(True, '::handler ended')
 
@@ -50,8 +53,9 @@ def end():
     SafeEnd.set()
     # web_socket.close() if web_socket else None
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
-    asyncio.get_running_loop().stop()
-    asyncio.get_running_loop().close()
+    loop = asyncio.get_running_loop()
+    loop.stop()
+    loop.close()
     use.echo_print(True, "::Handle_signals Ended")
     pass
 

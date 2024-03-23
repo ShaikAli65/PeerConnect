@@ -13,8 +13,8 @@ import src.configurations.configure_app
 
 
 def initiate() -> int:
-    const.OBJ = src.avails.nomad.Nomad(const.THIS_IP, const.PORT_THIS)
-    const.OBJ_THREAD = use.start_thread(const.OBJ.commence)
+    const.HOST_OBJ = src.avails.nomad.Nomad(const.THIS_IP, const.PORT_THIS)
+    const.OBJ_THREAD = use.start_thread(const.HOST_OBJ.commence)
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     if connect_server.initiate_connection() is False:
         # error = error_manager.ErrorManager(ConnectionError, "Connection to server failed", 0, __file__)
