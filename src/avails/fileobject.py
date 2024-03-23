@@ -1,21 +1,19 @@
-import socket
 
 import tqdm
 from pathlib import Path
 
 from src.core import *
 from src.avails.textobject import SimplePeerText
-from src.avails import useables as use
 
 
 class PeerFile:
     def __init__(self,
                  uri: tuple[str, int],
                  path: str = '',
-                 control_flag=threading.Event(), chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
+                 control_flag=True, chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
 
         self._lock = threading.Lock()
-        self.__control_flag: threading.Event = control_flag
+        self.__control_flag = control_flag
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -43,7 +41,7 @@ class PeerFile:
         with self._lock:
             if not self.set_up_socket_connection():
                 return False
-            if self.__control_flag.is_set():
+            if not self.__control_flag:
                 return False
             self.__sock.sendall(self.raw_size)
             return SimplePeerText(self.__sock, const.CMD_FILESOCKET_HANDSHAKE).send()
@@ -76,12 +74,13 @@ class PeerFile:
         """
         with self._lock:
             # try:
-            send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B",
-                                      unit_scale=True, unit_divisor=1024)
-            for data in self.__chunkify__():  # send the file in chunks
-                self.__sock.sendall(data)
-                send_progress.update(len(data))
-            send_progress.close()
+            with self.__sock:
+                send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B",
+                                          unit_scale=True, unit_divisor=1024)
+                for data in self.__chunkify__():  # send the file in chunks
+                    self.__sock.sendall(data)
+                    send_progress.update(len(data))
+                send_progress.close()
             return True
             # except Exception as e:
             #     error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
@@ -103,7 +102,7 @@ class PeerFile:
                                  unit_scale=True,
                                  unit_divisor=1024)
             with open(os.path.join(const.PATH_DOWNLOAD, self.__validatename__(self.filename)), 'wb') as file:
-                while (not self.__control_flag.is_set()) and (data := self.__sock.recv(self.__chunk_size)):
+                while self.__control_flag and (data := self.__sock.recv(self.__chunk_size)):
                     file.write(data)
                     progress.update(len(data))
             progress.close()
@@ -127,7 +126,7 @@ class PeerFile:
 
     def __chunkify__(self):
         with open(self.path, 'rb') as file:
-            while (not self.__control_flag.is_set()) and (chunk := file.read(self.__chunk_size)):
+            while self.__control_flag and (chunk := file.read(self.__chunk_size)):
                 yield chunk
 
     def get_meta_data(self) -> str:
@@ -201,10 +200,10 @@ class PeerFile:
         )
 
     def hold(self):
-        self.__control_flag.set()
+        self.__control_flag = not self.__control_flag
 
     def force_stop(self):
-        self.__control_flag.set()
+        self.__control_flag = not self.__control_flag
         try:
             self.__sock.close()
         except socket.error as e:

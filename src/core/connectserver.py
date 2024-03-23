@@ -1,4 +1,5 @@
 import queue
+import socket
 
 from src.core import *
 from src.core import requests_handler
@@ -15,12 +16,11 @@ connection_status = False
 def initial_list(no_of_users: int, initiate_socket):
     global End_Safe, Error_Calls
     ping_queue = queue.Queue()
-    if no_of_users == 0:
-        return None
     for _ in range(no_of_users):
         try:
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
-            if initiate_socket not in readable:
+            while not End_Safe.is_set() and initiate_socket not in readable:
+                readable, _, _ = select.select([initiate_socket], [], [], 0.001)
                 continue
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
@@ -48,18 +48,13 @@ def list_error_handler():
 def get_list_from(initiate_socket: socket.socket):
     const.PAGE_HANDLE_CALL.wait()
     global End_Safe, Error_Calls
-    raw_length = bytes(0)
-    for _ in range(const.MAX_CALL_BACKS):
-        try:
-            readable, _, _ = select.select([initiate_socket], [], [], 0.001)
-            if initiate_socket not in readable:
-                continue
-            raw_length = initiate_socket.recv(8)
-            break
-        except socket.error:
-            pass
-    length = struct.unpack('!Q', raw_length)[0]
-    return initial_list(length, initiate_socket)
+    while not End_Safe.is_set():
+        readable, _, _ = select.select([initiate_socket], [], [], 0.001)
+        if initiate_socket not in readable:
+            continue
+        raw_length = initiate_socket.recv(8)
+        length = struct.unpack('!Q', raw_length)[0]
+        return initial_list(length, initiate_socket)
 
 
 def list_from_forward_control(list_owner:remote_peer.RemotePeer):

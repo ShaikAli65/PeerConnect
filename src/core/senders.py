@@ -126,8 +126,7 @@ def sendFile(_path, sock=None):
     :param sock:
     :return bool:
     """
-    try:
-        use.start_thread(_target=filemanager.fileSender, _args=(_path['content'], sock))
-    except socket.error:
-        pass
-    pass
+    # try:
+    use.start_thread(_target=filemanager.fileSender, _args=(_path['content'], sock))
+    # except socket.error:
+    #     pass
