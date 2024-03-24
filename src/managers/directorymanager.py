@@ -77,7 +77,7 @@ def directory_receiver(_conn):
 def directorySender(_data: DataWeaver, recv_sock:socket.socket):
     receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
-    if _data.content == "":
+    if len(_data.content) == 0:
         _data.content = use.open_directory_dialog_window()
     zipper_process = Process(target=zipDir, args=(provisional_name, _data.content))
     try:

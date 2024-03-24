@@ -18,7 +18,7 @@ def __setFileId(file: PeerFile, receiver_obj: RemotePeer):
 def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
     receiver_obj,prompt_data = RemotePeer(), ''
     if _data.content == "":
-        _data = use.open_file_dialog_window()
+        _data.content = use.open_file_dialog_window()
     try:
         receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
         temp_port = use.get_free_port()

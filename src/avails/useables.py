@@ -3,7 +3,7 @@ import subprocess
 import platform
 import random
 from PyQt5.QtWidgets import QApplication, QFileDialog
-
+from PyQt5.QtCore import Qt
 import src.avails.remotepeer
 from src.core import *
 from src.configurations.bootup import is_port_empty
@@ -59,14 +59,18 @@ def reload_protocol():
 
 def open_file_dialog_window():
     """Opens the system-like file picker dialog."""
-    QApplication([])
-    file_path, _ = QFileDialog.getOpenFileName()
+    app = QApplication([])
+    dialog = QFileDialog()
+    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+    file_path = dialog.getOpenFileName()
     return file_path if file_path else None
 
 
 def open_directory_dialog_window():
-    QApplication([])
-    dir_path = QFileDialog.getExistingDirectory()
+    app = QApplication([])
+    dialog = QFileDialog()
+    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+    dir_path = dialog.getExistingDirectory()
     return dir_path if dir_path else None
 
 
