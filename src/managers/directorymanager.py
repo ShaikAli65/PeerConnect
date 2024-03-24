@@ -5,14 +5,13 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import tqdm
-from src.core import *
 
 from src.avails.fileobject import PeerFile
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.avails import useables as use
 from src.avails import remotepeer as remote_peer
-from src.avails.textobject import SimplePeerText, DataWeaver
+from src.avails.textobject import DataWeaver
 from src.managers.filemanager import fileSender
 
 
@@ -76,7 +75,7 @@ def directory_receiver(_conn):
 
 
 def directorySender(_data: DataWeaver, recv_sock:socket.socket):
-    receiver_obj: RemotePeer = use.get_peer_obj_from_sock(recv_sock)
+    receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
     if _data.content == "":
         _data.content = use.open_directory_dialog_window()

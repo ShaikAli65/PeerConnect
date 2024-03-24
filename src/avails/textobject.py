@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 
 from src.core import *
@@ -33,18 +34,15 @@ class SimplePeerText:
         """
         self.sock.send(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
-        send_raw_length = self.sock.recv(4)
-        send_length = struct.unpack('!I', send_raw_length)[0] if send_raw_length else 0
+        header_raw_length = self.sock.recv(4)
+        send_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
         while True:
             readable, _, _ = select.select([self.sock], [], [], 0.001)
             if self.sock not in readable:
                 continue
-            if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER:
-                return True
-            else:
-                return False
+            return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
 
-    def receive(self, cmp_string='') -> Union[bool, bytes]:
+    def receive(self, cmp_string: Union[str, bytes] = '') -> Union[bool, bytes]:
         """
         Receive text over the socket.
 
@@ -56,11 +54,18 @@ class SimplePeerText:
                         otherwise returns the received text as bytes.
 
         """
-        receive_raw_length = self.sock.recv(4)
-        receive_text_length = struct.unpack('!I', receive_raw_length)[0] if receive_raw_length else 0
-        chunk_count = max(receive_text_length // self.chunk_size, 1)
-        for i in range(chunk_count):
-            self.raw_text += self.sock.recv(receive_text_length)  # if receive_text_length else b''
+        raw_length = self.sock.recv(4)
+        receive_text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
+        received_data = bytearray()
+
+        while len(received_data) < receive_text_length:
+            chunk = self.sock.recv(min(self.chunk_size, receive_text_length - len(received_data)))
+            if not chunk:
+                break
+            received_data.extend(chunk)
+
+        self.raw_text = bytes(received_data)
+
         if self.raw_text:
             self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
             self.sock.sendall(const.TEXT_SUCCESS_HEADER)

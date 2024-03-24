@@ -6,14 +6,14 @@ from src.core import connectserver as connect_server, requests_handler as manage
 from src.webpage import httphandler
 
 
-def end_session() -> Union[bool, None]:
+def end_session(sig='',frame='') -> Union[bool, None]:
     """Asynchronously performs cleanup tasks for ending the application session.
 
     Returns:
         bool: True if cleanup was successful, False otherwise.
     """
 
-    print("::Initiating End Sequence")
+    print("::Initiating End Sequence",sig,frame)
     # activity_log("::Initiating End Sequence")
     connect_server.end_connection_with_server()
     senders.RecentConnections.end()

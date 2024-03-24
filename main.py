@@ -44,6 +44,7 @@ if __name__ == "__main__":
 
     tracemalloc.start()
     initiate()
+    signal.signal(signalnum=signal.SIGINT,handler=endmanager.end_session)
     th.join()
     activity_log("::End Sequence Complete")
 """
