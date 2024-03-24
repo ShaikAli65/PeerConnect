@@ -44,9 +44,9 @@ def get_ip() -> str:
                 data = response.json()
                 config_ip = data['ip']
     except soc.error as e:
+        error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
         config_ip = soc.gethostbyname(soc.gethostname()) if const.IP_VERSION == soc.AF_INET else \
             soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
-        error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
     finally:
         config_soc.close()
         return config_ip

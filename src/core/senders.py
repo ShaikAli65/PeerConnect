@@ -30,7 +30,6 @@ class SocketCache:
 
     def remove(self, peer_id):
         with self.__thread_lock:
-
             if peer_id in self.cache:
                 del self.cache[peer_id]
 

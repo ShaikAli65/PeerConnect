@@ -5,7 +5,7 @@ from src.core import *
 from src.avails import useables as use
 from src.core import handle_data
 from src.avails.textobject import SimplePeerText
-
+from src.core.senders import RecentConnections
 safe_stop = threading.Event()
 
 
@@ -46,6 +46,7 @@ def add_peer_accordingly(_peer: remotepeer.RemotePeer, include_ping=False):
         with const.LOCK_LIST_PEERS:
             const.LIST_OF_PEERS.pop(_peer.id, None)
             _peer.status = 0
+            RecentConnections.force_remove(_peer.id)
         use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
     asyncio.run(handle_data.feed_server_data_to_page(_peer))
     return True
@@ -86,7 +87,7 @@ def sync_users_with_server(_conn: socket.socket):
             try:
                 notify_user_connection(_conn, True)
             except Exception as e:
-                error_log(f"Error syncing list at {__name__}/{__file__} exp :  {e}")
+                error_log(f"Error syncing list at {sync_users_with_server.__name__}()/{os.path.relpath(sync_users_with_server.__code__.co_filename)} exp :  {e}")
     return
 
 
@@ -150,7 +151,7 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]):
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(False, f"Error sending active status at {signal_active_status.__name__}()/{signal_active_status.__code__.co_filename}")
-            # peer_object.status = 0
+            peer_object.status = 0  # this makes that user as not active
         add_peer_accordingly(peer_object)
 
 

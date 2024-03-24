@@ -10,7 +10,7 @@ class RemotePeer:
         self.status = status
         self.callbacks = 0
         self.req_uri = (ip, report)
-        self.id = '1'
+        self.id = ip
         self.file_count = 0
 
     def serialize(self, _to_send: socket.socket) -> bool:

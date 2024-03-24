@@ -62,7 +62,7 @@ def open_file_dialog_window():
     app = QApplication([])
     dialog = QFileDialog()
     dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    file_path = dialog.getOpenFileName()
+    file_path, _ = dialog.getOpenFileName()
     return file_path if file_path else None
 
 
@@ -70,7 +70,7 @@ def open_directory_dialog_window():
     app = QApplication([])
     dialog = QFileDialog()
     dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    dir_path = dialog.getExistingDirectory()
+    dir_path, _ = dialog.getExistingDirectory()
     return dir_path if dir_path else None
 
 

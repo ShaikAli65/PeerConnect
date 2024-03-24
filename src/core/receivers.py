@@ -18,7 +18,7 @@ def connectNew(_conn: socket.socket, currently_in_connection):
     while currently_in_connection.get(_conn):
         readable, _, _ = select.select([_conn], [], [], 592)
         if _conn not in readable:
-            use.echo_print(False, "::Connection timed out :", _conn.getpeername())
+            use.echo_print(False, f"::Connection timed out : at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)}", _conn.getpeername())
             disconnectUser(_conn, currently_in_connection)
             return
         try:
@@ -56,9 +56,7 @@ def handle_data_flow(_data: DataWeaver, _conn: socket.socket):
 
 def disconnectUser(_conn, currently_in_connection):
     currently_in_connection[_conn] = False
-    try:
-        with _conn:
-            DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
-        use.echo_print(False, "::Closing connection from disconnectUser() from core/nomad at line 153")
-    except socket.error:
-        return
+    with _conn:
+        DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
+    _conn.close()
+    use.echo_print(False, f"::Closing connection from {disconnectUser.__name__}()/{os.path.relpath(disconnectUser.__code__.co_filename)}")

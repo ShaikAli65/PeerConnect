@@ -3,7 +3,6 @@ import websockets
 import src.avails.textobject
 import src.core.senders
 import src.managers.endmanager
-from src.core import *
 from src.core.senders import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
@@ -101,6 +100,7 @@ def initiate_control():
 
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_DATA)
+    # start_server = websockets.serve(handler, "172.16.197.166", const.PORT_PAGE_DATA)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 
