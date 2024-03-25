@@ -11,7 +11,7 @@ import sys
 class ErrorManager:
     """
         A class to manage errors and exceptions.
-        _todo: int: The action to take to the error.
+        int: The action to take to the error.
     """
 
     def __init__(self, error, message:str,_todo:int,file:str) -> None:

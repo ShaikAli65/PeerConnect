@@ -4,7 +4,7 @@ from src.avails import constants as const, useables as use
 from src.avails.remotepeer import RemotePeer
 from src.avails.useables import echo_print
 from src.managers import filemanager
-from src.managers import directorymanager
+
 
 from collections import OrderedDict
 
@@ -30,6 +30,7 @@ class SocketCache:
 
     def remove(self, peer_id):
         with self.__thread_lock:
+
             if peer_id in self.cache:
                 del self.cache[peer_id]
 
@@ -48,8 +49,6 @@ class RecentConnections:
     current_connected: socket.socket = socket.socket()
 
     def __init__(self, function):
-        self.__code__ = function.__code__
-        self.__name__ = function.__name__
         self.function = function
 
     def __call__(self, argument):
@@ -57,7 +56,7 @@ class RecentConnections:
 
     @classmethod
     def addConnection(cls,peer_obj:RemotePeer):
-        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR)
+        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR,timeout=5)
         cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
@@ -78,16 +77,12 @@ class RecentConnections:
             use.echo_print(False, "cache hit !! and socket is connected",supposed_to_be_connected_socket)
         else:
             cls.connected_sockets.remove(peer_id=peer_obj.id)
-            use.echo_print(False,"cache hit !! socket not connected trying to reconnect")
+            use.echo_print(False,"cache hit !! socket not connected")
             cls.connect_peer(peer_obj)
 
     @classmethod
     def force_remove(cls,peer_id:str):
         cls.connected_sockets.remove(peer_id=peer_id)
-
-    @classmethod
-    def end(cls):
-        cls.connected_sockets.clear()
 
 
 @RecentConnections
@@ -99,16 +94,16 @@ def sendMessage(data: DataWeaver, sock=None):
     the thing with the decorator is different here, look into decorator's doc string for further reference
     :param data:
     :param sock:
-    :return bool:p
+    :return bool:
     """
-    try:
-        data['id'] = const.THIS_OBJECT.id
-        data.send(sock)
-        echo_print(False, "sent message to ", sock.getpeername())
-    except socket.error as exp:
-        print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}")
-        error_log(f"got error at handle/send_message :{exp}")
-
+    # try:
+    data['id'] = const.THIS_OBJECT.id
+    data.send(sock)
+    echo_print(False, "sent message to ", sock.getpeername())
+    # except socket.error as exp:
+    #     print(f"got error at handle/send_message :{exp}")
+    #     error_log(f"got error at handle/send_message :{exp}")
+    #
     # except AttributeError as exp:
     #     print(f"got error at handle/send_message :{exp}")
     #     error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
@@ -125,12 +120,8 @@ def sendFile(_path, sock=None):
     :param sock:
     :return bool:
     """
-    # try:
-    use.start_thread(_target=filemanager.fileSender, _args=(_path, sock))
-    # except socket.error:
-    #     pass
-
-
-@RecentConnections
-def sendDir(_path, sock=None):
-    use.start_thread(_target=directorymanager.directorySender, _args=(_path, sock))
+    try:
+        use.start_thread(_target=filemanager.fileSender, _args=(_path['content'], sock))
+    except socket.error:
+        pass
+    pass

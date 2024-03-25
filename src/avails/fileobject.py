@@ -12,6 +12,7 @@ class PeerFile:
                  path: str = '',
                  control_flag=True, chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
 
+        self.__code__ = None
         self._lock = threading.Lock()
         self.__control_flag = control_flag
         self.__chunk_size = chunk_size
@@ -56,7 +57,7 @@ class PeerFile:
             try:
                 self.__sock.connect(self.uri)
             except socket.error as e:
-                error_log(f"got error : {e} at fileobject :{self} from recv_meta_data(self)/fileobject.py")
+                error_log(f"got error : {e} at fileobject :{self} from recv_handshake()/fileobject.py")
 
             self.file_size = struct.unpack('!Q', self.__sock.recv(8))[0]
             return SimplePeerText(self.__sock).receive(cmp_string=const.CMD_FILESOCKET_HANDSHAKE)
@@ -83,7 +84,7 @@ class PeerFile:
                 send_progress.close()
             return True
             # except Exception as e:
-            #     error_log(f'::got {e} at core\\__init__.py from self.send_file() closing connection')
+            #     error_log(f'::got {e} at core\\__init__.py from self.send_file()/fileobject.py closing connection')
             #     return False
             # finally:
             #     self.__sock.close()
@@ -110,7 +111,7 @@ class PeerFile:
             activity_log(f'::received file {self.filename} :: from {self.__sock.getpeername()}')
             return True
             # except Exception as e:
-            #     error_log(f'::got {e} at avails\\fileobject.py from self.recv_file() closing connection')
+            #     error_log(f'::got {e} at avails\\fileobject.py from self.recv_file()/fileobject.py closing connection')
             #     self.__sock.close()
             #     self.__file_error__()
             #     return False
@@ -207,7 +208,7 @@ class PeerFile:
         try:
             self.__sock.close()
         except socket.error as e:
-            error_log(f'::got {e} at fileobject.py\\avails.py from self.force_stop() closing connection')
+            error_log(f'::got {e} from self.force_stop()/fileobject.py closing connection')
         return True
 
 

@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QApplication, QFileDialog
 from PyQt5.QtCore import Qt
 import src.avails.remotepeer
 from src.core import *
-from src.configurations.bootup import is_port_empty
+from src.configurations.boot_up import is_port_empty
 
 
 def start_thread(_target, _args=()):

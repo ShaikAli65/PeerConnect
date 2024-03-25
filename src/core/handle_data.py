@@ -1,3 +1,5 @@
+from threading import Lock
+
 import websockets
 
 import src.avails.textobject
@@ -15,7 +17,7 @@ from src import avails
 web_socket: websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
-stack_safe = threading.Lock()
+stack_safe: Lock = threading.Lock()
 
 
 def handle_connection(addr_id):
@@ -149,7 +151,7 @@ def end():
     loop = asyncio.get_event_loop()
     loop.stop()
     loop.run_until_complete(asyncio.gather(*asyncio.all_tasks()))
+    loop.stop()
     loop.close()
-
     use.echo_print(True, "::Handle_data Ended")
     return

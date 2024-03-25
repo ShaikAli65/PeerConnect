@@ -97,7 +97,11 @@ def end():
     SafeEnd.set()
     # web_socket.close() if web_socket else None
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
-    loop = asyncio.get_running_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError as err:
+        error_log(f"Some error at closing event loops :{err}")
+        return
     loop.stop()
     loop.close()
     use.echo_print(True, "::Handle_signals Ended")

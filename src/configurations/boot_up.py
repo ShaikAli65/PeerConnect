@@ -31,25 +31,36 @@ def get_ip() -> str:
     Raises:
         soc.error: If a socket error occurs during connection.
     """
-    config_soc = soc.socket(const.IP_VERSION, const.PROTOCOL)
-    config_soc.settimeout(2)
-    config_ip = 'localhost'
+    if const.IP_VERSION == soc.AF_INET:
+        config_ip = getv4()
+    else:
+        config_ip = getv6()
+    return config_ip
+
+
+def getv4():
+    with soc.socket(const.IP_VERSION, soc.SOCK_DGRAM) as config_soc:
+        config_soc.settimeout(3)
+        try:
+            config_soc.connect(('1.1.1.1', 80))
+            config_ip, _ = config_soc.getsockname()
+        except soc.error as e:
+            error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
+            config_ip = soc.gethostbyname(soc.gethostname())
+    return config_ip
+
+
+def getv6():
+    config_ip = "::1"
     try:
-        if const.IP_VERSION == soc.AF_INET:
-            config_soc.connect(('www.google.com', 80))
-            config_ip = config_soc.getsockname()[0]
-        else:
-            response = requests.get('https://api64.ipify.org?format=json')
-            if response.status_code == 200:
-                data = response.json()
-                config_ip = data['ip']
-    except soc.error as e:
+        response = requests.get('https://api64.ipify.org?format=json')
+        if response.status_code == 200:
+            data = response.json()
+            config_ip = data['ip']
+    except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
         error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
-        config_ip = soc.gethostbyname(soc.gethostname()) if const.IP_VERSION == soc.AF_INET else \
-            soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
-    finally:
-        config_soc.close()
-        return config_ip
+        config_ip = soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
+    return config_ip
 
 
 def set_paths():
