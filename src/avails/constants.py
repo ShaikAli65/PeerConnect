@@ -6,8 +6,10 @@ CLEARLOGSFLAG = 1
 USERNAME = ''
 SERVER_IP = ''
 THIS_IP = ''
-
-
+SYS_NAME = ''
+WINDOWS = "Windows"
+DARWIN = "Darwin"
+LINUX = "Linux"
 SERVER_TIMEOUT = 5
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 FORMAT = 'utf-8'

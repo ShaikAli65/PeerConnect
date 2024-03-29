@@ -1,19 +1,22 @@
+import webbrowser
+
+from src.avails import useables as use
 from src.core import *
 from src.configurations.configure_app import set_constants
 import configparser
 import requests
 import socket as soc
+import subprocess
 
 
 def initiate():
     const.THIS_IP = get_ip()
     clear_logs() if const.CLEARLOGSFLAG else None
-
     config_map = configparser.ConfigParser()
     try:
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     except KeyError:
-        load_defaults()
+        load_default_profiles()
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     set_constants(config_map)
     validate_ports()
@@ -32,13 +35,13 @@ def get_ip() -> str:
         soc.error: If a socket error occurs during connection.
     """
     if const.IP_VERSION == soc.AF_INET:
-        config_ip = getv4()
+        config_ip = get_v4()
     else:
-        config_ip = getv6()
+        config_ip = get_v6()
     return config_ip
 
 
-def getv4():
+def get_v4():
     with soc.socket(const.IP_VERSION, soc.SOCK_DGRAM) as config_soc:
         config_soc.settimeout(3)
         try:
@@ -46,11 +49,23 @@ def getv4():
             config_ip, _ = config_soc.getsockname()
         except soc.error as e:
             error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
+
             config_ip = soc.gethostbyname(soc.gethostname())
+            if const.SYS_NAME == const.DARWIN or const.SYS_NAME == const.LINUX:
+                config_ip = subprocess.getoutput("hostname -I")
+
     return config_ip
 
 
-def getv6():
+"""
+    import commands
+    ips = commands.getoutput("/sbin/ifconfig | grep -i \"inet\" | grep -iv \"inet6\" | " +
+                         "awk {'print $2'} | sed -ne 's/addr\:/ /p'")
+    print ips
+"""
+
+
+def get_v6():
     config_ip = "::1"
     try:
         response = requests.get('https://api64.ipify.org?format=json')
@@ -84,7 +99,7 @@ def clear_logs():
     return
 
 
-def load_defaults():
+def load_default_profiles():
     default_config_file = (
         '[NERD_OPTIONS]'
         'this_port = 48221'
@@ -133,3 +148,49 @@ def validate_ports() -> None:
             error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ, const.PORT_FILE = ports_list
     return None
+
+
+@NotInUse
+def retrace_browser_path():
+    if const.SYS_NAME == const.WINDOWS:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice")
+        prog_id, _ = winreg.QueryValueEx(key, 'ProgId')
+        key.Close()
+
+        key = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"\\{prog_id}\shell\open\command")
+        path, _ = winreg.QueryValueEx(key, '')
+        key.Close()
+
+        return path.strip('"')
+
+    if const.SYS_NAME == const.DARWIN:
+        return subprocess.check_output(["osascript",
+                                        "-e",
+                                        'tell application "System Events" to get POSIX path of (file of process "Safari" as alias)'
+                                        ]).decode().strip()
+
+    if const.SYS_NAME == const.LINUX:
+        command_output = subprocess.check_output(["xdg-settings", "get", "default-web-browser"]).decode().strip()
+
+        if command_output.startswith('userapp-'):
+            command_output = subprocess.check_output(["xdg-mime", "query", "default", "text/html"]).decode().strip()
+
+        return command_output
+
+
+def launch_web_page():
+    page_url = os.path.join(const.PATH_PAGE, "index.html")
+    try:
+        webbrowser.open(page_url)
+    except webbrowser.Error:
+        if const.SYS_NAME == const.WINDOWS:
+            os.system(f"start {page_url}")
+
+        elif const.SYS_NAME == const.LINUX or const.SYS_NAME == const.DARWIN:
+            subprocess.Popen(['xdg-open', page_url])
+
+        pass
+    except FileNotFoundError:
+        use.echo_print(False,"::webpage not found, look's like the package you downloaded is corrupted")

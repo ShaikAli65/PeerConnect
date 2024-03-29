@@ -1,5 +1,6 @@
 import websockets
-import webbrowser
+
+from src.configurations.boot_up import launch_web_page
 from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
@@ -42,7 +43,7 @@ async def handler(_websocket):
 
 def initiate_control():
     use.echo_print(True, '::Initiate_control called at handle_signals.py :', const.PATH_PAGE, const.PORT_PAGE_SIGNALS)
-    webbrowser.open(os.path.join(const.PATH_PAGE, "index.html"))
+    launch_web_page()
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_SIGNALS)
     # start_server = websockets.serve(handler, "172.16.197.166", const.PORT_PAGE_SIGNALS)
@@ -51,6 +52,7 @@ def initiate_control():
 
 
 # ----------------------------------------------------profile handlers---------------------------------------------------------------
+
 
 async def send_profiles(_websocket):
     # load_profiles_to_program()

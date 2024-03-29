@@ -1,6 +1,7 @@
 """Main entry point for the application."""
 import tracemalloc
 import signal
+import platform
 import src.avails.nomad
 from src.core import *
 from src.core import handle_data, handle_signals
@@ -25,6 +26,7 @@ def initiate() -> int:
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    const.SYS_NAME = platform.system()
     boot_up.set_paths()
     profile_manager.load_profiles_to_program()
     th = use.start_thread(handle_data.initiate_control)

@@ -3,11 +3,12 @@ from src.avails import constants as const
 
 from src.core import connectserver as connect_server, requests_handler as manage_requests, senders, handle_data, \
     handle_signals
+from src.managers import filemanager
 from src.webpage import httphandler
 
 
 def end_session(sig='',frame='') -> Union[bool, None]:
-    """Asynchronously performs cleanup tasks for ending the application session.
+    """performs cleanup tasks for ending the application session.
 
     Returns:
         bool: True if cleanup was successful, False otherwise.
@@ -27,6 +28,6 @@ def end_session(sig='',frame='') -> Union[bool, None]:
     with const.LOCK_LIST_PEERS:
         const.LIST_OF_PEERS.clear()
     httphandler.end_serving()
+    filemanager.endFileThreads()
     exit(1)
     # threadmanager.end_all_threads()
-    # filemanager.endFileThreads()
