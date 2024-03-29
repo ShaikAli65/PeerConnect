@@ -18,7 +18,10 @@ def __setFileId(file: PeerFile, receiver_obj: RemotePeer):
 def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
     receiver_obj,prompt_data = RemotePeer(), ''
     if _data.content == "":
-        _data.content = use.open_file_dialog_window()
+        files_list = use.open_file_dialog_window()
+        for file in files_list:
+            _data.content = file
+            fileSender(_data, receiver_sock, is_dir)
     try:
         receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
         temp_port = use.get_free_port()
@@ -27,7 +30,6 @@ def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
         _header = (const.CMD_RECV_DIR if is_dir else const.CMD_RECV_FILE)
         _id = f"{const.THIS_IP}(^){temp_port}"
         DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
-        time.sleep(0.07)
         if file.verify_handshake():
             file.send_file()
             print("::file sent: ", file.filename, " to ", receiver_sock.getpeername())

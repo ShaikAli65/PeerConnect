@@ -9,7 +9,7 @@ function_map = {
     # const.CMD_CLOSING_HEADER: lambda connection_socket: disconnectUser(connection_socket),
     const.CMD_RECV_DIR: lambda connection_socket: "sent you a dir : " + src.managers.directorymanager.directoryReceiver(connection_socket),
     const.CMD_RECV_FILE: lambda connection_socket: "sent you a file : " + filemanager.fileReceiver(connection_socket),
-    const.CMD_RECV_DIR_LITE: lambda connection_socket: "sent you a directory through lite : " + directorymanager.directory_receiver(connection_socket),
+    # const.CMD_RECV_DIR_LITE: lambda connection_socket: "sent you a directory through lite : " + directorymanager.directory_receiver(connection_socket),
     const.CMD_TEXT:lambda data: data
 }
 

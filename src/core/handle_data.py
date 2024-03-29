@@ -9,7 +9,6 @@ from src.core.senders import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-from src.managers import directorymanager
 from src.core import requests_handler as req_handler
 from src import avails
 
@@ -55,8 +54,6 @@ def control_data_flow(data_in: DataWeaver):
         const.HANDLE_MESSAGE_HEADER: lambda x: sendMessage(x),
         const.HANDLE_FILE_HEADER: lambda x: sendFile(x),
         const.HANDLE_DIR_HEADER: lambda x: sendDir(x),
-        const.HANDLE_DIR_HEADER_LITE: lambda x: directorymanager.directory_sender(
-            receiver_obj=const.LIST_OF_PEERS[x.id], dir_path=x.content),
     }
     try:
         function_map.get(data_in.header, lambda x: None)(data_in)

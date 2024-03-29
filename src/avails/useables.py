@@ -2,8 +2,11 @@ import socket
 import subprocess
 import platform
 import random
+
 from PyQt5.QtWidgets import QApplication, QFileDialog
 from PyQt5.QtCore import Qt
+
+
 import src.avails.remotepeer
 from src.core import *
 from src.configurations.boot_up import is_port_empty
@@ -62,7 +65,7 @@ def open_file_dialog_window():
     app = QApplication([])
     dialog = QFileDialog()
     dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    file_path, _ = dialog.getOpenFileName()
+    file_path, _ = dialog.getOpenFileNames()
     return file_path if file_path else None
 
 
@@ -97,6 +100,7 @@ def get_free_port() -> int:
     return random_port
 
 
+@NotInUse
 def get_peer_obj_from_sock(_conn: socket.socket):
     """Retrieves peer object from list using connected socket using ip address"""
     with const.LOCK_LIST_PEERS:

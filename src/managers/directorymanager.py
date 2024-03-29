@@ -6,6 +6,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 import tqdm
 
+
 from src.avails.fileobject import PeerFile
 from src.avails.remotepeer import RemotePeer
 from src.core import *
@@ -15,6 +16,7 @@ from src.avails.textobject import DataWeaver
 from src.managers.filemanager import fileSender
 
 
+@NotInUse
 def make_directory_structure(path: Path):
     d_dir = Path(const.PATH_DOWNLOAD)
 
@@ -40,6 +42,7 @@ def make_directory_structure(path: Path):
     use.echo_print(True, f"::Created directory structure at {parent}")
 
 
+@NotInUse
 def send_files(dir_socket, dir_path):
     for x in dir_path.glob('**/*'):
         if x.is_file():
@@ -47,6 +50,7 @@ def send_files(dir_socket, dir_path):
     pass
 
 
+@NotInUse
 def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
     dir_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     dir_socket.connect(receiver_obj.uri)
@@ -62,6 +66,7 @@ def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
     pass
 
 
+@NotInUse
 def directory_receiver(_conn):
     # use.get_peer_obj_from_id()
     with const.LOCK_LIST_PEERS:

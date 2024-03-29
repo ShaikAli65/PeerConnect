@@ -85,6 +85,5 @@ HANDLE_DIR_HEADER = 'thisisadir'
 HANDLE_POP_DIR_SELECTOR = 'popdirselector'
 HANDLE_PUSH_FILE_SELECTOR = 'pushfileselector'
 HANDLE_OPEN_FILE = 'openfile'
-HANDLE_DIR_HEADER_LITE = 'thisisadirlite'
 HANDLE_SYNC_USERS = 'syncusers'
 ACTIVE_PING = b"why_s ur facelikethat"
