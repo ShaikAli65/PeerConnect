@@ -4,7 +4,16 @@
     </head>
 <body >
     <div id="form_group" class="form-container" >
-        <button class="form-submit-btn" type="submit" onclick="initiate()">Confirm</button>
+		<div>
+			<div id="profileList" class = "profile-list">
+				<!-- Profiles will be dynamically added here -->
+			</div>
+			<div id="add-profile-button">
+				<button id="addProfileBtn" >Add Profile</button>
+				<!-- <button id="proceedBtn" style="display: none;">Proceed</button> -->
+			</div>
+		</div>
+        <button id="proceedBtn" class="form-submit-btn" type="submit" onclick="initiate_data();">Confirm</button>
 	</div>
 	<div id="headertile" class="header division">
 		<div id="display_name"></div>
@@ -38,6 +47,7 @@
 				<div id="intial_view" class="viewer" style="justify-content: center; align-items: center;"> No Users Currently<button id ="Close Application">CLOSE</button> </div>
             </div>
     </div>
-	<script src="perform.js"></script>
+	<script src="perform_data.js"></script>
+	<script src="perform_signals.js"></script>
 </body>
 </html>

@@ -29,7 +29,10 @@ def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
         __setFileId(file, receiver_obj)
         _header = (const.CMD_RECV_DIR if is_dir else const.CMD_RECV_FILE)
         _id = f"{const.THIS_IP}(^){temp_port}"
-        DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
+        try:
+            DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
+        except socket.error:
+            pass  # give feed back that can't send file, ask for feedback
         if file.verify_handshake():
             file.send_file()
             print("::file sent: ", file.filename, " to ", receiver_sock.getpeername())

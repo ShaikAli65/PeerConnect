@@ -4,7 +4,7 @@ from src.configurations.boot_up import launch_web_page
 from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-from src.managers.profile_manager import all_profiles, set_selected_profile, ProfileManager
+from src.managers.profile_manager import all_profiles, set_selected_profile, ProfileManager, load_profiles_to_program
 
 web_socket: websockets.WebSocketServerProtocol
 SafeEnd = asyncio.Event()
@@ -55,7 +55,6 @@ def initiate_control():
 
 
 async def send_profiles(_websocket):
-    # load_profiles_to_program()
     userdata = DataWeaver(header="this is a profiles list",
                           content=all_profiles())
     await web_socket.send(userdata.dump())
@@ -63,23 +62,35 @@ async def send_profiles(_websocket):
 
 
 async def align_profiles(_websocket):
+
     await send_profiles(_websocket)
     profile_data = await get_selected_profile()
-    profile_object = use.get_profile_from_username(next(iter(profile_data.keys())))
-    for header, content in profile_data[profile_object.username].items():
-        profile_object.edit_profile(header, content)
-    set_selected_profile(profile_object)
+
+    selected_profile:str = next(iter(profile_data.keys()))
+    selected_profile_object: ProfileManager = const.PROFILE_LIST[0]  # temporary profile to hold just for type hints
+
+    for profile in const.PROFILE_LIST:
+        if profile.username == selected_profile:
+            selected_profile_object = profile
+            break
+
+    for header, content in profile_data[selected_profile_object.username].items():
+        selected_profile_object.edit_profile(header, content)
+    set_selected_profile(selected_profile_object)
     const.HOLD_PROFILE_SETUP.set()
     # await configure_further_profile_data(_websocket)
+    # configure_further_profile_data(_websocket)
     use.echo_print(False, '::profile selected and updated', profile_data)
 
 
 async def get_selected_profile() -> dict[dict]:
     data = await web_socket.recv()
     selected_profile = DataWeaver(byte_data=data)
-    return selected_profile.content
+    if selected_profile.header == "selectedprofile":
+        return selected_profile.content
 
 
+@NotInUse
 async def configure_further_profile_data(_websocket):
     raw_profile_data = await web_socket.recv()
     profiles_data = DataWeaver(byte_data=raw_profile_data)
@@ -99,11 +110,9 @@ def end():
     SafeEnd.set()
     # web_socket.close() if web_socket else None
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError as err:
-        error_log(f"Some error at closing event loops :{err}")
-        return
+    loop = asyncio.get_running_loop()
     loop.stop()
     loop.close()
     use.echo_print(True, "::Handle_signals Ended")
+
+# initiate_control()

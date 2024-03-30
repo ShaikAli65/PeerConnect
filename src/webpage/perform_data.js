@@ -43,28 +43,15 @@ function eventlisteners()
     });
     
 }
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-var wss = new WebSocket("ws://localhost:42055");
-var DATA = "";
-wss.addEventListener('message', (event) => {
-    DATA = JSON.parse(event.data);
-    console.log("profile data :", DATA)})
-wss.addEventListener('open', () => {})
-wss.addEventListener('close', () => {})
 
-function initiate()
+// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function initiate_data()
 {
     let connectToCode_;
     connectToCode_ = new WebSocket(addr);
     main_division.style.display = "flex";
     form_group.style.display = "none";
     headertile.style.display = "flex";
-    var selected_profile = {'content':{'admin':DATA.content.admin},'header':'selectedprofile','id':''};
-    selected_profile.content.admin.CONFIGURATIONS.server_port = '45000';
-    selected_profile.header = "selectedprofile";
-    selected_profile.id = "";
-    // selected_profile.content.admin.CONFIGURATIONS.server_port = '45000';
-    wss.send(JSON.stringify(selected_profile));
 
     connectToCode_.addEventListener('open', (event) => {
 
@@ -134,7 +121,7 @@ function recievedataFromPython(connecttocode_)
             }
             else
             {
-                createUserTile(data.content+"(^)"+data.id);
+                createUserTile(data.content, data.id);
             }
         }
         if (data.header === "thisismyusername")
@@ -172,17 +159,16 @@ function endsession(connection)
       }
 }
 
-function createUserTile(idin='') // idin is the id of the user to be added syntax : name(^)ipaddress
+function createUserTile(name, name_id) // idin is the id of the user to be added syntax : name(^)ipaddress
 {
-    var idin_=idin.split("(^)");
     document.getElementById("intial_view").textContent = "Click on Name to view chat";
     document.getElementById("sender").style.display = "flex";
     var newtile_ = document.createElement("div");
     var newview_ = document.createElement("div");
-    newtile_.textContent = idin_[0];
-    newtile_.id = "person_"+idin_[1];
+    newtile_.textContent = name;
+    newtile_.id = "person_"+name_id;
     newtile_.className = "usertile";
-    newview_.id = "viewer_"+idin_[1];
+    newview_.id = "viewer_"+name_id;
     newview_.className = "viewer division";
     newview_.style.display = "none";
     newtile_.addEventListener("click",function(){showcurrent(newview_)});
@@ -218,70 +204,47 @@ function showcurrent(user)
 function createmessage()
 {
     var subDiv_ = document.createElement("div");
-    var Content_ = document.getElementById("message").value;
-    // console.log('::Message sent :', Content_);                                       //*debug
+    subDiv_.className = "message";
+    subDiv_.style.display = "flex";
+    subDiv_.style.alignItems = "center";
+    subDiv_.style.justifyContent = "center";
+    subDiv_.id = "message_" + countMessage[focusedUser.id];
+    countMessage[focusedUser.id] += 1 ;
+    let wrapperdiv_ = document.createElement("div");
+    wrapperdiv_.appendChild(subDiv_);
+    wrapperdiv_.className = "messagewrapper right";
+    let Content_ = document.getElementById("message").value;
     if (Content_ === "")
         return false;
     if (Content_.substring(0,7).includes("file::"))
     {
-        subDiv_.textContent = "U sent a file";
-        subDiv_.className = "message";
-        subDiv_.style.display = "flex";
         subDiv_.style.backgroundColor = "#92b892";
-        subDiv_.style.alignItems = "center";
-        subDiv_.style.justifyContent = "center";
-        subDiv_.id = "message_" + countMessage[focusedUser.id];
-        countMessage[focusedUser.id] += 1 ;
-        var wrapperdiv_ = document.createElement("div");
-        wrapperdiv_.appendChild(subDiv_);
-        wrapperdiv_.className = "messagewrapper right";
-        focusedUser.appendChild(wrapperdiv_); 
+        document.getElementById("message").value="";
+        focusedUser.appendChild(wrapperdiv_);
+        Content_ = Content_.split("file::")[1].trim().replaceAll('\"','');
+        subDiv_.textContent = "U sent a file : " + Content_;
         return JSON.stringify({
-                "header":"thisisafile",
-                "content":Content_.split("file::")[1].trim().replaceAll('\"',''),
-                "id":focusedUser.id.split("_")[1]
-            });
+            "header":"thisisafile",
+            "content":Content_,
+            "id":focusedUser.id.split("_")[1]
+        });
     }
     if (Content_.substring(0,7).includes("dir::"))
     {
-        subDiv_.textContent = "U sent a dir";
-        subDiv_.className = "message";
-        subDiv_.style.display = "flex";
-        subDiv_.style.backgroundColor = "#92b892";
-        subDiv_.style.alignItems = "center";
-        subDiv_.style.justifyContent = "center";
-        subDiv_.id = "message_" + countMessage[focusedUser.id];
-        countMessage[focusedUser.id] += 1 ;
-        var wrapperdiv_ = document.createElement("div");
-        wrapperdiv_.appendChild(subDiv_);
-        wrapperdiv_.className = "messagewrapper right";
         focusedUser.appendChild(wrapperdiv_); 
-        if (document.getElementById("litestatus").checked)
-        {
-            document.getElementById("litestatus").checked = false;
-            return JSON.stringify({
-                "header":"thisisadirlite",
-                "content":Content_.split("dir::")[1].trim().replaceAll('\"',''),
-                "id":focusedUser.id.split("_")[1]
-            });
-        }
+        document.getElementById("message").value="";
+        Content_ = Content_.split("dir::")[1].trim().replaceAll('\"','')
+        subDiv_.textContent = "U sent a dir: " + Content_;
         return JSON.stringify({
-                "header":"thisisadir",
-                "content":Content_.split("dir::")[1].trim().replaceAll('\"',''),
-                "id":focusedUser.id.split("_")[1]
-            });
+            "header":"thisisadir",
+            "content":Content_,
+            "id":focusedUser.id.split("_")[1]
+        });
     }
     subDiv_.textContent = Content_;
-    subDiv_.className = "message";
-    subDiv_.id = "message_" + countMessage[focusedUser.id];
-    countMessage[focusedUser.id] += 1 ;
-    var wrapperdiv_ = document.createElement("div");
-    wrapperdiv_.appendChild(subDiv_);
-    wrapperdiv_.className = "messagewrapper right";
-    focusedUser.appendChild(wrapperdiv_);
     focusedUser.scrollBy(0,100);
     document.getElementById("message").value="";
-    trimmed = focusedUser.id.split("_")[1].split("~")
+    trimmed = focusedUser.id.split("_")[1].split("~");
     return JSON.stringify({
                 "header":"thisisamessage",
                 "content":Content_,
@@ -319,7 +282,6 @@ function recievedmessage(recievedata)
 }
 function removeuser(idin)
 {
-    // idin syntax : name(^)ipaddress
     var user_ = document.getElementById("person_"+idin);
     var userview_ = document.getElementById("viewer_"+idin);
     console.log("removing user :",user_," ",userview_," ",idin);
@@ -329,16 +291,16 @@ function removeuser(idin)
     if (focusedUser != userview_)
     {
         division_viewerpov.removeChild(userview_);
-        console.log("line 340 focused :",focusedUser)
     }
     else
     {
         initial_view.style.display = "flex";
         division_viewerpov.appendChild(initial_view);
-        console.log("line 346 focused :",focusedUser)
-
          userview_.textContent='User Lost !';
          focusedUser = null;
          division_viewerpov.removeChild(userview_);
     }
 }
+
+// -------------------------profile data : ---------------------------------------------------
+

@@ -99,13 +99,13 @@ class ProfileManager:
 
 def all_profiles():
     main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
-    main_config = configparser.ConfigParser()
+    main_config = configparser.ConfigParser(defaults=None)
     main_config.read(main_config_path)
     profiles = {}
-    for profile_name,profile_file_name in main_config['USER_PROFILES'].items():
+    for _, profile_file_name in main_config['USER_PROFILES'].items():
         profile_path = os.path.join(const.PATH_PROFILES, profile_file_name)
         profile_manager = ProfileManager(profile_path)
-        profiles[profile_name] = profile_manager.load_profile_data()
+        profiles[profile_manager.username] = profile_manager.load_profile_data()
     return profiles
 
 
@@ -126,4 +126,4 @@ def set_selected_profile(profile:ProfileManager):
     const.USERNAME = profile.username
     const.SERVER_IP = profile.server_ip
     const.PORT_SERVER = int(profile.server_port)
-    return False
+    return

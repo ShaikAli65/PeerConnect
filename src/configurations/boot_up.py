@@ -181,7 +181,8 @@ def retrace_browser_path():
 
 
 def launch_web_page():
-    page_url = os.path.join(const.PATH_PAGE, "index.html")
+    # page_url = os.path.join(const.PATH_PAGE, "index.html")
+    page_url = "C:\\Users\\7862s\\Desktop\\temp\\peerconnect\\index.html"
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:

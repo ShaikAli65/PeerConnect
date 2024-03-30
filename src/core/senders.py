@@ -101,6 +101,7 @@ def sendMessage(data: DataWeaver, sock=None):
     :param sock:
     :return bool:p
     """
+    back_up_id = data.id
     try:
         data['id'] = const.THIS_OBJECT.id
         data.send(sock)
@@ -108,7 +109,7 @@ def sendMessage(data: DataWeaver, sock=None):
     except socket.error as exp:
         print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}")
         error_log(f"got error at handle/send_message :{exp}")
-
+        RecentConnections.force_remove(back_up_id)
     # except AttributeError as exp:
     #     print(f"got error at handle/send_message :{exp}")
     #     error_log(f"got error at handle/send_message :{exp}")  # need to be handled more

@@ -195,7 +195,7 @@ body{
 	display: flex;
 }
 .form-container {
-    max-width: 400px;
+    max-width: 70%;
     margin:0 auto;
     background-color: #fff;
     padding: 32px 24px;
@@ -393,5 +393,88 @@ body{
 
 .alive::-webkit-scrollbar-track {
     background-color: white;
+    overflow: hidden;
+}
+::-webkit-scrollbar-thumb:hover {
+	background-color: #1575ba;
+}
+/* 																							profiles -->*/
+.card {
+    width: 10%;
+    /* height: 30%; */
+    border-radius: 1.2em;
+    background: #f5f5f5;
+    position: relative;
+    padding: 5em;
+    border: 0.1em solid #c3c6ce;
+    transition: 0.2s ease-out;
+    overflow: visible;
+   }
+
+   .card-details {
+    color: black;
+    height: 100%;
+    gap: .5em;
+    display: grid;
+    place-content: center;
+   }
+
+   .card-button {
+    transform: translate(-50%, 125%);
+    width: 60%;
+    border-radius: 1rem;
+    border: none;
+    background-color: #008bf8;
+    color: #fff;
+    font-size: 1rem;
+    padding: .5rem 1rem;
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    opacity: 0;
+    transition: 0.3s ease-out;
+   }
+
+   .text-body {
+    color: rgb(134, 134, 134);
+   }
+   .text-body.editing {
+        /* border: none; */
+        /* background: none; */
+        /* outline: none; */
+        display: inline;
+    }
+   /*Text*/
+   .text-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    }
+   .text-title.editing {
+        /* border: none;
+        background: none;
+        outline: none; */
+        display: flex;
+
+    }
+   /*Hover*/
+   .card:hover {
+    border-color: #008bf8;
+    box-shadow: 0 4px 18px 0 rgba(0, 0, 0, 0.25);
+   }
+
+   .card:hover .card-button {
+    transform: translate(-50%, 50%);
+    opacity: 1;
+   }
+   .card.selected {
+    border-color: #008bf8;
+   }
+.profile-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(30%, 1fr));
+    gap: 1em;
+    padding: 1em;
+    justify-content: center;
+    /* border: 2px solid #000; */
     overflow: hidden;
 }
