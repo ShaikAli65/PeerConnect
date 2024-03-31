@@ -3,7 +3,7 @@ from collections import deque
 from src.avails import remotepeer
 from src.core import *
 from src.avails import useables as use
-from src.core import handle_data
+from src.webpage_handlers import handle_data
 from src.avails.textobject import SimplePeerText
 from src.core.senders import RecentConnections
 safe_stop = threading.Event()

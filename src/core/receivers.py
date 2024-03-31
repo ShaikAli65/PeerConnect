@@ -1,7 +1,7 @@
 import src.managers.directorymanager
 from src.core import *
 import src.avails.useables as use
-from src.core import handle_data
+from src.webpage_handlers import handle_data
 from src.managers import *
 from src.avails.textobject import DataWeaver
 

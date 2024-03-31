@@ -1,5 +1,3 @@
-from threading import Lock
-
 import websockets
 
 import src.avails.textobject
@@ -16,7 +14,7 @@ from src import avails
 web_socket: websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
 SafeEnd = asyncio.Event()
-stack_safe: Lock = threading.Lock()
+stack_safe: threading.Lock = threading.Lock()
 
 
 def handle_connection(addr_id):

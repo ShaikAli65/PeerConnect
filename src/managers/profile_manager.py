@@ -1,8 +1,8 @@
-import json
 import configparser
-import os
-from src.avails import constants as const
 from pathlib import Path
+
+
+from src.core import *
 
 
 class ProfileManager:
@@ -86,8 +86,9 @@ class ProfileManager:
 
     @classmethod
     def delete_profile(cls, profile_username):
-        if os.path.exists(os.path.join(const.PATH_PROFILES, f"{profile_username}.ini")):
-            os.remove(os.path.join(const.PATH_PROFILES, f"{profile_username}.ini"))
+        profile_path = Path(const.PATH_PROFILES, f"{profile_username}.ini")
+        if profile_path.is_file():
+            profile_path.unlink(True)
         cls.__remove_from_main_config(profile_username)
 
     def __str__(self):

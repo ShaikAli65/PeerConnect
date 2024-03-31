@@ -2,9 +2,11 @@
 import tracemalloc
 import signal
 import platform
+
+
 import src.avails.nomad
 from src.core import *
-from src.core import handle_data, handle_signals
+from src.webpage_handlers import handle_data, handle_signals
 from src.core import connectserver as connect_server
 from src.core import requests_handler as manage_requests
 import src.avails.useables as use

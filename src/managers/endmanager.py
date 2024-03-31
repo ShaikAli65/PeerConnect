@@ -1,8 +1,8 @@
 from typing import Union
 from src.avails import constants as const
 
-from src.core import connectserver as connect_server, requests_handler as manage_requests, senders, handle_data, \
-    handle_signals
+from src.core import connectserver as connect_server, requests_handler as manage_requests, senders
+from src.webpage_handlers import handle_data, handle_signals
 from src.managers import filemanager
 from src.webpage import httphandler
 
