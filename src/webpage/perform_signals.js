@@ -1,6 +1,7 @@
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 const profileListDiv = document.getElementById('profileList');
 const addProfileBtn = document.getElementById('addProfileBtn');
+const delProfileBtn = document.getElementById('delProfileBtn');
 const proceedBtn = document.getElementById('proceedBtn');
 const wss = new WebSocket("ws://localhost:42055");
 var DATA = {};
@@ -123,23 +124,42 @@ addProfileBtn.addEventListener('click', () => {
       profileListDiv.appendChild(newProfileElement);
     }
 });
-  
-proceedBtn.addEventListener('click', () => {
+delProfileBtn.addEventListener('click', () => {
     const selectedProfile = document.querySelector('.card.selected');
     if (selectedProfile) {
+        const profileName = selectedProfile.id.split('!@#')[1];
+        delete DATA.content[profileName];
+        selectedProfile.remove();
+    } else {
+        alert('Please select a profile.');
+    }
+});
+function proceed_profiles() {
+    const selectedProfile = document.querySelector('.card.selected');
+    if (selectedProfile) {
+        send_fresh_profiles();
       send_selected_profile(selectedProfile.id.split('!@#')[1]);
       console.log('Proceeding with profile:', selectedProfile);
+      let form_group = document.getElementById("form_group");
+      let flag = document.createElement("div");
+      flag.id = "proceed_flag";
+      form_group.appendChild(flag);
     } else {
       alert('Please select a profile.');
     }
-});
+}
+
 function send_selected_profile(selected_profile_id) {
     let dict_selected_profile = DATA.content[selected_profile_id];
-    let selected_profile = {'content':{[selected_profile_id] : dict_selected_profile},'header':'selectedprofile','id':''};
-    selected_profile.header = "selectedprofile";
-    selected_profile.id = "";
-    console.log('selected_profile:', selected_profile, selected_profile_id);
+    let selected_profile = {'content':dict_selected_profile.CONFIGURATIONS.username,'header':'selectedprofile','id':''};
+    console.log('selected_profile:', selected_profile);
     wss.send(JSON.stringify(selected_profile));
+}
+
+function send_fresh_profiles() {
+    let modified_profiles = {'content':DATA.content,'header':'newprofilelist','id':''};
+    console.log('modified_profiles:', modified_profiles);
+    wss.send(JSON.stringify(modified_profiles));
 }
 
 window.onload = initiate_signals;

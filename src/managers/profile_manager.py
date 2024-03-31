@@ -2,11 +2,15 @@ import json
 import configparser
 import os
 from src.avails import constants as const
+from pathlib import Path
 
 
 class ProfileManager:
+    main_config = configparser.ConfigParser()
+
     def __init__(self, profiles_file, profile_data=''):
-        self.profiles_file = profiles_file
+        ProfileManager.main_config.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
+        self.profile_file_path = Path(const.PATH_PROFILES, profiles_file)
         if not profile_data == "":
             self.profiles = profile_data
         else:
@@ -15,12 +19,12 @@ class ProfileManager:
     def load_profile_data(self):
         try:
             config = configparser.ConfigParser()
-            config.read(self.profiles_file)
+            config.read(self.profile_file_path)
             return {section: dict(config.items(section)) for section in config.sections()}
         except FileNotFoundError:
             return {}
 
-    def edit_profile(self, config_header, new_settings):
+    def edit_profile(self, config_header, new_settings: dict):
         """
         Accepts a dictionary of new settings and updates the profile with the new settings
         mapped to respective config_header
@@ -28,11 +32,14 @@ class ProfileManager:
         :param new_settings:
         :return:
         """
-        if config_header in self.profiles:
-            self.profiles[config_header].update(new_settings)
-        else:
-            self.profiles[config_header] = new_settings
+        prev_username = self.username
+        self.profiles.setdefault(config_header, {}).update(new_settings)
 
+        new_profile_path = Path(const.PATH_PROFILES, f"{self.username}.ini")
+        if not prev_username == self.username:
+            os.rename(self.profile_file_path, new_profile_path)
+            self.__remove_from_main_config(prev_username)
+            self.profile_file_path = new_profile_path
         self.save_profiles()
 
     def set_profile_data_from_file(self):
@@ -40,13 +47,14 @@ class ProfileManager:
 
     def save_profiles(self):
         config = configparser.ConfigParser()
-        for profile, settings in self.profiles.items():
-            config[profile] = settings
-        with open(self.profiles_file, 'w') as file:
+        config.update({profile: settings for profile, settings in self.profiles.items()})
+
+        with open(self.profile_file_path, 'w') as file:
             config.write(file)
+        ProfileManager.__write_to_main_config(self.username)
 
     @classmethod
-    def add_profile(cls, profile_name, settings:dict):
+    def add_profile(cls, profile_name, settings: dict):
         """
          Adds profile into application with settings provided as a dictionary mapped to respective headers
         :param profile_name:
@@ -59,23 +67,28 @@ class ProfileManager:
             config[section] = setting
         with open(profile_path, 'w') as file:
             config.write(file)
+        cls.__write_to_main_config(profile_name)
+
+    @classmethod
+    def __write_to_main_config(cls, profile_name):
         main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
-        main_config = configparser.ConfigParser()
-        main_config.read(main_config_path)
-        main_config['USER_PROFILES'][profile_name] = f'{profile_name}.ini'
+
+        cls.main_config['USER_PROFILES'][profile_name] = f'{profile_name}.ini'
         with open(main_config_path, 'w') as file:
-            main_config.write(file)
+            cls.main_config.write(file)
+
+    @classmethod
+    def __remove_from_main_config(cls, profile_key):
+        cls.main_config.remove_option('USER_PROFILES', profile_key)  # debug
+        main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
+        with open(main_config_path, 'w') as file:
+            cls.main_config.write(file)
 
     @classmethod
     def delete_profile(cls, profile_username):
         if os.path.exists(os.path.join(const.PATH_PROFILES, f"{profile_username}.ini")):
             os.remove(os.path.join(const.PATH_PROFILES, f"{profile_username}.ini"))
-        main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
-        main_config = configparser.ConfigParser()
-        main_config.read(main_config_path)
-        main_config.remove_option('USER_PROFILES', profile_username)
-        with open(main_config_path, 'w') as file:
-            main_config.write(file)
+        cls.__remove_from_main_config(profile_username)
 
     def __str__(self):
         return json.dumps(self.profiles)
@@ -92,37 +105,28 @@ class ProfileManager:
     def server_port(self):
         return self.profiles['CONFIGURATIONS']['server_port']
 
-    @property
-    def path(self):
-        return os.path.join(self.profiles_file)
+
+def all_profiles() -> dict:
+    """
+    give all profiles available as key{username} :mapped to: their settings given by their ProfileManager object
+    make sure that you definitely call :def load_profiles_to_program():,
+     this function uses that list from const.PROFILE_LIST
+    :return profiles:
+    """
+    return {profile.username: profile.load_profile_data() for profile in const.PROFILE_LIST}
 
 
-def all_profiles():
-    main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
-    main_config = configparser.ConfigParser(defaults=None)
-    main_config.read(main_config_path)
-    profiles = {}
-    for _, profile_file_name in main_config['USER_PROFILES'].items():
-        profile_path = os.path.join(const.PATH_PROFILES, profile_file_name)
-        profile_manager = ProfileManager(profile_path)
-        profiles[profile_manager.username] = profile_manager.load_profile_data()
-    return profiles
-
-
-def load_profiles_to_program():
+def load_profiles_to_program() -> bool:
     if not os.path.exists(const.PATH_PROFILES):
         return False
     main_config_path = os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE)
     main_config = configparser.ConfigParser()
     main_config.read(main_config_path)
-    for profile in main_config['USER_PROFILES']:
-        profile_path = os.path.join(const.PATH_PROFILES, main_config['USER_PROFILES'][profile])
-        profile = ProfileManager(profile_path)
-        const.PROFILE_LIST.append(profile)
+    const.PROFILE_LIST.extend([ProfileManager(settings) for settings in main_config['USER_PROFILES'].values()])
     return True
 
 
-def set_selected_profile(profile:ProfileManager):
+def set_selected_profile(profile: ProfileManager):
     const.USERNAME = profile.username
     const.SERVER_IP = profile.server_ip
     const.PORT_SERVER = int(profile.server_port)

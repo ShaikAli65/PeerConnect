@@ -116,17 +116,6 @@ def get_peer_obj_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
         return const.LIST_OF_PEERS[user_id]
 
 
-def get_profile_from_username(username: str):
-    """
-    Retrieves profile object from list given username
-    :param username:
-    """
-    for profile in const.PROFILE_LIST:
-        if profile.username == username:
-            return profile
-    return None
-
-
 def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR,timeout=0) -> socket.socket:
     """
     Creates a basic socket connection to peer id passed in,

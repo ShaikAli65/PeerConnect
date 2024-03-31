@@ -45,8 +45,16 @@ function eventlisteners()
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+document.getElementById('proceedBtn').addEventListener('click', () => {
+    initiate_data();
+});
 function initiate_data()
 {
+    console.log("::initiating data",document.getElementById("proceed_flag"));   
+    if (document.getElementById("proceed_flag") == null)
+    {
+        return false;
+    }
     let connectToCode_;
     connectToCode_ = new WebSocket(addr);
     main_division.style.display = "flex";

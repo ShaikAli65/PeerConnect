@@ -2,7 +2,7 @@ import socket as soc
 import threading
 
 CLEARLOGSFLAG = 1
-
+END_OR_NOT = False
 USERNAME = ''
 SERVER_IP = ''
 THIS_IP = ''

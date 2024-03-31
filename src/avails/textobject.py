@@ -147,7 +147,7 @@ class DataWeaver:
 
     """
 
-    def __init__(self, header: str = None, content: str = None, _id: str = None, byte_data: bytes = None):
+    def __init__(self, header: str = None, content: Union[str,dict] = None, _id: str = None, byte_data: bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
             self.__data: dict = json.loads(byte_data)

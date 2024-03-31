@@ -32,6 +32,8 @@ if __name__ == "__main__":
     th = use.start_thread(handle_data.initiate_control)
     use.start_thread(handle_signals.initiate_control)
     const.HOLD_PROFILE_SETUP.wait()
+    if const.END_OR_NOT is True:
+        exit(1)
     boot_up.initiate()
     src.configurations.configure_app.print_constants()
     tracemalloc.start()
