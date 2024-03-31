@@ -68,6 +68,7 @@ class ProfileManager:
         with open(profile_path, 'w') as file:
             config.write(file)
         cls.__write_to_main_config(profile_name)
+        const.PROFILE_LIST.append(ProfileManager(profile_path))
 
     @classmethod
     def __write_to_main_config(cls, profile_name):
@@ -90,6 +91,7 @@ class ProfileManager:
         if profile_path.is_file():
             profile_path.unlink(True)
         cls.__remove_from_main_config(profile_username)
+        # const.PROFILE_LIST.remove()
 
     def __str__(self):
         return json.dumps(self.profiles)

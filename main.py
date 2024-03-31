@@ -4,7 +4,7 @@ import signal
 import platform
 
 
-import src.avails.nomad
+import src.core.nomad
 from src.core import *
 from src.webpage_handlers import handle_data, handle_signals
 from src.core import connectserver as connect_server
@@ -16,7 +16,7 @@ import src.configurations.configure_app
 
 
 def initiate() -> int:
-    const.HOST_OBJ = src.avails.nomad.Nomad(const.THIS_IP, const.PORT_THIS)
+    const.HOST_OBJ = src.core.nomad.Nomad(const.THIS_IP, const.PORT_THIS)
     const.OBJ_THREAD = use.start_thread(const.HOST_OBJ.commence)
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     if connect_server.initiate_connection() is False:

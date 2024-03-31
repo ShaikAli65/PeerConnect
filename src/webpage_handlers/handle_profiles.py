@@ -44,6 +44,7 @@ async def configure_further_profile_data(_websocket):
 
     removed_profiles = set(all_profiles().keys()) - set(profiles_data)
     [ProfileManager.delete_profile(x) for x in removed_profiles]
+    const.PROFILE_LIST = [profile for profile in const.PROFILE_LIST if profile.username not in removed_profiles]
     print("deleted profiles :", removed_profiles)
 
     for profile_name, profile_settings in profiles_data.items():
@@ -51,6 +52,7 @@ async def configure_further_profile_data(_websocket):
 
         if profile_object is None:
             ProfileManager.add_profile(profile_name, profile_settings)
+
             continue
 
         for header, content in profile_settings.items():
