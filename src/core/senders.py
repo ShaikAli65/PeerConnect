@@ -17,7 +17,6 @@ class SocketCache:
 
     def appendPeer(self, peer_id:str, peer_socket:socket.socket):
         with self.__thread_lock:
-
             if len(self.cache) >= self.max_limit:
                 self.cache.popitem(last=False)
             self.cache[peer_id] = peer_socket
@@ -25,7 +24,6 @@ class SocketCache:
 
     def get_socket(self, peer_id) -> Union[socket.socket, None]:
         with self.__thread_lock:
-
             return self.cache.get(peer_id, None)
 
     def remove(self, peer_id):
@@ -35,7 +33,6 @@ class SocketCache:
 
     def clear(self):
         with self.__thread_lock:
-
             self.cache.clear()
 
     def __contains__(self, item:str):
@@ -116,7 +113,7 @@ def sendMessage(data: DataWeaver, sock=None):
 
 
 @RecentConnections
-def sendFile(_path, sock=None):
+def sendFile(_path: DataWeaver, sock=None):
     """
     A Wrapper function to function at {filemanager.fileSender()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -126,10 +123,11 @@ def sendFile(_path, sock=None):
     :param sock:
     :return bool:
     """
-    # try:
-    use.start_thread(_target=filemanager.fileSender, _args=(_path, sock))
-    # except socket.error:
-    #     pass
+    back_up_id = _path.id
+    try:
+        use.start_thread(_target=filemanager.fileSender, _args=(_path, sock))
+    except socket.error:
+        RecentConnections.force_remove(back_up_id)
 
 
 @RecentConnections
