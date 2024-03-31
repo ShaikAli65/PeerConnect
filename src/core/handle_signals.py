@@ -79,7 +79,7 @@ async def send_profiles(_websocket):
 async def get_selected_profile() -> str:
     data = await web_socket.recv()
     selected_profile = DataWeaver(byte_data=data)
-    if selected_profile.header == "selectedprofile":
+    if selected_profile.header == "selected profile":
         return selected_profile.content
 
 
@@ -87,7 +87,7 @@ async def get_selected_profile() -> str:
 async def configure_further_profile_data(_websocket):
     raw_profile_data = await web_socket.recv()
     profiles_data = DataWeaver(byte_data=raw_profile_data)
-    if not profiles_data.header == "newprofilelist":
+    if not profiles_data.header == "new profile list":
         return profiles_data
     # use.echo_print(False, "new profile list :",profiles_data.content)
     profiles_data = profiles_data.content

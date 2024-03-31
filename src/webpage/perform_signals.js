@@ -151,13 +151,13 @@ function proceed_profiles() {
 
 function send_selected_profile(selected_profile_id) {
     let dict_selected_profile = DATA.content[selected_profile_id];
-    let selected_profile = {'content':dict_selected_profile.CONFIGURATIONS.username,'header':'selectedprofile','id':''};
+    let selected_profile = {'content':dict_selected_profile.CONFIGURATIONS.username,'header':'selected profile','id':''};
     console.log('selected_profile:', selected_profile);
     wss.send(JSON.stringify(selected_profile));
 }
 
 function send_fresh_profiles() {
-    let modified_profiles = {'content':DATA.content,'header':'newprofilelist','id':''};
+    let modified_profiles = {'content':DATA.content,'header':'new profile list','id':''};
     console.log('modified_profiles:', modified_profiles);
     wss.send(JSON.stringify(modified_profiles));
 }
