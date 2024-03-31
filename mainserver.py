@@ -7,31 +7,33 @@ import time
 from collections import deque
 import requests
 import select
+from src.server.container import CustomSet
 from src.avails.textobject import SimplePeerText
-import container
 import src.avails.remotepeer as rp
 import src.avails.constants as const
+import json
+import subprocess
 
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
-
+PUBLIC_IP = '8.8.8.8'
 SAFE_LOCK = threading.Lock()
 SERVERPORT = 45000
 SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
 handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
-LIST = container.CustomSet()
-# LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.1.1', status=1))
+LIST = CustomSet()
+# LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.11.1', status=1))
 ip = ""
 
 
-def get_local_ip():
+def get_local_ip1():
     global ip
     s = soc.socket(IPVERSION, PROTOCOL)
     s.settimeout(0.5)
     try:
-        s.connect(("1.1.1.1", 80))
+        s.connect((PUBLIC_IP, 80))
         ip = s.getsockname()[0]
     except soc.error as e:
         print(f"::got {e} trying another way")
@@ -40,6 +42,33 @@ def get_local_ip():
         print(f"Local IP: {ip}")
         s.close()
         return ip
+
+
+def get_local_ip() -> str:
+    if const.IP_VERSION == soc.AF_INET:
+        with soc.socket(const.IP_VERSION, soc.SOCK_DGRAM) as config_soc:
+            config_soc.settimeout(3)
+            try:
+                config_soc.connect(('1.1.1.1', 80))
+                config_ip, _ = config_soc.getsockname()
+            except soc.error as err:
+                print("got error at getip() :", err)
+                config_ip = soc.gethostbyname(soc.gethostname())
+                if const.SYS_NAME == 'Darwin' or const.SYS_NAME == 'Linux':
+                    config_ip = subprocess.getoutput("hostname -I")
+    else:
+        config_ip = "::1"
+        try:
+            response = requests.get('https://api64.ipify.org?format=json')
+            if response.status_code == 200:
+                data = response.json()
+                config_ip = data['ip']
+        except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as err:
+            print("got error at getip() :", err)
+            config_ip = soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
+
+    print("Local IP: ", config_ip)
+    return config_ip
 
 
 def givelist(client: soc.socket, userobj: rp.RemotePeer):
@@ -97,14 +126,6 @@ def getip():
     return config_ip, SERVERPORT
 
 
-def give_chance(client: rp.RemotePeer):
-    with SAFE_LOCK:
-        if client not in LIST:
-            LIST.add(client)
-            return True
-    return False
-
-
 def sync_users():
     while not EXIT.is_set():
         if len(LIST) == 0:
@@ -118,7 +139,7 @@ def sync_users():
             active_user_sock.settimeout(5)
             try:
                 active_user_sock.connect(peer.req_uri)
-                SimplePeerText(active_user_sock, const.SERVER_PING, byte_able=False).send()
+                SimplePeerText(active_user_sock, const.SERVER_PING,byte_able=False).send()
             except soc.error as e:
                 print(f'::got EXCEPTION {e} closing connection with :', peer)
                 peer.status = 0
@@ -149,7 +170,7 @@ def start_server():
     SERVEROBJ.bind((const.THIS_IP, SERVERPORT))
     SERVEROBJ.listen()
     print("Server started at:\n>>", SERVEROBJ.getsockname())
-    threading.Thread(target=sync_users).start()
+    # threading.Thread(target=sync_users).start()
     while not EXIT.is_set():
         readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
         if SERVEROBJ in readable:
