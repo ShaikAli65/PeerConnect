@@ -7,7 +7,7 @@ import time
 from collections import deque
 import requests
 import select
-from src.server.container import CustomSet
+from src.avails.container import CustomSet
 from src.avails.textobject import SimplePeerText
 import src.avails.remotepeer as rp
 import src.avails.constants as const
