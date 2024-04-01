@@ -10,7 +10,7 @@ SYS_NAME = ''
 WINDOWS = "Windows"
 DARWIN = "Darwin"
 LINUX = "Linux"
-SERVER_TIMEOUT = 5
+SERVER_TIMEOUT = 13
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 FORMAT = 'utf-8'
 

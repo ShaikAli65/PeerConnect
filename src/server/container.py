@@ -21,10 +21,11 @@ class CustomSet:
             self.__list.discard(item)
             self.changes.appendleft(item)
 
-    def discard(self, item):
+    def discard(self, item,include_changes=True):
         with self.__lock:
             self.__list.discard(item)
-            self.changes.appendleft(item)
+            if include_changes:
+                self.changes.appendleft(item)
 
     def pop(self):
         with self.__lock:
@@ -62,7 +63,7 @@ class CustomSet:
 
     def __str__(self):
         with self.__lock:
-            return " ".join([str(i) for i in self.__list])
+            return "["+" ".join([str(i.id) for i in self.__list])+"]"
 
     def __contains__(self, item):
         with self.__lock:

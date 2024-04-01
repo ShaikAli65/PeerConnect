@@ -14,10 +14,10 @@ import src.avails.constants as const
 import json
 import subprocess
 
+
 IPVERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 PUBLIC_IP = '8.8.8.8'
-SAFE_LOCK = threading.Lock()
 SERVERPORT = 45000
 SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
 handshakemessage = 'connectionaccepted'
@@ -76,8 +76,7 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
         raise TypeError('client must be a socket')
     client.send(struct.pack('!Q', len(LIST)))
     for peers in LIST:
-        with SAFE_LOCK:
-            peers.serialize(client)
+        peers.serialize(client)
     LIST.add(userobj)
     print('::sent list to client :', client.getpeername())
     print('::new list :', LIST)
@@ -86,23 +85,22 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
 
 def sendlist(client: soc.socket, ):
     """Another implementation of sending a list not in use currently"""
-    with SAFE_LOCK:
-        _l = struct.pack('!I', len(LIST))
-        client.send(_l)
-        client.sendall(pickle.dumps(LIST))
+    _l = struct.pack('!I', len(LIST))
+    client.send(_l)
+    client.sendall(pickle.dumps(LIST))
 
 
 def validate(client: soc.socket):
     global handshakemessage
     try:
         _newuser = rp.deserialize(client)
-        print('::got new user :', _newuser, "ip: ", client.getsockname(), 'status :', _newuser.status)
-        with SAFE_LOCK:
-            if _newuser.status == 0:
-                print('::removing user :', _newuser)
-                LIST.discard(_newuser)
-                print("new list :", LIST)
-                return True
+        print(':got new user :', _newuser, 'status :', _newuser.status)
+        if _newuser.status == 0:
+            print('::removing user :', _newuser)
+            LIST.discard(_newuser)
+            print("new list :", LIST)
+            return True
+        LIST.discard(_newuser, False)
         SimplePeerText(client, const.SERVER_OK).send()
         threading.Thread(target=givelist, args=(client, _newuser)).start()
         return True
@@ -180,7 +178,7 @@ def start_server():
 
 
 def endserver(signum, frame):
-    print("\nExiting from application...")
+    print("\nExiting from server...")
     EXIT.set()
     SERVEROBJ.close()
     return

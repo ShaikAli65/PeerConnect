@@ -8,7 +8,8 @@ from src.webpage import httphandler
 
 
 def end_session(sig='',frame='') -> Union[bool, None]:
-    """performs cleanup tasks for ending the application session.
+    """
+    performs cleanup tasks for ending the application session.
 
     Returns:
         bool: True if cleanup was successful, False otherwise.
@@ -16,6 +17,7 @@ def end_session(sig='',frame='') -> Union[bool, None]:
 
     print("::Initiating End Sequence",sig,frame)
     # activity_log("::Initiating End Sequence")
+    connect_server.End_Safe.set()
     connect_server.end_connection_with_server()
     senders.RecentConnections.end()
     if not const.PAGE_HANDLE_CALL.is_set():

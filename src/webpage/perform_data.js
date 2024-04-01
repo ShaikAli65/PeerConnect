@@ -253,6 +253,7 @@ function createmessage()
     focusedUser.scrollBy(0,100);
     document.getElementById("message").value="";
     trimmed = focusedUser.id.split("_")[1].split("~");
+    focusedUser.appendChild(wrapperdiv_)
     return JSON.stringify({
                 "header":"thisisamessage",
                 "content":Content_,

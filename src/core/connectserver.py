@@ -12,7 +12,7 @@ Error_Calls = 0
 connection_status = False
 
 
-def initial_list(no_of_users: int, initiate_socket):
+def initial_list(no_of_users: int, initiate_socket) -> bool:
     global End_Safe, Error_Calls
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
@@ -44,7 +44,7 @@ def list_error_handler():
     pass
 
 
-def get_list_from(initiate_socket: socket.socket):
+def get_list_from(initiate_socket: socket.socket) -> bool:
     const.PAGE_HANDLE_CALL.wait()
     global End_Safe, Error_Calls
     while not End_Safe.is_set():
@@ -66,7 +66,7 @@ def list_from_forward_control(list_owner:remote_peer.RemotePeer):
     return True if list_connection_socket else False
 
 
-def initiate_connection():
+def initiate_connection() -> bool:
     global End_Safe, Error_Calls,connection_status
     call_count = 0
     use.echo_print(True, "::Connecting to server")
@@ -89,7 +89,7 @@ def initiate_connection():
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
             if End_Safe.is_set():
-                return False
+                return True 
         except KeyboardInterrupt:
             return False
         except Exception as exp:
@@ -99,7 +99,7 @@ def initiate_connection():
     return False
 
 
-def setup_connection():
+def setup_connection() -> socket.socket:
     server_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     server_connection_socket.settimeout(const.SERVER_TIMEOUT)
     server_connection_socket.connect((const.SERVER_IP, const.PORT_SERVER))
@@ -107,7 +107,7 @@ def setup_connection():
     return server_connection_socket
 
 
-def end_connection_with_server():
+def end_connection_with_server() -> bool:
     global End_Safe
     End_Safe.set()
     try:

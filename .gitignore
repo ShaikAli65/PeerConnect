@@ -4,3 +4,6 @@ env/
 bin
 .idea
 .vscode
+.todos
+*.pyc
+*.ini
