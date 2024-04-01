@@ -1,4 +1,5 @@
 source ./env/bin/activate.fish
+source ./env/bin/activate
 
 FLAG_FILE="setup_completed.txt"
 
