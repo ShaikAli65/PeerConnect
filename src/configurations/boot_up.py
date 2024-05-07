@@ -16,7 +16,7 @@ def initiate():
     try:
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     except KeyError:
-        load_default_profiles()
+        write_default_configurations()
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     set_constants(config_map)
     validate_ports()
@@ -104,7 +104,7 @@ def clear_logs():
         s.write('')
 
 
-def load_default_profiles():
+def write_default_configurations():
     default_config_file = (
         '[NERD_OPTIONS]'
         'this_port = 48221'
@@ -135,9 +135,8 @@ def is_port_empty(port):
     try:
         with soc.socket(const.IP_VERSION, soc.SOCK_STREAM) as s:
             s.bind((const.THIS_IP, port))
-            del s
             return True
-    except soc.error:
+    except OSError:
         return False
 
 

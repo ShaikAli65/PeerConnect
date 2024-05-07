@@ -40,19 +40,19 @@ async def configure_further_profile_data(_websocket):
     profiles_data = DataWeaver(byte_data=raw_profile_data)
     if not profiles_data.header == "new profile list":
         return profiles_data
+
     profiles_data = profiles_data.content
 
-    removed_profiles = set(all_profiles().keys()) - set(profiles_data)
-    [ProfileManager.delete_profile(x) for x in removed_profiles]
-    const.PROFILE_LIST = [profile for profile in const.PROFILE_LIST if profile.username not in removed_profiles]
-    print("deleted profiles :", removed_profiles)
+    if removed_profiles := set(all_profiles().keys()) - set(profiles_data):
+        [ProfileManager.delete_profile(x) for x in removed_profiles]
+        const.PROFILE_LIST = [profile for profile in const.PROFILE_LIST if profile.username not in removed_profiles]
+        print("deleted profiles :", removed_profiles)
 
     for profile_name, profile_settings in profiles_data.items():
         profile_object: ProfileManager = get_profile_from_username(profile_name)
 
         if profile_object is None:
             ProfileManager.add_profile(profile_name, profile_settings)
-
             continue
 
         for header, content in profile_settings.items():
