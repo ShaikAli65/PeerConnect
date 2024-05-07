@@ -15,22 +15,20 @@ import json
 import subprocess
 
 
-IPVERSION = soc.AF_INET
+IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
 PUBLIC_IP = '8.8.8.8'
 SERVERPORT = 45000
-SERVEROBJ = soc.socket(IPVERSION, PROTOCOL)
-handshakemessage = 'connectionaccepted'
+SERVER_SOCKET = soc.socket(IP_VERSION, PROTOCOL)
 print('::starting server')
 EXIT = threading.Event()
 LIST = CustomSet()
 # LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.11.1', status=1))
-ip = ""
 
 
 def get_local_ip1():
-    global ip
-    s = soc.socket(IPVERSION, PROTOCOL)
+    ip = ""
+    s = soc.socket(IP_VERSION, PROTOCOL)
     s.settimeout(0.5)
     try:
         s.connect((PUBLIC_IP, 80))
@@ -91,7 +89,6 @@ def sendlist(client: soc.socket, ):
 
 
 def validate(client: soc.socket):
-    global handshakemessage
     try:
         _newuser = rp.deserialize(client)
         print(':got new user :', _newuser, 'status :', _newuser.status)
@@ -111,9 +108,9 @@ def validate(client: soc.socket):
 
 
 def getip():
-    config_soc = soc.socket(IPVERSION, PROTOCOL)
+    config_soc = soc.socket(IP_VERSION, PROTOCOL)
     config_ip = ''
-    if IPVERSION == soc.AF_INET6:
+    if IP_VERSION == soc.AF_INET6:
         response = requests.get('https://api64.ipify.org?format=json')
         if response.status_code == 200:
             data = response.json()
@@ -133,7 +130,7 @@ def sync_users():
         filtered_changes = LIST.getchanges()
         while que:
             peer: rp.RemotePeer = que.popleft()
-            active_user_sock = soc.socket(IPVERSION, PROTOCOL)
+            active_user_sock = soc.socket(IP_VERSION, PROTOCOL)
             active_user_sock.settimeout(5)
             try:
                 active_user_sock.connect(peer.req_uri)
@@ -154,25 +151,26 @@ def give_changes(active_user_sock: soc.socket, changes: deque):
     # print(f'::give_changes called :{active_user_sock.getpeername()}', changes)
     try:
         with active_user_sock:
-            active_user_sock.send(struct.pack('!Q', len(changes)))
-            for _peer in changes:
-                _peer.serialize(active_user_sock)
+            # active_user_sock.send(struct.pack('!Q', len(changes)))
+            # for _peer in changes:
+            #     _peer.serialize(active_user_sock)
+            active_user_sock.send(struct.pack('!Q', 0))
     except soc.error as e:
         print(f'::got {e} for active user :', active_user_sock.getpeername())
 
 
 def start_server():
-    global SERVEROBJ
-    SERVEROBJ.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
+    global SERVER_SOCKET, SERVERPORT
+    SERVER_SOCKET.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
     const.THIS_IP, SERVERPORT = getip()
-    SERVEROBJ.bind((const.THIS_IP, SERVERPORT))
-    SERVEROBJ.listen()
-    print("Server started at:\n>>", SERVEROBJ.getsockname())
+    SERVER_SOCKET.bind((const.THIS_IP, SERVERPORT))
+    SERVER_SOCKET.listen()
+    print("Server started at:\n>>", SERVER_SOCKET.getsockname())
     # threading.Thread(target=sync_users).start()
     while not EXIT.is_set():
-        readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
-        if SERVEROBJ in readable:
-            client, addr = SERVEROBJ.accept()
+        readable, _, _ = select.select([SERVER_SOCKET], [], [], 0.001)
+        if SERVER_SOCKET in readable:
+            client, addr = SERVER_SOCKET.accept()
             print("A connection from :", addr)
             validate(client)
 
@@ -180,7 +178,7 @@ def start_server():
 def endserver(signum, frame):
     print("\nExiting from server...")
     EXIT.set()
-    SERVEROBJ.close()
+    SERVER_SOCKET.close()
     return
 
 

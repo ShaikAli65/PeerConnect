@@ -1,8 +1,21 @@
 from src.core import *
 import pickle
+from typing import Tuple
 
 
 class RemotePeer:
+
+    __annotations__ = {
+        'username': str,
+        'uri': Tuple[str, int],
+        'status': int,
+        'callbacks': int,
+        'req_uri': Tuple[str, int],
+        'id': str,
+        'file_count': int
+    }
+    __slots__ = ['username', 'uri', 'status', 'callbacks', 'req_uri', 'id', 'file_count']
+
     def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, report: int = 35896,
                  status: int = 0):
         self.username = username

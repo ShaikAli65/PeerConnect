@@ -60,7 +60,7 @@ def get_v4():
 """
     import commands
     ips = commands.getoutput("/sbin/ifconfig | grep -i \"inet\" | grep -iv \"inet6\" | " +
-                         "awk {'print $2'} | sed -ne 's/addr\:/ /p'")
+                         "awk {'print $2'} | sed -ne 's/addr: / /p'")
     print ips
 """
 
@@ -84,9 +84,15 @@ def set_paths():
     const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
     const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'src', 'webpage')
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
+    # check if the directory exists
+    if not os.path.exists(downloads_path):
+        downloads_path = os.path.join(os.path.expanduser('~'), 'Desktop')
+
     const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
-    if not os.path.exists(const.PATH_DOWNLOAD):
-        os.makedirs(const.PATH_DOWNLOAD)
+    try:
+        os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)
+    except OSError as e:
+        error_log(f"Error creating directory: {e} from set_paths() at line 70 in core/constants.py")
 
 
 def clear_logs():
@@ -96,7 +102,6 @@ def clear_logs():
         a.write('')
     with open(os.path.join(const.PATH_LOG, 'server.logs'), 'w') as s:
         s.write('')
-    return
 
 
 def load_default_profiles():
@@ -128,7 +133,7 @@ def load_default_profiles():
 
 def is_port_empty(port):
     try:
-        with soc.socket(soc.AF_INET, soc.SOCK_STREAM) as s:
+        with soc.socket(const.IP_VERSION, soc.SOCK_STREAM) as s:
             s.bind((const.THIS_IP, port))
             del s
             return True
@@ -182,7 +187,6 @@ def retrace_browser_path():
 
 def launch_web_page():
     page_url = os.path.join(const.PATH_PAGE, "index.html")
-    # page_url = "C:\\Users\\7862s\\Desktop\\temp\\peerconnect\\index.html"
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:

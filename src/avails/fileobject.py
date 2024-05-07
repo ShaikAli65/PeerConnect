@@ -7,6 +7,21 @@ from src.avails.textobject import SimplePeerText
 
 
 class PeerFile:
+
+    __annotations__ = {
+        'uri': tuple[str, int],
+        'path': str,
+        'control_flag': bool,
+        'chunk_size': int,
+        'error_ext': str
+    }
+
+    __dict__ = {'uri': ('localhost', 8080), 'path': '', 'control_flag': True, 'chunk_size': 1024 * 512,
+                'error_ext': '.invalid'}
+
+    __slots__ = ['__code__', '_lock', '__control_flag', '__chunk_size', '__error_extension', '__sock', 'uri', 'path',
+                 'filename', 'file_size', 'type', 'raw_size']
+
     def __init__(self,
                  uri: tuple[str, int],
                  path: str = '',
@@ -163,7 +178,7 @@ class PeerFile:
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
 
-    def __validatename__(self, file_addr: str):
+    def __validatename__(self, file_addr: str) -> str:
         """
             Ensures a unique filename if a file with the same name already exists.
 
@@ -180,7 +195,6 @@ class PeerFile:
             new_file_name = f"{base}({counter}){ext}"
             counter += 1
         self.filename = os.path.basename(new_file_name)
-        self.name_length = len(self.filename)
         return new_file_name
 
     def __len__(self):

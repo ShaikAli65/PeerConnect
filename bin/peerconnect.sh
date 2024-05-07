@@ -13,6 +13,7 @@ if [ ! -f "$FLAG_FILE" ]; then
     pip install websockets
     pip install requests
     pip install PyQt5
+    pip install tqdm
     echo "Setup completed." > "$FLAG_FILE"
 fi
 

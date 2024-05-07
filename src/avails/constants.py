@@ -30,7 +30,7 @@ PATH_PAGE = ''
 PATH_DOWNLOAD = ''
 
 
-IP_VERSION = soc.AF_INET
+IP_VERSION = None
 PROTOCOL = soc.SOCK_STREAM
 count_of_user_id = 0
 LOCK_USER_ID = threading.Lock()
@@ -44,7 +44,7 @@ PROFILE_LIST = []
 LIST_OF_PEERS: dict = {}
 
 anim_delay = 0.07
-MAX_CALL_BACKS = 2
+MAX_CALL_BACKS = 5
 REQ_URI_CONNECT = 12
 BASIC_URI_CONNECTOR = 13
 

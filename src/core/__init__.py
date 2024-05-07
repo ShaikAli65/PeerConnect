@@ -16,6 +16,12 @@ from logs import server_log
 
 
 class NotInUse:
+    __annotations__ = {
+        'function': str,
+        '__doc__': str
+    }
+    __slots__ = ['function', '__doc__']
+
     def __init__(self, function):
         """
         Decorator class to mark functions as not in use or not fully tested.

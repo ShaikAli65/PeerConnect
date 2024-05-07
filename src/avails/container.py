@@ -4,6 +4,17 @@ from collections import deque
 
 
 class CustomSet:
+    """
+    CustomSet is a thread safe set implementation with additional features.
+
+    """
+    __annotations__ = {
+        '__list': set,
+        '__lock': threading.Lock
+    }
+
+    __slots__ = ['__list', '__lock', 'changes']
+
     def __init__(self):
         self.__list = set()
         self.__lock = threading.Lock()

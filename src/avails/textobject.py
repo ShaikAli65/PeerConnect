@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 
 from src.core import *
@@ -16,6 +15,14 @@ class SimplePeerText:
     all comparisons are done on the stored bytes.
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
+    __annotations__ = {
+        'raw_text': bytes,
+        'text_len_encoded': bytes,
+        'sock': socket.socket,
+        'id': str
+    }
+
+    __slots__ = ['raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size']
 
     def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512):
         self.raw_text = text.encode(const.FORMAT) if byte_able else text
@@ -27,7 +34,12 @@ class SimplePeerText:
     def send(self) -> bool:
         """
         Send the stored text over the socket.
-
+        Possible Errors:
+        - ConnectionError: If the socket is not connected.
+        - ConnectionResetError: If the connection is reset.
+        - BrokenPipeError: If the connection is broken.
+        - OSError: If an error occurs while sending the text.
+        - struct.error: If an error occurs while packing the text length.
         Returns:
         - bool: True if the text was successfully sent; False otherwise.
 
@@ -47,7 +59,8 @@ class SimplePeerText:
         Receive text over the socket.
 
         Parameters:
-        - cmp_string (bytes): Optional comparison string for validation.
+        - cmp_string [str, bytes]: Optional comparison string for validation.
+        supports both string and byte string, resolves accordingly.
 
         Returns:
         - [bool, bytes]: If cmp_string is provided, returns True if received text matches cmp_string,
@@ -81,6 +94,7 @@ class SimplePeerText:
         """
         Compare the stored text to a provided string.
         accepts both byte string and normal string and checks accordingly.
+
         Parameters:
         - cmp_string (str): The string to compare to the stored text.
 
@@ -146,6 +160,11 @@ class DataWeaver:
     provides send and receive functions
 
     """
+    __annotations__ = {
+        'data_lock': threading.Lock,
+        '__data': dict
+    }
+    __slots__ = ['data_lock', '__data']
 
     def __init__(self, header: str = None, content: Union[str,dict] = None, _id: str = None, byte_data: bytes = None):
         self.data_lock = threading.Lock()
@@ -178,13 +197,25 @@ class DataWeaver:
     def send(self, receiver_sock):
         """
         Sends data as json string to the provided socket,
-        uses SimplePeerText's send function
+        This function is written on top of SimplePeerText's send function
+
         :param receiver_sock:
         :return:
+        
         """
         return SimplePeerText(text=self.dump(), refer_sock=receiver_sock).send()
 
     def receive(self, sender_sock):
+        """
+        Receives a text string from the specified sender socket and sets the values of the TextObject instance.
+        Written on top of SimplePeerText's receive function
+        Args:
+            sender_sock: The sender socket from which to receive the text string.
+
+        Returns:
+            The updated TextObject instance.
+
+        """
         text_string = SimplePeerText(refer_sock=sender_sock)
         text_string.receive()
         self.__set_values(json.loads(text_string.decode()))
@@ -231,4 +262,4 @@ class DataWeaver:
         return self.__data.__str__()
 
     def __repr__(self):
-        return f'DataWeaver({self.__data})'
+        return f'DataWeaver(content = {self.__data})'

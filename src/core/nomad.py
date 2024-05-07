@@ -6,6 +6,8 @@ from src.core.receivers import connectNew
 
 class Nomad:
     currently_in_connection = {}
+    __annotations__ = {'address': tuple, 'safe_stop': bool, 'main_socket': socket.socket}
+    __slots__ = ['address', 'safe_stop', 'main_socket']
 
     def __init__(self, ip='localhost', port=8088):
         with const.LOCK_PRINT:

@@ -36,13 +36,13 @@ def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
         if file.verify_handshake():
             file.send_file()
             print("::file sent: ", file.filename, " to ", receiver_sock.getpeername())
-            prompt_data = DataWeaver(header="thisisaprompt", content=file.filename, _id=receiver_obj.id)
+            prompt_data = DataWeaver(header="this is a prompt", content=file.filename, _id=receiver_obj.id)
             return file.filename
         return False
     except NotADirectoryError as nde:
-        prompt_data = DataWeaver(header="thisisaprompt", content=nde.filename, _id=receiver_obj.id)
+        prompt_data = DataWeaver(header="this is a prompt", content=nde.filename, _id=receiver_obj.id)
     except FileNotFoundError as fne:
-        prompt_data = DataWeaver(header="thisisaprompt", content=fne.filename, _id=receiver_obj.id)
+        prompt_data = DataWeaver(header="this is a prompt", content=fne.filename, _id=receiver_obj.id)
     finally:
         # asyncio.run(handle_data_flow.feed_core_data_to_page(prompt_data))
         pass

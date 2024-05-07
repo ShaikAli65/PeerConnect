@@ -11,32 +11,32 @@ from collections import OrderedDict
 
 class SocketCache:
     def __init__(self, max_limit=4):
-        self.cache: dict[str:socket.socket] = OrderedDict()
+        self.socket_cache: dict[str:socket.socket] = OrderedDict()
         self.max_limit = max_limit
         self.__thread_lock = threading.Lock()
 
     def appendPeer(self, peer_id:str, peer_socket:socket.socket):
         with self.__thread_lock:
-            if len(self.cache) >= self.max_limit:
-                self.cache.popitem(last=False)
-            self.cache[peer_id] = peer_socket
+            if len(self.socket_cache) >= self.max_limit:
+                self.socket_cache.popitem(last=False)
+            self.socket_cache[peer_id] = peer_socket
         return peer_socket
 
     def get_socket(self, peer_id) -> Union[socket.socket, None]:
         with self.__thread_lock:
-            return self.cache.get(peer_id, None)
+            return self.socket_cache.get(peer_id, None)
 
     def remove(self, peer_id):
         with self.__thread_lock:
-            if peer_id in self.cache:
-                del self.cache[peer_id]
+            if peer_id in self.socket_cache:
+                del self.socket_cache[peer_id]
 
     def clear(self):
         with self.__thread_lock:
-            self.cache.clear()
+            self.socket_cache.clear()
 
     def __contains__(self, item:str):
-        return item in self.cache
+        return item in self.socket_cache
 
 
 class RecentConnections:
@@ -57,6 +57,12 @@ class RecentConnections:
         connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR)
         cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
+
+    @classmethod
+    @NotInUse
+    def addSocket(cls,peer_id:str,peer_socket:socket.socket):
+        cls.connected_sockets.appendPeer(peer_id, peer_socket)
+        return peer_socket
 
     @classmethod
     def connect_peer(cls, peer_obj:RemotePeer):
