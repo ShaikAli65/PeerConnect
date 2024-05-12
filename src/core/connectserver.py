@@ -17,14 +17,17 @@ def initial_list(no_of_users: int, initiate_socket) -> bool:
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
         try:
+
             readable, _, _ = select.select([initiate_socket], [], [], 0.001)
             while not End_Safe.is_set() and initiate_socket not in readable:
                 readable, _, _ = select.select([initiate_socket], [], [], 0.001)
                 continue
+
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
             use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue,))
-            use.echo_print(False, f"::User received from server : {_nomad}")
+            use.echo_print(f"::User received from server : {_nomad}")
+
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/initial_list, exp:' + str(e))
             if not e.errno == 10054:
@@ -58,7 +61,7 @@ def get_list_from(initiate_socket: socket.socket) -> bool:
 
 def list_from_forward_control(list_owner:remote_peer.RemotePeer):
     with const.LOCK_PRINT:
-        use.echo_print(False, '::Connection redirected by server to : ', list_owner.req_uri)
+        use.echo_print('::Connection redirected by server to : ', list_owner.req_uri)
     list_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     list_connection_socket.connect(list_owner.req_uri)
     SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, byte_able=False).send()
@@ -69,13 +72,13 @@ def list_from_forward_control(list_owner:remote_peer.RemotePeer):
 def initiate_connection() -> bool:
     global End_Safe, Error_Calls,connection_status
     call_count = 0
-    use.echo_print(True, "::Connecting to server")
+    use.echo_print("::Connecting to server")
     while not End_Safe.is_set():
         try:
-            server_connection_socket = setup_connection()
+            server_connection_socket = setup_server_connection()
             if SimplePeerText(server_connection_socket).receive(cmp_string=const.SERVER_OK):
                 server_log('::Connection accepted by server at initiate_connection/connect server.py ', 2)
-                use.echo_print(False, '::Connection accepted by server')
+                use.echo_print('::Connection accepted by server')
                 connection_status = True
                 use.start_thread(_target=get_list_from, _args=(server_connection_socket,))
             else:
@@ -84,7 +87,7 @@ def initiate_connection() -> bool:
             return True
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
             if call_count >= const.MAX_CALL_BACKS:
-                use.echo_print(True, "\n::Ending program server refused connection")
+                use.echo_print("\n::Ending program server refused connection")
                 return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
@@ -92,14 +95,14 @@ def initiate_connection() -> bool:
                 return True 
         except KeyboardInterrupt:
             return False
-        except Exception as exp:
-            server_log(f'::Connection fatal ... at server.py/initiate_connection, exp : {exp}', 4)
-            use.echo_print(False, f"::Connection fatal ... at server.py/initiate_connection, exp : {exp}")
-            break
+        # except Exception as exp:
+        #     server_log(f'::Connection fatal ... at connectserver.py/initiate_connection, exp : {exp}', 4)
+        #     use.echo_print(f"::Connection fatal ... at server.py/initiate_connection, exp : {exp}")
+        #     break
     return False
 
 
-def setup_connection() -> socket.socket:
+def setup_server_connection() -> socket.socket:
     server_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     server_connection_socket.settimeout(const.SERVER_TIMEOUT)
     server_connection_socket.connect((const.SERVER_IP, const.PORT_SERVER))
@@ -113,7 +116,7 @@ def end_connection_with_server() -> bool:
     try:
         const.THIS_OBJECT.status = 0
         if connection_status is False:
-            return
+            return True
         with socket.socket(const.IP_VERSION, const.PROTOCOL) as EndSocket:
             EndSocket.connect((const.SERVER_IP, const.PORT_SERVER))
             const.THIS_OBJECT.serialize(EndSocket)

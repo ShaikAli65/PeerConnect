@@ -10,7 +10,9 @@ def connectNew(_conn: socket.socket, currently_in_connection):
     while currently_in_connection.get(_conn):
         readable, _, _ = select.select([_conn], [], [], 592)
         if _conn not in readable:
-            use.echo_print(False, f"::Connection timed out : at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)}", _conn.getpeername())
+            use.echo_print(
+                f"::Connection timed out : at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)}",
+                _conn.getpeername())
             disconnectUser(_conn, currently_in_connection)
             return
         try:
@@ -18,9 +20,11 @@ def connectNew(_conn: socket.socket, currently_in_connection):
                 return
             _data = DataWeaver().receive(_conn)
         except socket.error as e:
-            use.echo_print(False, f"::Connection error: at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)} exp:{e}", _conn.getpeername())
+            use.echo_print(
+                f"::Connection error: at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)} exp:{e}",
+                _conn.getpeername())
             return
-        use.echo_print(False, 'data from peer :', _data)
+        use.echo_print('data from peer :', _data)
 
         if _data.header == const.CMD_TEXT:
             asyncio.run(handle_data.feed_user_data_to_page(_data.content, _data.id))
@@ -44,4 +48,5 @@ def disconnectUser(_conn, currently_in_connection):
     with _conn:
         DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
     _conn.close()
-    use.echo_print(False, f"::Closing connection from {disconnectUser.__name__}()/{os.path.relpath(disconnectUser.__code__.co_filename)}")
+    use.echo_print(
+        f"::Closing connection from {disconnectUser.__name__}()/{os.path.relpath(disconnectUser.__code__.co_filename)}")

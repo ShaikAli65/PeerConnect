@@ -1,4 +1,3 @@
-
 import tqdm
 from pathlib import Path
 
@@ -9,7 +8,7 @@ from src.avails.textobject import SimplePeerText
 class PeerFile:
 
     __annotations__ = {
-        'uri': tuple[str, int],
+        'uri': Tuple[str, int],
         'path': str,
         'control_flag': bool,
         'chunk_size': int,
@@ -23,9 +22,12 @@ class PeerFile:
                  'filename', 'file_size', 'type', 'raw_size']
 
     def __init__(self,
-                 uri: tuple[str, int],
+                 uri: Tuple[str, int],
                  path: str = '',
-                 control_flag=True, chunk_size: int = 1024 * 512, error_ext: str = '.invalid'):
+                 control_flag=True,
+                 chunk_size: int = 1024 * 512,
+                 error_ext: str = '.invalid'
+                 ):
 
         self.__code__ = None
         self._lock = threading.Lock()
@@ -60,6 +62,7 @@ class PeerFile:
             if not self.__control_flag:
                 return False
             self.__sock.sendall(self.raw_size)
+
             return SimplePeerText(self.__sock, const.CMD_FILESOCKET_HANDSHAKE).send()
 
     def recv_handshake(self) -> bool:
@@ -84,6 +87,8 @@ class PeerFile:
     def send_file(self):
         """
            Sends the file contents to the receiver.
+           Once this function is called the handshake is no longer valid cause this function closes the socket
+           after file contents are transfered
 
            Returns:
                bool: True if the file was sent successfully, False otherwise.
@@ -99,7 +104,7 @@ class PeerFile:
                 send_progress.close()
             return True
             # except Exception as e:
-            #     error_log(f'::got {e} at core\\__init__.py from self.send_file()/fileobject.py closing connection')
+            #     error_log(f'::got {e} at core\\__init__.py from self.__send_file()/fileobject.py closing connection')
             #     return False
             # finally:
             #     self.__sock.close()
@@ -126,7 +131,7 @@ class PeerFile:
             activity_log(f'::received file {self.filename} :: from {self.__sock.getpeername()}')
             return True
             # except Exception as e:
-            #     error_log(f'::got {e} at avails\\fileobject.py from self.recv_file()/fileobject.py closing connection')
+            #     error_log(f'::got {e} at avails\\fileobject.py from self.__recv_file()/fileobject.py closing connection')
             #     self.__sock.close()
             #     self.__file_error__()
             #     return False
@@ -145,13 +150,13 @@ class PeerFile:
             while self.__control_flag and (chunk := file.read(self.__chunk_size)):
                 yield chunk
 
-    def get_meta_data(self) -> str:
-        """Returns metadata as json string in format name:'',size:'',type:''"""
-        return json.dumps({
+    def get_meta_data(self) -> dict[str, str | int]:
+        """Returns metadata as python dict, format name:'',size:'',type:''"""
+        return {
             'name': self.filename,
             'size': self.file_size,
             'type': self.type
-        })
+        }
 
     def set_up_socket_connection(self):
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__chunk_size)
@@ -170,7 +175,7 @@ class PeerFile:
         #     # error_log(f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
         #     return False
 
-    def set_meta_data(self, filename, file_size=0, control_flag=threading.Event(), chunk_size: int = 1024 * 512,
+    def set_meta_data(self, *, filename, file_size=0, control_flag=threading.Event(), chunk_size: int = 1024 * 512,
                       error_ext: str = '.invalid'):
         self.filename = filename
         self.file_size = file_size
@@ -205,7 +210,7 @@ class PeerFile:
 
     def __str__(self):
         """
-            Returns the filename.
+            Returns the file details
         """
         return (
             f"file name {self.filename}",
@@ -229,6 +234,7 @@ class PeerFile:
 # ++++++++++++++++--------------------------------------------------------------------------------------------------++++++++++++++++
 
 
+@NotInUse
 def calculate_buffer_size(file_size):
     # Define the minimum and maximum buffer sizes
     min_buffer_size = 64 * 1024  # 64 KB

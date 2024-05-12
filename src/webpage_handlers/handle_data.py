@@ -90,7 +90,7 @@ async def handler(_websocket):
     const.WEB_SOCKET = web_socket
     const.PAGE_HANDLE_CALL.set()
     await getdata()
-    use.echo_print(True, '::handler ended')
+    use.echo_print('::handler ended')
 
 
 def initiate_control():
@@ -119,7 +119,8 @@ async def feed_core_data_to_page(data: DataWeaver):
     global web_socket
     # try:
     print(f"::Sending data :{data} \n to page")
-    await web_socket.send(data.dump())
+    await web_socket.send(data.dump
+                          ())
     # except Exception as e:
     #     error_log(f"Error sending data handle_data_flow.py/feed_core_data exp: {e}")
     #     return
@@ -132,7 +133,7 @@ async def feed_server_data_to_page(peer: avails.remotepeer.RemotePeer):
                            content=(peer.username if peer.status else 0),
                            _id=peer.id)
         # try:
-        use.echo_print(False, f"::Sending data :{_data} to page: {peer.username}")
+        use.echo_print(f"::Sending data :{_data} to page: {peer.username}")
         await web_socket.send(_data.dump())
         # except Exception as e:
         #     error_log(f"Error sending data at handle_data_flow.py/feed_server_data, exp: {e}")
@@ -147,5 +148,5 @@ def end():
     # loop.run_until_complete(asyncio.gather(*asyncio.all_tasks()))
     loop.stop()
     loop.close()
-    use.echo_print(True, "::Handle_data Ended")
+    use.echo_print("::Handle_data Ended")
     return

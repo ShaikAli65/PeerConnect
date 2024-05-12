@@ -147,15 +147,12 @@ def load_profiles_to_program() -> bool:
     main_config.read(main_config_path)
 
     ProfileManager.main_config = main_config
-    profile_list_to_verify = []
     for profile_id in main_config['USER_PROFILES'].keys():
         try:
             profile = ProfileManager(profile_id)
-            profile_list_to_verify.append(profile)
+            const.PROFILE_LIST.append(profile)
         except LookupError:
             ProfileManager.delete_profile(profile_id)
-
-    const.PROFILE_LIST.extend(profile_list_to_verify)
     return True
 
 

@@ -23,7 +23,7 @@ async def getdata():
         # try:
         raw_data = await web_socket.recv()
         data = DataWeaver(byte_data=raw_data)
-        use.echo_print(False, "data from page:", data)
+        use.echo_print("data from page:", data)
         await control_data_flow(data_in=data)
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data_flow.py/getdata() ")
@@ -39,11 +39,11 @@ async def handler(_websocket):
     except websockets.exceptions.ConnectionClosedOK:
         end()
     await getdata()
-    use.echo_print(True, '::handler ended')
+    use.echo_print('::handler ended')
 
 
 def initiate_control():
-    use.echo_print(True, '::Initiate_control called at handle_signals.py :', const.PATH_PAGE, const.PORT_PAGE_SIGNALS)
+    use.echo_print('::Initiate_control called at handle_signals.py :', const.PATH_PAGE, const.PORT_PAGE_SIGNALS)
     launch_web_page()
     asyncio.set_event_loop(asyncio.new_event_loop())
     start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_SIGNALS)
@@ -62,4 +62,4 @@ def end():
     # loop.close()
     const.END_OR_NOT = True
     const.HOLD_PROFILE_SETUP.set()
-    use.echo_print(True, "::Handle_signals Ended")
+    use.echo_print("::Handle_signals Ended")

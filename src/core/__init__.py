@@ -7,7 +7,7 @@ import struct
 import select
 import os
 from collections.abc import MutableSet
-from typing import Union,Dict
+from typing import Union,Dict,Tuple
 
 import src.avails.constants as const
 from logs import error_log
@@ -25,7 +25,7 @@ class NotInUse:
     def __init__(self, function):
         """
         Decorator class to mark functions as not in use or not fully tested.
-
+        :raises ValueError : if function gets called
         Args:
         - function: The function to be decorated.
         """
@@ -43,6 +43,7 @@ class NotInUse:
         raise ValueError(f"Your are not supposed to call this function :{self.function.__name__}")
 
 
+@NotInUse
 class CustomDict:
     def __init__(self, **kwargs):
         self._data = dict(kwargs)

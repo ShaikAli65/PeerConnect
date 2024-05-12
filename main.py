@@ -3,7 +3,6 @@ import tracemalloc
 import signal
 import platform
 
-
 import src.core.nomad
 from src.core import *
 from src.webpage_handlers import handle_data, handle_signals
@@ -30,13 +29,13 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     const.SYS_NAME = platform.system()
     boot_up.set_paths()
+    boot_up.initiate()
     profile_manager.load_profiles_to_program()
     th = use.start_thread(handle_data.initiate_control)
     use.start_thread(handle_signals.initiate_control)
     const.HOLD_PROFILE_SETUP.wait()
     if const.END_OR_NOT is True:
         exit(1)
-    boot_up.initiate()
     src.configurations.configure_app.print_constants()
     tracemalloc.start()
     initiate()

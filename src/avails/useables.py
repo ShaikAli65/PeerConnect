@@ -3,10 +3,6 @@ import subprocess
 import platform
 import random
 
-from PyQt5.QtWidgets import QApplication, QFileDialog
-from PyQt5.QtCore import Qt
-
-
 import src.avails.remotepeer
 from src.core import *
 from src.configurations.boot_up import is_port_empty
@@ -35,15 +31,13 @@ def is_socket_connected(sock: socket.socket):
         sock.setblocking(True)
 
 
-def echo_print(delay_status, *args) -> None:
+def echo_print(*args) -> None:
     """Prints the given arguments to the console.
 
     Args:
         *args: The arguments to print.
-        :param delay_status:
     """
     with const.LOCK_PRINT:
-        time.sleep(const.anim_delay) if delay_status else None
         print(*args)
 
 
@@ -58,23 +52,6 @@ def reload_protocol():
     # end_session()
 
     return None
-
-
-def open_file_dialog_window():
-    """Opens the system-like file picker dialog."""
-    app = QApplication([])
-    dialog = QFileDialog()
-    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    file_path, _ = dialog.getOpenFileNames()
-    return file_path if file_path else None
-
-
-def open_directory_dialog_window():
-    app = QApplication([])
-    dialog = QFileDialog()
-    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    dir_path, _ = dialog.getExistingDirectory()
-    return dir_path if dir_path else None
 
 
 def open_file(content):

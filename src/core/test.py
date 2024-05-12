@@ -67,17 +67,17 @@ class RecentConnections:
                 cls.current_connected = cls.addConnection(peer_obj)
                 print("cache miss --current : ",cls.current_connected,peer_obj.username)
             except socket.error:
-                use.echo_print(False,"handle signal to page, that user might not be connected, or he is offline")
+                use.echo_print("handle signal to page, that user might not be connected, or he is offline")
                 pass
             return
 
         supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
         if use.is_socket_connected(supposed_to_be_connected_socket):
             cls.current_connected = supposed_to_be_connected_socket
-            use.echo_print(False, "cache hit !! and socket is connected",supposed_to_be_connected_socket)
+            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket)
         else:
             cls.connected_sockets.remove(peer_id=peer_obj.id)
-            use.echo_print(False,"cache hit !! socket not connected")
+            use.echo_print("cache hit !! socket not connected")
             cls.connect_peer(peer_obj)
 
     @classmethod
@@ -99,7 +99,7 @@ def sendMessage(data: DataWeaver, sock=None):
     # try:
     data['id'] = const.THIS_OBJECT.id
     data.send(sock)
-    echo_print(False, "sent message to ", sock.getpeername())
+    echo_print("sent message to ", sock.getpeername())
     # except socket.error as exp:
     #     print(f"got error at handle/send_message :{exp}")
     #     error_log(f"got error at handle/send_message :{exp}")

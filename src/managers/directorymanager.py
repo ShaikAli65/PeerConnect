@@ -1,45 +1,45 @@
 import pickle
 from multiprocessing import Process
 from os import PathLike
-from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import tqdm
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QFileDialog
 
-
-from src.avails.fileobject import PeerFile
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.avails import useables as use
 from src.avails import remotepeer as remote_peer
 from src.avails.textobject import DataWeaver
-from src.managers.filemanager import fileSender
+from src.managers.filemanager import fileSender, fileReceiver
+
+from pathlib import Path
 
 
 @NotInUse
-def make_directory_structure(path: Path):
-    d_dir = Path(const.PATH_DOWNLOAD)
+def make_directory_structure(of_directory: Path, at_directory):
 
-    def _fill_in(p: Path):
-        nonlocal d_dir
-        for f in p.iterdir():
-            if f.is_file():
-                d = d_dir / f.relative_to(path)
+    def _fill_in(current_directory: Path, download_dir):
+        for thing in current_directory.iterdir():
+            d = download_dir / thing.relative_to(of_directory)
+            if thing.is_file():
                 d.touch(exist_ok=True)
-            elif f.is_dir():
-                d = d_dir / f.relative_to(path)
+                pass
+            elif thing.is_dir():
                 d.mkdir(parents=True, exist_ok=True)
-                _fill_in(f)
+                _fill_in(thing, download_dir)
         return
 
-    parent = d_dir / path.name
+    parent = at_directory / of_directory.name
     balancer = 0
     while parent.exists():
-        parent = d_dir / f"{path.name}({balancer})"
+        parent = at_directory / f"{of_directory.name}({balancer})"
         balancer += 1
     parent.mkdir(parents=True, exist_ok=True)
-    _fill_in(path)
-    use.echo_print(True, f"::Created directory structure at {parent}")
+    _fill_in(of_directory, parent)
+    print(f"::Created directory structure at {parent}")
+    return Path(parent)
 
 
 @NotInUse
@@ -75,41 +75,35 @@ def directory_receiver(_conn):
     dir_len = struct.unpack('!Q', _conn.recv(8))[0]
     dir_path = pickle.loads(_conn.recv(dir_len))
     dir_path: Path = Path(dir_path)
-    make_directory_structure(dir_path)
+    make_directory_structure(dir_path,const.PATH_DOWNLOAD)
     return dir_path.name
 
 
-def directorySender(_data: DataWeaver, recv_sock:socket.socket):
+def directorySender(_data: DataWeaver, recv_sock: socket.socket):
     receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id}.zip"
     if len(_data.content) == 0:
-        _data.content = use.open_directory_dialog_window()
+        _data.content = open_directory_dialog_window()
     zipper_process = Process(target=zipDir, args=(provisional_name, _data.content))
     try:
         zipper_process.start()
         zipper_process.join()
         _data.content = provisional_name
-        fileSender(_data,recv_sock,is_dir=True)
-        use.echo_print(False, "sent zip file: ", provisional_name)
+        fileSender(_data, recv_sock, is_dir=True)
+        use.echo_print("sent zip file: ", provisional_name)
     finally:
         os.remove(provisional_name)
 
 
 def directoryReceiver(refer: DataWeaver):
-    tup = refer.id.split('(^)')
-    file = PeerFile(uri=(tup[0], int(tup[1])))
-    metadata = json.loads(refer.content)
-    file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
-    if file.recv_handshake():
-        file.recv_file()
-
-    file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file.filename)
+    file_name = fileReceiver(refer)
+    file_unzip_path = os.path.join(const.PATH_DOWNLOAD, file_name)
 
     unzip_process = Process(target=unZipper, args=(file_unzip_path, const.PATH_DOWNLOAD))
     unzip_process.start()
     unzip_process.join()
-
-    return file.filename
+    os.remove(file_unzip_path)
+    return file_name
 
 
 def zipDir(zip_name: str, source_dir: Union[str, PathLike]):
@@ -130,5 +124,12 @@ def unZipper(zip_path: str, destination_path: str):
         except PermissionError as pe:
             error_log(f"::PermissionError in unzipper() from core/nomad at line 68: {pe}")
     print(f"::Extracted {zip_path} to {destination_path}")
-    os.remove(zip_path)
     return
+
+
+def open_directory_dialog_window():
+    app = QApplication([])
+    dialog = QFileDialog()
+    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+    dir_path, _ = dialog.getExistingDirectory()
+    return dir_path if dir_path else None

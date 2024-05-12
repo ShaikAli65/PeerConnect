@@ -1,9 +1,9 @@
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+const wss = new WebSocket("ws://localhost:42055");
 const profileListDiv = document.getElementById('profileList');
 const addProfileBtn = document.getElementById('addProfileBtn');
 const delProfileBtn = document.getElementById('delProfileBtn');
 const proceedBtn = document.getElementById('proceedBtn');
-const wss = new WebSocket("ws://localhost:42055");
 var DATA = {};
 
 

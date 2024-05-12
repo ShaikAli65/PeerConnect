@@ -10,7 +10,6 @@ import subprocess
 
 
 def initiate():
-    const.THIS_IP = get_ip()
     clear_logs() if const.CLEARLOGSFLAG else None
     config_map = configparser.ConfigParser()
     try:
@@ -19,6 +18,7 @@ def initiate():
         write_default_configurations()
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     set_constants(config_map)
+    const.THIS_IP = get_ip()
     validate_ports()
 
 
@@ -34,9 +34,10 @@ def get_ip() -> str:
     Raises:
         soc.error: If a socket error occurs during connection.
     """
+    config_ip = ''
     if const.IP_VERSION == soc.AF_INET:
         config_ip = get_v4()
-    else:
+    elif const.IP_VERSION == soc.AF_INET6:
         config_ip = get_v6()
     return config_ip
 
@@ -109,6 +110,7 @@ def write_default_configurations():
         '[NERD_OPTIONS]'
         'this_port = 48221'
         'page_port = 12260'
+        'page_port_signals = 42057'
         'ip_version = 4'
         'protocol = tcp'
         'req_port = 35623'
@@ -197,4 +199,4 @@ def launch_web_page():
 
         pass
     except FileNotFoundError:
-        use.echo_print(False,"::webpage not found, look's like the package you downloaded is corrupted")
+        use.echo_print("::webpage not found, look's like the package you downloaded is corrupted")

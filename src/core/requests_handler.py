@@ -31,26 +31,27 @@ def send_list(_conn: socket.socket) -> Union[None, bool]:
     return
 
 
-def adjust_list_error(error_call,_conn, err) :
+def adjust_list_error(error_call,_conn, err):
     error_log(f"::Exception while giving list of users at {__name__}/{__file__}, exp : {err}")
     error_call += 1
-    use.echo_print(False, f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {err}")
+    use.echo_print(
+        f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {err}")
 
 
-def add_peer_accordingly(_peer: remotepeer.RemotePeer, include_ping=False) -> bool:
+def add_peer_accordingly(_peer: remotepeer.RemotePeer,*, include_ping=False) -> bool:
     if _peer.status == 1:
         with const.LOCK_LIST_PEERS:
             const.LIST_OF_PEERS[_peer.id] = _peer
-        use.echo_print(False, f"::added {_peer.uri} {_peer.username} to list of peers")
+        use.echo_print(f"::added {_peer.uri} {_peer.username} to list of peers")
     else:
         if include_ping:
             if ping_user(_peer):
-                return
+                return False
         with const.LOCK_LIST_PEERS:
-            const.LIST_OF_PEERS.pop(_peer.id, None)
             _peer.status = 0
+            const.LIST_OF_PEERS.pop(_peer.id, None)
             RecentConnections.force_remove(_peer.id)
-        use.echo_print(False, f"::removed {_peer.uri} {_peer.username} from list of peers")
+        use.echo_print(f"::removed {_peer.uri} {_peer.username} from list of peers")
     asyncio.run(handle_data.feed_server_data_to_page(_peer))
     return True
 
@@ -62,13 +63,13 @@ def initiate():
     control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     control_sock.bind(const.THIS_OBJECT.req_uri)
     control_sock.listen()
-    use.echo_print(True, "::Requests bind success full at ", const.THIS_OBJECT.req_uri)
+    use.echo_print("::Requests bind success full at ", const.THIS_OBJECT.req_uri)
     accept_peer_connections(control_sock)
     return
 
 
 def accept_peer_connections(_control_sock: socket.socket):
-    use.echo_print(True, "::Listening for requests at ", _control_sock.getsockname())
+    use.echo_print("::Listening for requests at ", _control_sock.getsockname())
     while safe_stop.is_set():
         readable, _, _ = select.select([_control_sock], [], [], 0.001)
         if _control_sock not in readable:
@@ -153,7 +154,8 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
                 SimplePeerText(_conn, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
-            use.echo_print(False, f"Error sending active status at {signal_active_status.__name__}()/{signal_active_status.__code__.co_filename}")
+            use.echo_print(
+                f"Error sending active status at {signal_active_status.__name__}()/{signal_active_status.__code__.co_filename}")
             peer_object.status = 0  # this makes that user as not active
         add_peer_accordingly(peer_object)
 
