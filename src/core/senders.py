@@ -15,7 +15,7 @@ class SocketCache:
         self.max_limit = max_limit
         self.__thread_lock = threading.Lock()
 
-    def appendPeer(self, peer_id:str, peer_socket:socket.socket):
+    def appendPeer(self, peer_id: str, peer_socket: socket.socket):
         with self.__thread_lock:
             if len(self.socket_cache) >= self.max_limit:
                 self.socket_cache.popitem(last=False)
@@ -35,12 +35,11 @@ class SocketCache:
         with self.__thread_lock:
             self.socket_cache.clear()
 
-    def __contains__(self, item:str):
+    def __contains__(self, item: str):
         return item in self.socket_cache
 
 
 class RecentConnections:
-
     connected_sockets = SocketCache()
     current_connected: socket.socket = socket.socket()
 
@@ -53,23 +52,23 @@ class RecentConnections:
         return self.function(argument, RecentConnections.current_connected)
 
     @classmethod
-    def addConnection(cls,peer_obj:RemotePeer):
-        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR)
+    def addConnection(cls, peer_obj: RemotePeer):
+        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj, to_which=const.BASIC_URI_CONNECTOR)
         cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
     @classmethod
     @NotInUse
-    def addSocket(cls,peer_id:str,peer_socket:socket.socket):
+    def addSocket(cls, peer_id: str, peer_socket: socket.socket):
         cls.connected_sockets.appendPeer(peer_id, peer_socket)
         return peer_socket
 
     @classmethod
-    def connect_peer(cls, peer_obj:RemotePeer):
+    def connect_peer(cls, peer_obj: RemotePeer):
         if peer_obj.id not in cls.connected_sockets:
             try:
                 cls.current_connected = cls.addConnection(peer_obj)
-                print("cache miss --current : ",cls.current_connected,peer_obj.username)
+                print("cache miss --current : ", cls.current_connected, peer_obj.username)
             except socket.error:
                 use.echo_print("handle signal to page, that user might not be connected, or he is offline")
                 pass
@@ -78,14 +77,14 @@ class RecentConnections:
         supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
         if use.is_socket_connected(supposed_to_be_connected_socket):
             cls.current_connected = supposed_to_be_connected_socket
-            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket)
+            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket.getpeername())
         else:
             cls.connected_sockets.remove(peer_id=peer_obj.id)
             use.echo_print("cache hit !! socket not connected trying to reconnect")
             cls.connect_peer(peer_obj)
 
     @classmethod
-    def force_remove(cls,peer_id:str):
+    def force_remove(cls, peer_id: str):
         cls.connected_sockets.remove(peer_id=peer_id)
 
     @classmethod
@@ -104,9 +103,9 @@ def sendMessage(data: DataWeaver, sock=None):
     :param sock:
     :return bool:p
     """
-    back_up_id = data.id
+    back_up_id = data.id  # back up the id, to be used in case of error
     try:
-        data['id'] = const.THIS_OBJECT.id
+        data['id'] = const.THIS_OBJECT.id  # Changing the id to your id
         data.send(sock)
         echo_print("sent message to ", sock.getpeername())
     except socket.error as exp:

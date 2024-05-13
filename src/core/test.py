@@ -17,7 +17,6 @@ class SocketCache:
 
     def appendPeer(self, peer_id:str, peer_socket:socket.socket):
         with self.__thread_lock:
-
             if len(self.cache) >= self.max_limit:
                 self.cache.popitem(last=False)
             self.cache[peer_id] = peer_socket
@@ -25,18 +24,15 @@ class SocketCache:
 
     def get_socket(self, peer_id) -> Union[socket.socket, None]:
         with self.__thread_lock:
-
             return self.cache.get(peer_id, None)
 
     def remove(self, peer_id):
         with self.__thread_lock:
-
             if peer_id in self.cache:
                 del self.cache[peer_id]
 
     def clear(self):
         with self.__thread_lock:
-
             self.cache.clear()
 
     def __contains__(self, item:str):
@@ -56,7 +52,7 @@ class RecentConnections:
 
     @classmethod
     def addConnection(cls,peer_obj:RemotePeer):
-        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj,to_which=const.BASIC_URI_CONNECTOR,timeout=5)
+        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj, to_which=const.BASIC_URI_CONNECTOR, timeout=5)
         cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
@@ -65,7 +61,7 @@ class RecentConnections:
         if peer_obj.id not in cls.connected_sockets:
             try:
                 cls.current_connected = cls.addConnection(peer_obj)
-                print("cache miss --current : ",cls.current_connected,peer_obj.username)
+                print("cache miss --current : ",cls.current_connected.getpeername(),peer_obj.username)
             except socket.error:
                 use.echo_print("handle signal to page, that user might not be connected, or he is offline")
                 pass
@@ -74,7 +70,7 @@ class RecentConnections:
         supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
         if use.is_socket_connected(supposed_to_be_connected_socket):
             cls.current_connected = supposed_to_be_connected_socket
-            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket)
+            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket.getpeername())
         else:
             cls.connected_sockets.remove(peer_id=peer_obj.id)
             use.echo_print("cache hit !! socket not connected")

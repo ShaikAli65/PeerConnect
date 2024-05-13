@@ -83,8 +83,7 @@ def endFileThreads():
 
 def open_file_dialog_window():
     """Opens the system-like file picker dialog."""
-    app = QApplication([])
+    QApplication([])
     dialog = QFileDialog()
     dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    file_path, _ = dialog.getOpenFileNames()
-    return file_path if file_path else None
+    return dialog.getOpenFileNames(caption="Select files to send")[0]

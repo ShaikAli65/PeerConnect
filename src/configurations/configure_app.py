@@ -36,7 +36,7 @@ def print_constants():
     line_format = "{:<15} {:<10}"
     with const.LOCK_PRINT:
         print('\n:configuration choices=========================\n'
-              f'{"{:<15} = {:<10}".format('USERNAME', const.USERNAME)}\n'
+              f'{"{:<15} = {:<10}".format("USERNAME", const.USERNAME)}\n'
               f'{"{:<15} = {:<10}".format("THIS_IP", const.THIS_IP)}\n'
               f'{"{:<15} = {:<10}".format("PORT_THIS", const.PORT_THIS)}\n'
               f'{"{:<15} = {:<10}".format("SERVER_IP", const.SERVER_IP)}\n'

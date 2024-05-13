@@ -71,7 +71,6 @@ class PeerFile:
             # try:
 
             self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-            self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.__chunk_size)
             try:
                 self.__sock.connect(self.uri)
             except socket.error as e:
@@ -159,7 +158,6 @@ class PeerFile:
         }
 
     def set_up_socket_connection(self):
-        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__chunk_size)
         self.__sock.settimeout(5)
         self.__sock.bind(self.uri)
         self.__sock.listen(1)
