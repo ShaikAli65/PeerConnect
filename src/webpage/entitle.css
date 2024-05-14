@@ -409,7 +409,7 @@ body{
   padding: 3em;
   border: 0.1em solid #c3c6ce;
   transition: 0.2s ease-out;
-  overflow: visible;
+  overflow: Hidden;
   max-width: 20%;
  }
 
@@ -418,7 +418,7 @@ body{
   height: 100%;
   gap: .5em;
   display: grid;
-  place-content: center;
+  /*place-content: center;*/
  }
 
  .card-button {

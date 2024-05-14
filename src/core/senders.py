@@ -93,7 +93,7 @@ class RecentConnections:
 
 
 @RecentConnections
-def sendMessage(data: DataWeaver, sock=None):
+def sendMessage(data: DataWeaver, sock:socket = None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -109,7 +109,7 @@ def sendMessage(data: DataWeaver, sock=None):
         data.send(sock)
         echo_print("sent message to ", sock.getpeername())
     except socket.error as exp:
-        print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}")
+        print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}",sock.getpeername())
         error_log(f"got error at handle/send_message :{exp}")
         RecentConnections.force_remove(back_up_id)
     # except AttributeError as exp:
