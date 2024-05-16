@@ -25,7 +25,7 @@ def initial_list(no_of_users: int, initiate_socket) -> bool:
 
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
-            use.start_thread(_target=requests_handler.signal_active_status, _args=(ping_queue,))
+            use.start_thread(_target=requests_handler.signal_status, _args=(ping_queue,))
             use.echo_print(f"::User received from server : {_nomad}")
 
         except socket.error as e:
@@ -50,18 +50,19 @@ def list_error_handler():
 def get_list_from(initiate_socket: socket.socket) -> bool:
     const.PAGE_HANDLE_CALL.wait()
     global End_Safe, Error_Calls
+
     while not End_Safe.is_set():
         readable, _, _ = select.select([initiate_socket], [], [], 0.001)
         if initiate_socket not in readable:
             continue
-        raw_length = initiate_socket.recv(8)
-        length = struct.unpack('!Q', raw_length)[0]
-        return initial_list(length, initiate_socket)
+
+    raw_length = initiate_socket.recv(8)
+    length = struct.unpack('!Q', raw_length)[0]
+    return initial_list(length, initiate_socket)
 
 
 def list_from_forward_control(list_owner:remote_peer.RemotePeer):
-    with const.LOCK_PRINT:
-        use.echo_print('::Connection redirected by server to : ', list_owner.req_uri)
+    use.echo_print('::Connection redirected by server to : ', list_owner.req_uri)
     list_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     list_connection_socket.connect(list_owner.req_uri)
     SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, byte_able=False).send()

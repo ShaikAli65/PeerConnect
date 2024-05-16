@@ -3,6 +3,8 @@ from collections import defaultdict
 from src.core import *
 from typing import Union
 
+control_flag = threading.Event()
+
 
 class SimplePeerText:
     """
@@ -48,11 +50,10 @@ class SimplePeerText:
         self.sock.sendall(self.raw_text)
         header_raw_length = self.sock.recv(4)
         send_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
-        while True:
+        while control_flag.is_set():
             readable, _, _ = select.select([self.sock], [], [], 0.001)
-            if self.sock not in readable:
-                continue
-            return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
+            if self.sock in readable:
+                return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
 
     def receive(self, cmp_string: Union[str, bytes] = '') -> Union[bool, bytes]:
         """
@@ -72,6 +73,12 @@ class SimplePeerText:
         received_data = bytearray()
 
         while len(received_data) < receive_text_length:
+
+            while control_flag.is_set():
+                readables, _, _ = select.select([self.sock], [], [], 0.005)
+                if self.sock in readables:
+                    break
+
             chunk = self.sock.recv(min(self.chunk_size, receive_text_length - len(received_data)))
             if not chunk:
                 break
@@ -156,9 +163,9 @@ class SimplePeerText:
 
 class DataWeaver:
     """
-    A wrapper class purposely designed to store data as {header, content, id} format to use further
+    A wrapper class purposely designed to store data (as {header, content, id} format)
     provides send and receive functions
-
+    Built on top of :class `SimplePeerText`:
     """
     __annotations__ = {
         'data_lock': threading.Lock,
@@ -166,7 +173,8 @@ class DataWeaver:
     }
     __slots__ = ['data_lock', '__data']
 
-    def __init__(self, header: str = None, content: Union[str,dict] = None, _id: str = None, byte_data: bytes = None):
+    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str] = None,
+                 byte_data: bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
             self.__data: dict = json.loads(byte_data)
@@ -262,4 +270,8 @@ class DataWeaver:
         return self.__data.__str__()
 
     def __repr__(self):
-        return f'DataWeaver(content = {self.__data})'
+        return f'DataWeaver(content="{self.__data}")'
+
+
+def stop_all_text():
+    control_flag.set()

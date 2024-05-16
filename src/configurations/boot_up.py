@@ -4,9 +4,9 @@ from src.avails import useables as use
 from src.core import *
 from src.configurations.configure_app import set_constants
 import configparser
-import requests
 import socket as soc
 import subprocess
+import urllib.request
 
 
 def initiate():
@@ -31,6 +31,7 @@ def get_ip() -> str:
     Returns:
         str: The local IP address as a string.
 
+
     Raises:
         soc.error: If a socket error occurs during connection.
     """
@@ -43,11 +44,10 @@ def get_ip() -> str:
 
 
 def get_v4():
-    with soc.socket(const.IP_VERSION, soc.SOCK_DGRAM) as config_soc:
-        config_soc.settimeout(3)
+    with soc.socket(soc.AF_INET, soc.SOCK_DGRAM) as config_soc:
         try:
             config_soc.connect(('1.1.1.1', 80))
-            config_ip, _ = config_soc.getsockname()
+            config_ip = config_soc.getsockname()[0]
         except soc.error as e:
             error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
 
@@ -67,15 +67,43 @@ def get_v4():
 
 
 def get_v6():
-    config_ip = "::1"
+    if const.SYS_NAME == const.WINDOWS:
+        for sock_tuple in soc.getaddrinfo("", None, soc.AF_INET6, proto=const.PROTOCOL, flags=soc.AI_PASSIVE):
+            if sock_tuple[4][3] == 0:
+                return sock_tuple[4][0]
+    elif const.SYS_NAME == const.DARWIN or const.SYS_NAME == const.LINUX:
+        return get_v6_from_shell() or get_v6_from_api64()
+
+
+def get_v6_from_shell():
     try:
-        response = requests.get('https://api64.ipify.org?format=json')
-        if response.status_code == 200:
-            data = response.json()
-            config_ip = data['ip']
-    except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
+        import subprocess
+
+        result = subprocess.run(['ip', '-6', 'addr', 'show'], capture_output=True, text=True)
+        output_lines = result.stdout.split('\n')
+
+        ip_v6 = []
+        for line in output_lines:
+            if 'inet6' in line and 'fe80' not in line and '::1' not in line:
+                ip_v6.append(line.split()[1])
+    except Exception as exp:
+        print(f"Error occurred: {exp}")
+        return []
+    return ip_v6[0]
+
+
+def get_v6_from_api64():
+    config_ip = "::1"  # Default IPv6 address
+
+    try:
+        with urllib.request.urlopen('https://api64.ipify.org?format=json') as response:
+            data = response.read().decode('utf-8')
+            data_dict = json.loads(data)
+            config_ip = data_dict.get('ip', config_ip)
+    except (urllib.request.HTTPError, json.JSONDecodeError) as e:
         error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
-        config_ip = soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
+        config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
+
     return config_ip
 
 

@@ -26,8 +26,9 @@ def initiate() -> int:
 
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
-    # print("USE TEMPFILE MODULE IN DIRECTORYMANAGER")
+    # print("USE TEMPFILE MODULE IN DIRECTORYMANAGER and try sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False/True)")
     # exit(1)
+
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     const.SYS_NAME = platform.system()
     boot_up.set_paths()

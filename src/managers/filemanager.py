@@ -1,6 +1,8 @@
+import os.path
+from typing import List
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QFileDialog
-
 
 from src.core import *
 from src.avails.remotepeer import RemotePeer
@@ -8,9 +10,7 @@ from src.avails import useables as use
 from src.avails.fileobject import PeerFile
 from src.avails.textobject import DataWeaver
 
-
 every_file = {}
-count = 0
 
 
 def __setFileId(file: PeerFile, receiver_obj: RemotePeer):
@@ -37,7 +37,7 @@ def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
         _id = json.dumps([const.THIS_IP, temp_port])
 
         try:
-            DataWeaver(header=_header,content=file.get_meta_data(),_id=_id).send(receiver_sock)
+            DataWeaver(header=_header, content=file.get_meta_data(), _id=_id).send(receiver_sock)
         except socket.error:
             pass  # give feed back that can't send file, ask for feedback
 
@@ -58,7 +58,6 @@ def fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
 
 
 def fileReceiver(refer: DataWeaver):
-
     recv_ip, recv_port = json.loads(refer.id)
     file = PeerFile(uri=(recv_ip, recv_port))
     metadata = refer.content
@@ -81,9 +80,17 @@ def endFileThreads():
     return True
 
 
-def open_file_dialog_window():
+def open_file_dialog_window(prev_directory=[]) -> List[str]:
     """Opens the system-like file picker dialog."""
-    QApplication([])
+    prev_directory.append("")
+    app = QApplication([])
     dialog = QFileDialog()
-    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-    return dialog.getOpenFileNames(caption="Select files to send")[0]
+    dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+    dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
+    files = dialog.getOpenFileNames(directory=prev_directory[0],
+                                    caption="Select files to send")[0]
+    try:
+        prev_directory[0] = os.path.dirname(files[0])
+    except IndexError:
+        pass
+    return files

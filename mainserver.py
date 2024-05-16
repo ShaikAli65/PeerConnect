@@ -1,12 +1,9 @@
 import socket as soc
-import threading
 import signal
-import struct
 import pickle
-import time
 from collections import deque
 import requests
-import select
+from src.core import *
 from src.avails.container import CustomSet
 from src.avails.textobject import SimplePeerText
 import src.avails.remotepeer as rp
@@ -166,7 +163,7 @@ def start_server():
     SERVER_SOCKET.bind((const.THIS_IP, SERVERPORT))
     SERVER_SOCKET.listen()
     print("Server started at:\n>>", SERVER_SOCKET.getsockname())
-    # threading.Thread(target=sync_users).start()
+
     while not EXIT.is_set():
         readable, _, _ = select.select([SERVER_SOCKET], [], [], 0.001)
         if SERVER_SOCKET in readable:

@@ -11,7 +11,6 @@ if [ ! -f "$FLAG_FILE" ]; then
     pip install venv
     python3 -m venv env
     pip install websockets
-    pip install requests
     pip install PyQt5
     pip install tqdm
     echo "Setup completed." > "$FLAG_FILE"

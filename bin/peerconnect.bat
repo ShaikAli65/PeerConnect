@@ -6,7 +6,6 @@ if not exist "%FLAG_FILE%" (
     echo Setting up...
     python -m pip install --upgrade pip
     pip install websockets
-    pip install requests
     pip install PyQt5
     pip install tqdm
     echo Setup completed. > "%FLAG_FILE%"

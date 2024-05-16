@@ -84,6 +84,11 @@ def get_peer_obj_from_sock(_conn: socket.socket):
         return const.LIST_OF_PEERS.get(_conn.getpeername()[0], None)
 
 
+@NotInUse
+def get_socket() -> socket.socket:
+    return socket.socket(const.IP_VERSION,const.PROTOCOL)
+
+
 def get_peer_obj_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
     """
     Retrieves peer object from list given id

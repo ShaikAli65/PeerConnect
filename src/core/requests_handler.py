@@ -144,7 +144,7 @@ def ping_user(remote_peer: remotepeer.RemotePeer) -> bool:
         return False
 
 
-def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
+def signal_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
     while safe_stop.is_set() and (not queue_in.empty()):
         peer_object = queue_in.get()
         try:
@@ -155,7 +155,7 @@ def signal_active_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(
-                f"Error sending active status at {signal_active_status.__name__}()/{signal_active_status.__code__.co_filename}")
+                f"Error sending active status at {signal_status.__name__}()/{signal_status.__code__.co_filename}")
             peer_object.status = 0  # this makes that user as not active
         add_peer_accordingly(peer_object)
 

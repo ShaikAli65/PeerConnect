@@ -5,15 +5,18 @@ from src.webpage_handlers import handle_data
 from src.managers import *
 from src.avails.textobject import DataWeaver
 
+currently_in_connection = {}
 
-def connectNew(_conn: socket.socket, currently_in_connection):
+
+def connectNew(_conn: socket.socket):
+    currently_in_connection[_conn] = True
     while currently_in_connection.get(_conn):
         readable, _, _ = select.select([_conn], [], [], 592)
         if _conn not in readable:
             use.echo_print(
                 f"::Connection timed out : at {connectNew.__name__}()/{os.path.relpath(connectNew.__code__.co_filename)}",
                 _conn.getpeername())
-            disconnectUser(_conn, currently_in_connection)
+            disconnectUser(_conn)
             return
         try:
             if _conn.recv(1, socket.MSG_PEEK) == b'':
@@ -37,13 +40,13 @@ def connectNew(_conn: socket.socket, currently_in_connection):
             src.managers.directorymanager.directoryReceiver(refer=_data)
 
         elif _data.header == const.CMD_CLOSING_HEADER:
-            disconnectUser(_conn, currently_in_connection)
+            disconnectUser(_conn)
 
-    disconnectUser(_conn, currently_in_connection)
+    disconnectUser(_conn)
     return
 
 
-def disconnectUser(_conn, currently_in_connection):
+def disconnectUser(_conn):
     currently_in_connection[_conn] = False
     with _conn:
         DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)

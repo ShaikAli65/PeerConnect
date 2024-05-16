@@ -84,7 +84,8 @@ def directorySender(_data: DataWeaver, recv_sock: socket.socket):
     provisional_name = f"temp{receiver_obj.get_file_count()}!!{receiver_obj.id.replace(':','.')}.zip"
     if len(_data.content) == 0:
         _data.content = open_directory_dialog_window()
-    zipper_process = Process(target=zipDir, args=(provisional_name, _data.content))
+    provisional_path = Path(os.path.join(const.PATH_DOWNLOAD, provisional_name))
+    zipper_process = Process(target=zipDir, args=(provisional_path, _data.content))
     try:
         zipper_process.start()
         zipper_process.join()

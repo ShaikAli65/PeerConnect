@@ -1,3 +1,4 @@
+import socket
 import socket as soc
 import configparser
 import src.avails.constants as const  # <--- This is the only import from avails/constants.py
@@ -22,7 +23,8 @@ def set_constants(config_map: configparser) -> bool:
     const.PORT_PAGE_SIGNALS = int(config_map['NERD_OPTIONS']['page_port_signals'])
     const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
     const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
-
+    if const.IP_VERSION == soc.AF_INET6 and not socket.has_ipv6:
+        const.IP_VERSION = soc.AF_INET
     # print_constants()
     if const.USERNAME == '' or const.SERVER_IP == '' or const.PORT_THIS == 0 or const.PORT_PAGE_DATA == 0 or const.PORT_SERVER == 0:
         error_log(

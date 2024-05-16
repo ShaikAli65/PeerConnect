@@ -67,10 +67,12 @@ CMD_RECV_DIR = 'thisisacommandtocore_/!_recvdir'
 CMD_RECV_DIR_LITE = b'thisisacommandtocore_/!_recvdir_lite'
 
 
+CMD_FILESUCCESS = b'file_success'
 TEXT_SUCCESS_HEADER = b'textstringrecvsuccess'
 REQ_FOR_LIST = b'thisisarequestocore_/!_listofusers'
 I_AM_ACTIVE = b'thisisacommandtocore_/!_notifyuser'
 SERVER_PING = b'thisisacommandfromserver_/!_ping'
+SOCKET_OK = b"socket_ok"
 
 
 SERVER_OK = 'connectionaccepted'
@@ -87,3 +89,5 @@ HANDLE_PUSH_FILE_SELECTOR = 'pushfileselector'
 HANDLE_OPEN_FILE = 'openfile'
 HANDLE_SYNC_USERS = 'syncusers'
 ACTIVE_PING = b"why_s ur facelikethat"
+
+
