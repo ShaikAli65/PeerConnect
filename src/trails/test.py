@@ -7,11 +7,19 @@ from src.core import *
 from src.avails.textobject import SimplePeerText  # , DataWeaver
 from src.managers import filemanager  # , error_manager
 
+type _Name = str
+type _Size = int
+type _FilePath = Union[str, Path]
+type _FileItem = Tuple[_Name, _Size, _FilePath]
+FILE_NAME = 0
+FILE_SIZE = 1
+FILE_PATH = 2
+
 
 class _PeerFile:
 
     def __init__(self,
-                 paths: list[Path | str] = "", *,
+                 paths: list[_FileItem] = "", *,
                  chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'
                  ):
@@ -19,7 +27,7 @@ class _PeerFile:
         self.__control_flag = True
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
-        self.file_paths = []
+        self.file_paths: List[_FileItem] = []
         if not paths:
             return
 
@@ -36,7 +44,7 @@ class _PeerFile:
             self.file_paths.append(
                 (os.path.basename(file_path), os.path.getsize(file_path), os.path.abspath(file_path)))
 
-    def __send_file(self, receiver_sock: socket.socket, *, file: Tuple[str, int, str]):
+    def __send_file(self, receiver_sock: socket.socket, *, file: _FileItem):
         """
            Accepts a connected socket as a parameter.
            Sends the file contents to the receiver.
@@ -82,7 +90,7 @@ class _PeerFile:
         self.calculate_chunk_size(file_size)
         progress = tqdm.tqdm(range(file_size), f"::receiving {filename[:20]}... ", unit="B", unit_scale=True,
                              unit_divisor=1024)
-        self.file_paths.append((filename, file_size, file_path))
+        self.file_paths.append((filename, file_size, file_path, ))
 
         with open(file_path, 'wb') as file:
             while self.__control_flag and file_size > 0:
@@ -100,6 +108,9 @@ class _PeerFile:
 
     def send_files(self, receiver_sock: socket.socket):
         """
+        [
+            (file_name, file_size, file_path),
+        ]
         Sends all files in the list to the receiver.
         A connected socket is required as a parameter.
         Returns:
@@ -142,7 +153,7 @@ class _PeerFile:
         filename += self.__error_extension
         return filename
 
-    def __chunkify__(self, file_path):
+    def __chunkify__(self, file_path: str | Path):
         with open(file_path, 'rb') as file:
             while self.__control_flag and (chunk := file.read(self.__chunk_size)):
                 yield chunk
@@ -180,7 +191,7 @@ class _PeerFile:
     def break_loop(self):
         self.__control_flag = False
 
-    def calculate_chunk_size(self, file_size):
+    def calculate_chunk_size(self, file_size: int):
         min_buffer_size = 64 * 1024  # 64 KB
         max_buffer_size = 1024 * 1024 * 2  # 2 MB
 
@@ -200,17 +211,18 @@ class _PeerFile:
 
 
 class _FileGroup:
-    def __init__(self,*, files: List[str | Path] = None, bandwidth: int = 1024*1024*512, latency: int):
+
+    def __init__(self, *, files: List[_FileItem] = None, bandwidth: int = 1024 * 1024 * 512, latency: int):
 
         self.files = files
-        self.grouped_files = [(self.files,), ]
+        self.grouped_files: list = [(self.files,), ]
         self.bandwidth, self.latency = bandwidth, latency
 
     def group(self):
         """
-
-        bandwidth :highest speed x MB/s
-        latency : 2ms
+        throughput :
+        bandwidth  : highest speed x MB/s
+        latency    : 2ms
         file size : y mb
         max no. of tuples = 6
         () :A files total size : n mb
@@ -229,28 +241,11 @@ class _FileGroup:
 
       """
 
-        self.files.sort(key=lambda x: os.path.getsize(x))
+        self.files.sort(key=lambda x: x[FILE_SIZE])
 
         file_groups = []
         current_group = []
-        total_group_size = 0
 
-        for file in self.files:
-            file_size = os.path.getsize(file)
-
-            # Consider estimated speed and bandwidth for group size
-            if (total_group_size + file_size) <= self.bandwidth - self.latency:
-                current_group.append(file)
-                total_group_size += file_size
-            else:
-                file_groups.append(tuple(current_group))
-                current_group = [file]
-                total_group_size = file_size
-
-        if current_group:
-            file_groups.append(tuple(current_group))
-
-            return self.grouped_files
 
     def re_group(self, size: int):
         """
