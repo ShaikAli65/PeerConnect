@@ -11,6 +11,7 @@ type _Name = str
 type _Size = int
 type _FilePath = Union[str, Path]
 type _FileItem = Tuple[_Name, _Size, _FilePath]
+
 FILE_NAME = 0
 FILE_SIZE = 1
 FILE_PATH = 2
@@ -31,10 +32,10 @@ class _PeerFile:
         if not paths:
             return
 
-        for file_path in paths:
-
+        for file_item in paths:
+            file_path = file_item[FILE_PATH]
             if not os.path.exists(file_path):
-                raise FileNotFoundError(f"File not found: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_item}")
 
             if os.path.isdir(file_path):
                 raise NotADirectoryError(f"Cannot use a directory in PeerFile: {file_path}")
