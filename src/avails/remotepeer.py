@@ -2,6 +2,9 @@ from src.core import *
 import pickle
 from typing import Tuple
 
+RP_FLAG = 3  # control flag for this class
+control_flag = const.CONTROL_FLAG[RP_FLAG]
+
 
 class RemotePeer:
 
@@ -63,6 +66,9 @@ class RemotePeer:
 
 
 def deserialize(to_recv: socket.socket) -> RemotePeer:
+
+    until_sock_is_readable(to_recv, control_flag=const.CONTROL_FLAG[RP_FLAG])
+
     try:
         raw_length = to_recv.recv(8)
         length = struct.unpack('!Q', raw_length)[0]

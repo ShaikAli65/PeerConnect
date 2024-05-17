@@ -3,7 +3,8 @@ from collections import defaultdict
 from src.core import *
 from typing import Union
 
-control_flag = threading.Event()
+
+PEER_TEXT = 0
 
 
 class SimplePeerText:
@@ -17,20 +18,21 @@ class SimplePeerText:
     all comparisons are done on the stored bytes.
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
+
     __annotations__ = {
         'raw_text': bytes,
         'text_len_encoded': bytes,
         'sock': socket.socket,
-        'id': str
+        '__control_flag': threading.Event,
+        'id': str,
     }
-
-    __slots__ = ['raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size']
+    __slots__ = ['raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',]
 
     def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512):
         self.raw_text = text.encode(const.FORMAT) if byte_able else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
+        self.__control_flag = const.CONTROL_FLAG[PEER_TEXT]
         self.sock = refer_sock
-        self.id = ''
         self.chunk_size = chunk_size
 
     def send(self) -> bool:
@@ -48,12 +50,13 @@ class SimplePeerText:
         """
         self.sock.send(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
+        until_sock_is_readable(self.sock,control_flag=self.__control_flag)
         header_raw_length = self.sock.recv(4)
         send_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
-        while control_flag.is_set():
-            readable, _, _ = select.select([self.sock], [], [], 0.001)
-            if self.sock in readable:
-                return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
+
+        until_sock_is_readable(self.sock, control_flag=self.__control_flag)
+
+        return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
 
     def receive(self, cmp_string: Union[str, bytes] = '') -> Union[bool, bytes]:
         """
@@ -68,15 +71,16 @@ class SimplePeerText:
                         otherwise returns the received text as bytes.
 
         """
+        until_sock_is_readable(self.sock,control_flag=self.__control_flag)
         raw_length = self.sock.recv(4)
         receive_text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
         received_data = bytearray()
 
         while len(received_data) < receive_text_length:
 
-            while control_flag.is_set():
-                readables, _, _ = select.select([self.sock], [], [], 0.005)
-                if self.sock in readables:
+            while self.safe_stop:
+                readable, _, _ = select.select([self.sock], [], [], 0.005)
+                if self.sock in readable:
                     break
 
             chunk = self.sock.recv(min(self.chunk_size, receive_text_length - len(received_data)))
@@ -111,6 +115,10 @@ class SimplePeerText:
         """
         return self.raw_text == cmp_string
 
+    @property
+    def safe_stop(self):
+        return self.__control_flag.is_set()
+
     def __str__(self):
         """
         Get the string representation of the stored text.
@@ -122,14 +130,7 @@ class SimplePeerText:
         return self.raw_text.decode(const.FORMAT)
 
     def __repr__(self):
-        """
-        Get the string representation of the stored text.
-
-        Returns:
-        - str: The decoded string representation of the stored text.
-
-        """
-        return self.raw_text.decode(const.FORMAT)
+        return f"SimplePeerText(refer_sock='{self.sock}', text='{self.raw_text}', chunk_size={self.chunk_size})"
 
     def __len__(self):
         """
@@ -149,7 +150,7 @@ class SimplePeerText:
         - iter: An iterator for the stored text.
 
         """
-        return iter(self.raw_text)
+        return self.raw_text.__iter__()
 
     def __eq__(self, other):
         return self.raw_text == other
@@ -167,13 +168,14 @@ class DataWeaver:
     provides send and receive functions
     Built on top of :class `SimplePeerText`:
     """
+
     __annotations__ = {
         'data_lock': threading.Lock,
         '__data': dict
     }
     __slots__ = ['data_lock', '__data']
 
-    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str] = None,
+    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str, tuple] = None,
                  byte_data: bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
@@ -274,4 +276,4 @@ class DataWeaver:
 
 
 def stop_all_text():
-    control_flag.set()
+    const.CONTROL_FLAG[PEER_TEXT].clear()

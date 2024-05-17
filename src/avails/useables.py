@@ -7,6 +7,12 @@ import src.avails.remotepeer
 from src.core import *
 from src.configurations.boot_up import is_port_empty
 
+USEABLES_FLAG = 4  # control_flag
+
+
+def safe_stop():
+    return const.CONTROL_FLAG[USEABLES_FLAG].is_set()
+
 
 def start_thread(_target, _args=()):
     if len(_args) != 0:

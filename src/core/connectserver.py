@@ -6,22 +6,23 @@ from src.avails.textobject import SimplePeerText
 import src.avails.useables as use
 import src.avails.remotepeer as remote_peer
 
-
-End_Safe = threading.Event()
+CONNECT_SERVER_FLAG = 5
+control_flag = const.CONTROL_FLAG[CONNECT_SERVER_FLAG]
 Error_Calls = 0
 connection_status = False
 
 
+def safe_stop():
+    return control_flag.is_set()
+
+
 def initial_list(no_of_users: int, initiate_socket) -> bool:
-    global End_Safe, Error_Calls
+    global Error_Calls
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
         try:
 
-            readable, _, _ = select.select([initiate_socket], [], [], 0.001)
-            while not End_Safe.is_set() and initiate_socket not in readable:
-                readable, _, _ = select.select([initiate_socket], [], [], 0.001)
-                continue
+            until_sock_is_readable(initiate_socket,control_flag=control_flag)
 
             _nomad:remote_peer.RemotePeer = remote_peer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
@@ -49,12 +50,9 @@ def list_error_handler():
 
 def get_list_from(initiate_socket: socket.socket) -> bool:
     const.PAGE_HANDLE_CALL.wait()
-    global End_Safe, Error_Calls
+    global Error_Calls
 
-    while not End_Safe.is_set():
-        readable, _, _ = select.select([initiate_socket], [], [], 0.001)
-        if initiate_socket not in readable:
-            continue
+    until_sock_is_readable(initiate_socket,control_flag=control_flag)
 
     raw_length = initiate_socket.recv(8)
     length = struct.unpack('!Q', raw_length)[0]
@@ -71,10 +69,10 @@ def list_from_forward_control(list_owner:remote_peer.RemotePeer):
 
 
 def initiate_connection() -> bool:
-    global End_Safe, Error_Calls,connection_status
+    global Error_Calls, connection_status
     call_count = 0
     use.echo_print("::Connecting to server")
-    while not End_Safe.is_set():
+    while safe_stop():
         try:
             server_connection_socket = setup_server_connection()
             if SimplePeerText(server_connection_socket).receive(cmp_string=const.SERVER_OK):
@@ -92,12 +90,12 @@ def initiate_connection() -> bool:
                 return False
             call_count += 1
             print(f"\r::Connection refused by server, retrying... {call_count}", end='')
-            if End_Safe.is_set():
+            if safe_stop():
                 return True 
         except KeyboardInterrupt:
             return False
         # except Exception as exp:
-        #     server_log(f'::Connection fatal ... at connectserver.py/initiate_connection, exp : {exp}', 4)
+        #     server_log(f'::Connection fatal ... at connect server.py/initiate_connection, exp : {exp}', 4)
         #     use.echo_print(f"::Connection fatal ... at server.py/initiate_connection, exp : {exp}")
         #     break
     return False
@@ -112,8 +110,7 @@ def setup_server_connection() -> socket.socket:
 
 
 def end_connection_with_server() -> bool:
-    global End_Safe
-    End_Safe.set()
+    const.CONTROL_FLAG[CONNECT_SERVER_FLAG].clear()
     try:
         const.THIS_OBJECT.status = 0
         if connection_status is False:

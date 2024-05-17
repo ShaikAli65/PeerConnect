@@ -86,7 +86,6 @@ async def handler(_websocket):
                               content=f"{const.USERNAME}(^){const.THIS_IP}",
                               _id='0')
     await web_socket.send(userdata.dump())
-    const.LOCK_FOR_PAGE = True
     const.WEB_SOCKET = web_socket
     const.PAGE_HANDLE_CALL.set()
     await getdata()

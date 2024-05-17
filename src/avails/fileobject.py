@@ -24,14 +24,12 @@ class PeerFile:
     def __init__(self,
                  uri: Tuple[str, int],
                  path: str = '',
-                 control_flag=True,
                  chunk_size: int = 1024 * 512,
                  error_ext: str = '.invalid'
                  ):
 
         self.__code__ = None
         self._lock = threading.Lock()
-        self.__control_flag = control_flag
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.__sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -163,8 +161,8 @@ class PeerFile:
         self.__sock.listen(1)
         # try:
         while True:
-            read_ables, _, _ = select.select([self.__sock], [], [], 0.001)
-            if self.__sock in read_ables:
+            readable, _, _ = select.select([self.__sock], [], [], 0.001)
+            if self.__sock in readable:
                 self.__sock, _ = self.__sock.accept()
                 return True
         # except Exception as e:

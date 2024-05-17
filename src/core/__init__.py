@@ -7,7 +7,7 @@ import struct
 import select
 import os
 from collections.abc import MutableSet
-from typing import Union, Dict, Tuple, List
+from typing import Union, Dict, Tuple
 
 import src.avails.constants as const
 from logs import error_log
@@ -152,3 +152,17 @@ class CustomDict:
     @classmethod
     def fromkeys(cls, seq, value=None):
         return dict.fromkeys(seq, value)
+
+
+def until_sock_is_readable(sock: socket.socket, *, control_flag: threading.Event) -> Union[socket.socket, None]:
+    """
+
+    :param sock: socket to get ready
+    :param control_flag: flag to end the loop, this function checks for func `threading.Event::is_set`
+    :return: returns socket when it is readable ,returns None if the loop breaks through `threading.Event::is_set`
+    """
+    while control_flag.is_set():
+        readable, _, _ = select.select([sock, ], [], [], 0.001)
+        if sock in readable:
+            return sock
+    return None

@@ -3,14 +3,16 @@ from src.avails import useables as use
 from src.avails.remotepeer import RemotePeer
 import src.core.receivers as receivers
 
+NOMAD_FLAG = 1  # control flag index
+
 
 class Nomad:
-    __annotations__ = {'address': tuple, 'safe_stop': bool, 'main_socket': socket.socket}
-    __slots__ = ['address', 'safe_stop', 'main_socket']
+    __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
+    __slots__ = ['address', '__control_flag', 'main_socket']
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
-        self.safe_stop = True
+        self.__control_flag = const.CONTROL_FLAG[NOMAD_FLAG]
         const.THIS_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.PORT_REQ, status=1)
         use.echo_print("::Initiating Nomad Object", self.address)
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -48,10 +50,14 @@ class Nomad:
         return
 
     def end(self):
-        self.safe_stop = False
+        const.CONTROL_FLAG[NOMAD_FLAG].clear()
         receivers.currently_in_connection.fromkeys(receivers.currently_in_connection, False)
         self.main_socket.close() if self.main_socket else None
         use.echo_print("::Nomad Object Ended")
+
+    @property
+    def safe_stop(self) -> bool:
+        return self.__control_flag.is_set()
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'

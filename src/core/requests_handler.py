@@ -1,7 +1,6 @@
 import queue
 from collections import deque
 
-
 from src.avails import remotepeer
 from src.core import *
 from src.avails import useables as use
@@ -9,7 +8,12 @@ from src.webpage_handlers import handle_data
 from src.avails.textobject import SimplePeerText
 from src.core.senders import RecentConnections
 
-safe_stop = threading.Event()
+REQ_FLAG = 2
+control_flag = const.CONTROL_FLAG[REQ_FLAG]
+
+
+def safe_stop():
+    return control_flag.is_set()
 
 
 def send_list(_conn: socket.socket) -> Union[None, bool]:
@@ -19,7 +23,7 @@ def send_list(_conn: socket.socket) -> Union[None, bool]:
     _conn.sendall(byte_length)
     error_call = 0
     for _nomad in peer_list.values():
-        if not safe_stop.is_set():
+        if safe_stop():
             return
         if not _nomad.status == 1:
             continue
@@ -31,14 +35,14 @@ def send_list(_conn: socket.socket) -> Union[None, bool]:
     return
 
 
-def adjust_list_error(error_call,_conn, err):
+def adjust_list_error(error_call, _conn, err):
     error_log(f"::Exception while giving list of users at {__name__}/{__file__}, exp : {err}")
     error_call += 1
     use.echo_print(
         f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {err}")
 
 
-def add_peer_accordingly(_peer: remotepeer.RemotePeer,*, include_ping=False) -> bool:
+def add_peer_accordingly(_peer: remotepeer.RemotePeer, *, include_ping=False) -> bool:
     if _peer.status == 1:
         with const.LOCK_LIST_PEERS:
             const.LIST_OF_PEERS[_peer.id] = _peer
@@ -47,6 +51,7 @@ def add_peer_accordingly(_peer: remotepeer.RemotePeer,*, include_ping=False) -> 
         if include_ping:
             if ping_user(_peer):
                 return False
+
         with const.LOCK_LIST_PEERS:
             _peer.status = 0
             const.LIST_OF_PEERS.pop(_peer.id, None)
@@ -57,8 +62,6 @@ def add_peer_accordingly(_peer: remotepeer.RemotePeer,*, include_ping=False) -> 
 
 
 def initiate():
-    global safe_stop
-    safe_stop.set()
     control_sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
     control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     control_sock.bind(const.THIS_OBJECT.req_uri)
@@ -70,7 +73,8 @@ def initiate():
 
 def accept_peer_connections(_control_sock: socket.socket):
     use.echo_print("::Listening for requests at ", _control_sock.getsockname())
-    while safe_stop.is_set():
+
+    while safe_stop():
         readable, _, _ = select.select([_control_sock], [], [], 0.001)
         if _control_sock not in readable:
             continue
@@ -91,7 +95,8 @@ def sync_users_with_server(_conn: socket.socket):
             try:
                 notify_user_connection(_conn, True)
             except Exception as e:
-                error_log(f"Error syncing list at {sync_users_with_server.__name__}()/{os.path.relpath(sync_users_with_server.__code__.co_filename)} exp :  {e}")
+                error_log(
+                    f"Error syncing list at {sync_users_with_server.__name__}()/{os.path.relpath(sync_users_with_server.__code__.co_filename)} exp :  {e}")
     return
 
 
@@ -116,7 +121,7 @@ function_map = {
 
 
 def control_connection(_conn: socket.socket) -> None:
-    while safe_stop.is_set():
+    while safe_stop():
         try:
             readable, _, _ = select.select([_conn], [], [], 0.001)
         except OSError:
@@ -130,7 +135,7 @@ def control_connection(_conn: socket.socket) -> None:
         except (socket.error, OSError) as e:
             error_log(f"Socket error at manage {__name__}/{__file__} exp:{e}")
             return
-        function_map.get(data.raw_text,lambda x: None)(_conn)
+        function_map.get(data.raw_text, lambda x: None)(_conn)
 
 
 def ping_user(remote_peer: remotepeer.RemotePeer) -> bool:
@@ -145,7 +150,7 @@ def ping_user(remote_peer: remotepeer.RemotePeer) -> bool:
 
 
 def signal_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
-    while safe_stop.is_set() and (not queue_in.empty()):
+    while safe_stop() and (not queue_in.empty()):
         peer_object = queue_in.get()
         try:
             with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
@@ -161,7 +166,6 @@ def signal_status(queue_in: queue.Queue[remotepeer.RemotePeer]) -> None:
 
 
 def notify_leaving_status_to_users() -> None:
-
     const.LOCK_LIST_PEERS.acquire()
     const.THIS_OBJECT.status = 0
     for peer in const.LIST_OF_PEERS.values():
@@ -174,7 +178,8 @@ def notify_leaving_status_to_users() -> None:
                 SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(notify_soc)
         except socket.error as e:
-            error_log(f"Error sending leaving status at {notify_leaving_status_to_users.__name__}()/{notify_leaving_status_to_users.__code__.co_filename} exp :  {e}")
+            error_log(
+                f"Error sending leaving status at {notify_leaving_status_to_users.__name__}()/{notify_leaving_status_to_users.__code__.co_filename} exp :  {e}")
     return None
 
 
@@ -182,7 +187,7 @@ def sync_list() -> None:
     with const.LOCK_LIST_PEERS:
         list_copy = deque(const.LIST_OF_PEERS.values())
     while list_copy:
-        if safe_stop.is_set():
+        if safe_stop():
             return
         peer_obj = list_copy.popleft()
         if not ping_user(peer_obj):
@@ -193,8 +198,7 @@ def sync_list() -> None:
 
 
 def end_requests_connection() -> None:
-    global safe_stop
-    safe_stop.set()
+    const.CONTROL_FLAG[REQ_FLAG].clear()
     const.THIS_OBJECT.status = 0
     notify_leaving_status_to_users()
     print("::Requests connections ended")

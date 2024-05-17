@@ -10,7 +10,7 @@ import urllib.request
 
 
 def initiate():
-    clear_logs() if const.CLEARLOGSFLAG else None
+    clear_logs() if const.CLEAR_LOGS else None
     config_map = configparser.ConfigParser()
     try:
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
