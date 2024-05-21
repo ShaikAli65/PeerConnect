@@ -5,6 +5,7 @@ from src.core import connectserver as connect_server, requests_handler as manage
 from src.webpage_handlers import handle_data, handle_signals
 from src.managers import filemanager
 from src.webpage import httphandler
+from src.avails import textobject
 
 
 def end_session(sig='',frame='') -> Union[bool, None]:
@@ -17,7 +18,7 @@ def end_session(sig='',frame='') -> Union[bool, None]:
 
     print("::Initiating End Sequence",sig,frame)
     # activity_log("::Initiating End Sequence")
-    connect_server.End_Safe.set()
+    textobject.stop_all_text()
     connect_server.end_connection_with_server()
     senders.RecentConnections.end()
     if not const.PAGE_HANDLE_CALL.is_set():

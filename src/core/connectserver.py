@@ -13,6 +13,7 @@ connection_status = False
 
 
 def safe_stop():
+    global control_flag
     return control_flag.is_set()
 
 
@@ -52,7 +53,9 @@ def get_list_from(initiate_socket: socket.socket) -> bool:
     const.PAGE_HANDLE_CALL.wait()
     global Error_Calls
 
-    until_sock_is_readable(initiate_socket,control_flag=control_flag)
+    initiate_socket = until_sock_is_readable(initiate_socket, control_flag=control_flag)
+    if initiate_socket is None:
+        return False
 
     raw_length = initiate_socket.recv(8)
     length = struct.unpack('!Q', raw_length)[0]
@@ -63,9 +66,10 @@ def list_from_forward_control(list_owner:remote_peer.RemotePeer):
     use.echo_print('::Connection redirected by server to : ', list_owner.req_uri)
     list_connection_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
     list_connection_socket.connect(list_owner.req_uri)
-    SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, byte_able=False).send()
-    use.start_thread(_target=get_list_from, _args=(list_connection_socket,))
-    return True if list_connection_socket else False
+    if SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, byte_able=False).send():
+        use.start_thread(_target=get_list_from, _args=(list_connection_socket,))
+    else:
+        return True
 
 
 def initiate_connection() -> bool:

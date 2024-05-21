@@ -67,11 +67,17 @@ class RemotePeer:
 
 def deserialize(to_recv: socket.socket) -> RemotePeer:
 
-    until_sock_is_readable(to_recv, control_flag=const.CONTROL_FLAG[RP_FLAG])
-
+    to_recv = until_sock_is_readable(to_recv, control_flag=const.CONTROL_FLAG[RP_FLAG])
+    if to_recv is None:
+        return RemotePeer()
     try:
         raw_length = to_recv.recv(8)
         length = struct.unpack('!Q', raw_length)[0]
+
+        to_recv = until_sock_is_readable(to_recv, control_flag=const.CONTROL_FLAG[RP_FLAG])
+        if to_recv is None:
+            return RemotePeer()
+
         serialized = to_recv.recv(length) if length else b''
         return pickle.loads(serialized)
     except Exception as e:

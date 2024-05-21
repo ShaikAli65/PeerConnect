@@ -49,7 +49,7 @@ def get_local_ip() -> str:
             except soc.error as err:
                 print("got error at getip() :", err)
                 config_ip = soc.gethostbyname(soc.gethostname())
-                if const.SYS_NAME == 'Darwin' or const.SYS_NAME == 'Linux':
+                if const.LINUX or const.DARWIN:
                     config_ip = subprocess.getoutput("hostname -I")
     else:
         config_ip = "::1"
@@ -105,8 +105,7 @@ def validate(client: soc.socket):
 
 
 def getip():
-    config_soc = soc.socket(IP_VERSION, PROTOCOL)
-    config_ip = ''
+
     if IP_VERSION == soc.AF_INET6:
         response = requests.get('https://api64.ipify.org?format=json')
         if response.status_code == 200:

@@ -1,6 +1,11 @@
+import os.path
+if __name__ == "__main__":
+    import sys
+    sys.path.append(os.path.join("C:\\Users\\7862s\\Desktop\\remotezone"))
+
 from src.avails.textobject import DataWeaver
 from src.core import *
-from src.trails.trail import fileReceiver
+from src.managers.filemanager import fileReceiver
 
 if __name__ == "__main__":
     const.PATH_DOWNLOAD = "D:\\server"

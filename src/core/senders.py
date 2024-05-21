@@ -97,7 +97,7 @@ def sendMessage(data: DataWeaver, sock:socket = None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
-    What is going on here??, can't be understood
+    What is going on here ?
     the thing with the decorator is different here, look into decorator's doc string for further reference
     :param data:
     :param sock:
@@ -105,7 +105,7 @@ def sendMessage(data: DataWeaver, sock:socket = None):
     """
     back_up_id = data.id  # back up the id, to be used in case of error
     try:
-        data['id'] = const.THIS_OBJECT.id  # Changing the id to your id
+        data['id'] = const.THIS_OBJECT.id  # Changing the id to this peer's id
         data.send(sock)
         echo_print("sent message to ", sock.getpeername())
     except socket.error as exp:

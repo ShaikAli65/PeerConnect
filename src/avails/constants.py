@@ -1,15 +1,19 @@
 import socket as soc
 import threading
+import platform
+
 
 CLEAR_LOGS = 1
 END_OR_NOT = False
-USERNAME = ''
+USERNAME = 'admin'
 SERVER_IP = ''
 THIS_IP = 'localhost'
-SYS_NAME = ''
-WINDOWS = "Windows"
-DARWIN = "Darwin"
-LINUX = "Linux"
+
+SYS_NAME = platform.system()
+WINDOWS = bool(SYS_NAME == "Windows")
+DARWIN = bool(SYS_NAME == "Darwin")
+LINUX = bool(SYS_NAME == "Linux")
+
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 FORMAT = 'utf-8'
@@ -40,7 +44,7 @@ LOCK_LIST_PEERS = threading.Lock()
 
 ACTIVE_PEERS = []
 PROFILE_LIST = []
-CONTROL_FLAG = [threading.Event() for x in range(5)]
+CONTROL_FLAG = [threading.Event() for x in range(10)]
 for event in CONTROL_FLAG:
     event.set()
 

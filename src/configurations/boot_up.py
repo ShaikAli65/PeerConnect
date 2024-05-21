@@ -7,6 +7,7 @@ import configparser
 import socket as soc
 import subprocess
 import urllib.request
+import ipaddress
 
 
 def initiate():
@@ -35,12 +36,13 @@ def get_ip() -> str:
     Raises:
         soc.error: If a socket error occurs during connection.
     """
-    config_ip = ''
     if const.IP_VERSION == soc.AF_INET:
-        config_ip = get_v4()
+        return get_v4() or 'localhost'
     elif const.IP_VERSION == soc.AF_INET6:
-        config_ip = get_v6()
-    return config_ip
+        if soc.has_ipv6:
+            return get_v6() or get_v4() or '::1'
+        else:
+            return get_v4() or 'localhost'
 
 
 def get_v4():
@@ -52,7 +54,7 @@ def get_v4():
             error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
 
             config_ip = soc.gethostbyname(soc.gethostname())
-            if const.SYS_NAME == const.DARWIN or const.SYS_NAME == const.LINUX:
+            if const.DARWIN or const.LINUX:
                 config_ip = subprocess.getoutput("hostname -I")
 
     return config_ip
@@ -67,11 +69,12 @@ def get_v4():
 
 
 def get_v6():
-    if const.SYS_NAME == const.WINDOWS:
+    if const.WINDOWS:
+        local_v6 = ""
         for sock_tuple in soc.getaddrinfo("", None, soc.AF_INET6, proto=const.PROTOCOL, flags=soc.AI_PASSIVE):
-            if sock_tuple[4][3] == 0:
+            if not ipaddress.ip_address(sock_tuple[4][0]).is_link_local:
                 return sock_tuple[4][0]
-    elif const.SYS_NAME == const.DARWIN or const.SYS_NAME == const.LINUX:
+    elif const.DARWIN or const.LINUX:
         return get_v6_from_shell() or get_v6_from_api64()
 
 
@@ -186,7 +189,7 @@ def validate_ports() -> None:
 
 @NotInUse
 def retrace_browser_path():
-    if const.SYS_NAME == const.WINDOWS:
+    if const.WINDOWS:
         import winreg
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                              r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice")
@@ -199,13 +202,13 @@ def retrace_browser_path():
 
         return path.strip('"')
 
-    if const.SYS_NAME == const.DARWIN:
+    if const.DARWIN:
         return subprocess.check_output(["osascript",
                                         "-e",
                                         'tell application "System Events" to get POSIX path of (file of process "Safari" as alias)'
                                         ]).decode().strip()
 
-    if const.SYS_NAME == const.LINUX:
+    if const.LINUX:
         command_output = subprocess.check_output(["xdg-settings", "get", "default-web-browser"]).decode().strip()
 
         if command_output.startswith('userapp-'):
@@ -219,10 +222,10 @@ def launch_web_page():
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
-        if const.SYS_NAME == const.WINDOWS:
+        if const.WINDOWS:
             os.system(f"start {page_url}")
 
-        elif const.SYS_NAME == const.LINUX or const.SYS_NAME == const.DARWIN:
+        elif const.LINUX or const.DARWIN:
             subprocess.Popen(['xdg-open', page_url])
 
         pass

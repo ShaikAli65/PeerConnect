@@ -30,7 +30,6 @@ if __name__ == "__main__":
     # exit(1)
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    const.SYS_NAME = platform.system()
     boot_up.set_paths()
     boot_up.initiate()
     profile_manager.load_profiles_to_program()

@@ -50,13 +50,8 @@ class SimplePeerText:
         """
         self.sock.send(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
-        until_sock_is_readable(self.sock,control_flag=self.__control_flag)
-        header_raw_length = self.sock.recv(4)
-        send_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
 
-        until_sock_is_readable(self.sock, control_flag=self.__control_flag)
-
-        return True if self.sock.recv(send_length) == const.TEXT_SUCCESS_HEADER else False
+        return self.__recv_header()
 
     def receive(self, cmp_string: Union[str, bytes] = '') -> Union[bool, bytes]:
         """
@@ -71,31 +66,41 @@ class SimplePeerText:
                         otherwise returns the received text as bytes.
 
         """
-        until_sock_is_readable(self.sock,control_flag=self.__control_flag)
+
+        while self.safe_stop:
+            readable, _, _ = select.select([self.sock], [], [], 0.005)
+            if self.sock in readable:
+                break
+        else:
+            return False if cmp_string else b''
+
         raw_length = self.sock.recv(4)
-        receive_text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
+        text_length_received = struct.unpack('!I', raw_length)[0] if raw_length else 0
         received_data = bytearray()
 
-        while len(received_data) < receive_text_length:
+        while len(received_data) < text_length_received:
 
             while self.safe_stop:
                 readable, _, _ = select.select([self.sock], [], [], 0.005)
                 if self.sock in readable:
                     break
+            else:
+                return False if cmp_string else b''
 
-            chunk = self.sock.recv(min(self.chunk_size, receive_text_length - len(received_data)))
+            chunk = self.sock.recv(min(self.chunk_size, text_length_received - len(received_data)))
             if not chunk:
                 break
             received_data.extend(chunk)
-
         self.raw_text = bytes(received_data)
 
-        if self.raw_text:
-            self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
-            self.sock.sendall(const.TEXT_SUCCESS_HEADER)
-            if cmp_string:
-                return True if self.raw_text == (
-                    cmp_string.encode(const.FORMAT) if isinstance(cmp_string, str) else cmp_string) else False
+        if not self.raw_text:
+            return b''
+
+        self.__send_header()
+
+        if cmp_string:
+            return self.raw_text == (cmp_string.encode(const.FORMAT) if isinstance(cmp_string, str) else cmp_string)
+
         return self.raw_text
 
     def decode(self):
@@ -114,6 +119,30 @@ class SimplePeerText:
 
         """
         return self.raw_text == cmp_string
+
+    def __send_header(self):
+        self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
+        self.sock.sendall(const.TEXT_SUCCESS_HEADER)
+
+    def __recv_header(self):
+
+        while self.safe_stop:
+            readable, _, _ = select.select([self.sock, ], [], [], 0.001)
+            if self.sock in readable:
+                break
+        else:
+            return False
+
+        header_raw_length = self.sock.recv(4)
+        header_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
+
+        while self.safe_stop:
+            readable, _, _ = select.select([self.sock, ], [], [], 0.001)
+            if self.sock in readable:
+                break
+        else:
+            return False
+        return self.sock.recv(header_length) == const.TEXT_SUCCESS_HEADER
 
     @property
     def safe_stop(self):
@@ -210,8 +239,7 @@ class DataWeaver:
         This function is written on top of SimplePeerText's send function
 
         :param receiver_sock:
-        :return:
-        
+        :returns True if sends text succesfully else False:
         """
         return SimplePeerText(text=self.dump(), refer_sock=receiver_sock).send()
 
