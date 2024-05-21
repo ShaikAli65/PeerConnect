@@ -1,10 +1,9 @@
+import threading
 from collections import defaultdict
 
 from src.core import *
 from typing import Union
-
-
-PEER_TEXT = 0
+from src.avails.constants import PEER_TEXT_FLAG
 
 
 class SimplePeerText:
@@ -26,12 +25,12 @@ class SimplePeerText:
         '__control_flag': threading.Event,
         'id': str,
     }
-    __slots__ = ['raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',]
+    __slots__ = ('raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',)
 
-    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512):
+    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512, control_flag:threading.Event = None):
         self.raw_text = text.encode(const.FORMAT) if byte_able else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
-        self.__control_flag = const.CONTROL_FLAG[PEER_TEXT]
+        self.__control_flag = control_flag or PEER_TEXT_FLAG
         self.sock = refer_sock
         self.chunk_size = chunk_size
 
@@ -70,11 +69,20 @@ class SimplePeerText:
         while self.safe_stop:
             readable, _, _ = select.select([self.sock], [], [], 0.005)
             if self.sock in readable:
+                raw_length = self.sock.recv(4)
                 break
         else:
             return False if cmp_string else b''
 
-        raw_length = self.sock.recv(4)
+        # buffer = bytearray()
+        # self.sock.setblocking(False)
+        # while self.safe_stop:
+        #     data = self.sock.recv(4)
+        #     buffer.extend(data)
+        #     if len(buffer) == 4:
+        #         break
+        # raw_length = bytes(buffer)
+
         text_length_received = struct.unpack('!I', raw_length)[0] if raw_length else 0
         received_data = bytearray()
 
@@ -83,11 +91,11 @@ class SimplePeerText:
             while self.safe_stop:
                 readable, _, _ = select.select([self.sock], [], [], 0.005)
                 if self.sock in readable:
+                    chunk = self.sock.recv(min(self.chunk_size, text_length_received - len(received_data)))
                     break
             else:
                 return False if cmp_string else b''
 
-            chunk = self.sock.recv(min(self.chunk_size, text_length_received - len(received_data)))
             if not chunk:
                 break
             received_data.extend(chunk)
@@ -127,7 +135,7 @@ class SimplePeerText:
     def __recv_header(self):
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.001)
+            readable, _, _ = select.select([self.sock, ], [], [], 0.005)
             if self.sock in readable:
                 break
         else:
@@ -137,7 +145,7 @@ class SimplePeerText:
         header_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.001)
+            readable, _, _ = select.select([self.sock, ], [], [], 0.005)
             if self.sock in readable:
                 break
         else:
@@ -202,7 +210,7 @@ class DataWeaver:
         'data_lock': threading.Lock,
         '__data': dict
     }
-    __slots__ = ['data_lock', '__data']
+    __slots__ = ('data_lock', '__data')
 
     def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str, tuple] = None,
                  byte_data: bytes = None):
@@ -304,4 +312,4 @@ class DataWeaver:
 
 
 def stop_all_text():
-    const.CONTROL_FLAG[PEER_TEXT].clear()
+    PEER_TEXT_FLAG.clear()

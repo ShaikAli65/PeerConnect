@@ -1,7 +1,7 @@
 import socket as soc
 import threading
 import platform
-
+from asyncio import Event
 
 CLEAR_LOGS = 1
 END_OR_NOT = False
@@ -36,16 +36,15 @@ PATH_DOWNLOAD = ''
 
 IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
-count_of_user_id = 0
-LOCK_USER_ID = threading.Lock()
 LOCK_PRINT = threading.Lock()
 LOCK_LIST_PEERS = threading.Lock()
 
 
 ACTIVE_PEERS = []
 PROFILE_LIST = []
-CONTROL_FLAG = [threading.Event() for x in range(10)]
-for event in CONTROL_FLAG:
+
+FLAGZ = [threading.Event() for x in range(10)]
+for event in FLAGZ:
     event.set()
 
 # This list has the whole control over the project files where functions
@@ -54,15 +53,15 @@ for event in CONTROL_FLAG:
 # to proceed further or not
 # and as the door,s open for exceptions some part of program may use their object's event to check for
 # end() functions available in this program mostly set their respective events
-# which lead to blocking parts break.
+# which leads to blocking parts break.
 
-# Respective indexes are named for readability
-# PEER_TEXT = 0
-# NOMAD_FLAG = 1
-# REQ_FLAG = 2
-# _ = 3 # use !!
-# USE ABLES_FLAG = 4
-# CONNECT_SERVER_FLAG = 5
+# Respective Events are named for readability
+PEER_TEXT_FLAG = FLAGZ[0]
+NOMAD_FLAG = FLAGZ[1]
+REQ_FLAG = FLAGZ[2]
+RP_FLAG = FLAGZ[3]
+USEABLES_FLAG = FLAGZ[4]
+CONNECT_SERVER_FLAG = FLAGZ[5]
 
 # and
 # the suggestion to use a non-blocking socket instead of
@@ -95,7 +94,6 @@ CMD_CLOSING_HEADER = 'this is a command to core_/!_close connection'
 CMD_FILESOCKET_HANDSHAKE = 'this is a command to core_/!_file socket open'
 CMD_TEXT = "this is a message"
 CMD_RECV_DIR = 'this is a command to core_/!_recv dir'
-CMD_RECV_DIR_LITE = b'this is a command to core_/!_recv dir_lite'
 
 
 CMD_FILE_SUCCESS = b'file_success'

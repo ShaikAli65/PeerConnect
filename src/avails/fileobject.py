@@ -2,7 +2,7 @@ from typing import Any
 
 from pathlib import Path
 from math import isclose
-
+from collections import namedtuple
 import tqdm
 import tempfile
 from src.core import *
@@ -13,27 +13,12 @@ type _Size = int
 type _FilePath = Union[str, Path]
 type FiLe = PeerFile
 
+__FileItem = namedtuple('__FileItem', ['name', 'size', 'path'])
 
-class _FileItem:
-    def __init__(self, file_name: str, size: int, full_path: str | Path):
-        self.__name = file_name
-        self.__path = full_path
-        self.__size = size
 
-    @property
-    def size(self):
-        return self.__size
-
-    @property
-    def name(self):
-        return self.__name
-
-    @property
-    def path(self):
-        return self.__path
-
-    @classmethod
-    def stringify_size(cls, size: int) -> str:
+class _FileItem(__FileItem):
+    @staticmethod
+    def stringify_size(size: int) -> str:
         sizes = ['B', 'KB', 'MB', 'GB', 'TB']
         index = 0
         while size >= 1024 and index < len(sizes) - 1:
@@ -42,17 +27,12 @@ class _FileItem:
         return f"{size:.2f} {sizes[index]}"
 
     def __str__(self):
-        size_str = _FileItem.stringify_size(self.size)
+        size_str = self.stringify_size(self.size)
         name_str = f"...{self.name[-10:]}" if len(self.name) > 10 else self.name
         return f"file({name_str}, {size_str})"
 
     def __repr__(self):
         return self.__str__()
-
-    def __iter__(self):
-        yield self.name
-        yield self.size
-        yield self.path
 
 
 class PeerFile:
@@ -205,8 +185,8 @@ class PeerFile:
             while self.safe_stop and (chunk := file.read(self.__chunk_size)):
                 yield chunk
 
-    @classmethod
-    def __validatename__(cls, file_addr: str) -> str:
+    @staticmethod
+    def __validatename__(file_addr: str) -> str:
         """
             Ensures a unique filename if a file with the same name already exists.
 
@@ -224,8 +204,8 @@ class PeerFile:
             counter += 1
         return new_file_name
 
-    @classmethod
-    def get_temp_file(cls):
+    @staticmethod
+    def get_temp_file():
         temp_file = tempfile.NamedTemporaryFile(mode='w+', prefix="peer_c", dir=const.PATH_DOWNLOAD, delete=False)
         return temp_file
 
@@ -268,7 +248,7 @@ GROUP_MAX = 6
 
 
 class _FileGroup:
-    def __init__(self, files: list[_FileItem] = None,*, bandwidth: int = 1024 * 1024 * 512, level: int = GROUP_MID):
+    def __init__(self, files: list[_FileItem] = None, *, bandwidth: int = 1024 * 1024 * 512, level: int):
         self.files = sorted(files, key=lambda x: x.size)
         self.grouped_files: list[list[_FileItem]] = []
         self.total_size = sum(x.size for x in files)
@@ -284,17 +264,20 @@ class _FileGroup:
         for file in self.files:
             file_size = file.size
 
-            if current_part_size + file_size <= self.part_size or isclose(current_part_size + file_size, self.part_size,
-                                                                          rel_tol=0.004):
+            if current_part_size + file_size <= self.part_size or \
+                    isclose(current_part_size + file_size, self.part_size, rel_tol=0.004):
+
                 parts[-1].append(file)
                 current_part_size += file_size
                 continue
-            if file_size >= 1024 ** 3 or isclose(file_size, 1024 ** 3, rel_tol=0.0002):
+            if file_size >= 1024 ** 3 or isclose(file_size, 1024 ** 3, rel_tol=0.0002):  # check again ??
                 parts.append([file])
                 current_part_size = 0
             else:
                 parts.append([file])
                 current_part_size = file_size
+
+
         self.grouped_files = parts
         self._re_group_if_needed()
 
@@ -423,7 +406,8 @@ def make_file_groups(file_list: list[_FilePath], grouping_level: int) -> _FileGr
     return grouped
 
 
-def make_sock_groups(sock_count: int, *, connect_ip: tuple[Any, ...] = None, bind_ip: tuple[Any, ...] = None) -> _SockGroup:
+def make_sock_groups(sock_count: int, *, connect_ip: tuple[Any, ...] = None,
+                     bind_ip: tuple[Any, ...] = None) -> _SockGroup:
     """
     This factory function blocks until required no. of socket-connections are not made
     Caller is responsible for closing of sockets returned by this function
@@ -453,7 +437,6 @@ def make_sock_groups(sock_count: int, *, connect_ip: tuple[Any, ...] = None, bin
 
 @NotInUse
 class _PeerFile:
-
     __annotations__ = {
         'uri': Tuple[str, int],
         'path': str,
@@ -465,8 +448,8 @@ class _PeerFile:
     __dict__ = {'uri': ('localhost', 8080), 'path': '', '__control_flag': True, 'chunk_size': 1024 * 512,
                 'error_ext': '.invalid'}
 
-    __slots__ = ['__code__', '_lock', '__control_flag', '__chunk_size', '__error_extension', '__sock', 'uri', 'path',
-                 'filename', 'file_size', 'type', 'raw_size']
+    __slots__ = ('__code__', '_lock', '__control_flag', '__chunk_size', '__error_extension', '__sock', 'uri', 'path',
+                 'filename', 'file_size', 'type', 'raw_size')
 
     def __init__(self,
                  uri: Tuple[str, int],

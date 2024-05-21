@@ -7,11 +7,11 @@ import src.avails.remotepeer
 from src.core import *
 from src.configurations.boot_up import is_port_empty
 
-USEABLES_FLAG = 4  # control_flag
+from src.avails.constants import USEABLES_FLAG  # control_flag
 
 
 def safe_stop():
-    return const.CONTROL_FLAG[USEABLES_FLAG].is_set()
+    return USEABLES_FLAG.is_set()
 
 
 def start_thread(_target, _args=()):
@@ -85,7 +85,7 @@ def get_free_port() -> int:
 
 @NotInUse
 def get_peer_obj_from_sock(_conn: socket.socket):
-    """Retrieves peer object from list using connected socket using ip address"""
+    """Retrieves peer object from list using connected socket's ip address"""
     with const.LOCK_LIST_PEERS:
         return const.LIST_OF_PEERS.get(_conn.getpeername()[0], None)
 

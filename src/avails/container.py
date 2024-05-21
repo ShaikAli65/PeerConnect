@@ -13,7 +13,7 @@ class CustomSet:
         '__lock': threading.Lock
     }
 
-    __slots__ = ['__list', '__lock', 'changes']
+    __slots__ = ('__list', '__lock', 'changes')
 
     def __init__(self):
         self.__list = set()

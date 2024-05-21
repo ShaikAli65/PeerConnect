@@ -1,13 +1,14 @@
+import socket
 import webbrowser
-
-from src.avails import useables as use
-from src.core import *
-from src.configurations.configure_app import set_constants
 import configparser
 import socket as soc
 import subprocess
 import urllib.request
 import ipaddress
+
+from src.avails import useables as use
+from src.core import *
+from src.configurations.configure_app import set_constants
 
 
 def initiate():
@@ -32,7 +33,6 @@ def get_ip() -> str:
     Returns:
         str: The local IP address as a string.
 
-
     Raises:
         soc.error: If a socket error occurs during connection.
     """
@@ -42,7 +42,8 @@ def get_ip() -> str:
         if soc.has_ipv6:
             return get_v6() or get_v4() or '::1'
         else:
-            return get_v4() or 'localhost'
+            const.IP_VERSION = socket.AF_INET
+            return get_ip()
 
 
 def get_v4():
@@ -72,8 +73,9 @@ def get_v6():
     if const.WINDOWS:
         local_v6 = ""
         for sock_tuple in soc.getaddrinfo("", None, soc.AF_INET6, proto=const.PROTOCOL, flags=soc.AI_PASSIVE):
-            if not ipaddress.ip_address(sock_tuple[4][0]).is_link_local:
-                return sock_tuple[4][0]
+            ip, _, _, _ = sock_tuple[4]
+            if not ipaddress.ip_address(ip).is_link_local:
+                return ip
     elif const.DARWIN or const.LINUX:
         return get_v6_from_shell() or get_v6_from_api64()
 
@@ -169,19 +171,24 @@ def is_port_empty(port):
         with soc.socket(const.IP_VERSION, soc.SOCK_STREAM) as s:
             s.bind((const.THIS_IP, port))
             return True
-    except OSError:
+    except socket.gaierror:
+        print("ERROR IN SETTING UP NETWORK ")
+        exit(1)
+    except (OSError,socket.error):
         return False
 
 
 def validate_ports() -> None:
     ports_list = [const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ,
                   const.PORT_FILE]
-    for i in range(len(ports_list)):
-        if is_port_empty(ports_list[i]):
+    for i, port in enumerate(ports_list):
+        if is_port_empty(port):
             continue
         else:
-            while not is_port_empty(ports_list[i]):
-                ports_list[i] += 1
+            while not is_port_empty(port):
+                port += 1
+                time.sleep(1)
+            ports_list[i] += port
             error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ, const.PORT_FILE = ports_list
     return None

@@ -96,8 +96,9 @@ def open_file_dialog_window(prev_directory=["", ]) -> list[str]:
 def endFileThreads():
     global every_file
     try:
-        for file in every_file.values():
-            file.hold()
+        for file_list in every_file.values():
+            for file in file_list:
+                file.break_loop()
     except AttributeError as e:
         error_log(f"::Error at endFileThreads() from  endFileThreads/filemanager at line 79: {e}")
     every_file.clear()

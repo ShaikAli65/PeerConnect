@@ -3,16 +3,16 @@ from src.avails import useables as use
 from src.avails.remotepeer import RemotePeer
 import src.core.receivers as receivers
 
-NOMAD_FLAG = 1  # control flag index
+from src.avails.constants import NOMAD_FLAG   # control flag
 
 
 class Nomad:
     __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
-    __slots__ = ['address', '__control_flag', 'main_socket']
+    __slots__ = ('address', '__control_flag', 'main_socket')
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
-        self.__control_flag = const.CONTROL_FLAG[NOMAD_FLAG]
+        self.__control_flag = NOMAD_FLAG
         const.THIS_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.PORT_REQ, status=1)
         use.echo_print("::Initiating Nomad Object", self.address)
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -50,7 +50,7 @@ class Nomad:
         return
 
     def end(self):
-        const.CONTROL_FLAG[NOMAD_FLAG].clear()
+        NOMAD_FLAG.clear()
         receivers.currently_in_connection.fromkeys(receivers.currently_in_connection, False)
         self.main_socket.close() if self.main_socket else None
         use.echo_print("::Nomad Object Ended")

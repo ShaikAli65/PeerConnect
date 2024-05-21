@@ -20,7 +20,7 @@ class NotInUse:
         'function': str,
         '__doc__': str
     }
-    __slots__ = ['function', '__doc__']
+    __slots__ = ('function', '__doc__')
 
     def __init__(self, function):
         """
@@ -154,16 +154,16 @@ class CustomDict:
         return dict.fromkeys(seq, value)
 
 
-def until_sock_is_readable(sock: socket.socket, *, control_flag: threading.Event) -> Union[socket.socket, None]:
+def until_sock_is_readable(sock: socket.socket, *, control_flag: threading.Event):
     """
-    Helper function, this function blocks until a socket is readable using `select.select` and timeout defaults to 0.001
+    Helper function, this function blocks until a socket is readable using `select.select` and timeout defaults to 0.01
     :param sock: socket to get ready
     :param control_flag: flag to end the loop, this function checks for func `threading.Event::is_set`
     :return: returns socket when it is readable ,returns None if the loop breaks through `threading.Event::is_set`
     """
     try:
         while control_flag.is_set():
-            readable, _, _ = select.select([sock,], [], [], 0.001)
+            readable, _, _ = select.select([sock,], [], [], 0.01)
             if sock in readable:
                 return sock
         else:

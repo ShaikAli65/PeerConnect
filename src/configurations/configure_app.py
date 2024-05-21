@@ -25,8 +25,7 @@ def set_constants(config_map: configparser) -> bool:
     const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
     if const.IP_VERSION == soc.AF_INET6 and not socket.has_ipv6:
         const.IP_VERSION = soc.AF_INET
-    # print_constants()
-    if const.USERNAME == '' or const.SERVER_IP == '' or const.PORT_THIS == 0 or const.PORT_PAGE_DATA == 0 or const.PORT_SERVER == 0:
+    if const.USERNAME == '' or const.PORT_THIS == 0 or const.PORT_PAGE_DATA == 0 or const.PORT_SERVER == 0:
         error_log(
             f"Error reading default_config.ini from set_constants() in {set_constants.__name__}()/{set_constants.__code__.co_filename}")
         return False
