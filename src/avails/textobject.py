@@ -67,7 +67,7 @@ class SimplePeerText:
         """
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.sock], [], [], 0.005)
+            readable, _, _ = select.select([self.sock], [], [], 0.5)
             if self.sock in readable:
                 raw_length = self.sock.recv(4)
                 break
@@ -89,7 +89,7 @@ class SimplePeerText:
         while len(received_data) < text_length_received:
 
             while self.safe_stop:
-                readable, _, _ = select.select([self.sock], [], [], 0.005)
+                readable, _, _ = select.select([self.sock], [], [], 0.5)
                 if self.sock in readable:
                     chunk = self.sock.recv(min(self.chunk_size, text_length_received - len(received_data)))
                     break
@@ -135,7 +135,7 @@ class SimplePeerText:
     def __recv_header(self):
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.005)
+            readable, _, _ = select.select([self.sock, ], [], [], 0.5)
             if self.sock in readable:
                 break
         else:
@@ -145,7 +145,7 @@ class SimplePeerText:
         header_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.005)
+            readable, _, _ = select.select([self.sock, ], [], [], 0.5)
             if self.sock in readable:
                 break
         else:

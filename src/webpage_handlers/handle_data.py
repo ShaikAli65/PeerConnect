@@ -19,7 +19,7 @@ stack_safe: threading.Lock = threading.Lock()
 
 def handle_connection(addr_id):
     try:
-        _nomad: RemotePeer = use.get_peer_obj_from_id(addr_id)
+        _nomad: RemotePeer = use.get_peer_from_id(addr_id)
 
     except KeyError:
         print("Looks like the user is not in the list can't connect to the user",const.LIST_OF_PEERS)

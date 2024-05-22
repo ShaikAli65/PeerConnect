@@ -8,7 +8,7 @@ from src.avails.constants import NOMAD_FLAG   # control flag
 
 class Nomad:
     __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
-    __slots__ = ('address', '__control_flag', 'main_socket')
+    __slots__ = ('address', '__control_flag', 'main_socket','selector')
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
@@ -18,6 +18,7 @@ class Nomad:
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
         self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.main_socket.bind(self.address)
+        self.selector = selectors.DefaultSelector()
 
     def __resetSocket(self):
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -28,7 +29,6 @@ class Nomad:
     def __acceptConnections(self):
         try:
             initiate_conn, _ = self.main_socket.accept()
-            activity_log(f'New connection from {_}')
             use.echo_print(f"New connection from {_}")
             use.start_thread(receivers.connectNew, _args=(initiate_conn,))
         except (socket.error, OSError) as e:
@@ -40,7 +40,7 @@ class Nomad:
         use.echo_print("::Listening for connections at ", self.address)
 
         while self.safe_stop:
-            readable, _, _ = select.select([self.main_socket], [], [], 0.001)
+            readable, _, _ = select.select([self.main_socket], [], [], 0.01)
             if self.main_socket not in readable:
                 continue
 

@@ -4,7 +4,6 @@ from pathlib import Path
 from math import isclose
 from collections import namedtuple
 import tqdm
-import tempfile
 from src.core import *
 from src.avails.textobject import SimplePeerText
 
@@ -73,12 +72,10 @@ class PeerFile:
                bool: True if the file is sent successfully, False otherwise.
         """
         filename, file_size, file_path = file
-        # print("sending :", file)
         self.calculate_chunk_size(file_size)
         if not SimplePeerText(text=filename, refer_sock=receiver_sock).send():
             raise ValueError(f"Cannot send file_path :{filename} some error occurred")
         receiver_sock.send(struct.pack('!Q', file_size))
-        # print("sent size",file_size,self.__chunk_size,receiver_sock)
 
         # send_progress = tqdm.tqdm(range(file_size), f"::sending {filename[:20]} ... ", unit="B", unit_scale=True,
         #                           unit_divisor=1024)
@@ -204,16 +201,17 @@ class PeerFile:
             counter += 1
         return new_file_name
 
-    @staticmethod
-    def get_temp_file():
-        temp_file = tempfile.NamedTemporaryFile(mode='w+', prefix="peer_c", dir=const.PATH_DOWNLOAD, delete=False)
-        return temp_file
-
     def __repr__(self):
         """
             Returns the file details
         """
         return f"_PeerFile(paths={self.file_paths.__repr__()})"
+
+    def __iter__(self):
+        """
+        :returns Internal file_paths list's iterator :
+        """
+        return self.file_paths.__iter__()
 
     @property
     def safe_stop(self):

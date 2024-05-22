@@ -40,7 +40,7 @@ def _start_file_sending_threads(file_groups, sockets):
     return file_list
 
 
-def fileSender(file_data: DataWeaver, receiver_sock: socket.socket):
+def fileSender(file_data: DataWeaver, receiver_sock):
     file_list = file_data.content['list'] or open_file_dialog_window()
     if not file_list:
         return
@@ -76,7 +76,7 @@ def fileReceiver(file_data: DataWeaver):
     add_to_list(file_data.id, file_list)
 
 
-def open_file_dialog_window(prev_directory=["", ]) -> list[str]:
+def open_file_dialog_window(prev_directory=["", ]):
     """Opens the system-like file picker dialog.
     :type prev_directory: list
     """
@@ -117,7 +117,7 @@ def _fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
             _data.content = file
             _fileSender(_data, receiver_sock, is_dir)
     try:
-        receiver_obj: RemotePeer = use.get_peer_obj_from_id(_data.id)
+        receiver_obj: RemotePeer = use.get_peer_from_id(_data.id)
         temp_port = use.get_free_port()
 
         file = _PeerFile(uri=(const.THIS_IP, temp_port), path=_data.content)

@@ -3,6 +3,7 @@ import pickle
 from typing import Tuple
 
 from src.avails.constants import RP_FLAG   # control flag for this class
+from itertools import count
 
 
 class RemotePeer:
@@ -26,7 +27,8 @@ class RemotePeer:
         self.callbacks = 0
         self.req_uri = (ip, report)
         self.id = ip
-        self.file_count = 0
+        self.file_count = count()
+
 
     def serialize(self, _to_send: socket.socket):
         try:
@@ -41,7 +43,7 @@ class RemotePeer:
         return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.req_uri[1]}, {self.status})'
 
     def get_file_count(self):
-        return self.file_count
+        return next(self.file_count)
 
     def __str__(self):
         return (
@@ -61,7 +63,7 @@ class RemotePeer:
         return self.uri == obj.uri and self.username == obj.username
 
     def increment_file_count(self):
-        self.file_count += 1
+        self.file_count.__next__()
 
     @staticmethod
     def deserialize(to_recv: socket.socket):

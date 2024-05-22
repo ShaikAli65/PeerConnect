@@ -5,6 +5,7 @@ import json
 import asyncio
 import struct
 import select
+import selectors
 import os
 from collections.abc import MutableSet
 from typing import Union, Dict, Tuple

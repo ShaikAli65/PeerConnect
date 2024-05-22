@@ -95,7 +95,7 @@ def get_socket() -> socket.socket:
     return socket.socket(const.IP_VERSION,const.PROTOCOL)
 
 
-def get_peer_obj_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
+def get_peer_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
     """
     Retrieves peer object from list given id
     :param user_id:
@@ -116,7 +116,7 @@ def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASI
     :param to_which:
     :return:
     """
-    peer_obj = _peer_obj if _peer_obj is not None else get_peer_obj_from_id(peer_id)
+    peer_obj = _peer_obj if _peer_obj is not None else get_peer_from_id(peer_id)
     addr = peer_obj.req_uri if to_which == const.REQ_URI_CONNECT else peer_obj.uri
 
     soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
