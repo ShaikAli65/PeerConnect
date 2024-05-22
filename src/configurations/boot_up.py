@@ -41,9 +41,9 @@ def get_ip() -> str:
         return get_v4() or 'localhost'
     elif const.IP_VERSION == soc.AF_INET6:
         if soc.has_ipv6:
-            return get_v6() or get_v4() or '::1'
-        else:
-            return get_ip()
+            return get_v6() or '::1'
+
+    return 'localhost'
 
 
 def get_v4():
@@ -71,11 +71,14 @@ def get_v4():
 
 def get_v6():
     if const.WINDOWS:
-        local_v6 = ""
+        back_up = ""
         for sock_tuple in soc.getaddrinfo("", None, soc.AF_INET6, proto=const.PROTOCOL, flags=soc.AI_PASSIVE):
             ip, _, _, _ = sock_tuple[4]
-            if not ipaddress.ip_address(ip).is_link_local:
+            if ipaddress.ip_address(ip).is_link_local:
+                back_up = ip
+            elif not ipaddress.ip_address(ip).is_link_local:
                 return ip
+        return back_up
     elif const.DARWIN or const.LINUX:
         return get_v6_from_shell() or get_v6_from_api64()
 
