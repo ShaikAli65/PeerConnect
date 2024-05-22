@@ -21,6 +21,7 @@ def initiate():
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     set_constants(config_map)
     const.THIS_IP = get_ip()
+    const.IP_VERSION = socket.AF_INET6 if ipaddress.ip_address(const.THIS_IP).version == 6 else socket.AF_INET
     validate_ports()
 
 
@@ -42,7 +43,6 @@ def get_ip() -> str:
         if soc.has_ipv6:
             return get_v6() or get_v4() or '::1'
         else:
-            const.IP_VERSION = socket.AF_INET
             return get_ip()
 
 
