@@ -76,7 +76,7 @@ def fileReceiver(file_data: DataWeaver):
     add_to_list(file_data.id, file_list)
 
 
-def open_file_dialog_window(prev_directory=["", ]):
+def open_file_dialog_window(prev_directory=[None,]):
     """Opens the system-like file picker dialog.
     :type prev_directory: list
     """
