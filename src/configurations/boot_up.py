@@ -1,4 +1,3 @@
-import socket
 import webbrowser
 import configparser
 import socket as soc
@@ -210,7 +209,7 @@ def retrace_browser_path():
         path, _ = winreg.QueryValueEx(key, '')
         key.Close()
 
-        return path.strip('"')
+        return path.strip().split('"')[1]
 
     if const.DARWIN:
         return subprocess.check_output(["osascript",
@@ -238,6 +237,5 @@ def launch_web_page():
         elif const.LINUX or const.DARWIN:
             subprocess.Popen(['xdg-open', page_url])
 
-        pass
     except FileNotFoundError:
         use.echo_print("::webpage not found, look's like the package you downloaded is corrupted")

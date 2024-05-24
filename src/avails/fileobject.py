@@ -275,7 +275,6 @@ class _FileGroup:
                 parts.append([file])
                 current_part_size = file_size
 
-
         self.grouped_files = parts
         self._re_group_if_needed()
 

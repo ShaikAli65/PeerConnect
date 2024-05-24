@@ -1,20 +1,18 @@
-import selectors
+from concurrent.futures import ThreadPoolExecutor
 
-import src
 from src.avails.textobject import DataWeaver
 from src.core import *
 from src.avails import useables as use
 from src.avails.remotepeer import RemotePeer
 import src.core.receivers as receivers
-
 from src.avails.constants import NOMAD_FLAG   # control flag
 from src.managers import filemanager
 from src.webpage_handlers import handle_data
 
 
 class Nomad:
-    __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
-    __slots__ = ('address', '__control_flag', 'main_socket','selector','currently_in_connection')
+    # __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
+    # __slots__ = ('address', '__control_flag', 'main_socket','selector','currently_in_connection')
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
@@ -26,6 +24,7 @@ class Nomad:
         self.main_socket.bind(self.address)
         self.selector = selectors.DefaultSelector()
         self.currently_in_connection = {}
+        self.thread_pool = ThreadPoolExecutor()
 
     def __resetSocket(self):
         self.main_socket = socket.socket(const.IP_VERSION, const.PROTOCOL)
@@ -48,11 +47,9 @@ class Nomad:
         use.echo_print("::Listening for connections at ", self.address)
         self.selector.register(self, selectors.EVENT_WRITE | selectors.EVENT_READ, self.__acceptConnection)
         while self.safe_stop:
-            events = self.selector.select(0.01)
+            events = self.selector.select()
             for key, mask in events:
-                callback = key.data
-                callback(key.fileobj)
-        return
+                self.thread_pool.submit(key.data, (key.fileobj,))
 
     def connectNew(self, _conn: socket.socket):
         try:

@@ -27,11 +27,11 @@ PORT_FILE = 45210
 PORT_REQ = 35896
 PORT_PAGE_SERVE = 40000
 
-PATH_CURRENT = ''
-PATH_LOG = ''
-PATH_PROFILES = ''
-PATH_PAGE = ''
-PATH_DOWNLOAD = ''
+PATH_CURRENT = '..\\..'
+PATH_LOG = '..\\..\\logs'
+PATH_PROFILES = '..\\..\\profiles'
+PATH_PAGE = '..\\webpage'
+PATH_DOWNLOAD = '..\\..\\Downloads'
 
 
 IP_VERSION = soc.AF_INET
@@ -63,17 +63,8 @@ RP_FLAG = FLAGZ[3]
 USEABLES_FLAG = FLAGZ[4]
 CONNECT_SERVER_FLAG = FLAGZ[5]
 
-# and
-# the suggestion to use a non-blocking socket instead of
-# while event.is_set():
-#    readable,_,_ = select.select([socket.socket],[],[],_timeout=0.00x)
-#    if socket.socket in readable:
-#       break
-# hMM... can be suppressed (it's tested :)
-
 LIST_OF_PEERS: dict = {}
 
-anim_delay = 0.07
 MAX_CALL_BACKS = 5
 REQ_URI_CONNECT = 12
 BASIC_URI_CONNECTOR = 13

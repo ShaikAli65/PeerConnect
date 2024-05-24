@@ -59,7 +59,7 @@ def end():
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
     loop = asyncio.get_running_loop()
     loop.stop()
-    # loop.close()
+
     const.END_OR_NOT = True
     const.HOLD_PROFILE_SETUP.set()
     use.echo_print("::Handle_signals Ended")

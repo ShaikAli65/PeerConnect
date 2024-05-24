@@ -9,13 +9,12 @@ from src.avails.remotepeer import RemotePeer
 from src.avails.constants import CONNECT_SERVER_FLAG
 
 
-control_flag = CONNECT_SERVER_FLAG
 Error_Calls = 0
 connection_status = False
 
 
 def safe_stop():
-    return control_flag.is_set()
+    return CONNECT_SERVER_FLAG.is_set()
 
 
 def get_initial_list(no_of_users, initiate_socket):
@@ -49,7 +48,7 @@ def get_list_from(initiate_socket):
     const.PAGE_HANDLE_CALL.wait()
     global Error_Calls
 
-    initiate_socket = until_sock_is_readable(initiate_socket, control_flag=control_flag)
+    initiate_socket = until_sock_is_readable(initiate_socket, control_flag=CONNECT_SERVER_FLAG)
     if initiate_socket is None:
         return False
     raw_length = initiate_socket.recv(8)
@@ -98,20 +97,20 @@ def initiate_connection():
 
 
 def setup_server_connection():
-    call_count = 0
+    retry_count = 0
     while safe_stop():
         server_connection = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        server_connection.settimeout(const.SERVER_TIMEOUT)
+        server_connection.settimeout(4)
         try:
             server_connection.connect((const.SERVER_IP, const.PORT_SERVER))
             break
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
-            if call_count >= const.MAX_CALL_BACKS:
+            if retry_count >= const.MAX_CALL_BACKS:
                 use.echo_print("\n::Ending program server refused connection")
                 return None
             try:
-                call_count += 1
-                print(f"\r::Connection refused by server, retrying... {call_count}", end='')
+                retry_count += 1
+                print(f"\r::Connection refused by server, retrying... {retry_count}", end='')
             except KeyboardInterrupt:
                 return None
     else:
@@ -121,7 +120,7 @@ def setup_server_connection():
 
 
 def end_connection_with_server():
-    control_flag.clear()
+    CONNECT_SERVER_FLAG.clear()
     try:
         const.THIS_OBJECT.status = 0
         if connection_status is False:

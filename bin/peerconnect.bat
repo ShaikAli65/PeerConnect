@@ -1,4 +1,4 @@
-@REM @echo off
+@echo off
 
 set "FLAG_FILE=setup_completed.txt"
 

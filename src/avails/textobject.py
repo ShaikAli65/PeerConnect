@@ -305,7 +305,10 @@ class DataWeaver:
         self.__data['id'] = _id
 
     def __str__(self):
-        return self.__data.__str__()
+        return (f"\n"
+                f"header : {self.header}\n"
+                f"content: {self.content}\n"
+                f"id     : {self.id}\n")
 
     def __repr__(self):
         return f'DataWeaver(content="{self.__data}")'

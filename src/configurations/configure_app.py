@@ -34,18 +34,18 @@ def set_constants(config_map: configparser) -> bool:
 
 
 def print_constants():
-    line_format = "{:<15} {:<10}"
+    line = "{:<15} {:<10}"
     with const.LOCK_PRINT:
         print('\n:configuration choices=========================\n'
-              f'{"{:<15} = {:<10}".format("USERNAME", const.USERNAME)}\n'
-              f'{"{:<15} = {:<10}".format("THIS_IP", const.THIS_IP)}\n'
-              f'{"{:<15} = {:<10}".format("PORT_THIS", const.PORT_THIS)}\n'
-              f'{"{:<15} = {:<10}".format("SERVER_IP", const.SERVER_IP)}\n'
-              f'{"{:<15} = {:<10}".format("SERVER_PORT", const.PORT_SERVER)}\n'
-              f'{"{:<15} = {:<10}".format("PAGE_DATA_PORT", const.PORT_PAGE_DATA)}\n'
-              f'{"{:<15} = {:<10}".format("PROTOCOL", const.PROTOCOL)}\n'
-              f'{"{:<15} = {:<10}".format("IP_VERSION", const.IP_VERSION)}\n'
-              f'{"{:<15} = {:<10}".format("PORT_REQ", const.PORT_REQ)}\n'
+              f'{line.format("USERNAME", const.USERNAME)}\n'
+              f'{line.format("THIS_IP", const.THIS_IP)}\n'
+              f'{line.format("PORT_THIS", const.PORT_THIS)}\n'
+              f'{line.format("SERVER_IP", const.SERVER_IP)}\n'
+              f'{line.format("SERVER_PORT", const.PORT_SERVER)}\n'
+              f'{line.format("PAGE_DATA_PORT", const.PORT_PAGE_DATA)}\n'
+              f'{line.format("PROTOCOL", const.PROTOCOL)}\n'
+              f'{line.format("IP_VERSION", const.IP_VERSION)}\n'
+              f'{line.format("PORT_REQ", const.PORT_REQ)}\n'
               '===============================================\n'
               )
     return

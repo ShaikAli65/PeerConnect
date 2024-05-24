@@ -1,7 +1,6 @@
 """Main entry point for the application."""
 import tracemalloc
 import signal
-import platform
 
 import src.core.nomad
 from src.core import *
@@ -27,8 +26,8 @@ def initiate() -> int:
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
     # print("USE TEMPFILE MODULE IN DIRECTORYMANAGER and try sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False/True)")
-    # print("ITERTOOLS\nFUNCTOOLS\nLOGGING\nSELECTORS\n"
-    #       "conncurrent.FUTURES\nASYNCIO\nHTTP\nWEBRTC"
+    # print("ITERTOOLS\nFUNCTOOLS\nLOGGING\n"
+    #       "concurrent.FUTURES\nASYNCIO\nHTTP\nWEBRTC"
     #       "USE PIPES INSTEAD OF POLLING IN SELECT.SELECTS")
     # exit(1)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))

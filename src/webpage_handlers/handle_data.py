@@ -28,6 +28,7 @@ def handle_connection(addr_id):
 
 
 def command_flow_handler(data_in: DataWeaver):
+    print("got",data_in)
     if data_in.match(_content=const.HANDLE_END):
         src.managers.endmanager.end_session()
     elif data_in.match(_content=const.HANDLE_CONNECT_USER):
@@ -65,8 +66,7 @@ async def getdata():
         # try:
         raw_data = await web_socket.recv()
         data = DataWeaver(byte_data=raw_data)
-        with const.LOCK_PRINT:
-            print("data from page:", data)
+        use.echo_print("data from page:", data)
         control_data_flow(data_in=data)
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data_flow.py/getdata() ")

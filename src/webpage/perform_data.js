@@ -83,8 +83,8 @@ function initiate_data()
         try {
             connect_r = new WebSocket(addr);
             connect_r.send(JSON.stringify({
-                "header":" 'thisiscommandtocore",
-                "content":"thisiscommandtocore_/!_reload",
+                "header":'this is a command',
+                "content":"this is command to core_/!_reload",
                 "id":""
             }));
             connectToCode_ = connect_r;
@@ -103,8 +103,8 @@ function initiate_data()
 function ping_currentuser_id_topython(touser="") {
     Connection.send(
         JSON.stringify({
-            "header":"thisisacommand",
-            "content":"connectuser",
+            "header":"this is a command",
+            "content":"connect user",
             "id":touser
         })
     );
@@ -121,7 +121,7 @@ function recievedataFromPython(connecttocode_)
     connectToCode_.addEventListener('message', (event) => {
         console.log('::Received message :', event.data);
         data = JSON.parse(event.data);
-        if (data.header === "thisisacommand")
+        if (data.header === "this is a command")
         {
             if (data.content == '0')
             {
@@ -132,11 +132,11 @@ function recievedataFromPython(connecttocode_)
                 createUserTile(data.content, data.id);
             }
         }
-        if (data.header === "thisismyusername")
+        if (data.header === "this is my username")
         {
             display_name.textContent = data.content;
         }
-        if (data.header === "thisismessage")
+        if (data.header === "this is a message")
         {
             recievedmessage(data);
         }});
@@ -152,8 +152,8 @@ function endsession(connection)
     //     element.removeEventListener("click",function(){});
     // });
     connection.send(JSON.stringify({
-        "header":"thisisacommand",
-        "content":"endprogram",
+        "header":"this is a command",
+        "content":"end program",
         id:""
     }));
     document.body.innerHTML = "<h1>Session Ended</h1>";
@@ -232,7 +232,7 @@ function createmessage()
         Content_ = Content_.split("file::")[1].trim().replaceAll('\"','');
         subDiv_.textContent = "U sent a file : " + Content_;
         return JSON.stringify({
-            "header":"thisisafile",
+            "header":"this is a file",
             "content":Content_,
             "id":focusedUser.id.split("_")[1]
         });
@@ -244,7 +244,7 @@ function createmessage()
         Content_ = Content_.split("dir::")[1].trim().replaceAll('\"','')
         subDiv_.textContent = "U sent a dir: " + Content_;
         return JSON.stringify({
-            "header":"thisisadir",
+            "header":"this is a dir",
             "content":Content_,
             "id":focusedUser.id.split("_")[1]
         });
@@ -255,7 +255,7 @@ function createmessage()
     trimmed = focusedUser.id.split("_")[1].split("~");
     focusedUser.appendChild(wrapperdiv_)
     return JSON.stringify({
-                "header":"thisisamessage",
+                "header":"this is a message",
                 "content":Content_,
                 "id":focusedUser.id.split("_")[1]
             });
