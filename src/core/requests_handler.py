@@ -15,13 +15,12 @@ def safe_stop():
     return REQ_FLAG.is_set()
 
 
-def send_list(_conn: socket.socket) -> Union[None, bool]:
-    with const.LOCK_LIST_PEERS:
-        peer_list = const.LIST_OF_PEERS.copy()
-    byte_length = struct.pack('!Q', len(const.LIST_OF_PEERS))
-    _conn.sendall(byte_length)
+def send_list(_conn):
+
+    no_of_peers = struct.pack('!Q', len(peer_list))
+    _conn.sendall(no_of_peers)
     error_call = 0
-    for _nomad in peer_list.values():
+    for _nomad in peer_list.peers():
         if safe_stop():
             return
         if not _nomad.status == 1:
@@ -38,42 +37,32 @@ def adjust_list_error(error_call, _conn, err):
     error_log(f"::Exception while giving list of users at {__name__}/{__file__}, exp : {err}")
     error_call += 1
     use.echo_print(
-        f"::Exception while giving list of users to {_conn.getpeername()} at manage_requests.py/send_list \n-exp : {err}")
+        f"::Exception while giving list of users to {_conn.getpeername()} at {func_str(adjust_list_error)} \n-exp : {err}")
 
 
 def add_peer_accordingly(_peer: RemotePeer, *, include_ping=False):
     if _peer.status == 1:
-        with const.LOCK_LIST_PEERS:
-            const.LIST_OF_PEERS[_peer.id] = _peer
+        peer_list.add_peer(_peer.id, _peer)
         use.echo_print(f"::added {_peer.uri} {_peer.username} to list of peers")
     else:
         if include_ping:
             if ping_user(_peer):
                 return False
 
-        with const.LOCK_LIST_PEERS:
-            _peer.status = 0
-            const.LIST_OF_PEERS.pop(_peer.id, None)
-            RecentConnections.force_remove(_peer.id)
+        _peer.status = 0
+        peer_list.remove_peer(_peer.id)
+        RecentConnections.force_remove(_peer.id)
         use.echo_print(f"::removed {_peer.uri} {_peer.username} from list of peers")
     asyncio.run(handle_data.feed_server_data_to_page(_peer))
     return True
 
 
 def initiate():
-    control_sock = socket.socket(const.IP_VERSION, const.PROTOCOL)
-    control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    control_sock.bind(const.THIS_OBJECT.req_uri)
-    control_sock.listen()
+    _control_sock = connect.create_server(const.THIS_OBJECT.req_uri,family=const.IP_VERSION)
+
     use.echo_print("::Requests bind success full at ", const.THIS_OBJECT.req_uri)
-    accept_peer_connections(control_sock)
-    return
-
-
-def accept_peer_connections(_control_sock: socket.socket):
     use.echo_print("::Listening for requests at ", _control_sock.getsockname())
-
-    while safe_stop():
+    while not safe_stop():
         readable, _, _ = select.select([_control_sock], [], [], 0.001)
         if _control_sock not in readable:
             continue
@@ -81,11 +70,10 @@ def accept_peer_connections(_control_sock: socket.socket):
             initiate_conn, _ = _control_sock.accept()
             use.start_thread(_target=control_connection, _args=(initiate_conn,))
         except (socket.error, OSError) as e:
-            error_log(f"Error at manage {__name__}/{__file__} exp: {e}")
-    return
+            error_log(f"Error at manage {func_str(initiate)} exp: {e}")
 
 
-def sync_users_with_server(_conn: socket.socket):
+def sync_users_with_server(_conn):
     with _conn:
         raw_data = _conn.recv(8)
         if not (diff_length := struct.unpack('!Q', raw_data)[0]):
@@ -95,17 +83,17 @@ def sync_users_with_server(_conn: socket.socket):
                 notify_user_connection(_conn, True)
             except Exception as e:
                 error_log(
-                    f"Error syncing list at {sync_users_with_server.__name__}()/{os.path.relpath(sync_users_with_server.__code__.co_filename)} exp :  {e}")
+                    f"Error syncing list at {func_str(sync_users_with_server)} exp :  {e}")
     return
 
 
-def notify_user_connection(_conn_socket: socket.socket, ping_again=False):
+def notify_user_connection(_conn_socket, ping_again=False):
     try:
         new_peer_object = RemotePeer.deserialize(_conn_socket)
         if not new_peer_object:
             return False
     except Exception as e:
-        error_log(f"Error sending data at {__name__}/{__file__} exp :  {e}")
+        error_log(f"Error sending data at {func_str(notify_user_connection)} exp :  {e}")
         return None
     return add_peer_accordingly(new_peer_object, include_ping=ping_again)
 
@@ -119,8 +107,8 @@ function_map = {
 }
 
 
-def control_connection(_conn: socket.socket) -> None:
-    while safe_stop():
+def control_connection(_conn):
+    while not safe_stop():
         try:
             readable, _, _ = select.select([_conn], [], [], 0.5)
         except OSError:
@@ -132,59 +120,39 @@ def control_connection(_conn: socket.socket) -> None:
             data.receive()
             # print(f"::Received {data.raw_text} from {_conn}")
         except (socket.error, OSError) as e:
-            error_log(f"Socket error at manage {__name__}/{__file__} exp:{e}")
+            error_log(f"Socket error at manage {func_str(control_connection)} exp:{e}")
             return
         function_map.get(data.raw_text, lambda x: None)(_conn)
 
 
 def ping_user(remote_peer: RemotePeer):
     try:
-        with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
+        with connect.Socket(const.IP_VERSION, const.PROTOCOL) as _conn:
             _conn.settimeout(2)
             _conn.connect(remote_peer.req_uri)
             return SimplePeerText(_conn, const.ACTIVE_PING, byte_able=False).send()
     except socket.error as e:
-        error_log(f"Error pinging user at requests_handler.py/ping_user exp :  {e}")
+        error_log(f"Error pinging user at {func_str(ping_user)} exp :  {e}")
         return False
 
 
-def signal_status(queue_in: queue.Queue[RemotePeer]) -> None:
-    while safe_stop() and (not queue_in.empty()):
+def signal_status(queue_in: queue.Queue[RemotePeer]):
+    while not (safe_stop() or queue_in.empty()):
         peer_object = queue_in.get()
         try:
-            with socket.socket(const.IP_VERSION, const.PROTOCOL) as _conn:
-                _conn.settimeout(5)
-                _conn.connect(peer_object.req_uri)
+            with connect.create_connection(peer_object.req_uri,timeout=5) as _conn:
                 SimplePeerText(_conn, const.I_AM_ACTIVE, byte_able=False).send()
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(
-                f"Error sending active status at {signal_status.__name__}()/{signal_status.__code__.co_filename}")
+                f"Error sending active status at {func_str(signal_status)}")
             peer_object.status = 0  # this makes that user as not active
         add_peer_accordingly(peer_object)
 
 
-def notify_leaving_status_to_users() -> None:
-    const.LOCK_LIST_PEERS.acquire()
-    const.THIS_OBJECT.status = 0
-    for peer in const.LIST_OF_PEERS.values():
-        if not peer:
-            continue
-        try:
-            with socket.socket(const.IP_VERSION, const.PROTOCOL) as notify_soc:
-                notify_soc.settimeout(4)
-                notify_soc.connect(peer.req_uri)
-                SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
-                const.THIS_OBJECT.serialize(notify_soc)
-        except socket.error as e:
-            error_log(
-                f"Error sending leaving status at {notify_leaving_status_to_users.__name__}()/{notify_leaving_status_to_users.__code__.co_filename} exp :  {e}")
-    return None
-
-
 def sync_list() -> None:
     with const.LOCK_LIST_PEERS:
-        list_copy = deque(const.LIST_OF_PEERS.values())
+        list_copy = deque(peer_list.peers())
     while list_copy:
         if safe_stop():
             return
@@ -194,6 +162,21 @@ def sync_list() -> None:
             add_peer_accordingly(peer_obj)
             continue
     return
+
+
+def notify_leaving_status_to_users():
+    const.LOCK_LIST_PEERS.acquire()
+    const.THIS_OBJECT.status = 0
+    for peer in peer_list.peers():
+        if not peer:
+            continue
+        try:
+            with connect.create_connection(peer.req_uri,4) as notify_soc:
+                SimplePeerText(notify_soc, const.I_AM_ACTIVE, byte_able=False).send()
+                const.THIS_OBJECT.serialize(notify_soc)
+        except socket.error as e:
+            error_log(
+                f"Error sending leaving status at {func_str(notify_leaving_status_to_users)} :  {e}")
 
 
 def end_requests_connection() -> None:

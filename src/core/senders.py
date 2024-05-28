@@ -1,3 +1,5 @@
+
+from typing import Optional
 from src.core import *
 from src.avails.textobject import DataWeaver
 from src.avails import constants as const, useables as use
@@ -11,18 +13,18 @@ from collections import OrderedDict
 
 class SocketCache:
     def __init__(self, max_limit=4):
-        self.socket_cache: dict[str:socket.socket] = OrderedDict()
+        self.socket_cache: dict[str: connect.Socket] = OrderedDict()
         self.max_limit = max_limit
         self.__thread_lock = threading.Lock()
 
-    def appendPeer(self, peer_id: str, peer_socket: socket.socket):
+    def appendPeer(self, peer_id: str, peer_socket):
         with self.__thread_lock:
             if len(self.socket_cache) >= self.max_limit:
                 self.socket_cache.popitem(last=False)
             self.socket_cache[peer_id] = peer_socket
         return peer_socket
 
-    def get_socket(self, peer_id) -> Union[socket.socket, None]:
+    def get_socket(self, peer_id) -> Union[connect.Socket, None]:
         with self.__thread_lock:
             return self.socket_cache.get(peer_id, None)
 
@@ -41,7 +43,7 @@ class SocketCache:
 
 class RecentConnections:
     connected_sockets = SocketCache()
-    current_connected: socket.socket = socket.socket()
+    current_connected: Optional[connect.Socket] = None
 
     def __init__(self, function):
         self.__code__ = function.__code__
@@ -58,10 +60,8 @@ class RecentConnections:
         return connection_socket
 
     @classmethod
-    @NotInUse
-    def addSocket(cls, peer_id: str, peer_socket: socket.socket):
+    def addSocket(cls, peer_id: str, peer_socket):
         cls.connected_sockets.appendPeer(peer_id, peer_socket)
-        return peer_socket
 
     @classmethod
     def connect_peer(cls, peer_obj: RemotePeer):
@@ -70,7 +70,7 @@ class RecentConnections:
                 cls.current_connected = cls.addConnection(peer_obj)
                 print("cache miss --current : ", cls.current_connected, peer_obj.username)
             except socket.error:
-                use.echo_print("handle signal to page, that user might not be connected, or he is offline")
+                use.echo_print("handle signal to page, that we can't reach user, or he is offline")
                 pass
             return
 
@@ -89,6 +89,7 @@ class RecentConnections:
 
     @classmethod
     def end(cls):
+        use.echo_print("::Cleared senders")
         cls.connected_sockets.clear()
 
 

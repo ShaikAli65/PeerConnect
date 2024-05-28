@@ -2,85 +2,99 @@ import os.path
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QFileDialog
+from concurrent.futures import ThreadPoolExecutor
 
+from src.avails.container import FileDict
 from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFile, \
-    _PeerFile  # _PeerFile is now deprecated
-
-every_file: Dict[str, Tuple[FiLe]] = {}  # every file sent in the current session are held here for further control
+from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
 
 
-def add_to_list(_id, file_list):
-    global every_file
-    if every_file.get(str(_id)):
-        every_file[str(_id)] += tuple(file_list)
-    else:
-        every_file[str(_id)] = tuple(file_list)
-
-
-def __setFileId(file: tuple[FiLe], receiver_obj: RemotePeer):
-    global every_file
-    receiver_obj.increment_file_count()
-    every_file[f"{receiver_obj.id}(^){receiver_obj.get_file_count()}"] = file
-
-
-def _start_file_sending_threads(file_groups, sockets):
-    def sock_thread(_file: FiLe, _conn: socket.socket):
-        with _conn:
-            _file.send_files(_conn)
-
-    file_list = []
-    for file_items, conn in zip(file_groups, sockets):
-        file = PeerFile(paths=file_items)
-        use.start_thread(_target=sock_thread, _args=(file, conn))
-        file_list.append(file)
-    return file_list
+global_files = FileDict()
 
 
 def fileSender(file_data: DataWeaver, receiver_sock):
-    file_list = file_data.content['list'] or open_file_dialog_window()
+    file_list = file_data.content['files']
+    receiver_id = file_data.id
+    if file_list == ['']:
+        file_list = open_file_dialog_window()
     if not file_list:
         return
-    file_groups = make_file_groups(file_list,grouping_level=file_data.content['grouping_level'])
-    # print(file_groups)
+    # print("got to send ",file_data)  # debug
+
+    def _sock_thread(_id, _file: FiLe, _conn):
+        with _conn:
+            if _file.send_files(_conn):
+                global_files.add_to_completed(_id, _file)
+            else:
+                global_files.add_to_continued(_id, _file)
+
+    file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
+    file_pools = [PeerFilePool(file_group) for file_group in file_groups]
+
     bind_ip = (const.THIS_IP, use.get_free_port())
-    hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content={'count': len(file_groups)},
-                            _id=bind_ip)
+    hand_shake = DataWeaver(header=const.CMD_RECV_FILE,
+                            content={'count': len(file_pools),'bind_ip': bind_ip},
+                            _id=const.THIS_OBJECT.id)
 
     if not hand_shake.send(receiver_sock):
         return
+    print("sent handshake", hand_shake)  # debug
+    sockets = make_sock_groups(len(file_pools), bind_ip=bind_ip)
+    print("made connections")  # debug
+    print(sockets)  # debug
+    print(file_pools)  # debug
+    th_pool = ThreadPoolExecutor(max_workers=len(sockets))
+    for file, sock in zip(file_pools, sockets):
+        print("inside $%%$%^%^&&*", file, sock,type(file),type(sock),type(receiver_id))  # debug
+        global_files.add_to_current(receiver_id, file)
+        th_pool.submit(_sock_thread, receiver_id, file, sock)
 
-    sockets = make_sock_groups(len(file_groups), bind_ip=bind_ip)
-
-    file_list_threads = _start_file_sending_threads(file_groups, sockets)
-    add_to_list(file_data.id, file_list_threads)
+    th_pool.shutdown()  # wait for all threads to finish  # debug
+    print("completed mapping threads")  # debug
 
 
 def fileReceiver(file_data: DataWeaver):
+    print("inside fileRecv")  # debug
     conn_count = file_data.content['count']
-    sockets = make_sock_groups(conn_count, connect_ip=tuple(file_data.id))
+    sender_id = file_data.id
+    if not conn_count:
+        return
+    print(f"{conn_count=}")  # debug
+    # print("got to recv ", file_data)  # debug
 
-    def sock_thread(_file: FiLe, _conn: socket.socket):
+    def _sock_thread(_id, _file: FiLe, _conn):
+        # print("inside recv_files parent :",_file, _conn)  # debug
         with _conn:
-            _file.recv_files(_conn)
+            if _file.recv_files(_conn):
+                global_files.add_to_completed(_id,_file)
+            else:
+                global_files.add_to_continued(_id,_file)
 
-    file_list = []
-    for conn in sockets:
-        file = PeerFile()
-        use.start_thread(_target=sock_thread, _args=(file, conn))
-        file_list.append(file)
+        print("Done :", _file)   # debug
 
-    add_to_list(file_data.id, file_list)
+    file_pools = [PeerFilePool() for _ in range(conn_count)]
+    sockets = make_sock_groups(conn_count, connect_ip=tuple(file_data.content['bind_ip']))
+    print(sockets)  # debug
+
+    print(file_pools)
+    th_pool = ThreadPoolExecutor(max_workers=conn_count)
+    for file, sock in zip(file_pools, sockets):
+        global_files.add_to_current(sender_id, file)
+        th_pool.submit(_sock_thread, sender_id, file, sock)
+
+    th_pool.shutdown()  # wait for all threads to finish  # debug
+    print(f"{file_pools=}")  # debug
+    print("completed mapping threads")  # debug
 
 
-def open_file_dialog_window(prev_directory=[None,]):
+def open_file_dialog_window(prev_directory=[None, ]):  # this param is use as a cache for recent directory
     """Opens the system-like file picker dialog.
     :type prev_directory: list
     """
-    app = QApplication([])
+    _ = QApplication([])
     dialog = QFileDialog()
     dialog.setOption(QFileDialog.DontUseNativeDialog, True)
     dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
@@ -94,22 +108,28 @@ def open_file_dialog_window(prev_directory=[None,]):
 
 
 def endFileThreads():
-    global every_file
     try:
-        for file_list in every_file.values():
+        for file_list in global_files.current:
             for file in file_list:
                 file.break_loop()
     except AttributeError as e:
         error_log(f"::Error at endFileThreads() from  endFileThreads/filemanager at line 79: {e}")
-    every_file.clear()
     return True
 
 
 # deprecated methods of sending files
+from src.avails.fileobject import _PeerFile  # _PeerFile is now deprecated
 
 
 @NotInUse
-def _fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
+def __setFileId(file: tuple[FiLe], receiver_obj: RemotePeer):
+    global every_file
+    receiver_obj.increment_file_count()
+    every_file[f"{receiver_obj.id}(^){receiver_obj.get_file_count()}"] = file
+
+
+@NotInUse
+def _fileSender(_data: DataWeaver, receiver_sock, is_dir=False):
     receiver_obj, prompt_data = RemotePeer(), ''
     if _data.content == "":
         files_list = open_file_dialog_window()
@@ -117,7 +137,7 @@ def _fileSender(_data: DataWeaver, receiver_sock: socket.socket, is_dir=False):
             _data.content = file
             _fileSender(_data, receiver_sock, is_dir)
     try:
-        receiver_obj: RemotePeer = use.get_peer_from_id(_data.id)
+        receiver_obj: RemotePeer = peer_list.get_peer(_data.id)
         temp_port = use.get_free_port()
 
         file = _PeerFile(uri=(const.THIS_IP, temp_port), path=_data.content)

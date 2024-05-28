@@ -1,4 +1,3 @@
-import threading
 from collections import defaultdict
 
 from src.core import *
@@ -21,13 +20,13 @@ class SimplePeerText:
     __annotations__ = {
         'raw_text': bytes,
         'text_len_encoded': bytes,
-        'sock': socket.socket,
+        'sock': connect.Socket,
         '__control_flag': threading.Event,
         'id': str,
     }
-    __slots__ = ('raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',)
+    __slots__ = 'raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',
 
-    def __init__(self, refer_sock: socket.socket, text: str = '', byte_able=True, chunk_size=512, control_flag:threading.Event = None):
+    def __init__(self, refer_sock, text='', byte_able=True, chunk_size=512, control_flag:threading.Event = None):
         self.raw_text = text.encode(const.FORMAT) if byte_able else text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.__control_flag = control_flag or PEER_TEXT_FLAG
@@ -66,7 +65,7 @@ class SimplePeerText:
 
         """
 
-        while self.safe_stop:
+        while not self.safe_stop:
             readable, _, _ = select.select([self.sock], [], [], 0.5)
             if self.sock in readable:
                 raw_length = self.sock.recv(4)
@@ -74,30 +73,22 @@ class SimplePeerText:
         else:
             return False if cmp_string else b''
 
-        # buffer = bytearray()
-        # self.sock.setblocking(False)
-        # while self.safe_stop:
-        #     data = self.sock.recv(4)
-        #     buffer.extend(data)
-        #     if len(buffer) == 4:
-        #         break
-        # raw_length = bytes(buffer)
-
-        text_length_received = struct.unpack('!I', raw_length)[0] if raw_length else 0
+        text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
         received_data = bytearray()
 
-        while len(received_data) < text_length_received:
+        while text_length > 0:
 
-            while self.safe_stop:
+            while not self.safe_stop:
                 readable, _, _ = select.select([self.sock], [], [], 0.5)
                 if self.sock in readable:
-                    chunk = self.sock.recv(min(self.chunk_size, text_length_received - len(received_data)))
+                    chunk = self.sock.recv(min(self.chunk_size, text_length))
                     break
             else:
                 return False if cmp_string else b''
 
             if not chunk:
                 break
+            text_length -= len(chunk)
             received_data.extend(chunk)
         self.raw_text = bytes(received_data)
 
@@ -111,10 +102,7 @@ class SimplePeerText:
 
         return self.raw_text
 
-    def decode(self):
-        return self.raw_text.decode(const.FORMAT)
-
-    def compare(self, cmp_string: bytes) -> bool:
+    def compare(self, cmp_string: str):
         """
         Compare the stored text to a provided string.
         accepts both byte string and normal string and checks accordingly.
@@ -126,7 +114,7 @@ class SimplePeerText:
         - bool: True if the stored text matches cmp_string; False otherwise.
 
         """
-        return self.raw_text == cmp_string
+        return self.raw_text == cmp_string.encode(const.FORMAT)
 
     def __send_header(self):
         self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
@@ -134,7 +122,7 @@ class SimplePeerText:
 
     def __recv_header(self):
 
-        while self.safe_stop:
+        while not self.safe_stop:
             readable, _, _ = select.select([self.sock, ], [], [], 0.5)
             if self.sock in readable:
                 break
@@ -144,7 +132,7 @@ class SimplePeerText:
         header_raw_length = self.sock.recv(4)
         header_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
 
-        while self.safe_stop:
+        while not self.safe_stop:
             readable, _, _ = select.select([self.sock, ], [], [], 0.5)
             if self.sock in readable:
                 break
@@ -181,11 +169,8 @@ class SimplePeerText:
 
     def __iter__(self):
         """
-        Get an iterator for the stored text.
-
         Returns:
         - iter: An iterator for the stored text.
-
         """
         return self.raw_text.__iter__()
 
@@ -203,14 +188,13 @@ class DataWeaver:
     """
     A wrapper class purposely designed to store data (as {header, content, id} format)
     provides send and receive functions
-    Built on top of :class `SimplePeerText`:
     """
 
     __annotations__ = {
         'data_lock': threading.Lock,
         '__data': dict
     }
-    __slots__ = ('data_lock', '__data')
+    __slots__ = 'data_lock', '__data'
 
     def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str, tuple] = None,
                  byte_data: bytes = None):
@@ -223,7 +207,7 @@ class DataWeaver:
             self.__data['content'] = content
             self.__data['id'] = _id
 
-    def dump(self) -> str:
+    def dump(self):
         """
         Modifies data in json 's string format and,
         returns json string representation of the data
@@ -232,29 +216,30 @@ class DataWeaver:
         with self.data_lock:
             return json.dumps(self.__data)
 
-    def match(self, _header: str = None, _content: str = None, _id: str = None) -> bool:
+    def match_content(self, _content) -> bool:
         with self.data_lock:
-            if _header:
-                return self.__data['header'] == _header
-            elif _content:
-                return self.__data['content'] == _content
-            elif _id:
-                return self.__data['id'] == _id
+            return self.__data['content'] == _content
+
+    def match_header(self,_header) -> bool:
+        with self.data_lock:
+            return self.__data['header'] == _header
 
     def send(self, receiver_sock):
         """
         Sends data as json string to the provided socket,
-        This function is written on top of SimplePeerText's send function
+        This function is written on top of :class: `SimplePeerText`'s send function
+        Args:
+            :param receiver_sock:
 
-        :param receiver_sock:
-        :returns True if sends text succesfully else False:
+        Returns:
+            :returns True if sends text successfully else False:
         """
         return SimplePeerText(text=self.dump(), refer_sock=receiver_sock).send()
 
     def receive(self, sender_sock):
         """
         Receives a text string from the specified sender socket and sets the values of the TextObject instance.
-        Written on top of SimplePeerText's receive function
+        Written on top of :class: `SimplePeerText`'s receive function
         Args:
             sender_sock: The sender socket from which to receive the text string.
 
@@ -264,7 +249,7 @@ class DataWeaver:
         """
         text_string = SimplePeerText(refer_sock=sender_sock)
         text_string.receive()
-        self.__set_values(json.loads(text_string.decode()))
+        self.__set_values(json.loads(str(text_string)))
         return self
 
     def __set_values(self, data_value: dict):
@@ -307,8 +292,8 @@ class DataWeaver:
     def __str__(self):
         return (f"\n"
                 f"header : {self.header}\n"
-                f"content: {self.content}\n"
-                f"id     : {self.id}\n")
+                f"content: {str(self.content).strip(' \n')}\n"
+                f"id     : {self.id}")
 
     def __repr__(self):
         return f'DataWeaver(content="{self.__data}")'
@@ -316,3 +301,4 @@ class DataWeaver:
 
 def stop_all_text():
     PEER_TEXT_FLAG.clear()
+    print("::All texts stopped")

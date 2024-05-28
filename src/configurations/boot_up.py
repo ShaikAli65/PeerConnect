@@ -4,6 +4,7 @@ import socket as soc
 import subprocess
 import urllib.request
 import ipaddress
+import random
 
 from src.avails import useables as use
 from src.core import *
@@ -21,7 +22,48 @@ def initiate():
     set_constants(config_map)
     const.THIS_IP = get_ip()
     const.IP_VERSION = socket.AF_INET6 if ipaddress.ip_address(const.THIS_IP).version == 6 else socket.AF_INET
+    # print(f"{const.THIS_IP=}")
     validate_ports()
+    write_port_to_js()  # just a convenience function of testing
+
+
+def write_port_to_js():
+    def free_port():
+        while True:
+            random_port = random.randint(1024, 65535)
+            try:
+                with soc.socket(const.IP_VERSION, const.PROTOCOL) as s:
+                    s.bind(("localhost",random_port))
+            except socket.error:
+                pass
+            else:
+                return random_port
+    import re
+    # data = f"const addr = 'ws://localhost:{const.PORT_PAGE_DATA}';"
+    # signals = f"const wss = new WebSocket(\"ws://localhost:{const.PORT_PAGE_SIGNALS}\");"
+    const.PORT_PAGE_SIGNALS, const.PORT_PAGE_DATA = free_port(), free_port()
+    perform_signals = os.path.join(const.PATH_PAGE, 'perform_signals.js')
+    perform_data = os.path.join(const.PATH_PAGE, 'perform_data.js')
+
+    with open(perform_signals, 'r') as file:
+        pattern = r'const wss = new WebSocket\("ws://localhost:\d+"\);'
+        line = f'const wss = new WebSocket("ws://localhost:{const.PORT_PAGE_SIGNALS}");'
+
+        lines = file.readlines()
+        lines[1] = re.sub(pattern, line, lines[1])
+
+    with open(perform_signals, 'w') as file:
+        file.writelines(lines)
+
+    with open(perform_data, 'r') as file:
+        pattern = r'const addr = "ws://localhost:\d+";'
+        line = f"const addr = \"ws://localhost:{const.PORT_PAGE_DATA}\";"
+
+        lines = file.readlines()
+
+        lines[1] = re.sub(pattern, line, lines[1])
+    with open(perform_data, 'w') as file:
+        file.writelines(lines)
 
 
 def get_ip() -> str:
@@ -37,12 +79,12 @@ def get_ip() -> str:
         soc.error: If a socket error occurs during connection.
     """
     if const.IP_VERSION == soc.AF_INET:
-        return get_v4() or 'localhost'
+        return get_v4() or '127.0.0.1'
     elif const.IP_VERSION == soc.AF_INET6:
         if soc.has_ipv6:
             return get_v6() or '::1'
 
-    return 'localhost'
+    return '127.0.0.1'
 
 
 def get_v4():
@@ -176,7 +218,7 @@ def is_port_empty(port):
     except socket.gaierror:
         print("ERROR IN SETTING UP NETWORK ")
         exit(1)
-    except (OSError,socket.error):
+    except (OSError, socket.error):
         return False
 
 
@@ -184,13 +226,8 @@ def validate_ports() -> None:
     ports_list = [const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ,
                   const.PORT_FILE]
     for i, port in enumerate(ports_list):
-        if is_port_empty(port):
-            continue
-        else:
-            while not is_port_empty(port):
-                port += 1
-                time.sleep(1)
-            ports_list[i] += port
+        if not is_port_empty(port):
+            ports_list[i] = use.get_free_port()
             error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ, const.PORT_FILE = ports_list
     return None

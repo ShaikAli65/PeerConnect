@@ -14,7 +14,7 @@ def end_session(sig='',frame='') -> Union[bool, None]:
     Returns:
         bool: True if cleanup was successful, False otherwise.
     """
-
+    const.END_OR_NOT = True
     print("::Initiating End Sequence",sig,frame)
     # activity_log("::Initiating End Sequence")
     textobject.stop_all_text()
@@ -27,9 +27,7 @@ def end_session(sig='',frame='') -> Union[bool, None]:
     manage_requests.end_requests_connection()
     handle_data.end()
     handle_signals.end()
-    with const.LOCK_LIST_PEERS:
-        const.LIST_OF_PEERS.clear()
+    const.LIST_OF_PEERS.clear()
     httphandler.end_serving()
     filemanager.endFileThreads()
     exit(1)
-    # threadmanager.end_all_threads()

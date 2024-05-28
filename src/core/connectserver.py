@@ -1,11 +1,11 @@
 import queue
 
+import src.avails.useables as use
+
 from src.core import *
 from src.core import requests_handler
 from src.avails.textobject import SimplePeerText
-import src.avails.useables as use
 from src.avails.remotepeer import RemotePeer
-
 from src.avails.constants import CONNECT_SERVER_FLAG
 
 
@@ -55,7 +55,7 @@ def get_list_from(initiate_socket):
 
     # initiate_socket.setblocking(False)
     # buffer = bytearray()
-    # while safe_stop():
+    # while proceed():
     #     data = initiate_socket.recv(8)
     #     buffer.extend(data)
     #     if len(buffer) == 8:
@@ -69,7 +69,8 @@ def get_list_from(initiate_socket):
 
 
 def list_from_forward_control(list_owner: RemotePeer):
-    with socket.socket(const.IP_VERSION, const.PROTOCOL) as list_connection_socket:
+    # socket.create_connection()
+    with connect.Socket(const.IP_VERSION, const.PROTOCOL) as list_connection_socket:
         list_connection_socket.connect(list_owner.req_uri)
         if SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, byte_able=False).send():
             get_list_from(list_connection_socket)
@@ -80,29 +81,30 @@ def initiate_connection():
 
     use.echo_print("::Connecting to server")
     server_connection = setup_server_connection()
-    if not server_connection:
-        return False
+    if server_connection is None:
+        return False if (const.END_OR_NOT is True) else None
 
-    if SimplePeerText(server_connection).receive(cmp_string=const.SERVER_OK):
-        use.echo_print('::Connection accepted by server')
+    text = SimplePeerText(server_connection)
+    if text.receive(cmp_string=const.SERVER_OK):
+        use.echo_print('\n::Connection accepted by server')
         use.start_thread(_target=get_list_from, _args=(server_connection,))
-
-    else:  # server may send a peer's details to get list from, if it's busy
+    elif text.compare(const.REDIRECT):
+        # server may send a peer's details to get list from
         recv_list_user = RemotePeer.deserialize(server_connection)
         use.echo_print('::Connection redirected by server to : ', recv_list_user.req_uri)
         use.start_thread(_target=list_from_forward_control, _args=(recv_list_user,))
-
+    else:
+        return None
     connection_status = True
     return True
 
 
 def setup_server_connection():
     retry_count = 0
-    while safe_stop():
-        server_connection = socket.socket(const.IP_VERSION, const.PROTOCOL)
-        server_connection.settimeout(4)
+    while not safe_stop():
         try:
-            server_connection.connect((const.SERVER_IP, const.PORT_SERVER))
+            server_add = (const.SERVER_IP, const.PORT_SERVER)
+            server_connection = connect.create_connection(server_add, timeout=const.SERVER_TIMEOUT)
             break
         except (ConnectionRefusedError, TimeoutError, ConnectionError):
             if retry_count >= const.MAX_CALL_BACKS:
@@ -110,23 +112,28 @@ def setup_server_connection():
                 return None
             try:
                 retry_count += 1
-                print(f"\r::Connection refused by server, retrying... {retry_count}", end='')
+                print(f"\r::Connection refused by server, {f'retrying... {retry_count}' if safe_stop() else 'returning'}", end='')
             except KeyboardInterrupt:
-                return None
+                return
+
     else:
         return None
-    const.THIS_OBJECT.serialize(server_connection)
+    try:
+        const.THIS_OBJECT.serialize(server_connection)
+    except (socket.error,OSError):
+        server_connection.close()
+        return
     return server_connection
 
 
 def end_connection_with_server():
-    CONNECT_SERVER_FLAG.clear()
+    CONNECT_SERVER_FLAG.set()
+    print("::Cleared server flag")
     try:
         const.THIS_OBJECT.status = 0
         if connection_status is False:
             return True
-        with socket.socket(const.IP_VERSION, const.PROTOCOL) as end_socket:
-            end_socket.connect((const.SERVER_IP, const.PORT_SERVER))
+        with connect.create_connection((const.SERVER_IP, const.PORT_SERVER)) as end_socket:
             const.THIS_OBJECT.serialize(end_socket)
         print("::sent leaving status to server")
         return True

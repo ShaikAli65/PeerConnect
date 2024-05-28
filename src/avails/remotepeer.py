@@ -17,10 +17,10 @@ class RemotePeer:
         'id': str,
         'file_count': int
     }
-    __slots__ = ('username', 'uri', 'status', 'callbacks', 'req_uri', 'id', 'file_count')
+    __slots__ = 'username', 'uri', 'status', 'callbacks', 'req_uri', 'id', 'file_count'
 
-    def __init__(self, username: str = 'admin', ip: str = 'localhost', port: int = 8088, report: int = 35896,
-                 status: int = 0):
+    def __init__(self, username='admin', ip='localhost', port=8088, report=35896,
+                 status=0):
         self.username = username
         self.uri = (ip, port)
         self.status = status
@@ -29,8 +29,7 @@ class RemotePeer:
         self.id = ip
         self.file_count = count()
 
-
-    def serialize(self, _to_send: socket.socket):
+    def serialize(self, _to_send: connect.Socket):
         try:
             serialized = pickle.dumps(self)
             _to_send.send(struct.pack('!Q', len(serialized)))
@@ -66,7 +65,7 @@ class RemotePeer:
         self.file_count.__next__()
 
     @staticmethod
-    def deserialize(to_recv: socket.socket):
+    def deserialize(to_recv: connect.Socket):
 
         to_recv = until_sock_is_readable(to_recv, control_flag=RP_FLAG)
         if to_recv is None:

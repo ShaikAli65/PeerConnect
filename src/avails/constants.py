@@ -1,7 +1,7 @@
 import socket as soc
 import threading
-import platform
-from asyncio import Event
+from sys import platform as sys_name
+from src.avails.container import PeerDict
 
 CLEAR_LOGS = 1
 END_OR_NOT = False
@@ -9,10 +9,9 @@ USERNAME = 'admin'
 SERVER_IP = ''
 THIS_IP = 'localhost'
 
-SYS_NAME = platform.system()
-WINDOWS = bool(SYS_NAME == "Windows")
-DARWIN = bool(SYS_NAME == "Darwin")
-LINUX = bool(SYS_NAME == "Linux")
+WINDOWS = sys_name == "win32"
+DARWIN = sys_name == "darwin"
+LINUX = sys_name == "linux"
 
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
@@ -44,8 +43,7 @@ ACTIVE_PEERS = []
 PROFILE_LIST = []
 
 FLAGZ = [threading.Event() for x in range(10)]
-for event in FLAGZ:
-    event.set()
+
 
 # This list has the whole control over the project files where functions
 # block for resources until they get themselves available
@@ -63,7 +61,7 @@ RP_FLAG = FLAGZ[3]
 USEABLES_FLAG = FLAGZ[4]
 CONNECT_SERVER_FLAG = FLAGZ[5]
 
-LIST_OF_PEERS: dict = {}
+LIST_OF_PEERS = PeerDict()
 
 MAX_CALL_BACKS = 5
 REQ_URI_CONNECT = 12
@@ -96,6 +94,7 @@ SOCKET_OK = b"socket_ok"
 
 
 SERVER_OK = 'connection accepted'
+REDIRECT = 'redirect'
 LIST_SYNC = 'sync list'
 HANDLE_MESSAGE_HEADER = 'this is a message'
 HANDLE_END = 'end program'

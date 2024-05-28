@@ -1,8 +1,9 @@
-import websockets
+import websockets.server
 
 import src.avails.textobject
 import src.core.senders
 import src.managers.endmanager
+
 from src.core.senders import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
@@ -19,26 +20,25 @@ stack_safe: threading.Lock = threading.Lock()
 
 def handle_connection(addr_id):
     try:
-        _nomad: RemotePeer = use.get_peer_from_id(addr_id)
+        _nomad: RemotePeer = peer_list.get_peer(addr_id)
 
     except KeyError:
-        print("Looks like the user is not in the list can't connect to the user",const.LIST_OF_PEERS)
+        print("Looks like the user is not in the list can't connect to the user", peer_list)
         return False
     RecentConnections.connect_peer(_nomad)
 
 
 def command_flow_handler(data_in: DataWeaver):
-    print("got",data_in)
-    if data_in.match(_content=const.HANDLE_END):
+    if data_in.match_content(const.HANDLE_END):
         src.managers.endmanager.end_session()
-    elif data_in.match(_content=const.HANDLE_CONNECT_USER):
+    elif data_in.match_content(const.HANDLE_CONNECT_USER):
         handle_connection(addr_id=data_in.id)
-    elif data_in.match(_content=const.HANDLE_OPEN_FILE):
+    elif data_in.match_content(const.HANDLE_OPEN_FILE):
         use.open_file(data_in.content)
-    elif data_in.match(const.HANDLE_RELOAD):
+    elif data_in.match_header(const.HANDLE_RELOAD):
         use.reload_protocol()
         return
-    elif data_in.match(const.HANDLE_SYNC_USERS):
+    elif data_in.match_header(const.HANDLE_SYNC_USERS):
         use.start_thread(_target=req_handler.sync_list)
 
 
@@ -79,10 +79,10 @@ async def handler(_websocket):
     web_socket = _websocket
     const.HOLD_PROFILE_SETUP.wait()
     if const.USERNAME == '':
-        userdata = DataWeaver(header="thisisacommand",
+        userdata = DataWeaver(header="this is a command",
                               content="no..username", )
     else:
-        userdata = DataWeaver(header="thisismyusername",
+        userdata = DataWeaver(header="this is my username",
                               content=f"{const.USERNAME}(^){const.THIS_IP}",
                               _id='0')
     await web_socket.send(userdata.dump())
@@ -103,11 +103,11 @@ def initiate_control():
 
 async def feed_user_data_to_page(_data: str, ip):
     global web_socket
-    _data = DataWeaver(header="thisismessage",
+    _data = DataWeaver(header="this is a message",
                        content=f"{_data}",
                        _id=f"{ip}")
     # try:
-    print(f"::Sending data :{_data} to page: {ip}")
+    print(f"::Sending data to page:{ip}\n {_data}")
     await web_socket.send(_data.dump())
     # except Exception as e:
     #     error_log(f"Error sending data handle_data_flow.py/feed_user_data exp: {e}")
@@ -117,9 +117,8 @@ async def feed_user_data_to_page(_data: str, ip):
 async def feed_core_data_to_page(data: DataWeaver):
     global web_socket
     # try:
-    print(f"::Sending data :{data} \n to page")
-    await web_socket.send(data.dump
-                          ())
+    print(f"::Sending data to page :\n{data}")
+    await web_socket.send(data.dump())
     # except Exception as e:
     #     error_log(f"Error sending data handle_data_flow.py/feed_core_data exp: {e}")
     #     return
@@ -132,7 +131,7 @@ async def feed_server_data_to_page(peer: avails.remotepeer.RemotePeer):
                            content=(peer.username if peer.status else 0),
                            _id=peer.id)
         # try:
-        use.echo_print(f"::Sending data :{_data} to page: {peer.username}")
+        use.echo_print(f"::Sending data to page username:{peer.username}\n\n{_data}")
         await web_socket.send(_data.dump())
         # except Exception as e:
         #     error_log(f"Error sending data at handle_data_flow.py/feed_server_data, exp: {e}")

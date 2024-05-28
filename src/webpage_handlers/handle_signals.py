@@ -55,11 +55,11 @@ def initiate_control():
 def end():
     global SafeEnd, web_socket
     SafeEnd.set()
+    const.END_OR_NOT = True
     web_socket.close() if web_socket else None
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
     loop = asyncio.get_running_loop()
     loop.stop()
 
-    const.END_OR_NOT = True
     const.HOLD_PROFILE_SETUP.set()
     use.echo_print("::Handle_signals Ended")

@@ -1,4 +1,3 @@
-import socket
 import subprocess
 import platform
 import random
@@ -19,11 +18,12 @@ def start_thread(_target, _args=()):
         thread_recv = threading.Thread(target=_target, args=_args)
     else:
         thread_recv = threading.Thread(target=_target, daemon=True)
+    # thread_recv.name = "peer-connect"
     thread_recv.start()
     return thread_recv
 
 
-def is_socket_connected(sock: socket.socket):
+def is_socket_connected(sock: connect.Socket):
     try:
         sock.getpeername()
         sock.setblocking(False)
@@ -83,28 +83,7 @@ def get_free_port() -> int:
     return random_port
 
 
-@NotInUse
-def get_peer_obj_from_sock(_conn: socket.socket):
-    """Retrieves peer object from list using connected socket's ip address"""
-    with const.LOCK_LIST_PEERS:
-        return const.LIST_OF_PEERS.get(_conn.getpeername()[0], None)
-
-
-@NotInUse
-def get_socket() -> socket.socket:
-    return socket.socket(const.IP_VERSION,const.PROTOCOL)
-
-
-def get_peer_from_id(user_id: str) -> src.avails.remotepeer.RemotePeer:
-    """
-    Retrieves peer object from list given id
-    :param user_id:
-    """
-    with const.LOCK_LIST_PEERS:
-        return const.LIST_OF_PEERS[user_id]
-
-
-def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR,timeout=0) -> socket.socket:
+def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR,timeout=0):
     """
     Creates a basic socket connection to peer id passed in,
     or to the peer_obj passed in.
@@ -116,10 +95,10 @@ def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASI
     :param to_which:
     :return:
     """
-    peer_obj = _peer_obj if _peer_obj is not None else get_peer_from_id(peer_id)
+    peer_obj = _peer_obj if _peer_obj is not None else peer_list.get_peer(peer_id)
     addr = peer_obj.req_uri if to_which == const.REQ_URI_CONNECT else peer_obj.uri
 
-    soc = socket.socket(const.IP_VERSION, const.PROTOCOL)
+    soc = connect.Socket(const.IP_VERSION, const.PROTOCOL)
     if not timeout == 0:
         soc.settimeout(timeout)
     soc.connect(addr)

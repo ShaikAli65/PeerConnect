@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const addr = 'ws://localhost:12260';
+const addr = "ws://localhost:49854";
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
@@ -41,7 +41,7 @@ function eventlisteners()
     window.addEventListener('beforeunload', function(event) {
         endsession(Connection);
     });
-    
+
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -50,7 +50,7 @@ document.getElementById('proceedBtn').addEventListener('click', () => {
 });
 function initiate_data()
 {
-    console.log("::initiating data",document.getElementById("proceed_flag"));   
+    console.log("::initiating data",document.getElementById("proceed_flag"));
     if (document.getElementById("proceed_flag") == null)
     {
         return false;
@@ -206,7 +206,7 @@ function showcurrent(user)
     focusedUser = user;
     viewname.textContent = nametile_.textContent;
     console.log("line 217 focused :",focusedUser)
-    
+
 }
 
 function createmessage()
@@ -233,13 +233,13 @@ function createmessage()
         subDiv_.textContent = "U sent a file : " + Content_;
         return JSON.stringify({
             "header":"this is a file",
-            "content":Content_,
+            "content":{'files':[Content_,], 'grouping_level':4},
             "id":focusedUser.id.split("_")[1]
         });
     }
     if (Content_.substring(0,7).includes("dir::"))
     {
-        focusedUser.appendChild(wrapperdiv_); 
+        focusedUser.appendChild(wrapperdiv_);
         document.getElementById("message").value="";
         Content_ = Content_.split("dir::")[1].trim().replaceAll('\"','')
         subDiv_.textContent = "U sent a dir: " + Content_;
@@ -312,4 +312,3 @@ function removeuser(idin)
 }
 
 // -------------------------profile data : ---------------------------------------------------
-
