@@ -2,7 +2,11 @@ from collections import defaultdict
 
 from src.core import *
 from typing import Union
-from src.avails.constants import PEER_TEXT_FLAG
+from src.avails.constants import PEER_TEXT_FLAG, DATA_WEAVER_FLAG
+
+p_controller = ThreadController(None, control_flag=PEER_TEXT_FLAG)
+d_controller = ThreadController(None,control_flag=DATA_WEAVER_FLAG)
+TIMEOUT = 5
 
 
 class SimplePeerText:
@@ -21,15 +25,15 @@ class SimplePeerText:
         'raw_text': bytes,
         'text_len_encoded': bytes,
         'sock': connect.Socket,
-        '__control_flag': threading.Event,
+        'controller': ThreadController,
         'id': str,
     }
-    __slots__ = 'raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', '__control_flag',
+    __slots__ = 'raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', 'controller',
 
-    def __init__(self, refer_sock, text='', byte_able=True, chunk_size=512, control_flag:threading.Event = None):
-        self.raw_text = text.encode(const.FORMAT) if byte_able else text
+    def __init__(self, refer_sock, text=b'',*, chunk_size=512, controller=p_controller):
+        self.raw_text = text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
-        self.__control_flag = control_flag or PEER_TEXT_FLAG
+        self.controller = controller
         self.sock = refer_sock
         self.chunk_size = chunk_size
 
@@ -39,7 +43,6 @@ class SimplePeerText:
         Possible Errors:
         - ConnectionError: If the socket is not connected.
         - ConnectionResetError: If the connection is reset.
-        - BrokenPipeError: If the connection is broken.
         - OSError: If an error occurs while sending the text.
         - struct.error: If an error occurs while packing the text length.
         Returns:
@@ -64,45 +67,46 @@ class SimplePeerText:
                         otherwise returns the received text as bytes.
 
         """
-
-        while not self.safe_stop:
-            readable, _, _ = select.select([self.sock], [], [], 0.5)
-            if self.sock in readable:
-                raw_length = self.sock.recv(4)
-                break
-        else:
+        readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
+        if self.controller.to_stop or self.sock not in readable:
             return False if cmp_string else b''
 
+        raw_length = self.sock.recv(4)
         text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
+
         received_data = bytearray()
-
-        while text_length > 0:
-
-            while not self.safe_stop:
-                readable, _, _ = select.select([self.sock], [], [], 0.5)
-                if self.sock in readable:
+        try:
+            safe_stop = self.controller.to_stop
+            self.sock.setblocking(False)
+            chunk = b''
+            while text_length > 0:
+                try:
                     chunk = self.sock.recv(min(self.chunk_size, text_length))
+                except BlockingIOError:
+                    pass
+                if safe_stop is True:
+                    return False if cmp_string else b''
+                if not chunk:
                     break
-            else:
-                return False if cmp_string else b''
+                text_length -= len(chunk)
+                received_data.extend(chunk)
+        finally:
+            self.sock.setblocking(True)
 
-            if not chunk:
-                break
-            text_length -= len(chunk)
-            received_data.extend(chunk)
         self.raw_text = bytes(received_data)
 
-        if not self.raw_text:
+        if (not self.raw_text) or text_length > 0:
+            self.sock.send(struct.pack('!I', 0))
             return b''
 
         self.__send_header()
 
         if cmp_string:
-            return self.raw_text == (cmp_string.encode(const.FORMAT) if isinstance(cmp_string, str) else cmp_string)
+            return self.raw_text == cmp_string
 
         return self.raw_text
 
-    def compare(self, cmp_string: str):
+    def compare(self, cmp_string: bytes):
         """
         Compare the stored text to a provided string.
         accepts both byte string and normal string and checks accordingly.
@@ -114,7 +118,7 @@ class SimplePeerText:
         - bool: True if the stored text matches cmp_string; False otherwise.
 
         """
-        return self.raw_text == cmp_string.encode(const.FORMAT)
+        return self.raw_text == cmp_string
 
     def __send_header(self):
         self.sock.send(struct.pack('!I', len(const.TEXT_SUCCESS_HEADER)))
@@ -122,27 +126,19 @@ class SimplePeerText:
 
     def __recv_header(self):
 
-        while not self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.5)
-            if self.sock in readable:
-                break
-        else:
+        readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
+        if self.controller.to_stop or self.sock not in readable:
             return False
 
-        header_raw_length = self.sock.recv(4)
-        header_length = struct.unpack('!I', header_raw_length)[0] if header_raw_length else 0
+        raw_length = self.sock.recv(4)
+        header_length = struct.unpack('!I', raw_length)[0]
 
-        while not self.safe_stop:
-            readable, _, _ = select.select([self.sock, ], [], [], 0.5)
-            if self.sock in readable:
-                break
-        else:
+        readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
+        if self.controller.to_stop:
             return False
-        return self.sock.recv(header_length) == const.TEXT_SUCCESS_HEADER
-
-    @property
-    def safe_stop(self):
-        return self.__control_flag.is_set()
+        if self.sock in readable:
+            return self.sock.recv(header_length) == const.TEXT_SUCCESS_HEADER
+        return False
 
     def __str__(self):
         """
@@ -224,30 +220,31 @@ class DataWeaver:
         with self.data_lock:
             return self.__data['header'] == _header
 
-    def send(self, receiver_sock):
+    def send(self, receiver_sock,controller=d_controller):
         """
         Sends data as json string to the provided socket,
         This function is written on top of :class: `SimplePeerText`'s send function
         Args:
+            :param controller: an optional controller to pass into SimplePeerText
             :param receiver_sock:
 
         Returns:
             :returns True if sends text successfully else False:
         """
-        return SimplePeerText(text=self.dump(), refer_sock=receiver_sock).send()
+        return SimplePeerText(receiver_sock, self.dump().encode(const.FORMAT), controller=controller).send()
 
-    def receive(self, sender_sock):
+    def receive(self, sender_sock, controller=d_controller):
         """
         Receives a text string from the specified sender socket and sets the values of the TextObject instance.
         Written on top of :class: `SimplePeerText`'s receive function
         Args:
             sender_sock: The sender socket from which to receive the text string.
-
+            :param sender_sock:
+            :param controller: An optional controller to pass into SimplePeerText
         Returns:
-            The updated TextObject instance.
-
+            The updated TextObject instance
         """
-        text_string = SimplePeerText(refer_sock=sender_sock)
+        text_string = SimplePeerText(sender_sock, controller=controller)
         text_string.receive()
         self.__set_values(json.loads(str(text_string)))
         return self
@@ -290,15 +287,17 @@ class DataWeaver:
         self.__data['id'] = _id
 
     def __str__(self):
-        return (f"\n"
-                f"header : {self.header}\n"
-                f"content: {str(self.content).strip(' \n')}\n"
-                f"id     : {self.id}")
+        return (f"--------------------------------------------------\n"
+                f"header  : {self.header}\n"
+                f"content : {str(self.content).strip(' \n')}\n"
+                f"id      : {self.id}\n"
+                f"--------------------------------------------------")
 
     def __repr__(self):
         return f'DataWeaver(content="{self.__data}")'
 
 
 def stop_all_text():
-    PEER_TEXT_FLAG.clear()
+    p_controller.stop()
+    d_controller.stop()
     print("::All texts stopped")

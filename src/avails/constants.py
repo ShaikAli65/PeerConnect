@@ -1,6 +1,6 @@
 import socket as soc
 import threading
-from sys import platform as sys_name
+from sys import platform
 from src.avails.container import PeerDict
 
 CLEAR_LOGS = 1
@@ -9,9 +9,9 @@ USERNAME = 'admin'
 SERVER_IP = ''
 THIS_IP = 'localhost'
 
-WINDOWS = sys_name == "win32"
-DARWIN = sys_name == "darwin"
-LINUX = sys_name == "linux"
+WINDOWS = platform == "win32"
+DARWIN = platform == "darwin"
+LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
@@ -60,7 +60,7 @@ REQ_FLAG = FLAGZ[2]
 RP_FLAG = FLAGZ[3]
 USEABLES_FLAG = FLAGZ[4]
 CONNECT_SERVER_FLAG = FLAGZ[5]
-
+DATA_WEAVER_FLAG = FLAGZ[6]
 LIST_OF_PEERS = PeerDict()
 
 MAX_CALL_BACKS = 5
@@ -80,11 +80,11 @@ WEB_SOCKET = None
 
 CMD_RECV_FILE = 'this is a command to core_/!_recv a file'
 CMD_CLOSING_HEADER = 'this is a command to core_/!_close connection'
-CMD_FILESOCKET_HANDSHAKE = 'this is a command to core_/!_file socket open'
 CMD_TEXT = "this is a message"
 CMD_RECV_DIR = 'this is a command to core_/!_recv dir'
 
 
+CMD_FILESOCKET_HANDSHAKE = b'this is a command to core_/!_file socket open'
 CMD_FILE_SUCCESS = b'file_success'
 TEXT_SUCCESS_HEADER = b'text string recv success'
 REQ_FOR_LIST = b'this is a request to core_/!_list of users'
@@ -93,9 +93,11 @@ SERVER_PING = b'this is a command from server_/!_ping'
 SOCKET_OK = b"socket_ok"
 
 
-SERVER_OK = 'connection accepted'
-REDIRECT = 'redirect'
-LIST_SYNC = 'sync list'
+SERVER_OK = b'connection accepted'
+REDIRECT = b'redirect'
+LIST_SYNC = b'sync list'
+ACTIVE_PING = b"why_s ur face like that"
+
 HANDLE_MESSAGE_HEADER = 'this is a message'
 HANDLE_END = 'end program'
 HANDLE_COMMAND = 'this is a command'
@@ -107,4 +109,3 @@ HANDLE_POP_DIR_SELECTOR = 'pop dir selector'
 HANDLE_PUSH_FILE_SELECTOR = 'push file selector'
 HANDLE_OPEN_FILE = 'open file'
 HANDLE_SYNC_USERS = 'sync users'
-ACTIVE_PING = b"why_s ur face like that"

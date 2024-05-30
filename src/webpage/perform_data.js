@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const addr = "ws://localhost:49854";
+const addr = "ws://localhost:28425";
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
@@ -17,8 +17,8 @@ let EventListeners =   [];
 let Connection     =   null;
 function searchfunction()
 {
-    var searched = searchbox.value;
-    if (searched == "")
+    const searched = searchbox.value;
+    if (searched === "")
         return false;
     users_list.forEach(element => {
         if (element.textContent.toLowerCase().includes(searched.toLowerCase()))
@@ -66,26 +66,25 @@ function initiate_data()
         document.getElementById("senderbutton").addEventListener("click",
         function()
         {
-            if (focusedUser == null)
-            {
-                console.log("focused :",focusedUser)
-                document.getElementById("intial_view").textContent="Select a user to chat";
-            }
-            else
-            {
+            let data;
+            if (focusedUser == null) {
+                console.log("focused :", focusedUser)
+                document.getElementById("intial_view").textContent = "Select a user to chat";
+            } else {
                 data = createmessage();
                 connectToCode_.send(data);
-                console.log("message sent :",data);
+                console.log("message sent :", data);
             }
         });
     });
     document.getElementById("Close Application").addEventListener("click",()=>{
+        let connect_r;
         try {
             connect_r = new WebSocket(addr);
             connect_r.send(JSON.stringify({
-                "header":'this is a command',
-                "content":"this is command to core_/!_reload",
-                "id":""
+                "header": 'this is a command',
+                "content": "this is command to core_/!_reload",
+                "id": ""
             }));
             connectToCode_ = connect_r;
         } catch (error) {
@@ -98,7 +97,7 @@ function initiate_data()
     EventListeners.push(document.getElementById("senderbutton"));
     /*sending messages on port :12346 message syntax : "thisisamessage_/!_" + Content + "~^~" + focusedUser.id */
     eventlisteners();
-    recievedataFromPython(connectToCode_);
+    recieveDataFromPython(connectToCode_);
 }
 function ping_currentuser_id_topython(touser="") {
     Connection.send(
@@ -115,15 +114,15 @@ function revert()
             element.style.display = "flex";
     });
 }
-function recievedataFromPython(connecttocode_)
+function recieveDataFromPython(connecttocode_)
 {
     const connectToCode_ = connecttocode_;
     connectToCode_.addEventListener('message', (event) => {
         console.log('::Received message :', event.data);
-        data = JSON.parse(event.data);
+        let data = JSON.parse(event.data);
         if (data.header === "this is a command")
         {
-            if (data.content == '0')
+            if (data.content == 0)
             {
                 removeuser(data.id);
             }
@@ -132,11 +131,12 @@ function recievedataFromPython(connecttocode_)
                 createUserTile(data.content, data.id);
             }
         }
-        if (data.header === "this is my username")
+        if (data.header == "this is my username")
         {
             display_name.textContent = data.content;
+            document.title = data.content.split('(^)')[0];
         }
-        if (data.header === "this is a message")
+        if (data.header == "this is a message")
         {
             recievedmessage(data);
         }});
@@ -162,9 +162,6 @@ function endsession(connection)
     document.body.style.justifyContent = "center";
     connection = null;
     document.title = "Chat Closed";
-    if (typeof window.gc === 'function') {
-        window.gc();
-      }
 }
 
 function createUserTile(name, name_id) // idin is the id of the user to be added syntax : name(^)ipaddress
@@ -263,24 +260,25 @@ function createmessage()
 
 function recievedmessage(recievedata)
 {
+    let reciever = recievedata.id.trim();
+    let reciever_view = document.getElementById("viewer_"+reciever);
     console.log("::recievedata : ",recievedata);
-    var reciever = recievedata.id.trim();
     recievedata = recievedata.content;
     console.log("::recievedata : ","person_",reciever);
-    var reciever_tile = document.getElementById("person_"+reciever);
+    let reciever_tile = document.getElementById("person_" + reciever);
     if(reciever_tile == null)
     {
-        reciever_tile = createUserTile("Unknown@"+reciever+"(^)"+reciever);
+        reciever_tile = createUserTile("Unknown@"+reciever);
         reciever_tile.style.backgroundColor = "var(--dark)";
     }
-    if(reciever_view != focusedUser)
+    if(reciever_view !== focusedUser)
     {
         reciever_tile.style.backgroundColor = "var(--dark)";
     }
-    var reciever_view = document.getElementById("viewer_"+reciever);
-    var wrapperdiv_ = document.createElement("div");
-    var subDiv_ = document.createElement("div");
-    reciever_view.scrollTo=reciever_view.scrollBy(0,100);
+    let wrapperdiv_ = document.createElement("div");
+    let subDiv_ = document.createElement("div");
+    // reciever_view.scrollBy(0,100);
+    reciever_view.scrollTop = reciever_view.scrollHeight;
     subDiv_.textContent =recievedata;
     subDiv_.className="message";
     subDiv_.id = "message_"+countMessage;
@@ -291,13 +289,13 @@ function recievedmessage(recievedata)
 }
 function removeuser(idin)
 {
-    var user_ = document.getElementById("person_"+idin);
-    var userview_ = document.getElementById("viewer_"+idin);
+    const user_ = document.getElementById("person_" + idin);
+    const userview_ = document.getElementById("viewer_" + idin);
     console.log("removing user :",user_," ",userview_," ",idin);
     division_alive.removeChild(user_);
     users_list.splice(users_list.indexOf(user_),1);
     initial_view.textContent = "Select a user to chat";
-    if (focusedUser != userview_)
+    if (focusedUser !== userview_)
     {
         division_viewerpov.removeChild(userview_);
     }

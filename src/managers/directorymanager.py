@@ -97,7 +97,9 @@ def process_unzipping(file_path):
 def open_directory_dialog_window(prev_dir=[None, ]):
     _ = QApplication([])
     dialog = QFileDialog()
-    dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+    dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+    dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
+
     directory = dialog.getExistingDirectory(directory=prev_dir[0], caption="Select directory to send")
     prev_dir[0] = directory
     return directory

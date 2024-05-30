@@ -1,5 +1,15 @@
+# Importing the required modules and packages for files across the project
+
+import src.avails.connect as connect
+from src.avails.constants import LIST_OF_PEERS as peer_list
+from src.avails.waiters import *
+from logs import error_log
+from logs import activity_log
+from logs import server_log
+
+
 import threading
-# import socket
+import socket
 import time
 import json
 import asyncio
@@ -7,15 +17,20 @@ import struct
 import select
 import selectors
 import os
+
 from collections.abc import MutableSet
 from typing import Union, Dict, Tuple
 import src.avails.constants as const
-from src.avails.constants import LIST_OF_PEERS as peer_list
-from src.avails.waiters import *
-import src.avails.connect as connect
-from logs import error_log
-from logs import activity_log
-from logs import server_log
+
+
+modules = (
+    threading, socket, time, json,
+    asyncio, struct, select, selectors,
+    os, MutableSet, Union, Dict, Tuple,
+    const, peer_list, connect,
+    error_log, activity_log, server_log,
+    peer_list, Union, ThreadController
+)
 
 
 class NotInUse:
@@ -50,6 +65,7 @@ def func_str(func_name):
     return f"{func_name.__name__}()\\{os.path.relpath(func_name.__code__.co_filename)}"
 
 
+@NotInUse
 def until_sock_is_readable(sock, *, control_flag: threading.Event):
     """
     Helper function, this function blocks until a socket is readable using `select.select` and timeout defaults to 0.1
@@ -59,7 +75,7 @@ def until_sock_is_readable(sock, *, control_flag: threading.Event):
     """
     try:
         while not control_flag.is_set():
-            readable, _, _ = select.select([sock, ], [], [], 0.1)
+            readable, _, _ = select.select([sock, ], [], [])
             # readable, _, _ = select.select([sock, ], [], [], 0.1)
             if sock in readable:
                 return sock

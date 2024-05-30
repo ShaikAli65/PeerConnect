@@ -130,7 +130,7 @@ def sync_users():
             active_user_sock.settimeout(5)
             try:
                 active_user_sock.connect(peer.req_uri)
-                SimplePeerText(active_user_sock, const.SERVER_PING,byte_able=False).send()
+                SimplePeerText(active_user_sock, const.SERVER_PING).send()
             except soc.error as e:
                 print(f'::got EXCEPTION {e} closing connection with :', peer)
                 peer.status = 0

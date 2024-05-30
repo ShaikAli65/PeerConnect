@@ -1,7 +1,6 @@
 from src.core import *
 from src.avails import useables as use
 from src.avails.remotepeer import RemotePeer
-import src.core.receivers as receivers
 
 from src.avails.constants import NOMAD_FLAG  # control flag
 from src.avails.waiters import waker_flag

@@ -21,7 +21,9 @@ def initiate():
         config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
     set_constants(config_map)
     const.THIS_IP = get_ip()
-    const.IP_VERSION = socket.AF_INET6 if ipaddress.ip_address(const.THIS_IP).version == 6 else socket.AF_INET
+    const.IP_VERSION = (socket.AF_INET6
+                        if ipaddress.ip_address(const.THIS_IP).version == 6
+                        else socket.AF_INET)
     # print(f"{const.THIS_IP=}")
     validate_ports()
     write_port_to_js()  # just a convenience function of testing
@@ -33,11 +35,12 @@ def write_port_to_js():
             random_port = random.randint(1024, 65535)
             try:
                 with soc.socket(const.IP_VERSION, const.PROTOCOL) as s:
-                    s.bind(("localhost",random_port))
+                    s.bind(("localhost", random_port))
             except socket.error:
                 pass
             else:
                 return random_port
+
     import re
     # data = f"const addr = 'ws://localhost:{const.PORT_PAGE_DATA}';"
     # signals = f"const wss = new WebSocket(\"ws://localhost:{const.PORT_PAGE_SIGNALS}\");"

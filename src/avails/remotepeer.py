@@ -2,12 +2,14 @@ from src.core import *
 import pickle
 from typing import Tuple
 
-from src.avails.constants import RP_FLAG   # control flag for this class
+from src.avails.constants import RP_FLAG  # control flag for this class
 from itertools import count
+
+_controller = ThreadController(None, control_flag=RP_FLAG)
+TIMEOUT = 50  # sec
 
 
 class RemotePeer:
-
     __annotations__ = {
         'username': str,
         'uri': Tuple[str, int],
@@ -26,17 +28,14 @@ class RemotePeer:
         self.status = status
         self.callbacks = 0
         self.req_uri = (ip, report)
-        self.id = ip
+        self.id = f'{ip}{port}'
         self.file_count = count()
 
     def serialize(self, _to_send: connect.Socket):
-        try:
-            serialized = pickle.dumps(self)
-            _to_send.send(struct.pack('!Q', len(serialized)))
-            _to_send.send(serialized)
-            return True
-        except socket.error as e:
-            print(f"::Exception while serializing... {e}")
+        serialized = pickle.dumps(self)
+        _to_send.send(struct.pack('!I', len(serialized)))
+        _to_send.send(serialized)
+        return True
 
     def __repr__(self):
         return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.req_uri[1]}, {self.status})'
@@ -65,21 +64,27 @@ class RemotePeer:
         self.file_count.__next__()
 
     @staticmethod
-    def deserialize(to_recv: connect.Socket):
+    def deserialize(to_recv: connect.Socket, controller=_controller):
 
-        to_recv = until_sock_is_readable(to_recv, control_flag=RP_FLAG)
-        if to_recv is None:
+        reads, _, _ = select.select([to_recv, controller], [], [], TIMEOUT)
+        if to_recv not in reads or controller.to_stop:
             return RemotePeer()
         try:
-            raw_length = to_recv.recv(8)
-            length = struct.unpack('!Q', raw_length)[0]
+            raw_length = to_recv.recv(4)
+            size_to_recv = struct.unpack('!I', raw_length)[0]
 
-            to_recv = until_sock_is_readable(to_recv, control_flag=RP_FLAG)
-            if to_recv is None:
+            reads, _, _ = select.select([to_recv, controller], [], [],50)
+            if to_recv not in reads or controller.to_stop:
                 return RemotePeer()
 
-            serialized = to_recv.recv(length) if length else b''
+            serialized = to_recv.recv(size_to_recv)
             return pickle.loads(serialized)
         except Exception as e:
             print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
-            return RemotePeer(username="N/A",ip=to_recv.getpeername()[0], port=to_recv.getpeername()[1],)
+            return RemotePeer(username="N/A", ip=to_recv.getpeername()[0], port=to_recv.getpeername()[1], )
+
+
+def end():
+    _controller()
+    print("::RemotePeers Ended")
+

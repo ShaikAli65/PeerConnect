@@ -8,7 +8,7 @@ from src.avails.textobject import DataWeaver
 from src.webpage_handlers.handle_profiles import align_profiles
 
 web_socket: websockets.WebSocketServerProtocol
-SafeEnd = asyncio.Event()
+safe_end = asyncio.Event()
 
 
 async def control_data_flow(data_in: DataWeaver):
@@ -18,7 +18,7 @@ async def control_data_flow(data_in: DataWeaver):
 
 
 async def getdata():
-    global web_socket, SafeEnd
+    global web_socket, safe_end
     while not SafeEnd.is_set():
         # try:
         raw_data = await web_socket.recv()
@@ -32,7 +32,7 @@ async def getdata():
 
 
 async def handler(_websocket):
-    global web_socket, SafeEnd
+    global web_socket, safe_end
     web_socket = _websocket
     try:
         await align_profiles(_websocket)
@@ -53,7 +53,7 @@ def initiate_control():
 
 
 def end():
-    global SafeEnd, web_socket
+    global safe_end, web_socket
     SafeEnd.set()
     const.END_OR_NOT = True
     web_socket.close() if web_socket else None

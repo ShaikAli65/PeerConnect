@@ -27,7 +27,7 @@ class _FileItem:
     __slots__ = 'name', 'size', 'path', 'seeked'
 
     def __init__(self, name, size, path, seeked):
-        self.name = name
+        self.name: str = name
         self.size = size
         self.path = path
         self.seeked = seeked
@@ -67,6 +67,7 @@ def stringify_size(size: int) -> str:
 
 
 class PeerFilePool:
+    __slots__ = 'file_paths', '__control_flag', '__chunk_size', '__error_extension'
 
     def __init__(self,
                  paths: list[_FileItem] = None, *,
@@ -94,7 +95,7 @@ class PeerFilePool:
         #     if not os.path.isfile(file_path):
         #         raise IsADirectoryError(f"Not a regular file: {file_path}")
 
-    def __send_file(self, receiver_sock, *, file):
+    def __send_file(self, receiver_sock, *, file: _FileItem):
 
         """
            Accepts a connected socket as a parameter.
@@ -105,7 +106,7 @@ class PeerFilePool:
                bool: True if the file is sent successfully, False otherwise.
         """
 
-        if not SimplePeerText(text=file.name, refer_sock=receiver_sock).send():
+        if not SimplePeerText(text=file.name.encode(const.FORMAT), refer_sock=receiver_sock).send():
             raise ValueError(f"Cannot send file_path :{file.name} some error occurred")
         self.calculate_chunk_size(file.size)
         receiver_sock.send(struct.pack('!Q', file.size))
@@ -419,7 +420,7 @@ class _SockGroup:
 
             conn, _ = connection_sock.accept()
 
-            if SimplePeerText(refer_sock=conn, text=const.SOCKET_OK, byte_able=False).send():
+            if SimplePeerText(conn, const.SOCKET_OK).send():
                 self.sock_list.append(conn)
 
     def connect_sockets(self, sender_ip: Tuple[Any, ...]):

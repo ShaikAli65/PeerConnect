@@ -14,7 +14,7 @@ from src import avails
 
 web_socket: websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
-SafeEnd = asyncio.Event()
+safe_end = asyncio.Event()
 stack_safe: threading.Lock = threading.Lock()
 
 
@@ -30,6 +30,7 @@ def handle_connection(addr_id):
 
 def command_flow_handler(data_in: DataWeaver):
     if data_in.match_content(const.HANDLE_END):
+        safe_end.set()
         src.managers.endmanager.end_session()
     elif data_in.match_content(const.HANDLE_CONNECT_USER):
         handle_connection(addr_id=data_in.id)
@@ -61,12 +62,12 @@ def control_data_flow(data_in: DataWeaver):
 
 
 async def getdata():
-    global web_socket, SafeEnd
-    while not SafeEnd.is_set():
+    global web_socket, safe_end
+    while not safe_end.is_set():
         # try:
         raw_data = await web_socket.recv()
         data = DataWeaver(byte_data=raw_data)
-        use.echo_print("data from page:", data)
+        use.echo_print("data from page:\n", data)
         control_data_flow(data_in=data)
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data_flow.py/getdata() ")
@@ -75,7 +76,7 @@ async def getdata():
 
 
 async def handler(_websocket):
-    global web_socket, SafeEnd
+    global web_socket, safe_end
     web_socket = _websocket
     const.HOLD_PROFILE_SETUP.wait()
     if const.USERNAME == '':
@@ -102,36 +103,32 @@ def initiate_control():
 
 
 async def feed_user_data_to_page(_data: str, ip):
+    if safe_end.is_set():
+        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        return
     global web_socket
     _data = DataWeaver(header="this is a message",
                        content=f"{_data}",
                        _id=f"{ip}")
     # try:
-    print(f"::Sending data to page:{ip}\n {_data}")
+    print(f"::Sending data to page: {ip}\n{_data}")
     await web_socket.send(_data.dump())
     # except Exception as e:
     #     error_log(f"Error sending data handle_data_flow.py/feed_user_data exp: {e}")
     #     return
 
 
-async def feed_core_data_to_page(data: DataWeaver):
-    global web_socket
-    # try:
-    print(f"::Sending data to page :\n{data}")
-    await web_socket.send(data.dump())
-    # except Exception as e:
-    #     error_log(f"Error sending data handle_data_flow.py/feed_core_data exp: {e}")
-    #     return
-
-
-async def feed_server_data_to_page(peer: avails.remotepeer.RemotePeer):
+async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
+    if safe_end.is_set():
+        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        return
     global web_socket, server_data_lock
     with server_data_lock:
         _data = DataWeaver(header=const.HANDLE_COMMAND,
-                           content=(peer.username if peer.status else 0),
+                           content=peer.username if peer.status else 0,
                            _id=peer.id)
         # try:
-        use.echo_print(f"::Sending data to page username:{peer.username}\n\n{_data}")
+        use.echo_print(f"::signaling page username:{peer.username}\n{_data}")
         await web_socket.send(_data.dump())
         # except Exception as e:
         #     error_log(f"Error sending data at handle_data_flow.py/feed_server_data, exp: {e}")
@@ -139,8 +136,8 @@ async def feed_server_data_to_page(peer: avails.remotepeer.RemotePeer):
 
 
 def end():
-    global SafeEnd, web_socket
-    SafeEnd.set()
+    global safe_end, web_socket
+    safe_end.set()
 
     loop = asyncio.get_event_loop()
     # loop.run_until_complete(asyncio.gather(*asyncio.all_tasks()))

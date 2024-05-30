@@ -1,13 +1,12 @@
-from typing import Union
 from src.avails import constants as const
 
-from src.core import connectserver as connect_server, requests_handler as manage_requests, senders
+from src.core import connectserver as connect_server, requests_handler, senders
 from src.webpage_handlers import handle_data, handle_signals, httphandler
 from src.managers import filemanager
-from src.avails import textobject
+from src.avails import textobject, remotepeer
 
 
-def end_session(sig='',frame='') -> Union[bool, None]:
+def end_session(sig='',frame=''):
     """
     performs cleanup tasks for ending the application session.
 
@@ -17,17 +16,17 @@ def end_session(sig='',frame='') -> Union[bool, None]:
     const.END_OR_NOT = True
     print("::Initiating End Sequence",sig,frame)
     # activity_log("::Initiating End Sequence")
-    textobject.stop_all_text()
     connect_server.end_connection_with_server()
+    requests_handler.end_requests_connection()
     senders.RecentConnections.end()
-    if not const.PAGE_HANDLE_CALL.is_set():
-        return None
+    # if not const.PAGE_HANDLE_CALL.is_set():
+    #     return None
     if const.HOST_OBJ:
         const.HOST_OBJ.end()
-    manage_requests.end_requests_connection()
     handle_data.end()
     handle_signals.end()
-    const.LIST_OF_PEERS.clear()
     httphandler.end_serving()
     filemanager.endFileThreads()
+    textobject.stop_all_text()
+    remotepeer.end()
     exit(1)

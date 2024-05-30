@@ -1,16 +1,16 @@
 """Main entry point for the application."""
 import tracemalloc
 import signal
-# from src.core.nomad import Nomad
+
 from src.core import *
+import src.configurations.configure_app
+import src.avails.useables as use
 from src.core.nomad import Nomad
 from src.webpage_handlers import handle_data, handle_signals
 from src.core import connectserver as connect_server
 from src.core import requests_handler as manage_requests
-import src.avails.useables as use
 from src.configurations import boot_up
 from src.managers import endmanager, profile_manager
-import src.configurations.configure_app
 
 
 def initiate() -> int:
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     #       "USE PIPES INSTEAD OF POLLING IN SELECT.SELECTS")
     """                                       WRITE A PY SCRIPT TO CREATE 5 USERS FOR CHECKING !!!           """
     # exit(1)
-    # file_dialogue =
+
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     boot_up.set_paths()
     boot_up.initiate()

@@ -33,6 +33,7 @@ class PeerDict:
             return self.__dict.values()
 
     def clear(self):
+        return
         with self.__lock:
             self.__dict.clear()
 

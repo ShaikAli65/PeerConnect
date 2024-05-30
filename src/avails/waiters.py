@@ -1,13 +1,14 @@
-from collections import namedtuple
-from io import BufferedReader
-from typing import BinaryIO, Callable
-
-from functools import partial
-import socket
 import os
+import socket
+import threading
+
+from io import BufferedReader
+from typing import BinaryIO, Callable, Union
+from functools import partial
+
 import src.avails.constants as const
 
-type ThController = _ThreadControl
+type ThController = ThreadController
 
 
 def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
@@ -40,20 +41,45 @@ def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
     return read, write
 
 
-class Waits:
+# namedtuple('_ThreadControl', field_names=['control_flag', 'reader', 'select_waker', 'thread', 'proceed'])
+class ThreadController:
+    """
 
-    def __init__(self):
-        pass
+        This is used to control threads in a blocking way
+        this object can be called directly to wake ~select.select calls instantly
+        which were blocked in order to get their reads active
+        control_flag: threading.Event
+        reader: BufferedReader | BinaryIO
+        select_waker: Callable
+        thread: threading.Thread
 
-    def __call__(self, *args, **kwargs):
-        pass
+    """
+    __slots__ = 'control_flag', 'reader', 'select_waker', 'thread'
+    __annotations__ = {
+        'control_flag': Union[threading.Event, bool],
+        'reader': BufferedReader | BinaryIO,
+        'select_waker': Callable,
+        'thread': threading.Thread
+    }
 
+    def __init__(self, thread, control_flag=None):
+        self.control_flag = control_flag or threading.Event()
+        self.reader, self.select_waker = waker_flag()
+        self.thread = thread
 
-_ThreadControl = namedtuple('_ThreadControl', field_names=['control_flag', 'reader', 'select_waker', 'thread', 'flag_check'])
+    def __call__(self):
+        self.stop()
 
+    @property
+    def to_stop(self):
+        return self.control_flag.is_set()
 
-def get_thread_controller(control_flag, select_reader, select_waker, thread):
-    def _is_set(event):
-        return event.is_set()
-    flag = partial(_is_set,control_flag)
-    return _ThreadControl(control_flag, select_reader, select_waker, thread, flag)
+    def stop(self):
+        self.control_flag.set()
+        self.select_waker()
+        if self.thread:
+            self.thread.join()
+        self.reader.flush()
+
+    def fileno(self):
+        return self.reader.fileno()

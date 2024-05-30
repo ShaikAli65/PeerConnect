@@ -68,7 +68,7 @@ class RecentConnections:
         if peer_obj.id not in cls.connected_sockets:
             try:
                 cls.current_connected = cls.addConnection(peer_obj)
-                print("cache miss --current : ", cls.current_connected, peer_obj.username)
+                print("cache miss --current : ", peer_obj.username, cls.current_connected.getpeername()[:2],cls.current_connected.getsockname()[:2])
             except socket.error:
                 use.echo_print("handle signal to page, that we can't reach user, or he is offline")
                 pass
@@ -77,7 +77,8 @@ class RecentConnections:
         supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
         if use.is_socket_connected(supposed_to_be_connected_socket):
             cls.current_connected = supposed_to_be_connected_socket
-            use.echo_print("cache hit !! and socket is connected", supposed_to_be_connected_socket.getpeername())
+            pr_str = f"cache hit !{f"{peer_obj.username[:10]}..." if len(peer_obj.username) > 10 else peer_obj.username}! and socket is connected"
+            use.echo_print(pr_str, supposed_to_be_connected_socket.getpeername())
         else:
             cls.connected_sockets.remove(peer_id=peer_obj.id)
             use.echo_print("cache hit !! socket not connected trying to reconnect")

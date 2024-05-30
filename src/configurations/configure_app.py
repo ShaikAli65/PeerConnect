@@ -36,7 +36,7 @@ def set_constants(config_map: configparser) -> bool:
 def print_constants():
     line = "{:<15} {:<10}"
     with const.LOCK_PRINT:
-        print('\n:configuration choices=========================\n'
+        print('\n:configuration choices============================\n'
               f'{line.format("USERNAME", const.USERNAME)}\n'
               f'{line.format("THIS_IP", const.THIS_IP)}\n'
               f'{line.format("PORT_THIS", const.PORT_THIS)}\n'
@@ -46,7 +46,7 @@ def print_constants():
               f'{line.format("PROTOCOL", const.PROTOCOL)}\n'
               f'{line.format("IP_VERSION", const.IP_VERSION)}\n'
               f'{line.format("PORT_REQ", const.PORT_REQ)}\n'
-              '===============================================\n'
+              '===================================================\n'
               )
     return
     #
