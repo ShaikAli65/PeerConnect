@@ -137,7 +137,7 @@ def get_v6_from_shell():
         ip_v6 = []
         for line in output_lines:
             if 'inet6' in line and 'fe80' not in line and '::1' not in line:
-                ip_v6.append(line.split()[1])
+                ip_v6.append(line.split()[1].split('/')[0])
     except Exception as exp:
         print(f"Error occurred: {exp}")
         return []

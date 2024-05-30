@@ -19,7 +19,7 @@ async def control_data_flow(data_in: DataWeaver):
 
 async def getdata():
     global web_socket, safe_end
-    while not SafeEnd.is_set():
+    while not safe_end.is_set():
         # try:
         raw_data = await web_socket.recv()
         data = DataWeaver(byte_data=raw_data)
@@ -54,7 +54,7 @@ def initiate_control():
 
 def end():
     global safe_end, web_socket
-    SafeEnd.set()
+    safe_end.set()
     const.END_OR_NOT = True
     web_socket.close() if web_socket else None
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
