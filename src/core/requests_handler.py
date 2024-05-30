@@ -159,15 +159,19 @@ def sync_list() -> None:
 
 def notify_leaving_status_to_users():
     const.THIS_OBJECT.status = 0
-    queue = Queue()
     for peer in peer_list.peers():
         if not peer:
             continue
         # try:
         use.echo_print("::Notifying leaving ", peer.uri, peer.username)
-        queue.put(peer)
-        signal_status(queue)
-        # except socket.error as e:
+        try:
+            with connect.create_connection(peer.req_uri, timeout=5) as _conn:
+                SimplePeerText(_conn, const.I_AM_ACTIVE).send()
+                const.THIS_OBJECT.serialize(_conn)
+        except socket.error:
+            use.echo_print(f"Error sending leaving status at {func_str(signal_status)}")
+
+    # except socket.error as e:
         #     error_log(
         #         f"Error sending leaving status at {func_str(notify_leaving_status_to_users)} :  {e}")
 
