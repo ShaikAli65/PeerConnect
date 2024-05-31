@@ -178,6 +178,30 @@ class FileDict:
             self.__continued[_id].remove(file_pool)
             self.__completed[_id].add(file_pool)
 
+    def get_running_file(self, peer_id, file_id):
+        return next(file for file in self.__current[peer_id] if file.id == file_id)
+
+    def get_completed_file(self, peer_id, file_id):
+        return next(file for file in self.__completed[peer_id] if file.id == file_id)
+
+    def get_continued_file(self, peer_id, file_id):
+        return next(file for file in self.__continued[peer_id] if file.id == file_id)
+
+    def get_file(self, peer_id, file_id):
+        try:
+            return self.get_running_file(peer_id, file_id)
+        except StopIteration:
+            pass
+        try:
+            return self.get_completed_file(peer_id, file_id)
+        except StopIteration:
+            pass
+        try:
+            return self.get_continued_file(peer_id, file_id)
+        except StopIteration:
+            pass
+        return None
+
     @property
     def continued(self):
         with self.__lock:
@@ -192,3 +216,12 @@ class FileDict:
     def current(self):
         with self.__lock:
             return self.__current.values()
+
+    def stop_all_files(self):
+        with self.__lock:
+            for file_set in self.__current.values():
+                for file in file_set:
+                    file.break_loop()
+            self.__continued.update(self.__current)
+            self.__current.clear()
+        return

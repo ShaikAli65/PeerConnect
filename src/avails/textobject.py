@@ -6,7 +6,8 @@ from src.avails.constants import PEER_TEXT_FLAG, DATA_WEAVER_FLAG
 
 p_controller = ThreadController(None, control_flag=PEER_TEXT_FLAG)
 d_controller = ThreadController(None,control_flag=DATA_WEAVER_FLAG)
-TIMEOUT = 5
+
+TIMEOUT = 10
 
 
 class SimplePeerText:
@@ -37,7 +38,7 @@ class SimplePeerText:
         self.sock = refer_sock
         self.chunk_size = chunk_size
 
-    def send(self) -> bool:
+    def send(self,*, require_confirmation=True) -> bool:
         """
         Send the stored text over the socket.
         Possible Errors:
@@ -51,12 +52,14 @@ class SimplePeerText:
         """
         self.sock.send(self.text_len_encoded)
         self.sock.sendall(self.raw_text)
+        # if require_confirmation:
+        #     return self.__recv_header()
+        return True
 
-        return self.__recv_header()
-
-    def receive(self, cmp_string: Union[str, bytes] = '') -> Union[bool, bytes]:
+    def receive(self, cmp_string: Union[str, bytes] = '',*, require_confirmation=True) -> Union[bool, bytes]:
         """
         Receive text over the socket.
+        Better to check for `truthy` and `falsy` values for cmp_string as it may return empty bytes.
 
         Parameters:
         - cmp_string [str, bytes]: Optional comparison string for validation.
@@ -65,27 +68,25 @@ class SimplePeerText:
         Returns:
         - [bool, bytes]: If cmp_string is provided, returns True if received text matches cmp_string,
                         otherwise returns the received text as bytes.
-
         """
         readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
         if self.controller.to_stop or self.sock not in readable:
-            return False if cmp_string else b''
+            return b''
 
-        raw_length = self.sock.recv(4)
-        text_length = struct.unpack('!I', raw_length)[0] if raw_length else 0
+        text_length = struct.unpack('!I', self.sock.recv(4))[0]
 
         received_data = bytearray()
         try:
-            safe_stop = self.controller.to_stop
             self.sock.setblocking(False)
-            chunk = b''
+            safe_stop = self.controller.to_stop
+            recv = self.sock.recv
             while text_length > 0:
-                try:
-                    chunk = self.sock.recv(min(self.chunk_size, text_length))
-                except BlockingIOError:
-                    pass
                 if safe_stop is True:
-                    return False if cmp_string else b''
+                    return b''
+                try:
+                    chunk = recv(min(self.chunk_size, text_length))
+                except BlockingIOError:
+                    continue
                 if not chunk:
                     break
                 text_length -= len(chunk)
@@ -95,11 +96,11 @@ class SimplePeerText:
 
         self.raw_text = bytes(received_data)
 
-        if (not self.raw_text) or text_length > 0:
+        if text_length > 0:
             self.sock.send(struct.pack('!I', 0))
             return b''
-
-        self.__send_header()
+        # if require_confirmation:
+            # self.__send_header()
 
         if cmp_string:
             return self.raw_text == cmp_string
@@ -131,9 +132,10 @@ class SimplePeerText:
             return False
 
         raw_length = self.sock.recv(4)
+        if raw_length == b'':
+            return False
         header_length = struct.unpack('!I', raw_length)[0]
 
-        readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
         if self.controller.to_stop:
             return False
         if self.sock in readable:
@@ -151,7 +153,10 @@ class SimplePeerText:
         return self.raw_text.decode(const.FORMAT)
 
     def __repr__(self):
-        return f"SimplePeerText(refer_sock='{self.sock}', text='{self.raw_text}', chunk_size={self.chunk_size})"
+        return (f"SimplePeerText(refer_sock='{self.sock.__repr__}',"
+                f" text='{self.raw_text}',"
+                f" chunk_size={self.chunk_size},"
+                f" controller={self.controller})")
 
     def __len__(self):
         """

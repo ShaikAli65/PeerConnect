@@ -30,7 +30,7 @@ PATH_CURRENT = '..\\..'
 PATH_LOG = '..\\..\\logs'
 PATH_PROFILES = '..\\..\\profiles'
 PATH_PAGE = '..\\webpage'
-PATH_DOWNLOAD = '..\\..\\Downloads'
+PATH_DOWNLOAD = '..\\..\\fallbacks'
 
 
 IP_VERSION = soc.AF_INET

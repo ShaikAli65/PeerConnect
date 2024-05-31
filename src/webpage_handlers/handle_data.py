@@ -102,19 +102,35 @@ def initiate_control():
     asyncio.get_event_loop().run_forever()
 
 
-async def feed_user_data_to_page(_data: str, ip):
+async def feed_user_data_to_page(_data, ip):
     if safe_end.is_set():
         use.echo_print("Can't send data to page safe_end is set", safe_end)
         return
     global web_socket
     _data = DataWeaver(header="this is a message",
-                       content=f"{_data}",
+                       content=_data,
                        _id=f"{ip}")
     # try:
     print(f"::Sending data to page: {ip}\n{_data}")
     await web_socket.send(_data.dump())
     # except Exception as e:
     #     error_log(f"Error sending data handle_data_flow.py/feed_user_data exp: {e}")
+    #     return
+
+
+async def feed_file_data_to_page(_data, _id):
+    if safe_end.is_set():
+        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        return
+    global web_socket
+    _data = DataWeaver(header=const.HANDLE_FILE_HEADER,
+                       content=_data,
+                       _id=_id)
+    # try:
+    print(f"::Sending data to page: {_id}\n{_data}")
+    await web_socket.send(_data.dump())
+    # except Exception as e:
+    #     error_log(f"Error sending data handle_data_flow.py/feed_file_data exp: {e}")
     #     return
 
 

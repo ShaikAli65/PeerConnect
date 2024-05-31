@@ -2,6 +2,7 @@
 import tracemalloc
 import signal
 
+
 from src.core import *
 import src.configurations.configure_app
 import src.avails.useables as use
@@ -21,6 +22,7 @@ def initiate() -> int:
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     # connect_server.initiate_connection()
     if connect_server.initiate_connection() is None:
+
         endmanager.end_session()
         return -1
     const.OBJ_THREAD.join()
@@ -29,12 +31,14 @@ def initiate() -> int:
 
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
-    # print("USE TEMPFILE MODULE IN DIRECTORYMANAGER and try sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False/True)")
-    # print("ITERTOOLS\nFUNCTOOLS\nLOGGING\n"
-    #       "ASYNCIO\nHTTP\nWEBRTC"
-    #       "USE PIPES INSTEAD OF POLLING IN SELECT.SELECTS")
-    """                                       WRITE A PY SCRIPT TO CREATE 5 USERS FOR CHECKING !!!           """
-    # exit(1)
+    # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False/True)
+    #        ITERTOOLS
+    #        FUNCTOOLS
+    #         LOGGING
+    #         ASYNCIO
+    #          HTTP
+    #         WEBRTC
+    #       ******USE PIPES INSTEAD OF POLLING IN SELECT.SELECTS******
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     boot_up.set_paths()

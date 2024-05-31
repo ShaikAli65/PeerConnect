@@ -70,12 +70,24 @@ class ThreadController:
     def __call__(self):
         self.stop()
 
+    def set(self):
+        """
+        This function sets the underlying control flag Event
+        useful when to_stop is used in a while loop which prevent inverting True to False and vice versa
+        :return:
+        """
+        self.control_flag.set()
+
     @property
     def to_stop(self):
         return self.control_flag.is_set()
 
     def stop(self):
-        self.control_flag.set()
+        if self.control_flag.is_set():
+            self.control_flag.set()
+        else:
+            self.control_flag.clear()
+
         self.select_waker()
         if self.thread:
             self.thread.join()

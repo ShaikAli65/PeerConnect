@@ -174,6 +174,7 @@ def set_paths():
         os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)
     except OSError as e:
         error_log(f"Error creating directory: {e} from set_paths() at line 70 in core/constants.py")
+        const.PATH_DOWNLOAD = os.path.join(const.PATH_CURRENT, 'fallbacks')
 
 
 def clear_logs():

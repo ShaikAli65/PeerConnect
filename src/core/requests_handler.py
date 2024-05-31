@@ -102,7 +102,7 @@ function_map = {
     const.I_AM_ACTIVE: notify_user_connection,
     const.SERVER_PING: sync_users_with_server,
     const.ACTIVE_PING: lambda x: None,
-    const.LIST_SYNC: lambda x: None
+    const.LIST_SYNC: lambda x: None,
 }
 
 
@@ -135,7 +135,7 @@ def signal_status(queue_in: Queue[RemotePeer]):
         peer_object = queue_in.get()
         try:
             with connect.create_connection(peer_object.req_uri,timeout=5) as _conn:
-                SimplePeerText(_conn, const.I_AM_ACTIVE).send()
+                SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(f"Error sending status({const.THIS_OBJECT.status}) at {func_str(signal_status)}")
@@ -166,7 +166,7 @@ def notify_leaving_status_to_users():
         use.echo_print("::Notifying leaving ", peer.uri, peer.username)
         try:
             with connect.create_connection(peer.req_uri, timeout=5) as _conn:
-                SimplePeerText(_conn, const.I_AM_ACTIVE).send()
+                SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(f"Error sending leaving status at {func_str(signal_status)}")

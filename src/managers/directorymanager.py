@@ -1,6 +1,5 @@
 import pickle
 from multiprocessing import Process
-from queue import Queue
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import tqdm
@@ -94,14 +93,14 @@ def process_unzipping(file_path):
     return queue.get()
 
 
-def open_directory_dialog_window(prev_dir=[None, ]):
+def open_directory_dialog_window(_prev_dir=[os.path.join(os.path.expanduser('~'), 'Downloads'), ]):
     _ = QApplication([])
     dialog = QFileDialog()
     dialog.setOption(QFileDialog.DontUseNativeDialog, True)
     dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
-
-    directory = dialog.getExistingDirectory(directory=prev_dir[0], caption="Select directory to send")
-    prev_dir[0] = directory
+    directory = dialog.getExistingDirectory(directory=_prev_dir[0],
+                                            caption="Select directory to send")
+    _prev_dir[0] = directory
     return directory
 
 

@@ -39,9 +39,10 @@ class _FileItem:
         # return f'{self.name}'
 
     def __repr__(self):
-        return (f"_FileItem({self.name[:10]}{'...' if len(self.name) > 10 else ''},"
-                f" {self.size},"
-                f" {self.path[:10]}{'...' if len(self.path) > 10 else ''})")
+        return (f"_FileItem({self.name[:10]}, "  # {'...' if len(self.name) > 10 else ''}
+                f"size={self.size}, "
+                # f" {self.path[:10]}{'...' if len(self.path) > 10 else ''})")
+                f'seeked={self.seeked})')
         # return f'{self.name}'
 
     def __eq__(self, other):
@@ -67,10 +68,11 @@ def stringify_size(size: int) -> str:
 
 
 class PeerFilePool:
-    __slots__ = 'file_paths', '__control_flag', '__chunk_size', '__error_extension'
+    __slots__ = 'file_paths', '__control_flag', '__chunk_size', '__error_extension', 'id'
 
     def __init__(self,
                  paths: list[_FileItem] = None, *,
+                 _id,
                  control_flag=threading.Event(),
                  chunk_size=1024 * 512,
                  error_ext='.invalid'
@@ -81,6 +83,7 @@ class PeerFilePool:
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.file_paths: set[_FileItem] = set(paths or [])
+        self.id = _id
         if not paths:
             return
 
@@ -233,7 +236,7 @@ class PeerFilePool:
         for _ in range(file_count):
             if (not self.proceed) or self.__recv_file(sender_sock) is False:
                 return False
-        print("TOTAL RECEIVED :", self.file_paths)
+        # print("TOTAL RECEIVED :", self.file_paths)  # debug
         return True
 
     def __chunkify__(self, file_path):
