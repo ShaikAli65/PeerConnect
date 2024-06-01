@@ -68,18 +68,18 @@ def stringify_size(size: int) -> str:
 
 
 class PeerFilePool:
-    __slots__ = 'file_paths', '__control_flag', '__chunk_size', '__error_extension', 'id'
+    __slots__ = 'file_paths', '__controller', '__chunk_size', '__error_extension', 'id'
 
     def __init__(self,
                  paths: list[_FileItem] = None, *,
                  _id,
-                 control_flag=threading.Event(),
+                 control_flag=ThreadController(None),
                  chunk_size=1024 * 512,
                  error_ext='.invalid'
                  ):
 
-        self.__control_flag = control_flag
-        self.__control_flag.set()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
+        self.__controller = control_flag
+        self.__controller.set()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.file_paths: set[_FileItem] = set(paths or [])
@@ -120,8 +120,8 @@ class PeerFilePool:
         sock_send = receiver_sock.send
         seek = 0
         with open(file.path, 'rb') as f:
-            f_read = f.read
-            while self.proceed:
+            f_read, proceed = f.read, self.__controller
+            while proceed.to_stop:
                 chunk = memoryview(f_read(self.__chunk_size))
                 if not chunk:
                     break
@@ -148,11 +148,13 @@ class PeerFilePool:
             return
         FILE_PATH = os.path.join(const.PATH_DOWNLOAD, self.__validatename__(FILE_NAME))
 
-        while self.proceed:
-            reads, _, _ = select.select([sender_sock], [], [], 1)
-            if sender_sock in reads:
-                break
-
+        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
+        if not self.__controller.to_stop:
+            print("RETURNING TIMEOUT OCCURED")
+            return
+        if sender_sock not in reads:
+            print("SOMETHING'S NOT GOOD")
+            return
         FILE_SIZE = struct.unpack('!Q', sender_sock.recv(8))[0]
 
         self.calculate_chunk_size(FILE_SIZE)
@@ -168,7 +170,7 @@ class PeerFilePool:
     def __recv_file_(self, sender_sock, file_path, size, progress):
         with open(file_path, 'xb') as file:
             f_write, f_recv = file.write, sender_sock.recv
-            while self.proceed and size > 0:
+            while self.__controller.to_stop and size > 0:
                 data = f_recv(min(self.__chunk_size, size))  # possible: socket.error, s
                 f_write(data)  # possible: No Space Left
                 size -= len(data)
@@ -190,7 +192,7 @@ class PeerFilePool:
                 with memoryview(mm_file) as mm_view:  # getting memory-view of file
                     sock_recv = sender_sock.recv_into
                     seek = 0
-                    while self.proceed and seek < file_size:
+                    while self.__controller.to_stop and seek < file_size:
                         buffer_len = min(self.__chunk_size, file_size - seek)
                         n_bytes = sock_recv(mm_view[seek: seek + buffer_len],
                                             buffer_len)  # receiving data directly into memory
@@ -212,7 +214,7 @@ class PeerFilePool:
         receiver_sock.send(raw_file_count)
 
         for file in self.file_paths:
-            if self.proceed is False or self.__send_file(receiver_sock, file=file) is False:
+            if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
                 return False
         return True
 
@@ -225,16 +227,19 @@ class PeerFilePool:
         """
         sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
 
-        while self.proceed:
-            reads, _, _ = select.select([sender_sock], [], [], 1)
-            if sender_sock in reads:
-                break
+        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
+        if not self.__controller.to_stop:
+            print("RETURNING TIMEOUT OCCURED")
+            return
+        if sender_sock not in reads:
+            print("SOMETHING'S NOT GOOD")
+            return
 
         raw_file_count = sender_sock.recv(4) if hasattr(sender_sock, "recv") else b'\x00\x00\x00\x00'
         file_count = struct.unpack('!I', raw_file_count)[0]
 
         for _ in range(file_count):
-            if (not self.proceed) or self.__recv_file(sender_sock) is False:
+            if (not self.__controller.to_stop) or self.__recv_file(sender_sock) is False:
                 return False
         # print("TOTAL RECEIVED :", self.file_paths)  # debug
         return True
@@ -242,7 +247,7 @@ class PeerFilePool:
     def __chunkify__(self, file_path):
         with open(file_path, 'rb') as file:
             f_read = file.read
-            while self.proceed:
+            while self.__controller.to_stop:
                 chunk = memoryview(f_read(self.__chunk_size))
                 if not chunk:
                     break
@@ -287,13 +292,9 @@ class PeerFilePool:
         """
         return self.file_paths.__iter__()
 
-    @property
-    def proceed(self):
-        return self.__control_flag.is_set()
-
     def break_loop(self):
-        self.__control_flag.clear()
-        self.__control_flag = None
+        self.__controller.stop()
+        self.__controller = None
 
     def calculate_chunk_size(self, file_size: int):
         min_buffer_size = 64 * 1024  # 64 KB
@@ -354,9 +355,11 @@ class _FileGroup:
     def _adjust_part_size(self):
         if self.grouping_level == GROUP_MIN:
             return self.total_size // 2
-        elif self.grouping_level == GROUP_MAX:
+        if self.grouping_level == GROUP_MAX:
             return self.total_size // 6
-        return self.total_size // 4
+        if self.grouping_level == GROUP_MID:
+            return self.total_size // 4
+        return self.total_size
 
     def _re_group_if_needed(self):
         max_parts = self.grouping_level
@@ -407,19 +410,22 @@ class _FileGroup:
 
 
 class _SockGroup:
-    def __init__(self, sock_count, *, control_flag=threading.Event()):
+
+    def __init__(self, sock_count, *, control_flag=ThreadController(None)):
         self.sock_list: list[connect.Socket] = []
         self.sock_count = sock_count
-        self.__control_flag = control_flag
-        self.__control_flag.set()
+        self.__controller = control_flag
 
     def get_sockets_from(self, connection_sock):
         for i in range(self.sock_count):
 
-            while self.safe_stop:
-                reads, _, _ = select.select([connection_sock], [], [], 0.1)
-                if connection_sock in reads:
-                    break
+            reads, _, _ = select.select([connection_sock, self.__controller], [], [], 30)
+            if self.__controller.to_stop:
+                print("RETURNING TIMEOUT OCCURED AT SOCK GROUPING")
+                return
+            if connection_sock not in reads:
+                print("SOMETHING'S NOT GOOD IN SOCK GROUPING")
+                return
 
             conn, _ = connection_sock.accept()
 
@@ -441,15 +447,11 @@ class _SockGroup:
             except Exception:
                 pass
 
-    @property
-    def safe_stop(self):
-        return self.__control_flag.is_set()
-
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__control_flag.set()
+        self.__controller.stop()
         self.close()
 
     def __len__(self):

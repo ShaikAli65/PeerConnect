@@ -10,8 +10,8 @@ from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-# from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
-from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+# from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
 from src.webpage_handlers.handle_data import feed_file_data_to_page
 
 global_files = FileDict()
@@ -83,12 +83,13 @@ def fileReceiver(file_data: DataWeaver):
     sockets = make_sock_groups(conn_count, connect_ip=tuple(file_data.content['bind_ip']))
     print(sockets)  # debug
 
-    def waiter(sock):
-        time.sleep(1)
-        sock.close()
     print(file_pools)
+
+    def waiter(_sock):
+        time.sleep(1)
+        _sock.close()
+    # threading.Thread(target=waiter, args=(next(sockets.__iter__()),)).start()
     th_pool = ThreadPoolExecutor(max_workers=conn_count)
-    threading.Thread(target=waiter, args=(next(sockets.__iter__()),)).start()
     for file, sock in zip(file_pools, sockets):
         global_files.add_to_current(sender_id, file)
         # th_pool.submit(_sock_thread, sender_id, file, sock)
@@ -105,12 +106,11 @@ def stop_a_file(refer_data: DataWeaver):
     global_files.add_to_continued(peer_id, file_pool)
 
 
-def resume_a_file(refer_data: DataWeaver):
+def resend_file(refer_data: DataWeaver):
     peer_id = refer_data.id
     file_id = refer_data.content['file_id']
     file_pool = global_files.get_continued_file(peer_id, file_id)
     file_pool.resume_loop()
-    global_files.add_to_current(peer_id, file_pool)
 
 
 def open_file_dialog_window(_prev_directory=[os.path.join(os.path.expanduser('~'), 'Downloads'), ]):
@@ -193,7 +193,7 @@ def _fileSender(_data: DataWeaver, receiver_sock, is_dir=False):
 def _fileReceiver(refer: DataWeaver):
     rec_v_port: object
     rec_v_ip, rec_v_port = json.loads(refer.id)
-    file = _PeerFile(uri=(rec_v_ip, recv_port))
+    file = _PeerFile(uri=(rec_v_ip, rec_v_port))
     metadata = refer.content
     file.set_meta_data(filename=metadata['name'], file_size=int(metadata['size']))
 
