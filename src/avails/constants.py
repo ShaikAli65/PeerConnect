@@ -50,7 +50,7 @@ FLAGZ = [threading.Event() for x in range(10)]
 # almost every while loop checks for their respective event's `threading.Event::is_set` function
 # to proceed further or not
 # and as the door,s open for exceptions some part of program may use their object's event to check for
-# end() functions available in this program mostly set their respective events
+# end() functions available in this program mostly flip their respective events
 # which leads to blocking parts break.
 
 # Respective Events are named for readability
@@ -78,12 +78,15 @@ HOLD_PROFILE_SETUP = threading.Event()
 WEB_SOCKET = None
 
 
+CMD_RECV_FILE_AGAIN = 'this is command to core_/!_recv file again'
 CMD_RECV_FILE = 'this is a command to core_/!_recv a file'
 CMD_CLOSING_HEADER = 'this is a command to core_/!_close connection'
 CMD_TEXT = "this is a message"
 CMD_RECV_DIR = 'this is a command to core_/!_recv dir'
 
 
+CMD_VERIFY_HEADER = b'this is a verification header'
+VERIFY_OK = b'verification okay'
 CMD_FILESOCKET_HANDSHAKE = b'this is a command to core_/!_file socket open'
 CMD_FILE_SUCCESS = b'file_success'
 TEXT_SUCCESS_HEADER = b'text string recv success'
@@ -109,3 +112,4 @@ HANDLE_POP_DIR_SELECTOR = 'pop dir selector'
 HANDLE_PUSH_FILE_SELECTOR = 'push file selector'
 HANDLE_OPEN_FILE = 'open file'
 HANDLE_SYNC_USERS = 'sync users'
+HANDLE_VERIFICATION = 'handle verification'
