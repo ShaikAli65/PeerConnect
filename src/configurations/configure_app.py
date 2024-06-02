@@ -12,7 +12,7 @@ def set_constants(config_map: configparser) -> bool:
     Also sets directory paths for logs and the webpage.
 
     Returns:
-        bool: True if configuration values were set successfully, False otherwise.
+        bool: True if configuration values were flip successfully, False otherwise.
     """
 
     const.PAGE_SERVE_PORT = int(config_map['NERD_OPTIONS']['page_serve_port'])

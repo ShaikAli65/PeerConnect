@@ -29,7 +29,7 @@ modules = (
     os, MutableSet, Union, Dict, Tuple,
     const, peer_list, connect,
     error_log, activity_log, server_log,
-    peer_list, Union, ThreadController
+    peer_list, Union, ThreadActuator
 )
 
 

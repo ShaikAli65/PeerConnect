@@ -1,7 +1,8 @@
-
+import socket
+import time
 from typing import Optional
 from src.core import *
-from src.avails.textobject import DataWeaver
+from src.avails.textobject import DataWeaver, SimplePeerText
 from src.avails import constants as const, useables as use
 from src.avails.remotepeer import RemotePeer
 from src.avails.useables import echo_print
@@ -17,7 +18,7 @@ class SocketCache:
         self.max_limit = max_limit
         self.__thread_lock = threading.Lock()
 
-    def appendPeer(self, peer_id: str, peer_socket):
+    def append_peer(self, peer_id: str, peer_socket):
         with self.__thread_lock:
             if len(self.socket_cache) >= self.max_limit:
                 self.socket_cache.popitem(last=False)
@@ -54,23 +55,40 @@ class RecentConnections:
         return self.function(argument, RecentConnections.current_connected)
 
     @classmethod
+    def verifier(cls, connection_socket):
+        # try:
+        time.sleep(0.2)
+        SimplePeerText(connection_socket, text=const.CMD_VERIFY_HEADER).send()
+        print("sent header")
+        SimplePeerText(connection_socket, text=const.THIS_OBJECT.id.__str__().encode(const.FORMAT)).send()
+        # DataWeaver(header=const.CMD_VERIFY_HEADER,content="",_id=const.THIS_OBJECT.id).send(connection_socket)
+        print("Sent verification to ", connection_socket.getpeername())
+        # except json.JSONDecoder:
+        #     return False
+        return True
+
+    @classmethod
     def addConnection(cls, peer_obj: RemotePeer):
-        connection_socket = use.create_socket_to_peer(_peer_obj=peer_obj, to_which=const.BASIC_URI_CONNECTOR)
-        cls.connected_sockets.appendPeer(peer_obj.id, peer_socket=connection_socket)
+        connection_socket = use.create_connection_to_peer(_peer_obj=peer_obj, to_which=const.BASIC_URI_CONNECTOR)
+        # if cls.verifier(connection_socket):
+        cls.connected_sockets.append_peer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
     @classmethod
     def addSocket(cls, peer_id: str, peer_socket):
-        cls.connected_sockets.appendPeer(peer_id, peer_socket)
+        cls.connected_sockets.append_peer(peer_id, peer_socket)
 
     @classmethod
     def connect_peer(cls, peer_obj: RemotePeer):
         if peer_obj.id not in cls.connected_sockets:
             try:
                 cls.current_connected = cls.addConnection(peer_obj)
-                print("cache miss --current : ", peer_obj.username, cls.current_connected.getpeername()[:2],cls.current_connected.getsockname()[:2])
-            except socket.error:
-                use.echo_print("handle signal to page, that we can't reach user, or he is offline")
+                cls.verifier(cls.current_connected)
+                const.HOST_OBJ.add_receive_thread(cls.current_connected, peer_obj.id)
+                print("cache miss --current : ", peer_obj.username, cls.current_connected.getpeername()[:2],
+                      cls.current_connected.getsockname()[:2])
+            except (socket.error, ConnectionResetError):
+                use.echo_print(f"handle signal to page, that we can't reach {peer_obj.username}, or he is offline")
                 pass
             return
 
@@ -95,7 +113,7 @@ class RecentConnections:
 
 
 @RecentConnections
-def sendMessage(data: DataWeaver, sock:socket = None):
+def sendMessage(data: DataWeaver, sock: socket = None):
     """
     A Wrapper function to function at {nomad.send()}
     Provides Error Handling And Ensures robustness of sending data.
@@ -110,8 +128,8 @@ def sendMessage(data: DataWeaver, sock:socket = None):
         data['id'] = const.THIS_OBJECT.id  # Changing the id to this peer's id
         data.send(sock)
         echo_print("sent message to ", sock.getpeername())
-    except socket.error as exp:
-        print(f"got error at {sendMessage.__name__}()/{os.path.relpath(sendMessage.__code__.co_filename)} :{exp}",sock.getpeername())
+    except (socket.error, OSError) as exp:
+        print(f"got error at {func_str(sendMessage)} :{exp}", sock)
         error_log(f"got error at handle/send_message :{exp}")
         RecentConnections.force_remove(back_up_id)
     # except AttributeError as exp:
@@ -124,15 +142,22 @@ def sendFile(_path: DataWeaver, sock=None):
     """
     A Wrapper function to function at {filemanager.fileSender()}
     Provides Error Handling And Ensures robustness of sending data.
-    What is going on here??
-    the thing with the decorator is different, look into decorator's doc string for further reference
+    look into decorator's doc string for further reference
     :param _path:
     :param sock:
-    :return bool:
     """
     back_up_id = _path.id
     try:
         use.start_thread(_target=filemanager.fileSender, _args=(_path, sock))
+    except socket.error:
+        RecentConnections.force_remove(back_up_id)
+
+
+@RecentConnections
+def sendFileAgain(_path: DataWeaver, sock=None):
+    back_up_id = _path.id
+    try:
+        use.start_thread(filemanager.resend_file, _args=(_path, sock))
     except socket.error:
         RecentConnections.force_remove(back_up_id)
 

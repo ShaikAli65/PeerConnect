@@ -4,8 +4,8 @@ from src.core import *
 from typing import Union
 from src.avails.constants import PEER_TEXT_FLAG, DATA_WEAVER_FLAG
 
-p_controller = ThreadController(None, control_flag=PEER_TEXT_FLAG)
-d_controller = ThreadController(None,control_flag=DATA_WEAVER_FLAG)
+p_controller = ThreadActuator(None, control_flag=PEER_TEXT_FLAG)
+d_controller = ThreadActuator(None, control_flag=DATA_WEAVER_FLAG)
 
 TIMEOUT = 10
 
@@ -26,19 +26,19 @@ class SimplePeerText:
         'raw_text': bytes,
         'text_len_encoded': bytes,
         'sock': connect.Socket,
-        'controller': ThreadController,
+        'controller': ThreadActuator,
         'id': str,
     }
     __slots__ = 'raw_text', 'text_len_encoded', 'sock', 'id', 'chunk_size', 'controller',
 
-    def __init__(self, refer_sock, text=b'',*, chunk_size=512, controller=p_controller):
+    def __init__(self, refer_sock, text=b'', *, chunk_size=512, controller=p_controller):
         self.raw_text = text
         self.text_len_encoded = struct.pack('!I', len(self.raw_text))
         self.controller = controller
         self.sock = refer_sock
         self.chunk_size = chunk_size
 
-    def send(self,*, require_confirmation=True) -> bool:
+    def send(self, *, require_confirmation=True) -> bool:
         """
         Send the stored text over the socket.
         Possible Errors:
@@ -56,7 +56,7 @@ class SimplePeerText:
         #     return self.__recv_header()
         return True
 
-    def receive(self, cmp_string: Union[str, bytes] = '',*, require_confirmation=True) -> Union[bool, bytes]:
+    def receive(self, cmp_string: Union[str, bytes] = '', *, require_confirmation=True) -> Union[bool, bytes]:
         """
         Receive text over the socket.
         Better to check for `truthy` and `falsy` values for cmp_string as it may return empty bytes.
@@ -72,7 +72,6 @@ class SimplePeerText:
         readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
         if self.controller.to_stop or self.sock not in readable:
             return b''
-
         text_length = struct.unpack('!I', self.sock.recv(4))[0]
 
         received_data = bytearray()
@@ -100,7 +99,7 @@ class SimplePeerText:
             self.sock.send(struct.pack('!I', 0))
             return b''
         # if require_confirmation:
-            # self.__send_header()
+        #    self.__send_header()
 
         if cmp_string:
             return self.raw_text == cmp_string
@@ -197,8 +196,9 @@ class DataWeaver:
     }
     __slots__ = 'data_lock', '__data'
 
-    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None, _id: Union[int, str, tuple] = None,
-                 byte_data: bytes = None):
+    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None,
+                 _id: Union[int, str, tuple] = None,
+                 byte_data: str | bytes = None):
         self.data_lock = threading.Lock()
         if byte_data:
             self.__data: dict = json.loads(byte_data)
@@ -221,11 +221,11 @@ class DataWeaver:
         with self.data_lock:
             return self.__data['content'] == _content
 
-    def match_header(self,_header) -> bool:
+    def match_header(self, _header) -> bool:
         with self.data_lock:
             return self.__data['header'] == _header
 
-    def send(self, receiver_sock,controller=d_controller):
+    def send(self, receiver_sock, controller=d_controller):
         """
         Sends data as json string to the provided socket,
         This function is written on top of :class: `SimplePeerText`'s send function
@@ -242,10 +242,9 @@ class DataWeaver:
         """
         Receives a text string from the specified sender socket and sets the values of the TextObject instance.
         Written on top of :class: `SimplePeerText`'s receive function
-        Args:
-            sender_sock: The sender socket from which to receive the text string.
-            :param sender_sock:
-            :param controller: An optional controller to pass into SimplePeerText
+
+        :param sender_sock: The sender socket from which to receive the text string.
+        :param controller: An optional controller to pass into SimplePeerText
         Returns:
             The updated TextObject instance
         """
