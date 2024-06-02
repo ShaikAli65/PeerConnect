@@ -22,7 +22,6 @@ def initiate() -> int:
     const.REQUESTS_THREAD = use.start_thread(manage_requests.initiate)
     # connect_server.initiate_connection()
     if connect_server.initiate_connection() is None:
-
         endmanager.end_session()
         return -1
     const.OBJ_THREAD.join()
@@ -31,14 +30,12 @@ def initiate() -> int:
 
 if __name__ == "__main__":
     """Entry point for the application when run as a script."""
-    # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False/True)
     #        ITERTOOLS
     #        FUNCTOOLS
     #         LOGGING
     #         ASYNCIO
     #          HTTP
     #         WEBRTC
-    #       ******USE PIPES INSTEAD OF POLLING IN SELECT.SELECTS******
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     boot_up.set_paths()
@@ -53,7 +50,6 @@ if __name__ == "__main__":
     tracemalloc.start()
     signal.signal(signalnum=signal.SIGINT, handler=endmanager.end_session)
     initiate()
-    # th.join()
     activity_log("::End Sequence Complete")
 """
 
