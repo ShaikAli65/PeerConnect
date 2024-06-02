@@ -25,7 +25,7 @@ def end_session(sig='',frame=''):
         const.HOST_OBJ.end()
     handle_data.end()
     handle_signals.end()
-    httphandler.end_serving()
+    # httphandler.end_serving()
     filemanager.endFileThreads()
     textobject.stop_all_text()
     remotepeer.end()
