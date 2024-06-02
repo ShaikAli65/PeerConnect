@@ -28,7 +28,7 @@ async def getdata():
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data_flow.py/getdata() ")
         #     break
-    print('::SafeEnd is set')
+    print('::SafeEnd is flip')
 
 
 async def handler(_websocket):
@@ -57,6 +57,7 @@ def end():
     safe_end.set()
     const.END_OR_NOT = True
     web_socket.close() if web_socket else None
+    web_socket.ws_server.close()
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
     loop = asyncio.get_running_loop()
     loop.stop()
