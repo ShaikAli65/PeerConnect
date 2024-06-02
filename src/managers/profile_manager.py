@@ -104,7 +104,7 @@ class ProfileManager:
     @classmethod
     def delete_profile(cls, profile_username: str):
         profile_path = Path(const.PATH_PROFILES,
-                            f"{profile_username}.ini" if not profile_username.endswith('.ini') else profile_username)
+                            f"{profile_username}.ini")  # if not profile_username.endswith('.ini') else profile_username)
         if profile_path.is_file():
             try:
                 profile_path.unlink(True)

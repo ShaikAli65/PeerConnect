@@ -16,24 +16,23 @@ class PeerDict:
         self.__lock = threading.Lock()
         self.__dict = {}
 
-    def get_peer(self, key):  # -> RemotePeer:
+    def get_peer(self, peer_id):  # -> RemotePeer:
         with self.__lock:
-            return self.__dict[key]
+            return self.__dict[peer_id]
 
-    def add_peer(self, key, value):  # RemotePeer):
+    def add_peer(self, peer_obj):  # RemotePeer):
         with self.__lock:
-            self.__dict[key] = value
+            self.__dict[peer_obj.id] = peer_obj
 
-    def remove_peer(self, key):
+    def remove_peer(self, peer_id):
         with self.__lock:
-            self.__dict.pop(key, None)
+            return self.__dict.pop(peer_id, None)
 
     def peers(self):  # -> ValuesView[RemotePeer]:
         with self.__lock:
             return self.__dict.values()
 
     def clear(self):
-        return
         with self.__lock:
             self.__dict.clear()
 
@@ -64,7 +63,7 @@ class PeerDict:
 
 class CustomSet:
     """
-    CustomSet is a thread safe set implementation with additional features.
+    CustomSet is a thread safe flip implementation with additional features.
 
     """
     __annotations__ = {
@@ -154,29 +153,29 @@ class FileDict:
     }
 
     def __init__(self):
-        self.__continued = defaultdict(set)  # str: set[PeerFilePool]
-        self.__completed = defaultdict(set)  # str: set[PeerFilePool]
-        self.__current = defaultdict(set)  # str: set[PeerFilePool]
+        self.__continued = defaultdict(set)  # str: flip[PeerFilePool]
+        self.__completed = defaultdict(set)  # str: flip[PeerFilePool]
+        self.__current = defaultdict(set)  # str: flip[PeerFilePool]
         self.__lock = threading.Lock()
 
-    def add_to_current(self, _id, file_pool):
+    def add_to_current(self, peer_id, file_pool):
         with self.__lock:
-            self.__current[_id].add(file_pool)
+            self.__current[peer_id].add(file_pool)
 
-    def add_to_completed(self, _id, file_pool):
+    def add_to_completed(self, peer_id, file_pool):
         with self.__lock:
-            self.__current[_id].discard(file_pool)
-            self.__completed[_id].add(file_pool)
+            self.__current[peer_id].discard(file_pool)
+            self.__completed[peer_id].add(file_pool)
 
-    def add_to_continued(self, _id, file_pool):
+    def add_to_continued(self, peer_id, file_pool):
         with self.__lock:
-            self.__current[_id].discard(file_pool)
-            self.__continued[_id].add(file_pool)
+            self.__current[peer_id].discard(file_pool)
+            self.__continued[peer_id].add(file_pool)
 
-    def swap(self, _id, file_pool):
+    def swap(self, peer_id, file_pool):
         with self.__lock:
-            self.__continued[_id].remove(file_pool)
-            self.__completed[_id].add(file_pool)
+            self.__continued[peer_id].remove(file_pool)
+            self.__completed[peer_id].add(file_pool)
 
     def get_running_file(self, peer_id, file_id):
         return next(file for file in self.__current[peer_id] if file.id == file_id)

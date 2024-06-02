@@ -5,7 +5,7 @@ from typing import Tuple
 from src.avails.constants import RP_FLAG  # control flag for this class
 from itertools import count
 
-_controller = ThreadController(None, control_flag=RP_FLAG)
+_controller = ThreadActuator(None, control_flag=RP_FLAG)
 TIMEOUT = 50  # sec
 
 
@@ -64,17 +64,17 @@ class RemotePeer:
         self.file_count.__next__()
 
     @staticmethod
-    def deserialize(to_recv: connect.Socket, controller=_controller):
+    def deserialize(to_recv: connect.Socket, actuator=_controller):
 
-        reads, _, _ = select.select([to_recv, controller], [], [], TIMEOUT)
-        if to_recv not in reads or controller.to_stop:
+        reads, _, _ = select.select([to_recv, actuator], [], [], TIMEOUT)
+        if to_recv not in reads or actuator.to_stop:
             return RemotePeer()
         try:
             raw_length = to_recv.recv(4)
             size_to_recv = struct.unpack('!I', raw_length)[0]
 
-            reads, _, _ = select.select([to_recv, controller], [], [],50)
-            if to_recv not in reads or controller.to_stop:
+            reads, _, _ = select.select([to_recv, actuator], [], [],50)
+            if to_recv not in reads or actuator.to_stop:
                 return RemotePeer()
 
             serialized = to_recv.recv(size_to_recv)
