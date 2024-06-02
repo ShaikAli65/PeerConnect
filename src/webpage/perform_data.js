@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const addr = "ws://localhost:19922";
+const addr = "ws://localhost:26153";
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
@@ -10,7 +10,7 @@ let division_viewerpov =   document.getElementById(   "prattle"   );
 let searchbox          =   document.getElementById(   "search"    );
 let headertile         =   document.getElementById( "headertile"  );
 let viewname           =   document.getElementById("currentviewing");
-let Usersviews     =   [];
+let users_views     =   [];
 let countMessage   =   {};
 let users_list     =   [];
 let EventListeners =   [];
@@ -62,7 +62,11 @@ function initiate_data()
     headertile.style.display = "flex";
 
     connectToCode_.addEventListener('open', (event) => {
-
+        connectToCode_.send(JSON.stringify({
+            'header':'handle verification',
+            'content':'',
+            'id':0
+        }));
         document.getElementById("senderbutton").addEventListener("click",
         function()
         {
@@ -72,6 +76,9 @@ function initiate_data()
                 document.getElementById("intial_view").textContent = "Select a user to chat";
             } else {
                 data = createmessage();
+                if (data == false){
+                    return
+                }
                 connectToCode_.send(data);
                 console.log("message sent :", data);
             }
@@ -138,7 +145,7 @@ function recieveDataFromPython(connecttocode_)
         }
         if (data.header == "this is a message")
         {
-            recievedmessage(data);
+            recievedMessage(data);
         }});
     /* data syntax : thisisamessage_/!_message~^~recieverid syntax of recieverid :
         name(^)ipaddress
@@ -178,9 +185,13 @@ function createUserTile(name, name_id) // idin is the id of the user to be added
     newview_.style.display = "none";
     newtile_.addEventListener("click",function(){showcurrent(newview_)});
     EventListeners.push(newtile_);
+    if (division_alive.contains(newtile_)){
+        console.warn("RETURNING TILE WITH SAME ID FOUND",newtile_);
+        return;
+    }
     division_alive.appendChild(newtile_);
     division_viewerpov.appendChild(newview_);
-    Usersviews.push(newview_);
+    users_views.push(newview_);
     users_list.push(newtile_);
     return newtile_;
 }
@@ -219,7 +230,7 @@ function createmessage()
     wrapperdiv_.appendChild(subDiv_);
     wrapperdiv_.className = "messagewrapper right";
     let Content_ = document.getElementById("message").value;
-    if (Content_ === "")
+    if (Content_.length == 0)
         return false;
     if (Content_.substring(0,7).includes("file::"))
     {
@@ -258,7 +269,7 @@ function createmessage()
             });
 }
 
-function recievedmessage(recievedata)
+function recievedMessage(recievedata)
 {
     let reciever = recievedata.id.trim();
     let reciever_view = document.getElementById("viewer_"+reciever);
@@ -279,7 +290,7 @@ function recievedmessage(recievedata)
     let subDiv_ = document.createElement("div");
     // reciever_view.scrollBy(0,100);
     reciever_view.scrollTop = reciever_view.scrollHeight;
-    subDiv_.textContent =recievedata;
+    subDiv_.textContent = recievedata.length > 500 ? recievedata.substring(500)+"\n..." : recievedata;
     subDiv_.className="message";
     subDiv_.id = "message_"+countMessage;
     wrapperdiv_.className="messagewrapper left";
@@ -290,9 +301,14 @@ function recievedmessage(recievedata)
 function removeuser(idin)
 {
     const user_ = document.getElementById("person_" + idin);
+    if(!division_alive.contains(user_)){
+        console.warn(user_," ::not found")
+        return
+    }
     const userview_ = document.getElementById("viewer_" + idin);
     console.log("removing user :",user_," ",userview_," ",idin);
     division_alive.removeChild(user_);
+
     users_list.splice(users_list.indexOf(user_),1);
     initial_view.textContent = "Select a user to chat";
     if (focusedUser !== userview_)
@@ -308,5 +324,3 @@ function removeuser(idin)
          division_viewerpov.removeChild(userview_);
     }
 }
-
-// -------------------------profile data : ---------------------------------------------------
