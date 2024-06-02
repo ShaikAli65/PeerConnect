@@ -36,7 +36,10 @@ def is_socket_connected(sock: connect.Socket):
     except (ConnectionResetError, ConnectionError, ConnectionAbortedError, OSError):
         return False
     finally:
-        sock.setblocking(True)
+        try:
+            sock.setblocking(True)
+        except OSError:
+            return False
 
 
 def echo_print(*args) -> None:
@@ -85,7 +88,7 @@ def get_free_port() -> int:
     return random_port
 
 
-def create_socket_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR,timeout=0):
+def create_connection_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR, timeout=0):
     """
     Creates a basic socket connection to peer id passed in,
     or to the peer_obj passed in.
