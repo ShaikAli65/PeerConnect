@@ -8,7 +8,7 @@ from functools import partial
 
 import src.avails.constants as const
 
-type ThController = ThreadController
+type ThActuator = ThreadActuator
 
 
 def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
@@ -42,7 +42,7 @@ def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
 
 
 # namedtuple('_ThreadControl', field_names=['control_flag', 'reader', 'select_waker', 'thread', 'proceed'])
-class ThreadController:
+class ThreadActuator:
     """
 
         This is used to control threads in a blocking way
@@ -70,13 +70,16 @@ class ThreadController:
     def __call__(self):
         self.stop()
 
-    def set(self):
+    def flip(self):
         """
-        This function sets the underlying control flag Event
+        This function sets or unsets the underlying control flag Event
         useful when to_stop is used in a while loop which prevent inverting True to False and vice versa
         :return:
         """
-        self.control_flag.set()
+        if self.control_flag.is_set():
+            self.control_flag.clear()
+        else:
+            self.control_flag.set()
 
     @property
     def to_stop(self):
@@ -84,9 +87,9 @@ class ThreadController:
 
     def stop(self):
         if self.control_flag.is_set():
-            self.control_flag.set()
-        else:
             self.control_flag.clear()
+        else:
+            self.control_flag.set()
 
         self.select_waker()
         if self.thread:
