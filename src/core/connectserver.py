@@ -11,7 +11,7 @@ from src.avails.constants import CONNECT_SERVER_FLAG
 
 error_calls = 0
 connection_status = False
-_controller = ThreadController(None, control_flag=CONNECT_SERVER_FLAG)
+_controller = ThreadActuator(None, control_flag=CONNECT_SERVER_FLAG)
 TIMEOUT = 50  # sec
 
 
@@ -23,15 +23,15 @@ def get_initial_list(no_of_users, initiate_socket):
             _nomad = RemotePeer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
             requests_handler.signal_status(ping_queue,)
-            use.echo_print(f"::User received from server : {_nomad}")
-
+            # use.echo_print(f"::User received from server : {_nomad}")
+            server_log(f"::User received from server : {_nomad!r}", 2)
         except socket.error as e:
             error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
             if not e.errno == 10054:
                 continue
 
             end_connection_with_server()
-            if not ping_queue.empty():
+            if len(peer_list) > 0:
                 server_log(f"::Server disconnected received some users retrying ...", 4)
                 list_error_handler()
             return False
@@ -39,14 +39,20 @@ def get_initial_list(no_of_users, initiate_socket):
 
 
 def list_error_handler():
-    pass
+    req_peer = next(peer_list)
+    conn = use.create_connection_to_peer(_peer_obj=req_peer,to_which=const.REQ_URI_CONNECT)
+    with conn:
+        SimplePeerText(text=const.REQ_FOR_LIST,refer_sock=conn).send()
+        select.select([conn, _controller], [], [], 100)
+        list_len = struct.unpack('!Q',conn.recv(8))[0]
+        get_initial_list(list_len, conn)
 
 
 def get_list_from(initiate_socket):
     const.PAGE_HANDLE_CALL.wait()
     global error_calls
 
-    select.select([initiate_socket, _controller], [], [])
+    select.select([initiate_socket, _controller], [], [], 100)
     if _controller.to_stop is True:
         return False
     with initiate_socket:
