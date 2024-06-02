@@ -5,7 +5,8 @@ from src.managers.profile_manager import ProfileManager, set_selected_profile, a
 
 
 async def align_profiles(_websocket):
-
+    if const.HOLD_PROFILE_SETUP.is_set():
+        return
     await send_profiles(_websocket)
 
     await configure_further_profile_data(_websocket)

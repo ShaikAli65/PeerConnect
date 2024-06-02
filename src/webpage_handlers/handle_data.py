@@ -1,3 +1,6 @@
+import asyncio
+import sys
+
 import websockets.server
 
 import src.avails.textobject
@@ -11,7 +14,7 @@ from src.avails.textobject import DataWeaver
 from src.core import requests_handler as req_handler
 from src import avails
 
-
+loop: asyncio.events = asyncio.new_event_loop()
 web_socket: websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
 safe_end = asyncio.Event()
@@ -32,6 +35,7 @@ def command_flow_handler(data_in: DataWeaver):
     if data_in.match_content(const.HANDLE_END):
         safe_end.set()
         src.managers.endmanager.end_session()
+        exit(1)
     elif data_in.match_content(const.HANDLE_CONNECT_USER):
         handle_connection(addr_id=data_in.id)
     elif data_in.match_content(const.HANDLE_OPEN_FILE):
@@ -43,10 +47,11 @@ def command_flow_handler(data_in: DataWeaver):
         use.start_thread(_target=req_handler.sync_list)
 
 
-def control_data_flow(data_in: DataWeaver):
+async def control_data_flow(data_in: DataWeaver):
     """
     A function to control the data flow from the page
     :param data_in:
+
     :return:
     """
     function_map = {
@@ -68,11 +73,11 @@ async def getdata():
         raw_data = await web_socket.recv()
         data = DataWeaver(byte_data=raw_data)
         use.echo_print("data from page:\n", data)
-        control_data_flow(data_in=data)
+        await control_data_flow(data_in=data)
         # except Exception as e:
         #     print(f"Error in getdata: {e} at handle_data_flow.py/getdata() ")
         #     break
-    print('::SafeEnd is set')
+    print('::SafeEnd is flip')
 
 
 async def handler(_websocket):
@@ -87,24 +92,30 @@ async def handler(_websocket):
                               content=f"{const.USERNAME}(^){const.THIS_IP}",
                               _id='0')
     await web_socket.send(userdata.dump())
+    verification = DataWeaver(byte_data=await web_socket.recv())
+    if verification.header == const.HANDLE_VERIFICATION:
+        await asyncio.sleep(0.2)  # time to load page's javascript
+        for peer in peer_list.peers():
+            await feed_user_status_to_page(peer)
+    use.echo_print("::sent list of peers to page")
     const.WEB_SOCKET = web_socket
     const.PAGE_HANDLE_CALL.set()
     await getdata()
-    use.echo_print('::handler ended')
+    use.echo_print('::liuuo handler ended')
 
 
 def initiate_control():
-
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_DATA)
-    # start_server = websockets.serve(handler, "172.16.197.166", const.PORT_PAGE_DATA)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
+    global loop
+    asyncio.set_event_loop(loop)
+    start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_DATA,)
+    # start_server.ws_server.start_serving()
+    loop.run_until_complete(start_server)
+    loop.run_forever()
 
 
 async def feed_user_data_to_page(_data, ip):
     if safe_end.is_set():
-        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        use.echo_print("Can't send data to page, safe_end is flip", safe_end)
         return
     global web_socket
     _data = DataWeaver(header="this is a message",
@@ -120,7 +131,7 @@ async def feed_user_data_to_page(_data, ip):
 
 async def feed_file_data_to_page(_data, _id):
     if safe_end.is_set():
-        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        use.echo_print("Can't send data to page, safe_end is flip", safe_end)
         return
     global web_socket
     _data = DataWeaver(header=const.HANDLE_FILE_HEADER,
@@ -136,7 +147,7 @@ async def feed_file_data_to_page(_data, _id):
 
 async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
     if safe_end.is_set():
-        use.echo_print("Can't send data to page safe_end is set", safe_end)
+        use.echo_print("Can't send data to page, safe_end is flip", safe_end)
         return
     global web_socket, server_data_lock
     with server_data_lock:
@@ -151,13 +162,17 @@ async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
         # pass
 
 
-def end():
-    global safe_end, web_socket
+async def end():
+    global loop, web_socket
     safe_end.set()
-
-    loop = asyncio.get_event_loop()
-    # loop.run_until_complete(asyncio.gather(*asyncio.all_tasks()))
+    await web_socket.close()
+    web_socket.ws_server.close()
+    if loop.is_running():
+        loop.call_soon_threadsafe(loop.stop)
+    # Immediately stop the loop without waiting for tasks to complete
     loop.stop()
+    # Force close the loop
+    sys.exit(1)
+    exit(1)
     loop.close()
-    use.echo_print("::Handle_data Ended")
-    return
+    print("::Handle_data Ended")
