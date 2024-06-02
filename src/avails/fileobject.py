@@ -1,4 +1,4 @@
-import mmap
+import itertools
 import os.path
 from typing import Any
 
@@ -45,11 +45,8 @@ class _FileItem:
                 f'seeked={self.seeked})')
         # return f'{self.name}'
 
-    def __eq__(self, other):
-        return self.name == other.name and self.size == other.size and self.path == other.path
-
-    def __hash__(self):
-        return hash(self.name) ^ hash(self.size) ^ hash(self.path)
+    # def __eq__(self, other):
+    #     return self.name == other.name and self.size == other.size and self.path == other.path
 
     def __iter__(self):
         return iter((self.name, self.size, self.path))
@@ -58,7 +55,7 @@ class _FileItem:
         return (self.name, self.size, self.path)[item]
 
 
-def stringify_size(size: int) -> str:
+def stringify_size(size):
     sizes = ['B', 'KB', 'MB', 'GB', 'TB']
     index = 0
     while size >= 1024 and index < len(sizes) - 1:
@@ -68,22 +65,23 @@ def stringify_size(size: int) -> str:
 
 
 class PeerFilePool:
-    __slots__ = 'file_paths', '__controller', '__chunk_size', '__error_extension', 'id'
+    __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'file_iter'
 
     def __init__(self,
                  paths: list[_FileItem] = None, *,
                  _id,
-                 control_flag=ThreadController(None),
+                 control_flag=ThreadActuator(None),
                  chunk_size=1024 * 512,
                  error_ext='.invalid'
                  ):
 
         self.__controller = control_flag
-        self.__controller.set()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
+        self.__controller.flip()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
-        self.file_paths: set[_FileItem] = set(paths or [])
+        self.file_items: set[_FileItem] = set(paths or [])
         self.id = _id
+        self.file_iter = self.file_items.__iter__()
         if not paths:
             return
 
@@ -98,152 +96,155 @@ class PeerFilePool:
         #     if not os.path.isfile(file_path):
         #         raise IsADirectoryError(f"Not a regular file: {file_path}")
 
+    def send_files(self, receiver_sock):
+        raw_file_count = struct.pack('!I', len(self.file_items))
+        print("sent file count ", raw_file_count)  # debug
+        receiver_sock.send(raw_file_count)
+        receiver_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
+        self.file_iter, iterator = itertools.tee(self.file_items)
+        return self.send_file_loop(iterator, receiver_sock)
+
+    def send_file_loop(self, current_iter, receiver_sock):
+        for file in current_iter:
+            if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
+                return False
+            next(self.file_iter)
+        return True
+
     def __send_file(self, receiver_sock, *, file: _FileItem):
 
-        """
-           Accepts a connected socket as a parameter.
-           Sends the file contents to the receiver.
-           Does not own the ~socket
-              Does not provide error handling for the file transfer.
-           Returns:
-               bool: True if the file is sent successfully, False otherwise.
-        """
-
-        if not SimplePeerText(text=file.name.encode(const.FORMAT), refer_sock=receiver_sock).send():
-            raise ValueError(f"Cannot send file_path :{file.name} some error occurred")
-        self.calculate_chunk_size(file.size)
+        SimplePeerText(text=file.name.encode(const.FORMAT), refer_sock=receiver_sock).send()
         receiver_sock.send(struct.pack('!Q', file.size))
+        self.calculate_chunk_size(file.size)
 
-        send_progress = tqdm.tqdm(range(file.size), f"::sending {file.name[:20]} ... ", unit="B", unit_scale=True,
-                                  unit_divisor=1024)
+        send_progress = tqdm.tqdm(range(file.size),
+                                  f"::sending {file.name[:20]} ... ", unit="B",
+                                  unit_scale=True, unit_divisor=1024)
 
+        self.__send_actual_file(file, receiver_sock, send_progress)
+        send_progress.close()
+
+    def __send_actual_file(self, file, receiver_sock, send_progress):
         sock_send = receiver_sock.send
-        seek = 0
+        send_progress.update(file.seeked)
         with open(file.path, 'rb') as f:
             f_read, proceed = f.read, self.__controller
+            f.seek(file.seeked)
+            seek = file.seeked
             while proceed.to_stop:
                 chunk = memoryview(f_read(self.__chunk_size))
                 if not chunk:
                     break
-                sock_send(chunk)  # possible: connection reset err
+                try:
+                    sock_send(chunk)  # possible: connection reset err
+                except TimeoutError:
+                    # may be the case where receiver is too slow , stimulating a delay
+                    time.sleep(7)  # just a random number
+                    continue
                 send_progress.update(len(chunk))
                 seek += len(chunk)
-        file.seeked = seek
-        send_progress.close()
+        file.seeked = seek  # can be ignored mostly for now
 
-    def __recv_file(self, sender_sock):
+    def recv_files(self, sender_sock):
+        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
+        if sender_sock in reads:
+            raw_file_count = sender_sock.recv(4) or b'\x00\x00\x00\x00'
+            file_count = struct.unpack('!I', raw_file_count)[0]
+        else:
+            print("TIMEOUT OF 30sec reached OR SOMETHING WRONG WITH SOCKET")
+            file_count = 0
+        self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
+        print("received file count", file_count, self.file_items)
+        self.file_iter, iterator = itertools.tee(self.file_items)
+        sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
+        return self.__receive_file_loop(iterator, sender_sock)
 
-        """
-        Accepts a connected socket as a parameter.
-           Does not own the ~socket
-        Receives the file contents from the sender and saves them with received data to Downloads/PeerConnect
-            Adds that file path as _FileItem(file_name, file_size, file_path) to the ~self.paths attribute of the class
-            Does not provide error handling for the file transfer.
-        Returns:
-            bool: True if the file was received successfully, False otherwise.
-        """
+    def __receive_file_loop(self, current_iter, sender_sock):
+        for file in current_iter:
+            if (not self.__controller.to_stop) or self.__recv_file(sender_sock, file) is False:
+                return False
+            next(self.file_iter)
+        return True
 
-        FILE_NAME = SimplePeerText(sender_sock).receive().decode(const.FORMAT)
-        if not FILE_NAME:
-            return
-        FILE_PATH = os.path.join(const.PATH_DOWNLOAD, self.__validatename__(FILE_NAME))
+    def __recv_file(self, sender_sock, file_item):
+
+        FILE_NAME = self.__validatename__(SimplePeerText(sender_sock).receive().decode(const.FORMAT))
+        file_item.name = FILE_NAME
+        file_item.path = os.path.join(const.PATH_DOWNLOAD, FILE_NAME)
 
         reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
         if not self.__controller.to_stop:
-            print("RETURNING TIMEOUT OCCURED")
+            print("RETURNING TIMEOUT OCCURRED")
             return
         if sender_sock not in reads:
             print("SOMETHING'S NOT GOOD")
             return
         FILE_SIZE = struct.unpack('!Q', sender_sock.recv(8))[0]
-
+        file_item.size = FILE_SIZE
         self.calculate_chunk_size(FILE_SIZE)
-        progress = tqdm.tqdm(range(FILE_SIZE), f"::receiving {FILE_NAME[:20]}... ", unit="B", unit_scale=True,
-                             unit_divisor=1024)
+        progress = tqdm.tqdm(range(FILE_SIZE),
+                             f"::receiving {FILE_NAME[:20]}... ", unit="B",
+                             unit_scale=True, unit_divisor=1024)
 
-        # sender_sock.setblocking(False)
-        seek = self.__recv_file_(sender_sock, FILE_PATH, FILE_SIZE, progress)
+        self.__recv_actual_file(sender_sock, file_item, progress)
         progress.close()
-        self.file_paths.add(_FileItem(FILE_NAME, FILE_SIZE, FILE_PATH, seek))
         return True
 
-    def __recv_file_(self, sender_sock, file_path, size, progress):
-        with open(file_path, 'xb') as file:
-            f_write, f_recv = file.write, sender_sock.recv
-            while self.__controller.to_stop and size > 0:
-                data = f_recv(min(self.__chunk_size, size))  # possible: socket.error, s
-                f_write(data)  # possible: No Space Left
-                size -= len(data)
-                progress.update(len(data))
-            return file.tell()
-
-    def __recv_file_with_mmap(self, sender_sock, file_path, file_size, progress):
+    def __recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
+        if file_item.seeked == 0:
+            mode = 'xb'
+        else:
+            mode = 'rb+'
         try:
-            with open(file_path, 'xb') as file:
-                file.truncate(file_size)  # allocating required space
+            with open(file_item.path, mode) as file:
+                f_write, f_recv, size = file.write, sender_sock.recv, file_item.size
+                file.seek(file_item.seeked)
+                progress.update(file_item.seeked)
+                while self.__controller.to_stop and size > 0:
+                    try:
+                        data = f_recv(min(self.__chunk_size, size))  # possible: socket.error, s
+                    except BlockingIOError:
+                        continue
+                    f_write(data)  # possible: No Space Left
+                    size -= len(data)
+                    progress.update(len(data))
+        finally:
+            file_item.seeked = file_item.size - size
 
-        except OSError as e:  # possible : OSError err no 28 (no space left)
-            print("Error creating file :", e)
+    def send_files_again(self, receiver_sock: socket.socket):
+        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
+
+        # -> ----------------------
+        start_file = next(present_iter)
+        reads, _, _ = select.select([receiver_sock, self.__controller], [], [], 30)
+        if receiver_sock not in reads:
+            print("SOMETHING WRONG IN RECEIVING FILE SEEK", reads)
             return
+        start_file.seeked = struct.unpack('!Q', receiver_sock.recv(8))[0]
+        progress = tqdm.tqdm(range(start_file.size), f"::sending {start_file.name[:20]} ... ", unit="B",
+                             unit_scale=True, unit_divisor=1024)
+        self.__send_actual_file(start_file, receiver_sock, progress)
+        progress.close()
+        # -> ---------------------- file continuation part
 
-        with open(file_path, 'r+b') as file:
-            with mmap.mmap(file.fileno(), 0,
-                           access=mmap.ACCESS_WRITE) as mm_file:  # memory mapping for bigger files (>1.0 GB)
-                with memoryview(mm_file) as mm_view:  # getting memory-view of file
-                    sock_recv = sender_sock.recv_into
-                    seek = 0
-                    while self.__controller.to_stop and seek < file_size:
-                        buffer_len = min(self.__chunk_size, file_size - seek)
-                        n_bytes = sock_recv(mm_view[seek: seek + buffer_len],
-                                            buffer_len)  # receiving data directly into memory
-                        seek += n_bytes
-                        progress.update(n_bytes)
-
-    def send_files(self, receiver_sock):
-        """
-        [
-            _FileItem(file_name, file_size, file_path),
-        ]
-        Sends all files in the list to the receiver.
-        A connected socket is required as a parameter.
-        Returns:
-            bool: True if all files are sent successfully, False otherwise.
-        """
-        receiver_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        raw_file_count = struct.pack('!I', len(self.file_paths))
-        receiver_sock.send(raw_file_count)
-
-        for file in self.file_paths:
-            if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
-                return False
+        self.send_file_loop(present_iter, receiver_sock)
         return True
 
-    def recv_files(self, sender_sock):
-        """
-        Receives all files from the sender.
-        A connected socket is required as a parameter.
-        Returns:
-            bool: True if all files are received successfully, False otherwise.
-        """
-        sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
+    def receive_files_again(self, sender_sock: socket.socket):
+        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
+        # -> ----------------------
+        start_file = next(present_iter)
+        sender_sock.send(start_file.seeked)
+        progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]} ... ", unit="B",
+                             unit_scale=True, unit_divisor=1024)
+        self.__recv_actual_file(sender_sock, start_file, progress)
+        progress.close()
+        # -> ---------------------- file continuation part
 
-        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
-        if not self.__controller.to_stop:
-            print("RETURNING TIMEOUT OCCURED")
-            return
-        if sender_sock not in reads:
-            print("SOMETHING'S NOT GOOD")
-            return
-
-        raw_file_count = sender_sock.recv(4) if hasattr(sender_sock, "recv") else b'\x00\x00\x00\x00'
-        file_count = struct.unpack('!I', raw_file_count)[0]
-
-        for _ in range(file_count):
-            if (not self.__controller.to_stop) or self.__recv_file(sender_sock) is False:
-                return False
-        # print("TOTAL RECEIVED :", self.file_paths)  # debug
+        self.__receive_file_loop(present_iter, sender_sock)
         return True
 
+    @NotInUse
     def __chunkify__(self, file_path):
         with open(file_path, 'rb') as file:
             f_read = file.read
@@ -284,13 +285,13 @@ class PeerFilePool:
         """
             Returns the file details
         """
-        return f"_PeerFile(paths={self.file_paths.__repr__()})"
+        return f"_PeerFile(paths={self.file_items.__repr__()})"
 
     def __iter__(self):
         """
         :returns Internal file_paths list's iterator :
         """
-        return self.file_paths.__iter__()
+        return self.file_items.__iter__()
 
     def break_loop(self):
         self.__controller.stop()
@@ -411,7 +412,7 @@ class _FileGroup:
 
 class _SockGroup:
 
-    def __init__(self, sock_count, *, control_flag=ThreadController(None)):
+    def __init__(self, sock_count, *, control_flag=ThreadActuator(None)):
         self.sock_list: list[connect.Socket] = []
         self.sock_count = sock_count
         self.__controller = control_flag
@@ -421,7 +422,7 @@ class _SockGroup:
 
             reads, _, _ = select.select([connection_sock, self.__controller], [], [], 30)
             if self.__controller.to_stop:
-                print("RETURNING TIMEOUT OCCURED AT SOCK GROUPING")
+                print("RETURNING TIMEOUT OCCURRED AT SOCK GROUPING")
                 return
             if connection_sock not in reads:
                 print("SOMETHING'S NOT GOOD IN SOCK GROUPING")

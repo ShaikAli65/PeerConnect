@@ -1,4 +1,5 @@
 # This file is responsible for sending and receiving files between peers.
+import struct
 import time
 
 from PyQt5.QtCore import Qt
@@ -10,8 +11,8 @@ from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
-# from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+# from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
 from src.webpage_handlers.handle_data import feed_file_data_to_page
 
 global_files = FileDict()
@@ -26,26 +27,26 @@ def fileSender(file_data: DataWeaver, receiver_sock):
         return
     receiver_obj = peer_list.get_peer(receiver_id)
 
-    def _sock_thread(_id, _file: FiLe, _conn):
-        with _conn:
-            if _file.send_files(_conn):
+    def _sock_thread(_id, _file: FiLe, conn):
+        with conn:
+            conn.send(struct.pack('!I', _file.id))
+            if _file.send_files(conn):
                 global_files.add_to_completed(_id, _file)
             else:
                 global_files.add_to_continued(_id, _file)
                 print("ERROR ERROR SOMETHING WRONG IN SENDING FILES")
 
     # file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
-    file_groups = make_file_groups(file_list, grouping_level=2)
+    file_groups = make_file_groups(file_list, grouping_level=4)
     file_pools = [PeerFilePool(file_group, _id=receiver_obj.get_file_count()) for file_group in file_groups]
     bind_ip = (const.THIS_IP, use.get_free_port())
     hand_shake = DataWeaver(header=const.CMD_RECV_FILE,
                             content={'count': len(file_pools), 'bind_ip': bind_ip},
                             _id=const.THIS_OBJECT.id)
-    if not hand_shake.send(receiver_sock):
-        return
-    print("sent handshake", hand_shake)  # debug
+    hand_shake.send(receiver_sock)
+    # print("sent handshake", hand_shake)  # debug
     sockets = make_sock_groups(len(file_pools), bind_ip=bind_ip)
-    print(file_pools)  # debug
+#     print(file_pools)  # debug
     th_pool = ThreadPoolExecutor(max_workers=len(sockets))
     print("made connections")  # debug
     print(sockets)  # debug
@@ -55,8 +56,8 @@ def fileSender(file_data: DataWeaver, receiver_sock):
         # th_pool.submit(_sock_thread, receiver_id, file, sock)
         threading.Thread(target=_sock_thread, args=(receiver_id, file, sock)).start()
 
-    th_pool.shutdown()  # wait for all threads to finish  # debug
-    print("completed mapping threads")  # debug
+#     th_pool.shutdown()  # wait for all threads to finish  # debug
+#     print("completed mapping threads")  # debug
 
 
 def fileReceiver(file_data: DataWeaver):
@@ -64,39 +65,34 @@ def fileReceiver(file_data: DataWeaver):
     if not conn_count:
         return
     sender_id = file_data.id
-    sender_obj: RemotePeer = peer_list.get_peer(sender_id)
 
-    def _sock_thread(_id, _file: FiLe, _conn):
-        # print("inside rec v_files parent :",_file, _conn)  # debug
+    def _sock_thread(_id, _file: FiLe, conn):
         try:
-            with _conn:
-                if _file.recv_files(_conn):
+            # print("inside rec v_files parent :",_file, _conn)  # debug
+            with conn:
+                _file.id = struct.unpack('!I', conn.recv(4))[0]
+                if _file.recv_files(conn):
                     global_files.add_to_completed(_id, _file)
                 else:
                     global_files.add_to_continued(_id, _file)
                     print("ERROR ERROR SOMETHING WRONG IN RECEIVING FILES")
         finally:
-            print(_file)
-        print("Done :", _file)  # debug
+            print("Done :", _file)  # debug
 
-    file_pools = [PeerFilePool(_id=sender_obj.get_file_count()) for _ in range(conn_count)]
+    file_pools = [PeerFilePool(_id=0) for _ in range(conn_count)]
     sockets = make_sock_groups(conn_count, connect_ip=tuple(file_data.content['bind_ip']))
     print(sockets)  # debug
 
-    print(file_pools)
+    print(file_pools)  # debug
 
-    def waiter(_sock):
-        time.sleep(1)
-        _sock.close()
-    # threading.Thread(target=waiter, args=(next(sockets.__iter__()),)).start()
     th_pool = ThreadPoolExecutor(max_workers=conn_count)
     for file, sock in zip(file_pools, sockets):
         global_files.add_to_current(sender_id, file)
         # th_pool.submit(_sock_thread, sender_id, file, sock)
         threading.Thread(target=_sock_thread, args=(sender_id, file, sock)).start()
-    th_pool.shutdown()  # wait for all threads to finish  # debug
-    print("completed mapping threads")  # debug
-    print('\n'.join(str(x) for x in file_pools))  # debug
+#     th_pool.shutdown()  # wait for all threads to finish  # debug
+#     print("completed mapping threads")  # debug
+#     print('\n'.join(str(x) for x in file_pools))  # debug
 
 
 def stop_a_file(refer_data: DataWeaver):
@@ -106,11 +102,27 @@ def stop_a_file(refer_data: DataWeaver):
     global_files.add_to_continued(peer_id, file_pool)
 
 
-def resend_file(refer_data: DataWeaver):
+def resend_file(refer_data: DataWeaver, receiver_sock):
     peer_id = refer_data.id
     file_id = refer_data.content['file_id']
-    file_pool = global_files.get_continued_file(peer_id, file_id)
-    file_pool.resume_loop()
+    file_pool: PeerFilePool = global_files.get_continued_file(peer_id, file_id)
+    bind_ip = (const.THIS_IP,use.get_free_port())
+    DataWeaver(header=const.CMD_RECV_FILE_AGAIN,content={'bind_ip':bind_ip,'file_id':file_id},_id=const.THIS_OBJECT.id).send(receiver_sock)
+    with socket.create_server(bind_ip,backlog=1) as soc:
+        receiver_conn, _ = soc.accept()
+
+    if file_pool.send_files_again(receiver_conn):
+        global_files.add_to_completed(peer_id, file_pool)
+
+
+def re_receive_file(refer_data: DataWeaver):
+    peer_id = refer_data.id
+    file_id = refer_data.content['file_id']
+    file_pool: PeerFilePool = global_files.get_continued_file(peer_id, file_id)
+    addr = refer_data.content['bind_ip']
+    with socket.create_connection((addr[0], addr[1]), timeout=20) as conn_sock:
+        if file_pool.receive_files_again(conn_sock):
+            global_files.add_to_completed(peer_id, file_pool)
 
 
 def open_file_dialog_window(_prev_directory=[os.path.join(os.path.expanduser('~'), 'Downloads'), ]):
