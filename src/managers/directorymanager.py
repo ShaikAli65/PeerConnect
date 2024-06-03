@@ -18,6 +18,7 @@ from pathlib import Path
 
 def do_handshake(_sock, _content):
     bind_addr = (const.THIS_IP, use.get_free_port())
+    _content['bind_ip'] = bind_addr
     with connect.create_server(bind_addr, family=const.IP_VERSION, backlog=1) as soc:
         handshake = DataWeaver(header=const.CMD_RECV_DIR, content=_content, _id=bind_addr)
         handshake.send(_sock)
@@ -30,20 +31,24 @@ def directorySender(_data: DataWeaver, recv_sock):
     file_name = _data.content
     if not file_name:
         file_name = open_directory_dialog_window()
-    temp_path = None
+    zip_path = None
     try:
-        temp_path = process_zipping(receiver_obj, file_name)
-        files = make_file_items([temp_path, ])
-        recv_sock = do_handshake(recv_sock, file_name)
-        PeerFilePool(paths=files).send_files(recv_sock)
+        zip_path = process_zipping(receiver_obj, file_name)
+        files = make_file_items([zip_path,])
+        _id = receiver_obj.get_file_count()
+        controller = ThreadActuator(threading.current_thread())
+        content = {'file_name':file_name, 'file_id':_id}
+        receiver_sock = do_handshake(recv_sock, content)
+        PeerFilePool(paths=files,_id=_id, control_flag=controller).send_files(receiver_sock)
     finally:
-        temp_path.unlink(missing_ok=True)
+        if zip_path:
+            zip_path.unlink(missing_ok=True)
 
 
 def directoryReceiver(refer: DataWeaver):
     with connect.Socket(const.IP_VERSION, const.PROTOCOL) as soc:
-        soc.connect(tuple(refer.id))
-        files = PeerFilePool()
+        soc.connect(tuple(refer.content['bind_ip']))
+        files = PeerFilePool(_id=refer.content['file_id'])
         files.recv_files(soc)
     for file in files:
         process_unzipping(Path(file.path))
@@ -138,8 +143,7 @@ def send_files(dir_socket, dir_path):
 
 @NotInUse
 def directory_sender(receiver_obj: remote_peer.RemotePeer, dir_path: str):
-    dir_socket = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-    dir_socket.connect(receiver_obj.uri)
+    dir_socket = use.create_conn_to_peer(receiver_obj)
     # SimplePeerText(dir_socket, const.CMD_RECV_DIR_LITE, byte_able=False).send()
     dir_path = Path(dir_path)
     DataWeaver(header=const.CMD_RECV_DIR, content=dir_path.name, _id=const.THIS_OBJECT.id)
