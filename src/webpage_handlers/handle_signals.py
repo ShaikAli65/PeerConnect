@@ -59,8 +59,8 @@ def end():
     web_socket.close() if web_socket else None
     web_socket.ws_server.close()
     asyncio.get_event_loop().stop() if asyncio.get_event_loop().is_running() else asyncio.get_event_loop().close()
-    # loop = asyncio.get_running_loop()
-    # loop.stop()
+    loop = asyncio.get_running_loop()
+    loop.stop()
 
     const.HOLD_PROFILE_SETUP.set()
     use.echo_print("::Handle_signals Ended")

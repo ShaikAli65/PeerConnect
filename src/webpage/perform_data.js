@@ -1,5 +1,5 @@
 // utitlities  : ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const addr = "ws://localhost:26153";
+const addr = "ws://localhost:24666";
 let focusedUser        =   document.getElementById(       ""      );
 let initial_view       =   document.getElementById( "intial_view" );
 let main_division      =   document.getElementById("main_division");
