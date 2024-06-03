@@ -1,6 +1,7 @@
 import queue
 
 import src.avails.useables as use
+from src.avails.useables import REQ_URI_CONNECT
 
 from src.core import *
 from src.core import requests_handler
@@ -40,7 +41,7 @@ def get_initial_list(no_of_users, initiate_socket):
 
 def list_error_handler():
     req_peer = next(peer_list)
-    conn = use.create_connection_to_peer(_peer_obj=req_peer,to_which=const.REQ_URI_CONNECT)
+    conn = use.create_conn_to_peer(_peer_obj=req_peer, to_which=REQ_URI_CONNECT)
     with conn:
         SimplePeerText(text=const.REQ_FOR_LIST,refer_sock=conn).send()
         select.select([conn, _controller], [], [], 100)
@@ -55,6 +56,7 @@ def get_list_from(initiate_socket):
     select.select([initiate_socket, _controller], [], [], 100)
     if _controller.to_stop is True:
         return False
+
     with initiate_socket:
         raw_length = initiate_socket.recv(8)
         length = struct.unpack('!Q', raw_length)[0]  # number of users
@@ -63,8 +65,7 @@ def get_list_from(initiate_socket):
 
 def list_from_forward_control(list_owner: RemotePeer):
     # socket.create_connection()
-    with connect.Socket(const.IP_VERSION, const.PROTOCOL) as list_connection_socket:
-        list_connection_socket.connect(list_owner.req_uri)
+    with use.create_conn_to_peer(list_owner, to_which=REQ_URI_CONNECT) as list_connection_socket:
         if SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, controller=_controller).send():
             get_list_from(list_connection_socket)
 
@@ -85,7 +86,7 @@ def initiate_connection():
         # server may send a peer's details to get list from
         recv_list_user = RemotePeer.deserialize(server_connection)
         use.echo_print('::Connection redirected by server to : ', recv_list_user.req_uri)
-        list_from_forward_control(recv_list_user,)
+        list_from_forward_control(recv_list_user)
     else:
         return None
     connection_status = True

@@ -3,7 +3,6 @@ import platform
 import random
 from typing import Optional
 
-from PyQt5.QtWidgets import QFileDialog
 
 from src.core import *
 from src.configurations.boot_up import is_port_empty
@@ -88,10 +87,14 @@ def get_free_port() -> int:
     return random_port
 
 
-def create_connection_to_peer(_peer_obj=None, peer_id="", to_which: int = const.BASIC_URI_CONNECTOR, timeout=0):
+BASIC_URI_CONNECT = 13
+REQ_URI_CONNECT = 12
+
+
+def create_conn_to_peer(_peer_obj=None, peer_id="", to_which: int = BASIC_URI_CONNECT, timeout=0):
     """
-    Creates a basic socket connection to peer id passed in,
-    or to the peer_obj passed in.
+    Creates a basic socket connection to peer id passed in, or to the peer_obj passed in.
+    peer_obj is given higher priority
     The another argument :param to_which: specifies to what uri should the connection made,
     pass :param const.REQ_URI_CONNECT: to connect to req_uri of peer
     :param timeout:
@@ -100,12 +103,13 @@ def create_connection_to_peer(_peer_obj=None, peer_id="", to_which: int = const.
     :param to_which:
     :return:
     """
-    peer_obj = _peer_obj if _peer_obj is not None else peer_list.get_peer(peer_id)
-    addr = peer_obj.req_uri if to_which == const.REQ_URI_CONNECT else peer_obj.uri
+    peer_obj = _peer_obj or peer_list.get_peer(peer_id)
+    addr = peer_obj.req_uri if to_which == REQ_URI_CONNECT else peer_obj.uri
 
     soc = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-    if not timeout == 0:
-        soc.settimeout(timeout)
+    soc.settimeout(timeout or None)
     soc.connect(addr)
-
+    # connect.create_connection(addr)
     return soc
+
+

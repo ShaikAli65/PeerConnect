@@ -1,5 +1,6 @@
 from importlib import import_module
 from collections import defaultdict
+from typing import Any
 
 from ..core import *
 from ..avails import useables as use
@@ -13,12 +14,18 @@ from ..avails.textobject import DataWeaver, SimplePeerText
 
 
 class Nomad(object):
-    # __annotations__ = {'address': tuple, '__control_flag': threading.Event, 'main_socket': socket.socket}
-    # __slots__ = 'address', '__control_flag', 'main_socket','selector'
+    __annotations__ = {
+        'address': tuple,
+        '__control_flag': threading.Event,
+        'main_socket': socket.socket,
+        'controller':ThreadActuator,
+        'currently_in_connection':defaultdict,
+        'RecentConnections':Any,
+    }
+    __slots__ = 'address', 'controller', 'selector', 'main_socket', 'currently_in_connection', 'RecentConnections'
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
-        self.__control_flag = NOMAD_FLAG
         self.controller = ThreadActuator(None)
         const.THIS_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.PORT_REQ, status=1)
         use.echo_print("::Initiating Nomad Object", self.address)
@@ -51,7 +58,7 @@ class Nomad(object):
             return _id
 
     def add_receive_thread(self, initial_conn, peer_id):
-        th_controller = ThreadActuator(None, self.__control_flag)
+        th_controller = ThreadActuator(None, NOMAD_FLAG)
         thread = use.start_thread(self.connectNew, _args=(initial_conn,peer_id))  # name these threads .??
         th_controller.thread = thread
         thread_handler.register(th_controller, NOMADS)
@@ -68,8 +75,7 @@ class Nomad(object):
             else:
                 initial_conn.close()
         except (socket.error, OSError) as e:
-            error_log(f"Socket error: at commence/nomad.py exp:{e}")
-            print("njbhuvgcfrtxezredxtfcygvubhnj", e)
+            error_log(f"Socket error: at {func_str(Nomad.__acceptConnections)} exp:{e}")
             initial_conn.close()
 
     def initiate(self):
@@ -112,9 +118,9 @@ class Nomad(object):
                 if _data.header == const.CMD_TEXT:
                     asyncio.run(handle_data.feed_user_data_to_page(_data.content, _data.id))
                 elif _data.header == const.CMD_RECV_FILE:
-                    use.start_thread(_target=filemanager.fileReceiver, _args=(_data,))
+                    use.start_thread(_target=filemanager.file_receiver, _args=(_data,))
                 elif _data.header == const.CMD_RECV_FILE_AGAIN:
-                    use.start_thread(_target=filemanager.fileReceiver, _args=(_data,))
+                    use.start_thread(_target=filemanager.re_receive_file, _args=(_data,))
                 elif _data.header == const.CMD_RECV_DIR:
                     directorymanager.directoryReceiver(refer=_data)
                 elif _data.header == const.CMD_CLOSING_HEADER:

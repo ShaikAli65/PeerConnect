@@ -1,6 +1,8 @@
 import socket
 import time
 from typing import Optional
+
+import src.avails.useables
 from src.core import *
 from src.avails.textobject import DataWeaver, SimplePeerText
 from src.avails import constants as const, useables as use
@@ -69,7 +71,7 @@ class RecentConnections:
 
     @classmethod
     def addConnection(cls, peer_obj: RemotePeer):
-        connection_socket = use.create_connection_to_peer(_peer_obj=peer_obj, to_which=const.BASIC_URI_CONNECTOR)
+        connection_socket = use.create_conn_to_peer(_peer_obj=peer_obj, to_which=src.avails.useables.BASIC_URI_CONNECTOR)
         # if cls.verifier(connection_socket):
         cls.connected_sockets.append_peer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket

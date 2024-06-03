@@ -2,9 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from collections import deque
 
+import src.avails.useables
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.avails import useables as use
+from src.avails.useables import BASIC_URI_CONNECT, REQ_URI_CONNECT
 from src.managers.thread_manager import thread_handler, REQUESTS
 from src.webpage_handlers import handle_data
 from src.avails.textobject import SimplePeerText
@@ -131,9 +133,7 @@ function_map = {
 
 def ping_user(remote_peer: RemotePeer):
     try:
-        with connect.Socket(const.IP_VERSION, const.PROTOCOL) as _conn:
-            _conn.settimeout(5)
-            _conn.connect(remote_peer.req_uri)
+        with use.create_conn_to_peer(remote_peer, to_which=REQ_URI_CONNECT, timeout=5) as _conn:
             return SimplePeerText(_conn, const.ACTIVE_PING).send()
     except socket.error as e:
         error_log(f"Error pinging user at {func_str(ping_user)} exp :  {e}")
@@ -144,7 +144,7 @@ def signal_status(queue_in: Queue[RemotePeer]):
     while not (_controller.to_stop or queue_in.empty()):
         peer_object = queue_in.get()
         try:
-            with connect.create_connection(peer_object.req_uri,timeout=5) as _conn:
+            with use.create_conn_to_peer(peer_object, to_which=REQ_URI_CONNECT, timeout=5) as _conn:
                 SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
@@ -175,15 +175,11 @@ def notify_leaving_status_to_users():
         # try:
         use.echo_print("::Notifying leaving ", peer.uri, peer.username)
         try:
-            with connect.create_connection(peer.req_uri, timeout=5) as _conn:
+            with use.create_conn_to_peer(peer, to_which=REQ_URI_CONNECT, timeout=5) as _conn:
                 SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
                 const.THIS_OBJECT.serialize(_conn)
         except socket.error:
             use.echo_print(f"Error sending leaving status at {func_str(signal_status)}")
-
-    # except socket.error as e:
-        #     error_log(
-        #         f"Error sending leaving status at {func_str(notify_leaving_status_to_users)} :  {e}")
 
 
 def end_requests_connection() -> None:

@@ -1,6 +1,5 @@
 # This file is responsible for sending and receiving files between peers.
-import struct
-import time
+
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QFileDialog
@@ -34,19 +33,16 @@ def fileSender(file_data: DataWeaver, receiver_sock):
                 global_files.add_to_completed(_id, _file)
             else:
                 global_files.add_to_continued(_id, _file)
-                print("ERROR ERROR SOMETHING WRONG IN SENDING FILES")
+                use.echo_print("ERROR ERROR SOMETHING WRONG IN SENDING FILES")
 
     # file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
     file_groups = make_file_groups(file_list, grouping_level=4)
     file_pools = [PeerFilePool(file_group, _id=receiver_obj.get_file_count()) for file_group in file_groups]
     bind_ip = (const.THIS_IP, use.get_free_port())
-    hand_shake = DataWeaver(header=const.CMD_RECV_FILE,
-                            content={'count': len(file_pools), 'bind_ip': bind_ip},
-                            _id=const.THIS_OBJECT.id)
+    content = {'count': len(file_pools), 'bind_ip': bind_ip}
+    hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content=content, _id=const.THIS_OBJECT.id)
     hand_shake.send(receiver_sock)
-    # print("sent handshake", hand_shake)  # debug
     sockets = make_sock_groups(len(file_pools), bind_ip=bind_ip)
-#     print(file_pools)  # debug
     th_pool = ThreadPoolExecutor(max_workers=len(sockets))
     print("made connections")  # debug
     print(sockets)  # debug
@@ -60,7 +56,7 @@ def fileSender(file_data: DataWeaver, receiver_sock):
 #     print("completed mapping threads")  # debug
 
 
-def fileReceiver(file_data: DataWeaver):
+def file_receiver(file_data: DataWeaver):
     conn_count = file_data.content['count']
     if not conn_count:
         return
@@ -75,7 +71,7 @@ def fileReceiver(file_data: DataWeaver):
                     global_files.add_to_completed(_id, _file)
                 else:
                     global_files.add_to_continued(_id, _file)
-                    print("ERROR ERROR SOMETHING WRONG IN RECEIVING FILES")
+                    use.echo_print("ERROR ERROR SOMETHING WRONG IN RECEIVING FILES")
         finally:
             print("Done :", _file)  # debug
 
