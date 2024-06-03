@@ -88,7 +88,7 @@ def control_connection(_conn):
             return
         # try:
         data = SimplePeerText(connection, controller=_controller).receive()
-        use.echo_print(f"::Received {data} from {connection.getpeername()}")
+        # use.echo_print(f"::Received {data} from {connection.getpeername()}")
         # except (socket.error, OSError) as e:
         #     error_log(f"Socket error at {func_str(controlconnection)} exp:{e} peer:{connection.getpeername()}")
         #     return
