@@ -1,753 +1,154 @@
-import itertools
-import os.path
+from importlib import import_module
+from collections import defaultdict
 from typing import Any
 
-from pathlib import Path
-from math import isclose
-import tqdm
-from src.core import *
-from src.avails.textobject import SimplePeerText
+from ..core import *
+from ..avails import useables as use
+from ..avails.remotepeer import RemotePeer
 
-type _Name = str
-type _Size = int
-type _FilePath = Union[str, Path]
-type FiLe = PeerFilePool
-
-
-# __FileItem = namedtuple('__FileItem', ['name', 'size', 'path'])
+from ..avails.constants import NOMAD_FLAG  # control flag
+from ..managers import directorymanager, filemanager
+from ..managers.thread_manager import thread_handler, NOMADS
+from ..webpage_handlers import handle_data
+from ..avails.textobject import DataWeaver, SimplePeerText
 
 
-class _FileItem:
+class Nomad(object):
     __annotations__ = {
-        'name': str,
-        'size': int,
-        'path': Union[str | Path],
-        'seeked': int
+        'address': tuple,
+        '__control_flag': threading.Event,
+        'main_socket': socket.socket,
+        'controller':ThreadActuator,
+        'currently_in_connection':defaultdict,
+        'RecentConnections':Any,
     }
-    __slots__ = 'name', 'size', 'path', 'seeked'
+    __slots__ = 'address', 'controller', 'selector', 'main_socket', 'currently_in_connection', 'RecentConnections'
 
-    def __init__(self, name, size, path, seeked):
-        self.name: str = name
-        self.size = size
-        self.path = path
-        self.seeked = seeked
+    def __init__(self, ip='localhost', port=8088):
+        self.address = (ip, port)
+        self.controller = ThreadActuator(None)
+        const.THIS_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.PORT_REQ, status=1)
+        use.echo_print("::Initiating Nomad Object", self.address)
+        self.main_socket = connect.Socket(const.IP_VERSION, const.PROTOCOL)
+        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.main_socket.bind(self.address)
+        self.currently_in_connection = defaultdict(int)
+        self.RecentConnections = getattr(import_module('src.core.senders'), 'RecentConnections')
 
-    def __str__(self):
-        size_str = stringify_size(self.size)
-        name_str = f"...{self.name[-10:]}" if len(self.name) > 10 else self.name
-        return f"({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
-        # return f'{self.name}'
+    def __resetSocket(self):
+        self.main_socket = connect.Socket(const.IP_VERSION, const.PROTOCOL)
+        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.main_socket.bind(self.address)
+        self.main_socket.listen()
 
-    def __repr__(self):
-        return (f"_FileItem({self.name[:10]}, "  # {'...' if len(self.name) > 10 else ''}
-                f"size={self.size}, "
-                # f" {self.path[:10]}{'...' if len(self.path) > 10 else ''})")
-                f'seeked={self.seeked})')
-        # return f'{self.name}'
+    def verify(self, _conn):
+        """
+        :param _conn: connection from peer
+        :returns peer_id: if verification is successful else None (implying socket to be removed)
+        """
+        # hand_shake = DataWeaver().receive(_conn,controller=self.controller)
+        hand_shake = SimplePeerText(refer_sock=_conn).receive(cmp_string=const.CMD_VERIFY_HEADER)
+        if hand_shake:
+            _id = SimplePeerText(_conn).receive().decode(const.FORMAT)
+            if _id not in peer_list:
+                return None
+            if self.currently_in_connection[_id] > 5:
+                return None
+            self.currently_in_connection[_id] += 1
+            return _id
 
-    # def __eq__(self, other):
-    #     return self.name == other.name and self.size == other.size and self.path == other.path
+    def add_receive_thread(self, initial_conn, peer_id):
+        th_controller = ThreadActuator(None, NOMAD_FLAG)
+        thread = use.start_thread(self.connectNew, _args=(initial_conn,peer_id))  # name these threads .??
+        th_controller.thread = thread
+        thread_handler.register(th_controller, NOMADS)
+        self.RecentConnections.addSocket(peer_id, initial_conn)
 
-    def __iter__(self):
-        return iter((self.name, self.size, self.path))
+    def __acceptConnections(self):
+        initial_conn = None
+        try:
+            initial_conn, _ = self.main_socket.accept()
+            use.echo_print(f"New connection from {_}")
+            peer_id = self.verify(initial_conn)
+            if peer_id:
+                self.add_receive_thread(initial_conn, peer_id)
+            else:
+                initial_conn.close()
+        except (socket.error, OSError) as e:
+            error_log(f"Socket error: at {func_str(Nomad.__acceptConnections)} exp:{e}")
+            initial_conn.close()
 
-    def __getitem__(self, item):
-        return (self.name, self.size, self.path)[item]
-
-
-def stringify_size(size):
-    sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-    index = 0
-    while size >= 1024 and index < len(sizes) - 1:
-        size /= 1024
-        index += 1
-    return f"{size:.2f} {sizes[index]}"
-
-
-class PeerFilePool:
-    __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'file_iter'
-
-    def __init__(self,
-                 paths: list[_FileItem] = None, *,
-                 _id,
-                 control_flag=ThreadActuator(None),
-                 chunk_size=1024 * 512,
-                 error_ext='.invalid'
-                 ):
-
-        self.__controller = control_flag
-        self.__controller.flip()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
-        self.__chunk_size = chunk_size
-        self.__error_extension = error_ext
-        self.file_items: set[_FileItem] = set(paths or [])
-        self.id = _id
-        self.file_iter = self.file_items.__iter__()
-        if not paths:
-            return
-
-        # for file_item in paths:
-        #     file_path = file_item.path
-        #     if not os.path.exists(file_path):
-        #         raise FileNotFoundError(f"File not found: {file_item}")
-        #
-        #     if os.path.isdir(file_path):
-        #         raise NotADirectoryError(f"Cannot use a directory in PeerFile: {file_path}")
-        #
-        #     if not os.path.isfile(file_path):
-        #         raise IsADirectoryError(f"Not a regular file: {file_path}")
-
-    def send_files(self, receiver_sock):
-        raw_file_count = struct.pack('!I', len(self.file_items))
-        print("sent file count ", raw_file_count)  # debug
-        receiver_sock.send(raw_file_count)
-        receiver_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        self.file_iter, iterator = itertools.tee(self.file_items)
-        return self.send_file_loop(iterator, receiver_sock)
-
-    def send_file_loop(self, current_iter, receiver_sock):
-        for file in current_iter:
-            if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
-                return False
-            next(self.file_iter)
-        return True
-
-    def __send_file(self, receiver_sock, *, file: _FileItem):
-
-        SimplePeerText(text=file.name.encode(const.FORMAT), refer_sock=receiver_sock).send()
-        receiver_sock.send(struct.pack('!Q', file.size))
-        self.calculate_chunk_size(file.size)
-
-        send_progress = tqdm.tqdm(range(file.size),
-                                  f"::sending {file.name[:20]} ... ",
-                                  unit="B",
-                                  unit_scale=True,
-                                  unit_divisor=1024)
-
-        self.__send_actual_file(file, receiver_sock, send_progress)
-        send_progress.close()
-
-    def __send_actual_file(self, file, receiver_sock, send_progress):
-        sock_send = receiver_sock.send
-        send_progress.update(file.seeked)
-        with open(file.path, 'rb') as f:
-            f_read, proceed = f.read, self.__controller
-            f.seek(file.seeked)
-            seek = file.seeked
-            while proceed.to_stop:
-                chunk = memoryview(f_read(self.__chunk_size))
-                if not chunk:
-                    break
-                try:
-                    sock_send(chunk)  # possible: connection reset err
-                except TimeoutError:
-                    # may be the case where receiver is too slow , stimulating a delay
-                    time.sleep(7)  # just a random number
+    def initiate(self):
+        self.main_socket.listen(3)
+        const.PAGE_HANDLE_CALL.wait()
+        use.echo_print("::Listening for connections", self.main_socket)
+        with self.main_socket:
+            reads_list = [self.main_socket, self.controller.reader]
+            while True:
+                reads, _, _ = select.select(reads_list, [], [])
+                if self.controller.to_stop is True:
+                    use.echo_print("::Nomad Object Ended")
+                    return
+                if self.main_socket not in reads:
                     continue
-                send_progress.update(len(chunk))
-                seek += len(chunk)
-        file.seeked = seek  # can be ignored mostly for now
+                if len(self.currently_in_connection) > 10:
+                    time.sleep(10)  # limiting rate just in case of more no. of different connections
+                self.__acceptConnections()
 
-    def recv_files(self, sender_sock):
-        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
-        if sender_sock in reads:
-            raw_file_count = sender_sock.recv(4) or b'\x00\x00\x00\x00'
-            file_count = struct.unpack('!I', raw_file_count)[0]
-        else:
-            print("TIMEOUT OF 30sec reached OR SOMETHING WRONG WITH SOCKET")
-            file_count = 0
-        self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
-        print("received file count", file_count, self.file_items)
-        self.file_iter, iterator = itertools.tee(self.file_items)
-        sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        return self.__receive_file_loop(iterator, sender_sock)
+    def connectNew(self, _conn, peer_id):
+        with _conn:
+            while True:
+                readable, _, _ = select.select([_conn, self.controller.reader], [], [], 100)
+                if self.controller.to_stop is True:
+                    return
+                if _conn not in readable:
+                    use.echo_print(f"::Connection timed out : at {func_str(self.connectNew)}", _conn.getpeername())
+                    self.disconnectUser(_conn, self.controller, peer_id)
+                    return
+                try:
+                    if _conn.recv(1, socket.MSG_PEEK) == b'':
+                        use.echo_print(f"::Connection closed by peer at {func_str(Nomad.connectNew)}", _conn.getpeername())
+                        return
+                    _data = DataWeaver().receive(_conn)
+                except socket.error as e:
+                    use.echo_print(
+                        f"::Connection error: at {func_str(Nomad.connectNew)} exp:{e}",
+                        _conn.getpeername())
+                    return
+                use.echo_print('data from peer :\n', _data)
 
-    def __receive_file_loop(self, current_iter, sender_sock):
-        for file in current_iter:
-            if (not self.__controller.to_stop) or self.__recv_file(sender_sock, file) is False:
-                return False
-            next(self.file_iter)
-        return True
+                if _data.header == const.CMD_TEXT:
+                    asyncio.run(handle_data.feed_user_data_to_page(_data.content, _data.id))
+                elif _data.header == const.CMD_RECV_FILE:
+                    use.start_thread(_target=filemanager.file_receiver, _args=(_data,))
+                elif _data.header == const.CMD_RECV_FILE_AGAIN:
+                    use.start_thread(_target=filemanager.re_receive_file, _args=(_data,))
+                elif _data.header == const.CMD_RECV_DIR:
+                    directorymanager.directoryReceiver(refer=_data)
+                elif _data.header == const.CMD_CLOSING_HEADER:
+                    self.disconnectUser(_conn, self.controller, peer_id)
+                    return
 
-    def __recv_file(self, sender_sock, file_item):
+    def disconnectUser(self, _conn, _controller, _id):
+        self.currently_in_connection[_id] -= 1
+        with _conn:
+            if use.is_socket_connected(_conn):
+                DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
+        use.echo_print(f"::Closing connection at {func_str(Nomad.disconnectUser)}\n", peer_list.get_peer(_id))
+        self.RecentConnections.force_remove(peer_id=_id)
+        # _controller.stop()
+        thread_handler.delete(_controller, NOMADS)
 
-        FILE_NAME = self.__validatename__(SimplePeerText(sender_sock).receive().decode(const.FORMAT))
-        file_item.name = FILE_NAME
-        file_item.path = os.path.join(const.PATH_DOWNLOAD, FILE_NAME)
-
-        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
-        if not self.__controller.to_stop:
-            print("RETURNING TIMEOUT OCCURRED")
-            return
-        if sender_sock not in reads:
-            print("SOMETHING'S NOT GOOD")
-            return
-        FILE_SIZE = struct.unpack('!Q', sender_sock.recv(8))[0]
-        file_item.size = FILE_SIZE
-        self.calculate_chunk_size(FILE_SIZE)
-        progress = tqdm.tqdm(range(FILE_SIZE),
-                             f"::receiving {FILE_NAME[:20]}... ",
-                             unit="B",
-                             unit_scale=True,
-                             unit_divisor=1024)
-
-        self.__recv_actual_file(sender_sock, file_item, progress)
-        progress.close()
-        return True
-
-    def __recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
-        if file_item.seeked == 0:
-            mode = 'xb'
-        else:
-            mode = 'rb+'
-        try:
-            with open(file_item.path, mode) as file:
-                f_write, f_recv, size = file.write, sender_sock.recv, file_item.size
-                file.seek(file_item.seeked)
-                progress.update(file_item.seeked)
-                while self.__controller.to_stop and size > 0:
-                    try:
-                        data = f_recv(min(self.__chunk_size, size))  # possible: socket.error, s
-                    except BlockingIOError:
-                        continue
-                    f_write(data)  # possible: No Space Left
-                    size -= len(data)
-                    progress.update(len(data))
-        finally:
-            file_item.seeked = file_item.size - size
-
-    def send_files_again(self, receiver_sock: socket.socket):
-        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
-        start_file = next(present_iter)
-
-        reads, _, _ = select.select([receiver_sock, self.__controller], [], [], 30)
-        if receiver_sock not in reads:
-            print("SOMETHING WRONG IN RECEIVING FILE SEEK", reads)
-            return
-        start_file.seeked = struct.unpack('!Q', receiver_sock.recv(8))[0]
-
-        # -> ----------------------
-        progress = tqdm.tqdm(range(start_file.size),
-                             f"::sending {start_file.name[:20]} ... ",
-                             unit="B",
-                             unit_scale=True,
-                             unit_divisor=1024)
-        self.__send_actual_file(start_file, receiver_sock, progress)
-        progress.close()
-        # -> ---------------------- file continuation part
-        self.send_file_loop(present_iter, receiver_sock)
-        return True
-
-    def receive_files_again(self, sender_sock: socket.socket):
-        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
-        start_file = next(present_iter)
-        sender_sock.send(start_file.seeked)
-        progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]} ... ", unit="B",
-                             unit_scale=True, unit_divisor=1024)
-        self.__recv_actual_file(sender_sock, start_file, progress)
-        progress.close()
-
-        self.__receive_file_loop(present_iter, sender_sock)
-        return True
-
-    @NotInUse
-    def __chunkify__(self, file_path):
-        with open(file_path, 'rb') as file:
-            f_read = file.read
-            while self.__controller.to_stop:
-                chunk = memoryview(f_read(self.__chunk_size))
-                if not chunk:
-                    break
-                yield chunk
-
-    def __file_error__(self, filename):
-        """
-            Handles file errors by renaming the file with an error extension.
-        """
-        os.rename(filename, filename + self.__error_extension)
-        filename += self.__error_extension
-        return filename
-
-    @staticmethod
-    def __validatename__(file_addr: str):
-        """
-            Ensures a unique filename if a file with the same name already exists.
-
-            Args:
-                file addr (str): The original filename.
-
-            Returns:
-                str: The validated filename, ensuring uniqueness.
-        """
-        base, ext = os.path.splitext(file_addr)
-        counter = 1
-        new_file_name = file_addr
-        while os.path.exists(os.path.join(const.PATH_DOWNLOAD, new_file_name)):
-            new_file_name = f"{base}({counter}){ext}"
-            counter += 1
-        return new_file_name
+    def end(self):
+        self.controller.signal_stopping()
+        self.currently_in_connection.fromkeys(self.currently_in_connection, 0)
+        self.main_socket.close() if self.main_socket else None
 
     def __repr__(self):
-        """
-            Returns the file details
-        """
-        return f"_PeerFile(paths={self.file_items.__repr__()})"
-
-    def __iter__(self):
-        """
-        :returns Internal file_paths list's iterator :
-        """
-        return self.file_items.__iter__()
-
-    def break_loop(self):
-        self.__controller.stop()
-        self.__controller = None
-
-    def calculate_chunk_size(self, file_size: int):
-        min_buffer_size = 64 * 1024  # 64 KB
-        max_buffer_size = (2 ** 20) * 2  # 2 MB
-
-        min_file_size = 1024
-        max_file_size = (2 ** 30) * 2  # 2 GB
-
-        if file_size <= min_file_size:
-            return min_buffer_size
-        elif file_size >= max_file_size:
-            return max_buffer_size
-        else:
-            # Linear scaling between min and max buffer sizes
-            buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (
-                    max_file_size - min_file_size)
-        self.__chunk_size = int(buffer_size)
-        return self.__chunk_size
-
-
-GROUP_MIN = 2
-GROUP_MID = 4
-GROUP_MAX = 6
-
-
-class _FileGroup:
-    def __init__(self, files: list[_FileItem] = None, *, bandwidth=1024 * 1024 * 512, level: int):
-        self.files = sorted(files, key=lambda x: x.size)
-        self.grouped_files: list[list[_FileItem]] = []
-        self.total_size = sum(x.size for x in files)
-        self.bandwidth = bandwidth
-        self.grouping_level = level
-        self.part_size = self.total_size // 6
-
-    def group(self):
-        self.part_size = self._adjust_part_size()
-        parts = [[]]
-        current_part_size = 0
-
-        for file in self.files:
-            file_size = file.size
-
-            if current_part_size + file_size <= self.part_size or \
-                    isclose(current_part_size + file_size, self.part_size, rel_tol=0.004):
-                parts[-1].append(file)
-                current_part_size += file_size
-                continue
-            if file_size >= 2 ** 30 or isclose(file_size, 2 ** 30, rel_tol=0.0002):  # check again ??
-                parts.append([file])
-                current_part_size = 0
-            else:
-                parts.append([file])
-                current_part_size = file_size
-
-        self.grouped_files = [x for x in parts if len(x) > 0]
-        self._re_group_if_needed()
-
-    def _adjust_part_size(self):
-        if self.grouping_level == GROUP_MIN:
-            return self.total_size // 2
-        if self.grouping_level == GROUP_MAX:
-            return self.total_size // 6
-        if self.grouping_level == GROUP_MID:
-            return self.total_size // 4
-        return self.total_size
-
-    def _re_group_if_needed(self):
-        max_parts = self.grouping_level
-
-        if len(self.grouped_files) > max_parts:
-            self.re_group(max_parts)
-
-    def re_group(self, size):
-        """Re-groups the files into the specified number of parts."""
-        new_group = []
-        combined_group = []
-        total_size = 0
-
-        for part in self.grouped_files:
-            part_size = sum(file.size for file in part)
-            if total_size + part_size <= self.part_size * size:
-                combined_group.extend(part)
-                total_size += part_size
-            else:
-                new_group.append(combined_group)
-                combined_group = part
-                total_size = part_size
-
-        if combined_group:
-            new_group.append(combined_group)
-
-        # self.grouped_files = [x for x in new_group if len(x) > 0]
-        self.grouped_files = new_group
-
-    def __len__(self):
-        return self.grouped_files.__len__()
-
-    def __iter__(self):
-        return self.grouped_files.__iter__()
-
-    def __str__(self):
-        string = (f'total size: {stringify_size(self.total_size)}\t'
-                  f'total no.of files: {len(self.files)}\t'
-                  f'part size : {stringify_size(self.part_size)}\n')
-
-        parts_str = "\n".join(
-            f"{stringify_size(sum(file.size for file in part))} : {part}" for part in self.grouped_files)
-
-        return string + parts_str
-
-    def __repr__(self):
-        return f'_FileGroup(files={self.files.__repr__()})'
-
-
-class _SockGroup:
-
-    def __init__(self, sock_count, *, control_flag=ThreadActuator(None)):
-        self.sock_list: list[connect.Socket] = []
-        self.sock_count = sock_count
-        self.__controller = control_flag
-
-    def get_sockets_from(self, connection_sock):
-        for i in range(self.sock_count):
-
-            reads, _, _ = select.select([connection_sock, self.__controller], [], [], 30)
-            if self.__controller.to_stop:
-                print("RETURNING TIMEOUT OCCURRED AT SOCK GROUPING")
-                return
-            if connection_sock not in reads:
-                print("SOMETHING'S NOT GOOD IN SOCK GROUPING")
-                return
-
-            conn, _ = connection_sock.accept()
-
-            if SimplePeerText(conn, const.SOCKET_OK).send():
-                self.sock_list.append(conn)
-
-    def connect_sockets(self, sender_ip: Tuple[Any, ...]):
-        for i in range(self.sock_count):
-            conn_sock = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-
-            conn_sock.connect(sender_ip)
-            if SimplePeerText(refer_sock=conn_sock).receive(cmp_string=const.SOCKET_OK):
-                self.sock_list.append(conn_sock)
-
-    def close(self):
-        for sock in self.sock_list:
-            try:
-                sock.close()
-            except Exception:
-                pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__controller.stop()
-        self.close()
-
-    def __len__(self):
-        return self.sock_list.__len__()
-
-    def __iter__(self):
-        return self.sock_list.__iter__()
-
-    def __str__(self):
-        str0 = "==========================================================="
-        str1 = f"\ntotal count:{self.sock_count}\t available:{len(self.sock_list)}\n"
-        str2 = ""
-        for i, sock in enumerate(self.sock_list):
-            str2 += f"{i}. {sock.getpeername()}\n"
-        return str0 + str1 + str2 + str0
-
-    def __repr__(self):
-        return f"_SockGroup(sock_count={self.sock_count})"
-
-
-def make_file_items(paths: list[_FilePath]) -> list[_FileItem]:
-    items = [_FileItem(os.path.basename(x), os.path.getsize(x), x, seeked=0) for x in paths]
-    return items
-
-
-def make_file_groups(file_list: list[_FilePath], grouping_level) -> _FileGroup:
-    """
-
-    A factory function which
-    converts given list of file paths into a program required format of LIST[tuple(NAME, SIZE, FULL_PATH)]
-    then passes it into _FileGroup()
-    generates groups by calling func `_FileGroup::group`
-
-    :param grouping_level: specifies grouping level
-    :returns _FileGroup:
-    :param file_list:
-    """
-
-    file_items = make_file_items(paths=file_list)
-    grouped = _FileGroup(file_items, level=grouping_level)
-    grouped.group()
-    return grouped
-
-
-def make_sock_groups(sock_count, *, connect_ip: tuple[Any, ...] = None,
-                     bind_ip: tuple[Any, ...] = None) -> _SockGroup:
-    """
-    This is a factory function, blocks until required no. of socket-connections are not made
-    Caller is responsible for closing of sockets returned by this function
-    :param bind_ip:    if specified then function will attempt to bind to that ip and listen for
-                       no. of connections specified by :param sock_count:
-    :param sock_count: function gets number of sockets specified by this
-    :param connect_ip: if this is specified then function will take a turn and get sock_count no. of sockets
-                       after successful connection to :param connect_ip:
-    :return _SockGroup:
-    """
-
-    if connect_ip:
-        grouped_sock = _SockGroup(sock_count)
-        print("initiated socket group")  # debug
-        grouped_sock.connect_sockets(connect_ip)
-        return grouped_sock
-
-    with connect.create_server(bind_ip, family=const.IP_VERSION, backlog=sock_count) as refer_sock:
-        grouped_sock = _SockGroup(sock_count)
-        grouped_sock.get_sockets_from(refer_sock)
-        return grouped_sock
-
-
-# deprecated file class
-
-
-@NotInUse
-class _PeerFile:
-    __annotations__ = {
-        'uri': Tuple[str, int],
-        'path': str,
-        '__control_flag': bool,
-        'chunk_size': int,
-        'error_ext': str
-    }
-
-    __dict__ = {'uri': ('localhost', 8080), 'path': '', '__control_flag': True, 'chunk_size': 1024 * 512,
-                'error_ext': '.invalid'}
-
-    __slots__ = ('__code__', '_lock', '__control_flag', '__chunk_size', '__error_extension', '__sock', 'uri', 'path',
-                 'filename', 'file_size', 'type', 'raw_size')
-
-    def __init__(self,
-                 uri: Tuple[str, int],
-                 path: str = '',
-                 chunk_size: int = 1024 * 512,
-                 error_ext: str = '.invalid'
-                 ):
-
-        self.__code__ = None
-        self._lock = threading.Lock()
-        self.__chunk_size = chunk_size
-        self.__error_extension = error_ext
-        self.__control_flag = True
-        self.__sock = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-        self.uri = uri
-        if path == '':
-            return
-
-        self.path = Path(path).resolve()
-
-        if not self.path.exists():
-            raise FileNotFoundError(f"File not found: {self.path}")
-
-        if self.path.is_dir():
-            raise NotADirectoryError(f"Cannot send a directory: {self.path}")
-
-        if not self.path.is_file():
-            raise IsADirectoryError(f"Not a regular file: {self.path}")
-
-        self.filename = self.path.name
-        self.file_size = self.path.stat().st_size
-        self.type = self.path.suffix
-        self.raw_size = struct.pack('!Q', self.file_size)
-
-    def verify_handshake(self) -> Union[bool, None]:
-        with self._lock:
-            if not self.set_up_socket_connection():
-                return False
-            if not self.__control_flag:
-                return False
-            self.__sock.sendall(self.raw_size)
-
-            return SimplePeerText(self.__sock, const.CMD_FILESOCKET_HANDSHAKE).send()
-
-    def recv_handshake(self) -> bool:
-
-        with self._lock:
-            # try:
-
-            self.__sock = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-            try:
-                self.__sock.connect(self.uri)
-            except socket.error as e:
-                error_log(f"got error : {e} at fileobject :{self} from recv_handshake()/fileobject.py")
-
-            self.file_size = struct.unpack('!Q', self.__sock.recv(8))[0]
-            return SimplePeerText(self.__sock).receive(cmp_string=const.CMD_FILESOCKET_HANDSHAKE)
-            # except Exception as e:
-            #     print(f'::got {e} at avails\\fileobject.py from self.recv_handshake() closing connection')
-            #     # error_log(f'::got {e} at core\\__init__.py from self.recv_handshake() closing connection')
-            #     return False
-
-    def send_file(self):
-        """
-           Sends the file contents to the receiver.
-           Once this function is called the handshake is no longer valid cause this function closes the socket
-           after file contents are transferred
-
-           Returns:
-               bool: True if the file was sent successfully, False otherwise.
-        """
-        with self._lock:
-            # try:
-            with self.__sock:
-                send_progress = tqdm.tqdm(range(self.file_size), f"::sending {self.filename[:20]} ... ", unit="B",
-                                          unit_scale=True, unit_divisor=1024)
-                for data in self.__chunkify__():  # send the file in chunks
-                    self.__sock.sendall(data)
-                    send_progress.update(len(data))
-                send_progress.close()
-            return True
-            # except Exception as e:
-            #     error_log(f'::got {e} at core\\__init__.py from self.__send_file()/fileobject.py closing connection')
-            #     return False
-            # finally:
-            #     self.__sock.close()
-
-    def recv_file(self):
-        """
-        Receives the file contents from the sender.
-
-        Returns:
-            bool: True if the file was received successfully, False otherwise.
-        """
-        with self._lock:
-            # try:
-            # received_bytes = 0
-            progress = tqdm.tqdm(range(self.file_size), f"::receiving {self.filename[:20]}... ", unit="B",
-                                 unit_scale=True,
-                                 unit_divisor=1024)
-            with open(os.path.join(const.PATH_DOWNLOAD, self.__validatename__(self.filename)), 'wb') as file:
-                while self.__control_flag and (data := self.__sock.recv(self.__chunk_size)):
-                    file.write(data)
-                    progress.update(len(data))
-            progress.close()
-            print()
-            activity_log(f'::received file {self.filename} :: from {self.__sock.getpeername()}')
-            return True
-            # except Exception as e:
-            #     error_log(f'::got {e} at avails\\fileobject.py from self.__recv_file()/fileobject.py closing connection')
-            #     self.__sock.close()
-            #     self.__file_error__()
-            #     return False
-
-    def __file_error__(self):
-        """
-            Handles file errors by renaming the file with an error extension.
-        """
-        with self._lock:
-            os.rename(self.filename, self.filename + self.__error_extension)
-            self.filename += self.__error_extension
-        return True
-
-    def __chunkify__(self):
-        with open(self.path, 'rb') as file:
-            while self.__control_flag and (chunk := file.read(self.__chunk_size)):
-                yield chunk
-
-    def get_meta_data(self) -> dict[str, str | int]:
-        """Returns metadata as python dict, format name:'',size:'',type:''"""
-        return {
-            'name': self.filename,
-            'size': self.file_size,
-            'type': self.type
-        }
-
-    def set_up_socket_connection(self):
-        self.__sock.settimeout(5)
-        self.__sock.bind(self.uri)
-        self.__sock.listen(1)
-        # try:
-        while True:
-            readable, _, _ = select.select([self.__sock], [], [], 0.001)
-            if self.__sock in readable:
-                self.__sock, _ = self.__sock.accept()
-                return True
-        # except Exception as e:
-        #     use.echo_print(False,
-        #                    f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
-        #     # error_log(f'::got {e} at core\\__init__.py from self.set_up_socket_connection() closing connection')
-        #     return False
-
-    def set_meta_data(self, *, filename, file_size=0, control_flag=threading.Event(), chunk_size: int = 1024 * 512,
-                      error_ext: str = '.invalid'):
-        self.filename = filename
-        self.file_size = file_size
-        self.__control_flag = control_flag
-        self.__chunk_size = chunk_size
-        self.__error_extension = error_ext
-
-    def __validatename__(self, file_addr: str) -> str:
-        """
-            Ensures a unique filename if a file with the same name already exists.
-
-            Args:
-                file addr (str): The original filename.
-
-            Returns:
-                str: The validated filename, ensuring uniqueness.
-        """
-        base, ext = os.path.splitext(file_addr)
-        counter = 1
-        new_file_name = file_addr
-        while os.path.exists(os.path.join(const.PATH_DOWNLOAD, new_file_name)):
-            new_file_name = f"{base}({counter}){ext}"
-            counter += 1
-        self.filename = os.path.basename(new_file_name)
-        return new_file_name
-
-    def __len__(self):
-        """
-            Returns the file size.
-        """
-        return self.file_size
-
-    def __str__(self):
-        """
-            Returns the file details
-        """
-        return (
-            f"file name {self.filename}",
-            f"file size {self.file_size}"
-            f"sending to {self.__sock.getpeername()}"
-            f"receiving from --"
-        )
-
-    def hold(self):
-        self.__control_flag = not self.__control_flag
-
-    def force_stop(self):
-        self.__control_flag = not self.__control_flag
-        try:
-            self.__sock.close()
-        except socket.error as e:
-            error_log(f'::got {e} from self.force_stop()/fileobject.py closing connection')
-        return True
+        return f'Nomad({self.address[0]}, {self.address[1]})'
+
+    def __del__(self):
+        self.main_socket.close()
+        self.controller.signal_stopping()
+        # for sock in self.currently_in_connection.keys():
+        # sock.close()
