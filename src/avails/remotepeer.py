@@ -45,7 +45,6 @@ class RemotePeer:
 
     def __str__(self):
         return (
-            "\n"
             "---------------------------\n"
             f"Username: {self.username[0:18]}\n"
             f"ID      : {self.id}\n"
@@ -82,6 +81,9 @@ class RemotePeer:
         except Exception as e:
             print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
             return RemotePeer(username="N/A", ip=to_recv.getpeername()[0], port=to_recv.getpeername()[1], )
+
+    def __bool__(self):
+        return bool(self.username or self.id or self.req_uri or self.uri)
 
 
 def end():

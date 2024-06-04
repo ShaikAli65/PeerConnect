@@ -121,7 +121,7 @@ def setup_server_connection():
 
 
 def end_connection_with_server():
-    _controller.stop()
+    _controller.signal_stopping()
     print("::Cleared server flag")
     try:
         const.THIS_OBJECT.status = 0
