@@ -2,21 +2,21 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from collections import deque
 
-import src.avails.useables
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.avails import useables as use
-from src.avails.useables import BASIC_URI_CONNECT, REQ_URI_CONNECT
+from src.avails.useables import REQ_URI_CONNECT
 from src.managers.thread_manager import thread_handler, REQUESTS
 from src.webpage_handlers import handle_data
 from src.avails.textobject import SimplePeerText
 from src.core.senders import RecentConnections
-
 from src.avails.constants import REQ_FLAG
+
 
 _controller = ThreadActuator(None, control_flag=REQ_FLAG)
 thread_handler.register(_controller, REQUESTS)
 event_selector = selectors.DefaultSelector()
+thread_pool = ThreadPoolExecutor(7, 'peer-connect-request_handler')
 connection_count = 0
 
 
@@ -64,7 +64,6 @@ def initiate():
     use.echo_print("::Requests bind success full at ", const.THIS_OBJECT.req_uri)
     event_selector.register(_controller, selectors.EVENT_READ)
     event_selector.register(_control_sock, selectors.EVENT_READ, control_connection)
-    thread_pool = ThreadPoolExecutor(13,'peer-connect-request_handler')
     use.echo_print("::Listening for requests at ", _control_sock.getsockname())
 
     while True:
@@ -74,13 +73,15 @@ def initiate():
             return
         try:
             for event, _ in events:
-                thread_pool.submit(event.data, event.fileobj)
+                func = event.data
+                sock = event.fileobj
+                func(sock)
         except (socket.error, OSError) as e:
             error_log(f"Error at manage {func_str(initiate)} exp: {e}")
 
 
 def control_connection(_conn):
-    connection, _ = _conn.accept()
+    connection, _ = _conn.accept()  # this should not be blocking as it is returned by  select call
     with connection:
         use.echo_print("New Connection at requests", _)
         readable, _, _ = select.select([connection, _controller], [], [], 40)
@@ -108,24 +109,23 @@ def sync_users_with_server(_conn):
             except Exception as e:
                 error_log(
                     f"Error syncing list at {func_str(sync_users_with_server)} exp :  {e}")
-    return
 
 
 def notify_user_connection(_conn_socket, ping_again=False):
     try:
         new_peer_object = RemotePeer.deserialize(_conn_socket)
         if not new_peer_object:
-            return False
+            return
     except Exception as e:
         error_log(f"Error at {func_str(notify_user_connection)} exp :  {e}")
-        return None
+        return
     return add_peer_accordingly(new_peer_object, include_ping=ping_again)
 
 
 function_map = {
-    const.REQ_FOR_LIST: send_list,
+    const.REQ_FOR_LIST: lambda x: thread_pool.submit(send_list,x),
     const.I_AM_ACTIVE: notify_user_connection,
-    const.SERVER_PING: sync_users_with_server,
+    const.SERVER_PING: lambda x: thread_pool.submit(sync_users_with_server, x),
     const.ACTIVE_PING: lambda x: None,
     const.LIST_SYNC: lambda x: None,
 }
@@ -184,6 +184,6 @@ def notify_leaving_status_to_users():
 
 def end_requests_connection() -> None:
     notify_leaving_status_to_users()
-    _controller.stop()
+    _controller.signal_stopping()
     const.THIS_OBJECT.status = 0
     return None
