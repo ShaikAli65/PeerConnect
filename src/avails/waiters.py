@@ -2,16 +2,15 @@ import os
 import socket
 import threading
 
-from io import BufferedReader
+from io import BufferedReader, BufferedWriter
 from typing import BinaryIO, Callable, Union
-from functools import partial
 
 import src.avails.constants as const
 
 type ThActuator = ThreadActuator
 
 
-def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
+def waker_flag() -> tuple[BufferedReader | BinaryIO, BufferedWriter | BinaryIO]:
     """
     This function is made to pass in a file descriptor to (sort of trojan horse) select module primitives
     which prevents polling and waking up of cpu in regular intervals
@@ -30,13 +29,15 @@ def waker_flag() -> tuple[BufferedReader | BinaryIO, Callable]:
     if const.WINDOWS:
         w_sock, r_sock = socket.socketpair()
         read = r_sock.makefile('rb')
-        write = partial(_write, w_sock.makefile('wb'))
+        # write = partial(_write, w_sock.makefile('wb'))
+        write = w_sock.makefile('wb')
         r_sock.close()
         w_sock.close()
     else:
         r_file, w_file = os.pipe()
         read = os.fdopen(r_file, 'rb')
-        write = partial(_write, os.fdopen(w_file, 'wb'))
+        # write = partial(_write, os.fdopen(w_file, 'wb'))
+        write = os.fdopen(w_file, 'wb')
 
     return read, write
 
@@ -56,19 +57,24 @@ class ThreadActuator:
     """
     __slots__ = 'control_flag', 'reader', 'select_waker', 'thread'
     __annotations__ = {
-        'control_flag': Union[threading.Event, bool],
+        'control_flag': bool,
         'reader': BufferedReader | BinaryIO,
         'select_waker': Callable,
         'thread': threading.Thread
     }
 
     def __init__(self, thread, control_flag=None):
-        self.control_flag = control_flag or threading.Event()
+        # self.control_flag = control_flag or threading.Event()
+        self.control_flag = False
         self.reader, self.select_waker = waker_flag()
         self.thread = thread
+    #
+    # def __call__(self):
+    #     self.signal_stopping()
 
-    def __call__(self):
-        self.stop()
+    def write(self):
+        self.select_waker.write(b'x')
+        self.select_waker.flush()
 
     def flip(self):
         """
@@ -76,25 +82,33 @@ class ThreadActuator:
         useful when to_stop is used in a while loop which prevent inverting True to False and vice versa
         :return:
         """
-        if self.control_flag.is_set():
-            self.control_flag.clear()
-        else:
-            self.control_flag.set()
+        # if self.control_flag.is_set():
+        #     self.control_flag.clear()
+        # else:
+        #     self.control_flag.set()
+        self.control_flag = not self.control_flag
 
     @property
     def to_stop(self):
-        return self.control_flag.is_set()
+        # return self.control_flag.is_set()
+        return self.control_flag
 
-    def stop(self):
-        if self.control_flag.is_set():
-            self.control_flag.clear()
-        else:
-            self.control_flag.set()
+    def clear_reader(self):
+        self.reader.read(1)
 
-        self.select_waker()
-        if self.thread:
-            self.thread.join()
-        self.reader.flush()
+    def signal_stopping(self):
+        self.flip()
+        self.write()
+        # if self.thread:
+        #     self.thread.join()
+        # self.clear_reader()
 
     def fileno(self):
         return self.reader.fileno()
+
+    def __str__(self):
+        # return f"<ThreadActuator(set={self.control_flag.is_set()})>"
+        return f"<ThreadActuator(set={self.control_flag})>"
+
+    def __repr__(self):
+        return self.__str__()
