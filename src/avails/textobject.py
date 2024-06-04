@@ -3,10 +3,12 @@ from collections import defaultdict
 from src.core import *
 from typing import Union
 from src.avails.constants import PEER_TEXT_FLAG, DATA_WEAVER_FLAG
+from src.managers.thread_manager import thread_handler, TEXT
 
 p_controller = ThreadActuator(None, control_flag=PEER_TEXT_FLAG)
 d_controller = ThreadActuator(None, control_flag=DATA_WEAVER_FLAG)
-
+thread_handler.register(p_controller, which=TEXT)
+thread_handler.register(d_controller, which=TEXT)
 TIMEOUT = 10
 
 
@@ -77,10 +79,10 @@ class SimplePeerText:
         received_data = bytearray()
         try:
             self.sock.setblocking(False)
-            safe_stop = self.controller.to_stop
+            safe_stop = self.controller
             recv = self.sock.recv
             while text_length > 0:
-                if safe_stop is True:
+                if safe_stop.to_stop is True:
                     return b''
                 try:
                     chunk = recv(min(self.chunk_size, text_length))
@@ -302,6 +304,8 @@ class DataWeaver:
 
 
 def stop_all_text():
-    p_controller.stop()
-    d_controller.stop()
+    thread_handler.delete(d_controller)
+    thread_handler.delete(p_controller)
+    p_controller.signal_stopping()
+    d_controller.signal_stopping()
     print("::All texts stopped")
