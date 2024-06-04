@@ -1,64 +1,40 @@
 import threading
 
 from collections import deque, defaultdict
+
+
 # from typing import ValuesView
 # from .remotepeer import RemotePeer
 
-
-class PeerDict:
-    __slots__ = '__lock', '__dict'
-    __annotations__ = {
-        '__lock': threading.Lock,
-        '__dict': dict
-    }
+class PeerDict(dict):
+    __slots__ = '__lock',
 
     def __init__(self):
+        super().__init__()
         self.__lock = threading.Lock()
-        self.__dict = {}
 
     def get_peer(self, peer_id):  # -> RemotePeer:
         with self.__lock:
-            return self.__dict[peer_id]
+            return self.__getitem__(peer_id)
 
     def add_peer(self, peer_obj):  # RemotePeer):
         with self.__lock:
-            self.__dict[peer_obj.id] = peer_obj
+            self.__setitem__(peer_obj.id, peer_obj)
 
     def remove_peer(self, peer_id):
         with self.__lock:
-            return self.__dict.pop(peer_id, None)
+            return self.pop(peer_id, None)
 
     def peers(self):  # -> ValuesView[RemotePeer]:
         with self.__lock:
-            return self.__dict.values()
+            return self.values()
 
     def clear(self):
         with self.__lock:
-            self.__dict.clear()
-
-    def __getitem__(self, key):  # -> RemotePeer:
-        return self.__dict[key]
-
-    def __setitem__(self, key, value):
-        self.__dict[key] = value
-
-    def __delitem__(self, key):
-        del self.__dict[key]
-
-    def __contains__(self, key):
-        return key in self.__dict
-
-    def __iter__(self):
-        return self.__dict.__iter__()
-
-    def __len__(self):
-        return self.__dict.__len__()
+            self.clear()
 
     def __str__(self):
-        return ', '.join(x.__repr__() for x in self.__dict.values())
-
-    def __repr__(self):
-        return self.__dict.__repr__()
+        return ', '.join(x.__repr__() for x in self.values())
 
 
 class CustomSet:
