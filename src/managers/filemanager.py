@@ -10,8 +10,8 @@ from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-# from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
-from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
+# from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
 from src.webpage_handlers.handle_data import feed_file_data_to_page
 
 global_files = FileDict()

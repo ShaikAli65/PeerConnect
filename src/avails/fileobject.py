@@ -34,8 +34,8 @@ class _FileItem:
 
     def __str__(self):
         size_str = stringify_size(self.size)
-        name_str = f"...{self.name[-10:]}" if len(self.name) > 10 else self.name
-        return f"({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
+        name_str = f"...{self.name[-20:]}" if len(self.name) > 20 else self.name
+        return f"_FileItem({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
         # return f'{self.name}'
 
     def __repr__(self):
@@ -68,21 +68,22 @@ class PeerFilePool:
     __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'file_iter'
 
     def __init__(self,
-                 paths: list[_FileItem] = None, *,
+                 file_items: list[_FileItem] = None, *,
                  _id,
-                 control_flag=ThreadActuator(None),
+                 control_flag=None,
                  chunk_size=1024 * 512,
                  error_ext='.invalid'
                  ):
 
-        self.__controller = control_flag
-        self.__controller.flip()  # setting event thus reducing ~not`ting~ of self.proceed() in most of the loops checking
+        self.__controller = control_flag or ThreadActuator(None)
+        # setting event thus reducing ~not`ting~ of self.proceed() in most of the loop checkings
+        self.__controller.flip()
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
-        self.file_items: set[_FileItem] = set(paths or [])
+        self.file_items: set[_FileItem] = set(file_items or [])
         self.id = _id
         self.file_iter = self.file_items.__iter__()
-        if not paths:
+        if not file_items:
             return
 
         # for file_item in paths:
@@ -98,7 +99,7 @@ class PeerFilePool:
 
     def send_files(self, receiver_sock):
         raw_file_count = struct.pack('!I', len(self.file_items))
-        print("sent file count ", raw_file_count)  # debug
+        # print("sent file count ", raw_file_count)  # debug
         receiver_sock.send(raw_file_count)
         receiver_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
         self.file_iter, iterator = itertools.tee(self.file_items)
@@ -154,7 +155,7 @@ class PeerFilePool:
             print("TIMEOUT OF 30sec reached OR SOMETHING WRONG WITH SOCKET")
             file_count = 0
         self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
-        print("received file count", file_count, self.file_items)
+        print("received file count", file_count)  # debug
         self.file_iter, iterator = itertools.tee(self.file_items)
         sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
         return self.__receive_file_loop(iterator, sender_sock)
@@ -163,7 +164,8 @@ class PeerFilePool:
         for file in current_iter:
             if (not self.__controller.to_stop) or self.__recv_file(sender_sock, file) is False:
                 return False
-            next(self.file_iter)
+            next(self.file_iter)  # forwarding iterator AFTER sending a file
+            print("completed receiving", file)
         return True
 
     def __recv_file(self, sender_sock, file_item):
@@ -181,6 +183,7 @@ class PeerFilePool:
             return
         FILE_SIZE = struct.unpack('!Q', sender_sock.recv(8))[0]
         file_item.size = FILE_SIZE
+        print('INTIAL FILE ITEM ', file_item)  # debug
         self.calculate_chunk_size(FILE_SIZE)
         progress = tqdm.tqdm(range(FILE_SIZE),
                              f"::receiving {FILE_NAME[:20]}... ", unit="B",
@@ -191,10 +194,8 @@ class PeerFilePool:
         return True
 
     def __recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
-        if file_item.seeked == 0:
-            mode = 'xb'
-        else:
-            mode = 'rb+'
+        mode = 'xb' if file_item.seeked == 0 else 'rb+'
+
         try:
             with open(file_item.path, mode) as file:
                 f_write, f_recv, size = file.write, sender_sock.recv, file_item.size
@@ -294,7 +295,7 @@ class PeerFilePool:
         return self.file_items.__iter__()
 
     def break_loop(self):
-        self.__controller.stop()
+        self.__controller.signal_stopping()
         self.__controller = None
 
     def calculate_chunk_size(self, file_size: int):
@@ -452,7 +453,7 @@ class _SockGroup:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__controller.stop()
+        self.__controller.signal_stopping()
         self.close()
 
     def __len__(self):
