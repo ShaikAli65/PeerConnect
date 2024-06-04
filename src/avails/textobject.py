@@ -9,7 +9,7 @@ p_controller = ThreadActuator(None, control_flag=PEER_TEXT_FLAG)
 d_controller = ThreadActuator(None, control_flag=DATA_WEAVER_FLAG)
 thread_handler.register(p_controller, which=TEXT)
 thread_handler.register(d_controller, which=TEXT)
-TIMEOUT = 10
+TIMEOUT = 4
 
 
 class SimplePeerText:

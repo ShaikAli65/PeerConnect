@@ -296,7 +296,7 @@ class PeerFilePool:
 
     def break_loop(self):
         self.__controller.signal_stopping()
-        self.__controller = None
+        # self.__controller = None
 
     def calculate_chunk_size(self, file_size: int):
         min_buffer_size = 64 * 1024  # 64 KB

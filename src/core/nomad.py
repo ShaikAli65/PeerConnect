@@ -6,7 +6,6 @@ from ..core import *
 from ..avails import useables as use
 from ..avails.remotepeer import RemotePeer
 
-from ..avails.constants import NOMAD_FLAG  # control flag
 from ..managers import directorymanager, filemanager
 from ..managers.thread_manager import thread_handler, NOMADS
 from ..webpage_handlers import handle_data
@@ -112,7 +111,7 @@ class SocketLoop(selectors.DefaultSelector):
         # a custom object to be used to wake select call when needed, instead of polling
         self._controller = ThreadActuator(threading.current_thread())
         thread_handler.register(self._controller, NOMADS)
-
+        self.threads = []
         self.register(self._controller, selectors.EVENT_READ)
         self.currently_in_connection = defaultdict(int)
         self.RecentConnections = getattr(import_module('src.core.senders'), 'RecentConnections')
@@ -132,7 +131,7 @@ class SocketLoop(selectors.DefaultSelector):
             if controller.to_stop:
                 use.echo_print("::Nomad connections ended")
                 return
-            use.echo_print("selelected", ' '.join(str(x) for x in events))
+            # use.echo_print("selelected", ' '.join(str(x) for x in events))
             try:
                 for event, _ in events:
                     file_desc = event.fileobj
@@ -140,6 +139,12 @@ class SocketLoop(selectors.DefaultSelector):
                         self.connect_new(file_desc, event.data)
             except (ConnectionResetError,ConnectionAbortedError):
                 pass
+
+    def start_thread(self, function, *args):
+        thread = threading.Thread(target=function, args=args)
+        thread.daemon = True
+        thread.start()
+        self.threads.append(thread)
 
     def connect_new(self,_conn, peer_id):
         try:
@@ -155,13 +160,17 @@ class SocketLoop(selectors.DefaultSelector):
             return
 
         if _data.header == const.CMD_TEXT:
+
             asyncio.run(handle_data.feed_user_data_to_page(_data.content, _data.id))
         elif _data.header == const.CMD_RECV_FILE:
-            use.start_thread(_target=filemanager.file_receiver, _args=(_data,))
+            self.start_thread(filemanager.file_receiver, _data)
+            # use.start_thread(_target=filemanager.file_receiver, _args=(_data,))
         elif _data.header == const.CMD_RECV_FILE_AGAIN:
-            use.start_thread(_target=filemanager.re_receive_file, _args=(_data,))
+            # use.start_thread(_target=filemanager.re_receive_file, _args=(_data,))
+            self.start_thread(filemanager.re_receive_file, _data)
         elif _data.header == const.CMD_RECV_DIR:
-            use.start_thread(_target=directorymanager.directoryReceiver, _args=(_data,))
+            # use.start_thread(_target=directorymanager.directoryReceiver, _args=(_data,))
+            self.start_thread(directorymanager.directoryReceiver,_data)
         elif _data.header == const.CMD_CLOSING_HEADER:
             self.unregister(_conn)
             self.disconnect_user(_conn, self._controller, peer_id)
