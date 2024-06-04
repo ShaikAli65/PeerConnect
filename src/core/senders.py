@@ -1,5 +1,3 @@
-import socket
-import time
 from typing import Optional
 
 import src.avails.useables
@@ -71,7 +69,7 @@ class RecentConnections:
 
     @classmethod
     def addConnection(cls, peer_obj: RemotePeer):
-        connection_socket = use.create_conn_to_peer(_peer_obj=peer_obj, to_which=src.avails.useables.BASIC_URI_CONNECTOR)
+        connection_socket = use.create_conn_to_peer(_peer_obj=peer_obj, to_which=src.avails.useables.BASIC_URI_CONNECT)
         # if cls.verifier(connection_socket):
         cls.connected_sockets.append_peer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
@@ -86,7 +84,7 @@ class RecentConnections:
             try:
                 cls.current_connected = cls.addConnection(peer_obj)
                 cls.verifier(cls.current_connected)
-                const.HOST_OBJ.add_receive_thread(cls.current_connected, peer_obj.id)
+                const.HOST_OBJ.socket_handler.register_sock(cls.current_connected, peer_obj.id)
                 print("cache miss --current : ", peer_obj.username, cls.current_connected.getpeername()[:2],
                       cls.current_connected.getsockname()[:2])
             except (socket.error, ConnectionResetError):
@@ -114,6 +112,9 @@ class RecentConnections:
         cls.connected_sockets.clear()
 
 
+retry_count = 0
+
+
 @RecentConnections
 def sendMessage(data: DataWeaver, sock: socket = None):
     """
@@ -130,13 +131,18 @@ def sendMessage(data: DataWeaver, sock: socket = None):
         data['id'] = const.THIS_OBJECT.id  # Changing the id to this peer's id
         data.send(sock)
         echo_print("sent message to ", sock.getpeername())
+        return
     except (socket.error, OSError) as exp:
         print(f"got error at {func_str(sendMessage)} :{exp}", sock)
         error_log(f"got error at handle/send_message :{exp}")
+        global retry_count
+        retry_count += 1
         RecentConnections.force_remove(back_up_id)
-    # except AttributeError as exp:
-    #     print(f"got error at handle/send_message :{exp}")
-    #     error_log(f"got error at handle/send_message :{exp}")  # need to be handled more
+    if retry_count < 3:
+        RecentConnections.connect_peer(peer_list.get_peer(back_up_id))  # retrying to connect
+        sendMessage(data)  # sending message
+    else:
+        retry_count = 0
 
 
 @RecentConnections
