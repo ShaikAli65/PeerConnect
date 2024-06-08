@@ -1,3 +1,4 @@
+import importlib
 import os.path
 import pickle
 import tqdm
@@ -6,21 +7,26 @@ from pathlib import Path
 from multiprocessing import Process, Queue
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QFileDialog
-
+import src.avails.connect
 from src.avails.fileobject import PeerFilePool, make_file_items
 from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
+from src.avails.dialogs import Dialog
 
 
-def do_handshake(_sock, controller, _content):
+def do_handshake(_sock, controller, _content, receiver_obj):
     bind_addr = (const.THIS_IP, use.get_free_port())
     _content['bind_ip'] = bind_addr
+    handshake = DataWeaver(header=const.CMD_RECV_DIR, content=_content, _id=const.THIS_OBJECT.id)
     with connect.create_server(bind_addr, family=const.IP_VERSION, backlog=1) as soc:
-        handshake = DataWeaver(header=const.CMD_RECV_DIR, content=_content, _id=const.THIS_OBJECT.id)
-        handshake.send(_sock)
+        try:
+            handshake.send(_sock)
+        except (ConnectionResetError,socket.error):
+            connections = getattr(importlib.import_module('src.core.senders'), 'RecentConnections')
+            receiver_sock = connections.add_connection(receiver_obj)
+            handshake.send(receiver_sock)
+
         use.echo_print("Waiting for connection...")
         reads,_,_ = select.select([controller, soc], [], [],64)
         if soc not in reads or controller.to_stop is True:
@@ -34,14 +40,16 @@ def directorySender(_data: DataWeaver, recv_sock):
     receiver_obj = peer_list.get_peer(_data.id)
     file_path = _data.content
     if not file_path:
-        file_path = open_directory_dialog_window()
+        file_path = Dialog.open_directory_dialog_window()
     zip_path = None
     try:
         zip_path = process_zipping(receiver_obj, file_path)
         files = make_file_items([zip_path,])
         _id = receiver_obj.get_file_count()
         controller = ThreadActuator(threading.current_thread())
-        receiver_sock = do_handshake(recv_sock, controller, {'file_name':os.path.basename(file_path), 'file_id':_id})
+        receiver_sock = do_handshake(recv_sock, controller,
+                                     {'file_name':os.path.basename(file_path), 'file_id':_id},
+                                     receiver_obj)
         if receiver_sock is None:
             return
         with receiver_sock:
@@ -106,16 +114,6 @@ def unZipper(zip_path, destination_path, name_queue):
     return
 
 
-def open_directory_dialog_window(_prev_dir=[os.path.join(os.path.expanduser('~'), 'Downloads'), ]):
-    _ = QApplication([])
-    dialog = QFileDialog()
-    dialog.setOption(QFileDialog.DontUseNativeDialog, True)
-    dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
-    directory = dialog.getExistingDirectory(directory=_prev_dir[0], caption="Select directory to send")
-    _prev_dir[0] = directory
-    return directory
-
-
 @NotInUse
 def make_directory_structure(of_directory: Path, at_directory):
     def _fill_in(current_directory: Path, download_dir):
@@ -123,7 +121,6 @@ def make_directory_structure(of_directory: Path, at_directory):
             d = download_dir / thing.relative_to(of_directory)
             if thing.is_file():
                 d.touch(exist_ok=True)
-                pass
             elif thing.is_dir():
                 d.mkdir(parents=True, exist_ok=True)
                 _fill_in(thing, download_dir)
@@ -142,6 +139,7 @@ def make_directory_structure(of_directory: Path, at_directory):
 
 @NotInUse
 def send_files(dir_socket, dir_path):
+    print(dir_socket)
     for x in dir_path.glob('**/*'):
         if x.is_file():
             pass
@@ -149,7 +147,7 @@ def send_files(dir_socket, dir_path):
 
 @NotInUse
 def directory_sender(receiver_obj, dir_path: str):
-    dir_socket = use.create_conn_to_peer(receiver_obj)
+    dir_socket = src.avails.connect.connect_to_peer(receiver_obj)
     dir_path = Path(dir_path)
     DataWeaver(header=const.CMD_RECV_DIR, content=dir_path.name, _id=const.THIS_OBJECT.id)
     print(f"sending directory{dir_path} to ", receiver_obj)
