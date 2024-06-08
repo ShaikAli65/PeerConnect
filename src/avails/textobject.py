@@ -61,7 +61,7 @@ class SimplePeerText:
     def receive(self, cmp_string: Union[str, bytes] = '', *, require_confirmation=True) -> Union[bool, bytes]:
         """
         Receive text over the socket.
-        Better to check for `truthy` and `falsy` values for cmp_string as it may return empty bytes.
+        Better to check for `truthy` and `falsy` values for cmp_string as this function may return empty bytes.
 
         Parameters:
         - cmp_string [str, bytes]: Optional comparison string for validation.
@@ -74,6 +74,7 @@ class SimplePeerText:
         readable, _, _ = select.select([self.sock, self.controller], [], [], TIMEOUT)
         if self.controller.to_stop or self.sock not in readable:
             return b''
+
         text_length = struct.unpack('!I', self.sock.recv(4))[0]
 
         received_data = bytearray()
@@ -208,7 +209,7 @@ class DataWeaver:
             self.__data: dict = defaultdict(str)
             self.__data['header'] = header
             self.__data['content'] = content
-            self.__data['id'] = _id
+            self.__data['id'] = _id or const.THIS_OBJECT.id
 
     def dump(self):
         """

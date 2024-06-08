@@ -1,9 +1,11 @@
 from typing import Optional
 
+import src.avails.connect
 import src.avails.useables
 from src.core import *
 from src.avails.textobject import DataWeaver, SimplePeerText
 from src.avails import constants as const, useables as use
+from src.avails.connect import BASIC_URI_CONNECT
 from src.avails.remotepeer import RemotePeer
 from src.avails.useables import echo_print
 from src.managers import filemanager
@@ -57,7 +59,6 @@ class RecentConnections:
     @classmethod
     def verifier(cls, connection_socket):
         # try:
-        time.sleep(0.2)
         SimplePeerText(connection_socket, text=const.CMD_VERIFY_HEADER).send()
         print("sent header")
         SimplePeerText(connection_socket, text=const.THIS_OBJECT.id.__str__().encode(const.FORMAT)).send()
@@ -68,9 +69,8 @@ class RecentConnections:
         return True
 
     @classmethod
-    def addConnection(cls, peer_obj: RemotePeer):
-        connection_socket = use.create_conn_to_peer(_peer_obj=peer_obj, to_which=src.avails.useables.BASIC_URI_CONNECT)
-        # if cls.verifier(connection_socket):
+    def add_connection(cls, peer_obj: RemotePeer):
+        connection_socket = connect.connect_to_peer(_peer_obj=peer_obj, to_which=BASIC_URI_CONNECT)
         cls.connected_sockets.append_peer(peer_obj.id, peer_socket=connection_socket)
         return connection_socket
 
@@ -82,7 +82,7 @@ class RecentConnections:
     def connect_peer(cls, peer_obj: RemotePeer):
         if peer_obj.id not in cls.connected_sockets:
             try:
-                cls.current_connected = cls.addConnection(peer_obj)
+                cls.current_connected = cls.add_connection(peer_obj)
                 cls.verifier(cls.current_connected)
                 const.HOST_OBJ.socket_handler.register_sock(cls.current_connected, peer_obj.id)
                 print("cache miss --current : ", peer_obj.username, cls.current_connected.getpeername()[:2],
@@ -93,7 +93,11 @@ class RecentConnections:
             return
 
         supposed_to_be_connected_socket = cls.connected_sockets.get_socket(peer_id=peer_obj.id)
-        if use.is_socket_connected(supposed_to_be_connected_socket):
+        if src.avails.connect.is_socket_connected(supposed_to_be_connected_socket):
+            # this socket connection checker is not 100 % sure in case of
+            # unexpected errors or disconnections, usually that means
+            # all the sending operations run at-most 2 times to check again
+            # for connection
             cls.current_connected = supposed_to_be_connected_socket
             pr_str = f"cache hit !{f"{peer_obj.username[:10]}..." if len(peer_obj.username) > 10 else peer_obj.username}! and socket is connected"
             use.echo_print(pr_str, supposed_to_be_connected_socket.getpeername())
