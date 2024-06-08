@@ -1,7 +1,8 @@
 from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
-from src.managers.profile_manager import ProfileManager, set_selected_profile, all_profiles
+from src.managers.profile_manager import ProfileManager, all_profiles
+from src.configurations.configure_app import set_selected_profile
 
 
 async def align_profiles(_websocket):
