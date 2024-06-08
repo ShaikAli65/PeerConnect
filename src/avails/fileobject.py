@@ -16,6 +16,7 @@ type FiLe = PeerFilePool
 
 # __FileItem = namedtuple('__FileItem', ['name', 'size', 'path'])
 
+# TODO: PRESERVE FILE ORDER
 
 class _FileItem:
     __annotations__ = {
@@ -45,9 +46,6 @@ class _FileItem:
                 f'seeked={self.seeked})')
         # return f'{self.name}'
 
-    # def __eq__(self, other):
-    #     return self.name == other.name and self.size == other.size and self.path == other.path
-
     def __iter__(self):
         return iter((self.name, self.size, self.path))
 
@@ -65,7 +63,7 @@ def stringify_size(size):
 
 
 class PeerFilePool:
-    __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'file_iter'
+    __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'current_file'
 
     def __init__(self,
                  file_items: list[_FileItem] = None, *,
@@ -82,7 +80,10 @@ class PeerFilePool:
         self.__error_extension = error_ext
         self.file_items: set[_FileItem] = set(file_items or [])
         self.id = _id
-        self.file_iter = self.file_items.__iter__()
+        self.current_file = self.file_items.__iter__()
+        # this can be ~_FileItem() while recieving (we don't use ~self.file_items list in case of receiving
+        # because it's redundent two store files both ways)
+        # and iterator while sending
         if not file_items:
             return
 
@@ -102,14 +103,14 @@ class PeerFilePool:
         # print("sent file count ", raw_file_count)  # debug
         receiver_sock.send(raw_file_count)
         receiver_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        self.file_iter, iterator = itertools.tee(self.file_items)
+        self.current_file, iterator = itertools.tee(self.file_items)
         return self.send_file_loop(iterator, receiver_sock)
 
     def send_file_loop(self, current_iter, receiver_sock):
         for file in current_iter:
             if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
                 return False
-            next(self.file_iter)
+            next(self.current_file)
         return True
 
     def __send_file(self, receiver_sock, *, file: _FileItem):
@@ -132,19 +133,23 @@ class PeerFilePool:
             f_read, proceed = f.read, self.__controller
             f.seek(file.seeked)
             seek = file.seeked
-            while proceed.to_stop:
-                chunk = memoryview(f_read(self.__chunk_size))
-                if not chunk:
-                    break
-                try:
-                    sock_send(chunk)  # possible: connection reset err
-                except TimeoutError:
-                    # may be the case where receiver is too slow , stimulating a delay
-                    time.sleep(7)  # just a random number
-                    continue
-                send_progress.update(len(chunk))
-                seek += len(chunk)
-        file.seeked = seek  # can be ignored mostly for now
+            try:
+                while proceed.to_stop:
+                    chunk = memoryview(f_read(self.__chunk_size))
+                    if not chunk:
+                        break
+                    try:
+                        sock_send(chunk)  # possible: connection reset err
+                    except TimeoutError:
+                        # may be the case where receiver is too slow , stimulating a delay
+                        time.sleep(3)  # just a random number
+                        continue
+                    except ConnectionResetError:
+                        break
+                    send_progress.update(len(chunk))
+                    seek += len(chunk)
+            finally:
+                file.seeked = seek  # can be ignored mostly for now
 
     def recv_files(self, sender_sock):
         reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
@@ -154,18 +159,21 @@ class PeerFilePool:
         else:
             print("TIMEOUT OF 30sec reached OR SOMETHING WRONG WITH SOCKET")
             file_count = 0
-        self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
+        # self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
         print("received file count", file_count)  # debug
-        self.file_iter, iterator = itertools.tee(self.file_items)
+        # self.current_file, iterator = itertools.tee(self.file_items)
         sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        return self.__receive_file_loop(iterator, sender_sock)
+        # return self.__receive_file_loop(iterator, sender_sock)
+        return self.__receive_file_loop(file_count, sender_sock)
 
-    def __receive_file_loop(self, current_iter, sender_sock):
-        for file in current_iter:
-            if (not self.__controller.to_stop) or self.__recv_file(sender_sock, file) is False:
-                return False
-            next(self.file_iter)  # forwarding iterator AFTER sending a file
-            print("completed receiving", file)
+    def __receive_file_loop(self, count, sender_sock):
+        for _ in range(count):
+            self.current_file = _FileItem('',0,'',0)
+            if not self.__controller.to_stop:
+                return
+            if self.__recv_file(sender_sock, self.current_file) is False:
+                return
+            print("completer receiving", self.current_file)  # debug
         return True
 
     def __recv_file(self, sender_sock, file_item):
@@ -213,7 +221,7 @@ class PeerFilePool:
             file_item.seeked = file_item.size - size
 
     def send_files_again(self, receiver_sock: socket.socket):
-        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
+        self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
 
         # -> ----------------------
         start_file = next(present_iter)
@@ -225,6 +233,23 @@ class PeerFilePool:
         progress = tqdm.tqdm(range(start_file.size), f"::sending {start_file.name[:20]} ... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
         self.__send_actual_file(start_file, receiver_sock, progress)
+        '''
+        
+        send id=1             recv id=1
+        PeerFilePool            PeerFilePool
+        ('') ('') ('')           () () ()
+        1                       1 ("",size,)
+                                seek += len(data)
+        2                       2 ()
+        
+        3 break <- iter         3 <- iter 
+                                (seeked=x)
+
+                                seek = len(nbytes)
+        4                       4 ()
+        5                       5 ()
+        
+        '''
         progress.close()
         # -> ---------------------- file continuation part
 
@@ -232,7 +257,7 @@ class PeerFilePool:
         return True
 
     def receive_files_again(self, sender_sock: socket.socket):
-        self.file_iter, present_iter = itertools.tee(self.file_iter)  # cloning iterators
+        self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
         # -> ----------------------
         start_file = next(present_iter)
         sender_sock.send(start_file.seeked)
