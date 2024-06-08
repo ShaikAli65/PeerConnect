@@ -1,7 +1,8 @@
 import queue
 
+import src.avails.connect
 import src.avails.useables as use
-from src.avails.useables import REQ_URI_CONNECT
+from src.avails.connect import REQ_URI_CONNECT
 
 from src.core import *
 from src.core import requests_handler
@@ -20,33 +21,23 @@ def get_initial_list(no_of_users, initiate_socket):
     global error_calls
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
-        try:
+        # try:
             _nomad = RemotePeer.deserialize(initiate_socket)
             ping_queue.put(_nomad)
             requests_handler.signal_status(ping_queue,)
-            # use.echo_print(f"::User received from server : {_nomad}")
+            use.echo_print(f"::User received from server :\n {_nomad}")
             server_log(f"::User received from server : {_nomad!r}", 2)
-        except socket.error as e:
-            error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
-            if not e.errno == 10054:
-                continue
-
-            end_connection_with_server()
-            if len(peer_list) > 0:
-                server_log(f"::Server disconnected received some users retrying ...", 4)
-                list_error_handler()
-            return False
+        # except socket.error as e:
+        #     error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
+        #     if not e.errno == 10054:
+        #         continue
+        #
+        #     end_connection_with_server()
+        #     if len(peer_list) > 0:
+        #         server_log(f"::Server disconnected received some users retrying ...", 4)
+        #         list_error_handler()
+        #     return False
     return True
-
-
-def list_error_handler():
-    req_peer = next(peer_list)
-    conn = use.create_conn_to_peer(_peer_obj=req_peer, to_which=REQ_URI_CONNECT)
-    with conn:
-        SimplePeerText(text=const.REQ_FOR_LIST,refer_sock=conn).send()
-        select.select([conn, _controller], [], [], 100)
-        list_len = struct.unpack('!Q',conn.recv(8))[0]
-        get_initial_list(list_len, conn)
 
 
 def get_list_from(initiate_socket):
@@ -63,9 +54,19 @@ def get_list_from(initiate_socket):
         return get_initial_list(length, initiate_socket)
 
 
+def list_error_handler():
+    req_peer = next(peer_list)
+    conn = src.avails.connect.connect_to_peer(_peer_obj=req_peer, to_which=REQ_URI_CONNECT)
+    with conn:
+        SimplePeerText(text=const.REQ_FOR_LIST,refer_sock=conn).send()
+        select.select([conn, _controller], [], [], 100)
+        list_len = struct.unpack('!Q',conn.recv(8))[0]
+        get_initial_list(list_len, conn)
+
+
 def list_from_forward_control(list_owner: RemotePeer):
     # socket.create_connection()
-    with use.create_conn_to_peer(list_owner, to_which=REQ_URI_CONNECT) as list_connection_socket:
+    with src.avails.connect.connect_to_peer(list_owner, to_which=REQ_URI_CONNECT) as list_connection_socket:
         if SimplePeerText(list_connection_socket, const.REQ_FOR_LIST, controller=_controller).send():
             get_list_from(list_connection_socket)
 
