@@ -1,77 +1,130 @@
+import ipaddress
 import socket as soc
+import threading
 import signal
+import struct
 import pickle
+import time
 from collections import deque
-import requests
-from src.core import *
-from src.avails.container import CustomSet
-from src.avails.textobject import SimplePeerText
-import src.avails.remotepeer as rp
+import select
+
+import urllib3
+from src.avails.connect import Socket
+from src.avails.container import SafeSet
+from src.avails.textobject import SimplePeerText, DataWeaver
+from src.avails.remotepeer import RemotePeer
 import src.avails.constants as const
 import json
 import subprocess
 
-
-IP_VERSION = soc.AF_INET
+IP_VERSION = soc.AF_INET6
 PROTOCOL = soc.SOCK_STREAM
 PUBLIC_IP = '8.8.8.8'
+SAFE_LOCK = threading.Lock()
 SERVERPORT = 45000
-SERVER_SOCKET = soc.socket(IP_VERSION, PROTOCOL)
+SERVEROBJ = Socket(IP_VERSION, PROTOCOL)
+handshakemessage = 'connectionaccepted'
 print('::starting server')
 EXIT = threading.Event()
-LIST = CustomSet()
+LIST = SafeSet()
 # LIST.add(rp.RemotePeer(username='temp', port=25006, ip='1.1.11.1', status=1))
+ip = ""
 
 
-def get_local_ip1():
-    ip = ""
-    s = soc.socket(IP_VERSION, PROTOCOL)
-    s.settimeout(0.5)
-    try:
-        s.connect((PUBLIC_IP, 80))
-        ip = s.getsockname()[0]
-    except soc.error as e:
-        print(f"::got {e} trying another way")
-        ip = soc.gethostbyname(soc.gethostname())
-    finally:
-        print(f"Local IP: {ip}")
-        s.close()
-        return ip
+def get_ip():
+    """Retrieves the local IP address of the machine.
+
+    Attempts to connect to a public DNS server (1.1.1.1) to obtain the local IP.
+    If unsuccessful, falls back to using gethostbyname().
+
+    Returns:
+        str: The local IP address as a string.
+
+    Raises:
+        soc.error: If a socket error occurs during connection.
+    """
+    if IP_VERSION == soc.AF_INET:
+        return get_v4() or '127.0.0.1', SERVERPORT
+    elif IP_VERSION == soc.AF_INET6:
+        if soc.has_ipv6:
+            return get_v6() or '::1', SERVERPORT
+
+    # return '127.0.0.1', SERVERPORT
 
 
-def get_local_ip() -> str:
-    if const.IP_VERSION == soc.AF_INET:
-        with soc.socket(const.IP_VERSION, soc.SOCK_DGRAM) as config_soc:
-            config_soc.settimeout(3)
-            try:
-                config_soc.connect(('1.1.1.1', 80))
-                config_ip, _ = config_soc.getsockname()
-            except soc.error as err:
-                print("got error at getip() :", err)
-                config_ip = soc.gethostbyname(soc.gethostname())
-                if const.LINUX or const.DARWIN:
-                    config_ip = subprocess.getoutput("hostname -I")
-    else:
-        config_ip = "::1"
+def get_v4():
+    with soc.socket(soc.AF_INET, soc.SOCK_DGRAM) as config_soc:
         try:
-            response = requests.get('https://api64.ipify.org?format=json')
-            if response.status_code == 200:
-                data = response.json()
-                config_ip = data['ip']
-        except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as err:
-            print("got error at getip() :", err)
-            config_ip = soc.getaddrinfo(soc.gethostname(), None, const.IP_VERSION)[0][4][0]
+            config_soc.connect(('1.1.1.1', 80))
+            config_ip = config_soc.getsockname()[0]
+        except soc.error as e:
+            print("error gettting ip")
+            config_ip = soc.gethostbyname(soc.gethostname())
+            if const.DARWIN or const.LINUX:
+                config_ip = subprocess.getoutput("hostname -I")
 
-    print("Local IP: ", config_ip)
     return config_ip
 
 
-def givelist(client: soc.socket, userobj: rp.RemotePeer):
+"""
+    import commands
+    ips = commands.getoutput("/sbin/ifconfig | grep -i \"inet\" | grep -iv \"inet6\" | " +
+                         "awk {'print $2'} | sed -ne 's/addr: / /p'")
+    print ips
+"""
+
+
+def get_v6():
+    if const.WINDOWS:
+        back_up = ""
+        for sock_tuple in soc.getaddrinfo("", None, soc.AF_INET6, proto=const.PROTOCOL, flags=soc.AI_PASSIVE):
+            ip, _, _, _ = sock_tuple[4]
+            if ipaddress.ip_address(ip).is_link_local:
+                back_up = ip
+            elif not ipaddress.ip_address(ip).is_link_local:
+                return ip
+        return back_up
+    elif const.DARWIN or const.LINUX:
+        return get_v6_from_shell() or get_v6_from_api64()
+
+
+def get_v6_from_shell():
+    try:
+        import subprocess
+
+        result = subprocess.run(['ip', '-6', 'addr', 'show'], capture_output=True, text=True)
+        output_lines = result.stdout.split('\n')
+
+        ip_v6 = []
+        for line in output_lines:
+            if 'inet6' in line and 'fe80' not in line and '::1' not in line:
+                ip_v6.append(line.split()[1])
+    except Exception as exp:
+        print(f"Error occurred: {exp}")
+        return []
+    return ip_v6[0]
+
+
+def get_v6_from_api64():
+    config_ip = "::1"  # Default IPv6 address
+    try:
+        with urllib3.request('GET','https://api64.ipify.org?format=json') as response:
+            data = response.read().decode('utf-8')
+            data_dict = json.loads(data)
+            config_ip = data_dict.get('ip', config_ip)
+    except json.JSONDecodeError:
+        config_ip = soc.getaddrinfo(soc.gethostname(), None, soc.AF_INET6)[0][4][0]
+
+    return config_ip
+
+
+def givelist(client: soc.socket, userobj: RemotePeer):
     if not isinstance(client, soc.socket):
         raise TypeError('client must be a socket')
     client.send(struct.pack('!Q', len(LIST)))
     for peers in LIST:
-        peers.serialize(client)
+        with SAFE_LOCK:
+            peers.serialize(client)
     LIST.add(userobj)
     print('::sent list to client :', client.getpeername())
     print('::new list :', LIST)
@@ -80,20 +133,23 @@ def givelist(client: soc.socket, userobj: rp.RemotePeer):
 
 def sendlist(client: soc.socket, ):
     """Another implementation of sending a list not in use currently"""
-    _l = struct.pack('!I', len(LIST))
-    client.send(_l)
-    client.sendall(pickle.dumps(LIST))
+    with SAFE_LOCK:
+        _l = struct.pack('!I', len(LIST))
+        client.send(_l)
+        client.sendall(pickle.dumps(LIST))
 
 
-def validate(client: soc.socket):
+def validate(client):
+    global handshakemessage
     try:
-        _newuser = rp.deserialize(client)
-        print(':got new user :', _newuser, 'status :', _newuser.status)
-        if _newuser.status == 0:
-            print('::removing user :', _newuser)
-            LIST.discard(_newuser)
-            print("new list :", LIST)
-            return True
+        _newuser = RemotePeer.deserialize(client)
+        print('::got new user :', _newuser, "ip: ", client.getsockname(), 'status :', _newuser.status)
+        with SAFE_LOCK:
+            if _newuser.status == 0:
+                print('::removing user :', _newuser)
+                LIST.discard(_newuser)
+                print("new list :", LIST)
+                return True
         LIST.discard(_newuser, False)
         SimplePeerText(client, const.SERVER_OK).send()
         threading.Thread(target=givelist, args=(client, _newuser)).start()
@@ -104,19 +160,6 @@ def validate(client: soc.socket):
         return False
 
 
-def getip():
-
-    if IP_VERSION == soc.AF_INET6:
-        response = requests.get('https://api64.ipify.org?format=json')
-        if response.status_code == 200:
-            data = response.json()
-            config_ip = data['ip']
-            return config_ip, SERVERPORT
-    config_ip = get_local_ip()
-
-    return config_ip, SERVERPORT
-
-
 def sync_users():
     while not EXIT.is_set():
         if len(LIST) == 0:
@@ -125,7 +168,7 @@ def sync_users():
         que = deque(LIST)
         filtered_changes = LIST.getchanges()
         while que:
-            peer: rp.RemotePeer = que.popleft()
+            peer: RemotePeer = que.popleft()
             active_user_sock = soc.socket(IP_VERSION, PROTOCOL)
             active_user_sock.settimeout(5)
             try:
@@ -147,34 +190,34 @@ def give_changes(active_user_sock: soc.socket, changes: deque):
     # print(f'::give_changes called :{active_user_sock.getpeername()}', changes)
     try:
         with active_user_sock:
-            # active_user_sock.send(struct.pack('!Q', len(changes)))
-            # for _peer in changes:
-            #     _peer.serialize(active_user_sock)
-            active_user_sock.send(struct.pack('!Q', 0))
+            active_user_sock.send(struct.pack('!Q', len(changes)))
+            for _peer in changes:
+                _peer.serialize(active_user_sock)
     except soc.error as e:
         print(f'::got {e} for active user :', active_user_sock.getpeername())
 
 
 def start_server():
-    global SERVER_SOCKET, SERVERPORT
-    SERVER_SOCKET.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
-    const.THIS_IP, SERVERPORT = getip()
-    SERVER_SOCKET.bind((const.THIS_IP, SERVERPORT))
-    SERVER_SOCKET.listen()
-    print("Server started at:\n>>", SERVER_SOCKET.getsockname())
-
+    global SERVEROBJ
+    SERVEROBJ.setsockopt(soc.SOL_SOCKET, soc.SO_REUSEADDR, 1)
+    _ip, port = get_ip()
+    print(get_ip())
+    SERVEROBJ.bind((_ip, port))
+    SERVEROBJ.listen()
+    print("Server started at:\n>>", SERVEROBJ.getsockname())
+    # threading.Thread(target=sync_users).start()
     while not EXIT.is_set():
-        readable, _, _ = select.select([SERVER_SOCKET], [], [], 0.001)
-        if SERVER_SOCKET in readable:
-            client, addr = SERVER_SOCKET.accept()
+        readable, _, _ = select.select([SERVEROBJ], [], [], 0.001)
+        if SERVEROBJ in readable:
+            client, addr = SERVEROBJ.accept()
             print("A connection from :", addr)
             validate(client)
 
 
 def endserver(signum, frame):
-    print("\nExiting from server...")
+    print("\nExiting from application...")
     EXIT.set()
-    SERVER_SOCKET.close()
+    SERVEROBJ.close()
     return
 
 
