@@ -4,6 +4,9 @@ import configparser
 import src.avails.constants as const  # <--- This is the only import from avails/constants.py
 from logs import *
 
+from src.avails import constants
+from src.managers.profile_manager import ProfileManager
+
 
 def set_constants(config_map: configparser) -> bool:
     """Sets global constants from values in the configuration file and directories.
@@ -55,3 +58,11 @@ def print_constants():
     # print("log path: ", const.PATH_LOG)
     # print("page path: ", const.PATH_PAGE)
     # print("download path: ", const.PATH_DOWNLOAD)
+
+
+def set_selected_profile(profile: ProfileManager):
+    const.USERNAME = profile.username
+    const.SERVER_IP = profile.server_ip
+    const.PORT_SERVER = int(profile.server_port)
+    const.THIS_OBJECT.username = profile.username
+    return
