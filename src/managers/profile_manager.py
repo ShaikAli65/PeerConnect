@@ -156,8 +156,3 @@ def load_profiles_to_program() -> bool:
     return True
 
 
-def set_selected_profile(profile: ProfileManager):
-    const.USERNAME = profile.username
-    const.SERVER_IP = profile.server_ip
-    const.PORT_SERVER = int(profile.server_port)
-    return
