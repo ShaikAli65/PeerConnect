@@ -7,6 +7,7 @@ import ipaddress
 import random
 
 from src.avails import useables as use
+from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.configurations.configure_app import set_constants
 
@@ -157,6 +158,10 @@ def get_v6_from_api64():
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
     return config_ip
+
+
+def initiate_this_object():
+    const.THIS_OBJECT = RemotePeer(const.USERNAME, const.THIS_IP, const.PORT_THIS, report=const.PORT_REQ, status=1)
 
 
 def set_paths():

@@ -2,9 +2,14 @@ import threading
 
 from collections import deque, defaultdict
 
+"""
+This module contains data storages used across the peer connect
+1. 
+2. PeerDict
+3. SafeSet
+4. FileDict
+"""
 
-# from typing import ValuesView
-# from .remotepeer import RemotePeer
 
 class PeerDict(dict):
     __slots__ = '__lock',
@@ -37,7 +42,7 @@ class PeerDict(dict):
         return ', '.join(x.__repr__() for x in self.values())
 
 
-class CustomSet:
+class SafeSet:
     """
     CustomSet is a thread safe flip implementation with additional features.
 

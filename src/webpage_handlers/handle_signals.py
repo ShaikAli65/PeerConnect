@@ -34,6 +34,7 @@ async def getdata():
 async def handler(_websocket):
     global web_socket, safe_end
     web_socket = _websocket
+    print("page signals connected")  # debug
     try:
         await align_profiles(_websocket)
     except websockets.exceptions.ConnectionClosedOK:

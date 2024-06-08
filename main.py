@@ -2,7 +2,7 @@
 import tracemalloc
 import signal
 
-
+from src.avails.remotepeer import RemotePeer
 from src.core import *
 import src.configurations.configure_app
 import src.avails.useables as use
@@ -41,11 +41,14 @@ if __name__ == "__main__":
     boot_up.set_paths()
     boot_up.initiate()
     profile_manager.load_profiles_to_program()
-    th = use.start_thread(handle_data.initiate_control)
+    boot_up.initiate_this_object()
+    use.start_thread(handle_data.initiate_control)
     use.start_thread(handle_signals.initiate_control)
     const.HOLD_PROFILE_SETUP.wait()
     if const.END_OR_NOT is True:
         exit(1)
+    const.THIS_OBJECT = RemotePeer(const.USERNAME, const.THIS_IP, const.PORT_THIS, report=const.PORT_REQ, status=1)
+
     src.configurations.configure_app.print_constants()
     tracemalloc.start()
     signal.signal(signalnum=signal.SIGINT, handler=endmanager.end_session)

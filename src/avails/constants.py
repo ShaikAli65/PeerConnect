@@ -1,6 +1,9 @@
 import socket as soc
 import threading
 from sys import platform
+
+from os import path
+
 from src.avails.container import PeerDict
 
 CLEAR_LOGS = 1
@@ -30,7 +33,7 @@ PATH_CURRENT = '..\\..'
 PATH_LOG = '..\\..\\logs'
 PATH_PROFILES = '..\\..\\profiles'
 PATH_PAGE = '..\\webpage'
-PATH_DOWNLOAD = '..\\..\\fallbacks'
+PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 
 
 IP_VERSION = soc.AF_INET

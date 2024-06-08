@@ -1,7 +1,8 @@
 from importlib import import_module
 from collections import defaultdict
-from typing import Any
+from types import ModuleType
 
+import src.avails.connect
 from ..core import *
 from ..avails import useables as use
 from ..avails.remotepeer import RemotePeer
@@ -19,27 +20,21 @@ class Nomad(object):
         'main_socket': socket.socket,
         'controller':ThreadActuator,
         'currently_in_connection':defaultdict,
-        'RecentConnections':Any,
+        'RecentConnections': ModuleType,
     }
     __slots__ = 'address', 'controller', 'selector', 'main_socket', 'currently_in_connection', 'RecentConnections', 'socket_handler'
 
     def __init__(self, ip='localhost', port=8088):
         self.address = (ip, port)
         self.controller = ThreadActuator(None)
-        const.THIS_OBJECT = RemotePeer(const.USERNAME, ip, port, report=const.PORT_REQ, status=1)
         use.echo_print("::Initiating Nomad Object", self.address)
-        self.main_socket = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.main_socket.bind(self.address)
+        self.main_socket = connect.create_server(self.address, family=const.IP_VERSION, backlog=5)
         self.currently_in_connection = defaultdict(int)
         self.RecentConnections = getattr(import_module('src.core.senders'), 'RecentConnections')
         self.socket_handler = SocketLoop()
 
     def __resetSocket(self):
-        self.main_socket = connect.Socket(const.IP_VERSION, const.PROTOCOL)
-        self.main_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.main_socket.bind(self.address)
-        self.main_socket.listen()
+        self.main_socket = connect.create_server(self.address, family=const.IP_VERSION,backlog=5)
 
     def verify(self, _conn):
         """
@@ -93,13 +88,13 @@ class Nomad(object):
         self.socket_handler.stop_loop()
         self.controller.signal_stopping()
         self.currently_in_connection.fromkeys(self.currently_in_connection, 0)
-        self.main_socket.close() if self.main_socket else None
+        # self.main_socket.close() if self.main_socket else None
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
 
     def __del__(self):
-        self.main_socket.close()
+        # self.main_socket.close()
         self.controller.signal_stopping()
         self.socket_handler.stop_loop()
 
@@ -131,7 +126,6 @@ class SocketLoop(selectors.DefaultSelector):
             if controller.to_stop:
                 use.echo_print("::Nomad connections ended")
                 return
-            # use.echo_print("selelected", ' '.join(str(x) for x in events))
             try:
                 for event, _ in events:
                     file_desc = event.fileobj
@@ -150,26 +144,24 @@ class SocketLoop(selectors.DefaultSelector):
         try:
             if _conn.recv(1, socket.MSG_PEEK) == b'':
                 self.unregister(_conn)
-                use.echo_print(f"::Connection closed by peer at {func_str(SocketLoop.connect_new)}", _conn.getpeername())
+                use.echo_print(f"::Connection closed by peer at {func_str(SocketLoop.connect_new)}", _conn)
                 return
             _data = DataWeaver().receive(_conn)
             # use.echo_print('data from peer :\n', _data)  # debug
-        except socket.error as e:
+        except (ConnectionResetError, socket.error) as e:
             self.unregister(_conn)
-            use.echo_print(f"::Connection error: at {func_str(SocketLoop.connect_new)} exp:{e}", _conn.getpeername())
+            use.echo_print(f"::Connection error: at {func_str(SocketLoop.connect_new)} exp:{e}", _conn)
+            return
+        except TimeoutError:
             return
 
         if _data.header == const.CMD_TEXT:
-
             asyncio.run(handle_data.feed_user_data_to_page(_data.content, _data.id))
         elif _data.header == const.CMD_RECV_FILE:
             self.start_thread(filemanager.file_receiver, _data)
-            # use.start_thread(_target=filemanager.file_receiver, _args=(_data,))
         elif _data.header == const.CMD_RECV_FILE_AGAIN:
-            # use.start_thread(_target=filemanager.re_receive_file, _args=(_data,))
             self.start_thread(filemanager.re_receive_file, _data)
         elif _data.header == const.CMD_RECV_DIR:
-            # use.start_thread(_target=directorymanager.directoryReceiver, _args=(_data,))
             self.start_thread(directorymanager.directoryReceiver,_data)
         elif _data.header == const.CMD_CLOSING_HEADER:
             self.unregister(_conn)
@@ -179,7 +171,7 @@ class SocketLoop(selectors.DefaultSelector):
     def disconnect_user(self, _conn, _controller, _id):
         self.currently_in_connection[_id] -= 1
         with _conn:
-            if use.is_socket_connected(_conn):
+            if src.avails.connect.is_socket_connected(_conn):
                 DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
         use.echo_print(f"::Closing connection at {func_str(SocketLoop.disconnect_user)}\n", peer_list.get_peer(_id))
         self.RecentConnections.force_remove(peer_id=_id)

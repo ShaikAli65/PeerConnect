@@ -1,17 +1,16 @@
 # This file is responsible for sending and receiving files between peers.
+import importlib
+import select
 
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QFileDialog
 from concurrent.futures import ThreadPoolExecutor
 
 from src.avails.container import FileDict
+from src.avails.dialogs import Dialog
 from src.core import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
 from src.avails.fileobject import FiLe, make_file_groups, make_sock_groups, PeerFilePool
-# from src.trails.test import FiLe, make_file_groups, make_sock_groups, PeerFilePool
 from src.webpage_handlers.handle_data import feed_file_data_to_page
 
 global_files = FileDict()
@@ -21,7 +20,7 @@ def fileSender(file_data: DataWeaver, receiver_sock):
     file_list = file_data.content['files']
     receiver_id = file_data.id
     if file_list == ['']:
-        file_list = open_file_dialog_window()
+        file_list = Dialog.open_file_dialog_window()
     if not file_list:
         return
     receiver_obj = peer_list.get_peer(receiver_id)
@@ -35,25 +34,37 @@ def fileSender(file_data: DataWeaver, receiver_sock):
                 global_files.add_to_continued(_id, _file)
                 use.echo_print("ERROR ERROR SOMETHING WRONG IN SENDING FILES")
 
-    # file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
-    file_groups = make_file_groups(file_list, grouping_level=4)
+    file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
+    # file_groups = make_file_groups(file_list, grouping_level=4)
     file_pools = [PeerFilePool(file_group, _id=receiver_obj.get_file_count()) for file_group in file_groups]
     bind_ip = (const.THIS_IP, use.get_free_port())
-    content = {'count': len(file_pools), 'bind_ip': bind_ip}
-    hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content=content, _id=const.THIS_OBJECT.id)
-    hand_shake.send(receiver_sock)
+
+    send_handshake(1, {'count': len(file_pools), 'bind_ip': bind_ip}, receiver_obj, receiver_sock)
+
     sockets = make_sock_groups(len(file_pools), bind_ip=bind_ip)
     th_pool = ThreadPoolExecutor(max_workers=len(sockets))
     print("made connections")  # debug
     print(sockets)  # debug
+
     for file, sock in zip(file_pools, sockets):
         asyncio.run(feed_file_data_to_page({'file_id': file.id}, receiver_id))
         global_files.add_to_current(receiver_id, file)
         # th_pool.submit(_sock_thread, receiver_id, file, sock)
         threading.Thread(target=_sock_thread, args=(receiver_id, file, sock)).start()
+    #     print("completed mapping threads")  # debug
 
-#     th_pool.shutdown()  # wait for all threads to finish  # debug
-#     print("completed mapping threads")  # debug
+
+def send_handshake(header, content, receiver_obj, receiver_sock):
+    try:
+        header = const.CMD_RECV_FILE if header == 1 else const.CMD_RECV_FILE_AGAIN
+        hand_shake = DataWeaver(header=header, content=content, _id=const.THIS_OBJECT.id)
+        hand_shake.send(receiver_sock)
+    except (ConnectionResetError, socket.error):
+        # retry connecting to peer if this fails then we can return that receiver can't be reached
+        connections = getattr(importlib.import_module('src.core.senders'), 'RecentConnections')
+        receiver_sock = connections.add_connection(receiver_obj)
+        hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content=content, _id=const.THIS_OBJECT.id)
+        hand_shake.send(receiver_sock)
 
 
 def file_receiver(file_data: DataWeaver):
@@ -103,9 +114,15 @@ def resend_file(refer_data: DataWeaver, receiver_sock):
     file_id = refer_data.content['file_id']
     file_pool: PeerFilePool = global_files.get_continued_file(peer_id, file_id)
     bind_ip = (const.THIS_IP,use.get_free_port())
-    DataWeaver(header=const.CMD_RECV_FILE_AGAIN,content={'bind_ip':bind_ip,'file_id':file_id},_id=const.THIS_OBJECT.id).send(receiver_sock)
-    with socket.create_server(bind_ip,backlog=1) as soc:
-        receiver_conn, _ = soc.accept()
+
+    send_handshake(2,{'bind_ip':bind_ip,'file_id':file_id}, peer_list.get_peer(peer_id), receiver_sock)
+
+    with socket.create_server(bind_ip, backlog=1) as soc:
+        reads,_,_ = select.select([file_pool.__controller, soc],[],[],50)
+        if soc in reads:
+            receiver_conn, _ = soc.accept()
+        else:
+            return
 
     if file_pool.send_files_again(receiver_conn):
         global_files.add_to_completed(peer_id, file_pool)
@@ -119,21 +136,6 @@ def re_receive_file(refer_data: DataWeaver):
     with socket.create_connection((addr[0], addr[1]), timeout=20) as conn_sock:
         if file_pool.receive_files_again(conn_sock):
             global_files.add_to_completed(peer_id, file_pool)
-
-
-def open_file_dialog_window(_prev_directory=[os.path.join(os.path.expanduser('~'), 'Downloads'), ]):
-    """Opens the system-like file picker dialog.
-    #:_prev_directory: this param is use as a cache for recent directory
-    :type _prev_directory: list
-    """
-    _ = QApplication([])
-    dialog = QFileDialog()
-    dialog.setOption(QFileDialog.DontUseNativeDialog, True)
-    dialog.setWindowFlags(Qt.WindowStaysOnTopHint | dialog.windowFlags())
-    files = dialog.getOpenFileNames(directory=_prev_directory[0],
-                                    caption="Select files to send")[0]
-    _prev_directory[0] = os.path.dirname(files[0])
-    return files
 
 
 def endFileThreads():
@@ -160,7 +162,7 @@ def __setFileId(file: tuple[FiLe], receiver_obj: RemotePeer):
 @NotInUse
 def _fileSender(_data: DataWeaver, receiver_sock, is_dir=False):
     if _data.content == "":
-        files_list = open_file_dialog_window()
+        files_list = Dialog.open_file_dialog_window()
         for file in files_list:
             _data.content = file
             _fileSender(_data, receiver_sock, is_dir)
@@ -207,5 +209,4 @@ def _fileReceiver(refer: DataWeaver):
 
     if file.recv_handshake():
         file.recv_file()
-
     return file.filename

@@ -1,4 +1,3 @@
-import asyncio
 import sys
 
 import websockets.server
@@ -101,7 +100,7 @@ async def handler(_websocket):
     const.WEB_SOCKET = web_socket
     const.PAGE_HANDLE_CALL.set()
     await getdata()
-    use.echo_print('::liuuo handler ended')
+    use.echo_print('::handler_data ended')
 
 
 def initiate_control():
@@ -172,7 +171,5 @@ async def end():
     # Immediately stop the loop without waiting for tasks to complete
     loop.stop()
     # Force close the loop
-    sys.exit(1)
-    exit(1)
-    loop.close()
     print("::Handle_data Ended")
+    sys.exit(1)
