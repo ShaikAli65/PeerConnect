@@ -1,6 +1,6 @@
 import itertools
 import os.path
-from typing import Any
+from typing import Any, Iterator
 
 from pathlib import Path
 from math import isclose
@@ -36,7 +36,9 @@ class _FileItem:
     def __str__(self):
         size_str = stringify_size(self.size)
         name_str = f"...{self.name[-20:]}" if len(self.name) > 20 else self.name
-        return f"_FileItem({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
+        str_str = f"_FileItem({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
+        # str_str = f"_FileItem({name_str}, {size_str}, {self.path})"
+        return str_str
         # return f'{self.name}'
 
     def __repr__(self):
@@ -63,7 +65,7 @@ def stringify_size(size):
 
 
 class PeerFilePool:
-    __slots__ = 'file_items', '__controller', '__chunk_size', '__error_extension', 'id', 'current_file'
+    __slots__ = 'file_items', 'controller', '__chunk_size', '__error_extension', 'id', 'current_file', 'file_count'
 
     def __init__(self,
                  file_items: list[_FileItem] = None, *,
@@ -73,14 +75,15 @@ class PeerFilePool:
                  error_ext='.invalid'
                  ):
 
-        self.__controller = control_flag or ThreadActuator(None)
+        self.controller = control_flag or ThreadActuator(None)
         # setting event thus reducing ~not`ting~ of self.proceed() in most of the loop checkings
-        self.__controller.flip()
+        self.controller.flip()
         self.__chunk_size = chunk_size
         self.__error_extension = error_ext
         self.file_items: set[_FileItem] = set(file_items or [])
         self.id = _id
-        self.current_file = self.file_items.__iter__()
+        self.current_file: Iterator[_FileItem] | _FileItem = self.file_items.__iter__()
+        self.file_count = 0
         # this can be ~_FileItem() while recieving (we don't use ~self.file_items list in case of receiving
         # because it's redundent two store files both ways)
         # and iterator while sending
@@ -108,7 +111,7 @@ class PeerFilePool:
 
     def send_file_loop(self, current_iter, receiver_sock):
         for file in current_iter:
-            if self.__controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
+            if self.controller.to_stop is False or self.__send_file(receiver_sock, file=file) is False:
                 return False
             next(self.current_file)
         return True
@@ -130,7 +133,7 @@ class PeerFilePool:
         sock_send = receiver_sock.send
         send_progress.update(file.seeked)
         with open(file.path, 'rb') as f:
-            f_read, proceed = f.read, self.__controller
+            f_read, proceed = f.read, self.controller
             f.seek(file.seeked)
             seek = file.seeked
             try:
@@ -152,28 +155,26 @@ class PeerFilePool:
                 file.seeked = seek  # can be ignored mostly for now
 
     def recv_files(self, sender_sock):
-        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
+        reads, _, _ = select.select([sender_sock, self.controller], [], [], 30)
         if sender_sock in reads:
             raw_file_count = sender_sock.recv(4) or b'\x00\x00\x00\x00'
-            file_count = struct.unpack('!I', raw_file_count)[0]
+            self.file_count = struct.unpack('!I', raw_file_count)[0]
         else:
             print("TIMEOUT OF 30sec reached OR SOMETHING WRONG WITH SOCKET")
-            file_count = 0
-        # self.file_items = set(_FileItem('', 0, '', 0) for _ in range(file_count))
-        print("received file count", file_count)  # debug
-        # self.current_file, iterator = itertools.tee(self.file_items)
+            self.file_count = 0
+        print("received file count", self.file_count)  # debug
         sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
-        # return self.__receive_file_loop(iterator, sender_sock)
-        return self.__receive_file_loop(file_count, sender_sock)
+        return self.__receive_file_loop(self.file_count, sender_sock)
 
-    def __receive_file_loop(self, count, sender_sock):
+    def __receive_file_loop(self, count: int, sender_sock):
         for _ in range(count):
             self.current_file = _FileItem('',0,'',0)
-            if not self.__controller.to_stop:
+            if not self.controller.to_stop:
                 return
             if self.__recv_file(sender_sock, self.current_file) is False:
                 return
-            print("completer receiving", self.current_file)  # debug
+            print("completed receiving", self.current_file)  # debug
+            self.file_count -= 1
         return True
 
     def __recv_file(self, sender_sock, file_item):
@@ -182,8 +183,8 @@ class PeerFilePool:
         file_item.name = FILE_NAME
         file_item.path = os.path.join(const.PATH_DOWNLOAD, FILE_NAME)
 
-        reads, _, _ = select.select([sender_sock, self.__controller], [], [], 30)
-        if not self.__controller.to_stop:
+        reads, _, _ = select.select([sender_sock, self.controller], [], [], 30)
+        if not self.controller.to_stop:
             print("RETURNING TIMEOUT OCCURRED")
             return
         if sender_sock not in reads:
@@ -197,9 +198,9 @@ class PeerFilePool:
                              f"::receiving {FILE_NAME[:20]}... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
 
-        self.__recv_actual_file(sender_sock, file_item, progress)
+        what = self.__recv_actual_file(sender_sock, file_item, progress)
         progress.close()
-        return True
+        return what
 
     def __recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
         mode = 'xb' if file_item.seeked == 0 else 'rb+'
@@ -209,23 +210,31 @@ class PeerFilePool:
                 f_write, f_recv, size = file.write, sender_sock.recv, file_item.size
                 file.seek(file_item.seeked)
                 progress.update(file_item.seeked)
-                while self.__controller.to_stop and size > 0:
+                while self.controller.to_stop and size > 0:
                     try:
                         data = f_recv(min(self.__chunk_size, size))  # possible: socket.error, s
                     except BlockingIOError:
                         continue
+                    except ConnectionResetError:
+                        break
+                    if not data:
+                        break
                     f_write(data)  # possible: No Space Left
                     size -= len(data)
                     progress.update(len(data))
         finally:
             file_item.seeked = file_item.size - size
+            if size > 0:
+                self.__file_error__(file_item)
+                return False
+            return True
 
     def send_files_again(self, receiver_sock: socket.socket):
         self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
 
         # -> ----------------------
         start_file = next(present_iter)
-        reads, _, _ = select.select([receiver_sock, self.__controller], [], [], 30)
+        reads, _, _ = select.select([receiver_sock, self.controller], [], [], 30)
         if receiver_sock not in reads:
             print("SOMETHING WRONG IN RECEIVING FILE SEEK", reads)
             return
@@ -233,23 +242,6 @@ class PeerFilePool:
         progress = tqdm.tqdm(range(start_file.size), f"::sending {start_file.name[:20]} ... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
         self.__send_actual_file(start_file, receiver_sock, progress)
-        '''
-        
-        send id=1             recv id=1
-        PeerFilePool            PeerFilePool
-        ('') ('') ('')           () () ()
-        1                       1 ("",size,)
-                                seek += len(data)
-        2                       2 ()
-        
-        3 break <- iter         3 <- iter 
-                                (seeked=x)
-
-                                seek = len(nbytes)
-        4                       4 ()
-        5                       5 ()
-        
-        '''
         progress.close()
         # -> ---------------------- file continuation part
 
@@ -257,9 +249,8 @@ class PeerFilePool:
         return True
 
     def receive_files_again(self, sender_sock: socket.socket):
-        self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
         # -> ----------------------
-        start_file = next(present_iter)
+        start_file = self.current_file
         sender_sock.send(start_file.seeked)
         progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]} ... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
@@ -267,29 +258,33 @@ class PeerFilePool:
         progress.close()
         # -> ---------------------- file continuation part
 
-        self.__receive_file_loop(present_iter, sender_sock)
+        self.__receive_file_loop(self.file_count, sender_sock)
         return True
 
     @NotInUse
     def __chunkify__(self, file_path):
         with open(file_path, 'rb') as file:
             f_read = file.read
-            while self.__controller.to_stop:
+            while self.controller.to_stop:
                 chunk = memoryview(f_read(self.__chunk_size))
                 if not chunk:
                     break
                 yield chunk
 
-    def __file_error__(self, filename):
+    def __file_error__(self, file_item: _FileItem):
         """
             Handles file errors by renaming the file with an error extension.
         """
-        os.rename(filename, filename + self.__error_extension)
-        filename += self.__error_extension
-        return filename
+        pathed = Path(file_item.path)
+        file_name = self.__validatename__(file_item.name + self.__error_extension)
+        file_item.path = str(pathed)
+        pathed.rename(os.path.join(const.PATH_DOWNLOAD, file_name))
+
+        file_item.name += self.__error_extension
+        return file_item
 
     @staticmethod
-    def __validatename__(file_addr: str):
+    def __validatename__(file_addr):
         """
             Ensures a unique filename if a file with the same name already exists.
 
@@ -320,7 +315,7 @@ class PeerFilePool:
         return self.file_items.__iter__()
 
     def break_loop(self):
-        self.__controller.signal_stopping()
+        self.controller.signal_stopping()
         # self.__controller = None
 
     def calculate_chunk_size(self, file_size: int):

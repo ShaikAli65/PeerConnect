@@ -1,9 +1,9 @@
 # This file is responsible for sending and receiving files between peers.
 import importlib
-import select
 
 from concurrent.futures import ThreadPoolExecutor
 
+import src.avails.connect
 from src.avails.container import FileDict
 from src.avails.dialogs import Dialog
 from src.core import *
@@ -37,7 +37,7 @@ def fileSender(file_data: DataWeaver, receiver_sock):
     file_groups = make_file_groups(file_list, grouping_level=file_data.content['grouping_level'])
     # file_groups = make_file_groups(file_list, grouping_level=4)
     file_pools = [PeerFilePool(file_group, _id=receiver_obj.get_file_count()) for file_group in file_groups]
-    bind_ip = (const.THIS_IP, use.get_free_port())
+    bind_ip = (const.THIS_IP, src.avails.connect.get_free_port())
 
     send_handshake(1, {'count': len(file_pools), 'bind_ip': bind_ip}, receiver_obj, receiver_sock)
 
@@ -52,19 +52,6 @@ def fileSender(file_data: DataWeaver, receiver_sock):
         # th_pool.submit(_sock_thread, receiver_id, file, sock)
         threading.Thread(target=_sock_thread, args=(receiver_id, file, sock)).start()
     #     print("completed mapping threads")  # debug
-
-
-def send_handshake(header, content, receiver_obj, receiver_sock):
-    try:
-        header = const.CMD_RECV_FILE if header == 1 else const.CMD_RECV_FILE_AGAIN
-        hand_shake = DataWeaver(header=header, content=content, _id=const.THIS_OBJECT.id)
-        hand_shake.send(receiver_sock)
-    except (ConnectionResetError, socket.error):
-        # retry connecting to peer if this fails then we can return that receiver can't be reached
-        connections = getattr(importlib.import_module('src.core.senders'), 'RecentConnections')
-        receiver_sock = connections.add_connection(receiver_obj)
-        hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content=content, _id=const.THIS_OBJECT.id)
-        hand_shake.send(receiver_sock)
 
 
 def file_receiver(file_data: DataWeaver):
@@ -102,23 +89,29 @@ def file_receiver(file_data: DataWeaver):
 #     print('\n'.join(str(x) for x in file_pools))  # debug
 
 
-def stop_a_file(refer_data: DataWeaver):
-    peer_id = refer_data.id
-    file_id = refer_data.content['file_id']
-    file_pool = global_files.get_running_file(peer_id, file_id).break_loop()
-    global_files.add_to_continued(peer_id, file_pool)
+def send_handshake(header, content, receiver_obj, receiver_sock):
+    try:
+        header = const.CMD_RECV_FILE if header == 1 else const.CMD_RECV_FILE_AGAIN
+        hand_shake = DataWeaver(header=header, content=content, _id=const.THIS_OBJECT.id)
+        hand_shake.send(receiver_sock)
+    except (ConnectionResetError, socket.error):
+        # retry connecting to peer if this fails then we can return that receiver can't be reached
+        connections = getattr(importlib.import_module('src.core.senders'), 'RecentConnections')
+        receiver_sock = connections.add_connection(receiver_obj)
+        hand_shake = DataWeaver(header=const.CMD_RECV_FILE, content=content, _id=const.THIS_OBJECT.id)
+        hand_shake.send(receiver_sock)
 
 
 def resend_file(refer_data: DataWeaver, receiver_sock):
     peer_id = refer_data.id
     file_id = refer_data.content['file_id']
     file_pool: PeerFilePool = global_files.get_continued_file(peer_id, file_id)
-    bind_ip = (const.THIS_IP,use.get_free_port())
+    bind_ip = (const.THIS_IP, src.avails.connect.get_free_port())
 
     send_handshake(2,{'bind_ip':bind_ip,'file_id':file_id}, peer_list.get_peer(peer_id), receiver_sock)
 
     with socket.create_server(bind_ip, backlog=1) as soc:
-        reads,_,_ = select.select([file_pool.__controller, soc],[],[],50)
+        reads,_,_ = select.select([file_pool.controller, soc],[],[],50)
         if soc in reads:
             receiver_conn, _ = soc.accept()
         else:
@@ -136,6 +129,13 @@ def re_receive_file(refer_data: DataWeaver):
     with socket.create_connection((addr[0], addr[1]), timeout=20) as conn_sock:
         if file_pool.receive_files_again(conn_sock):
             global_files.add_to_completed(peer_id, file_pool)
+
+
+def stop_a_file(refer_data: DataWeaver):
+    peer_id = refer_data.id
+    file_id = refer_data.content['file_id']
+    file_pool = global_files.get_running_file(peer_id, file_id).break_loop()
+    global_files.add_to_continued(peer_id, file_pool)
 
 
 def endFileThreads():
@@ -168,7 +168,7 @@ def _fileSender(_data: DataWeaver, receiver_sock, is_dir=False):
             _fileSender(_data, receiver_sock, is_dir)
     try:
         receiver_obj: RemotePeer = peer_list.get_peer(_data.id)
-        temp_port = use.get_free_port()
+        temp_port = src.avails.connect.get_free_port()
 
         file = _PeerFile(uri=(const.THIS_IP, temp_port), path=_data.content)
         __setFileId(file, receiver_obj)
