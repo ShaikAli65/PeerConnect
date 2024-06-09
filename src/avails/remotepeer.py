@@ -4,7 +4,8 @@ from typing import Tuple
 
 from src.avails.constants import RP_FLAG  # control flag for this class
 from itertools import count
-
+# from ..avails.waiters import ThreadActuator
+# import src.avails.connect as connect
 _controller = ThreadActuator(None, control_flag=RP_FLAG)
 TIMEOUT = 50  # sec
 
@@ -31,7 +32,7 @@ class RemotePeer:
         self.id = f'{ip}{port}'
         self.file_count = count()
 
-    def serialize(self, _to_send: connect.Socket):
+    def send_serialized(self, _to_send: connect.Socket):
         serialized = pickle.dumps(self)
         _to_send.send(struct.pack('!I', len(serialized)))
         _to_send.send(serialized)

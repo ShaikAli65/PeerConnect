@@ -12,14 +12,15 @@ from src.webpage_handlers import handle_data
 from src.avails.textobject import SimplePeerText
 from src.core.senders import RecentConnections
 from src.avails.constants import REQ_FLAG
-
+from src.avails.container import SocketStore
 
 _controller = ThreadActuator(None, control_flag=REQ_FLAG)
-thread_handler.register(_controller, REQUESTS)
+thread_handler.register_control(_controller, REQUESTS)
 event_selector = selectors.DefaultSelector()
 thread_pool = ThreadPoolExecutor(7, 'peer-connect-request_handler')
 connection_count = 0
-connections = set()
+
+connections = SocketStore()  # storing socket references what if we miss any socket closure ;)
 
 
 def send_list(_conn):
@@ -31,12 +32,12 @@ def send_list(_conn):
             if _controller.to_stop:
                 return
             try:
-                _nomad.serialize(_conn)
+                _nomad.send_serialized(_conn)
             except socket.error as e:
                 if error_call := adjust_list_error(error_call, _conn, e) > const.MAX_CALL_BACKS:
                     return
 
-    connections.discard(_conn)
+    connections.remove_socket(_conn)
 
 
 def adjust_list_error(error_call, _conn, err):
@@ -87,7 +88,7 @@ def initiate():
 def control_connection(_conn):
     connection, _ = _conn.accept()  # this should not be blocking, as it is returned by  select call
     use.echo_print("New Connection at requests", _)
-    connections.add(connection)
+    connections.add_socket(connection)
     event_selector.register(connection, selectors.EVENT_READ, resolve_data)
 
 
@@ -100,7 +101,7 @@ def notify_user_connection(conn_socket, ping_again=False):
         except Exception as e:
             error_log(f"Error at {func_str(notify_user_connection)} exp :  {e}")
             return
-        connections.discard(conn_socket)
+        connections.remove_socket(conn_socket)
         return add_peer_accordingly(new_peer_object, include_ping=ping_again)
 
 
@@ -121,8 +122,6 @@ def resolve_data(_conn):
     #     return
 
     function_map.get(data, lambda x: None)(_conn)
-    global connection_count
-    connection_count -= 1
     event_selector.unregister(_conn)
 
 
@@ -137,7 +136,7 @@ def sync_users_with_server(_conn):
             except Exception as e:
                 error_log(
                     f"Error syncing list at {func_str(sync_users_with_server)} exp :  {e}")
-    connections.discard(_conn)
+    connections.remove_socket(_conn)
 
 
 def ping_user(remote_peer: RemotePeer):
@@ -155,14 +154,14 @@ def signal_status(queue_in: Queue[RemotePeer]):
         try:
             with src.avails.connect.connect_to_peer(peer_object, to_which=REQ_URI_CONNECT, timeout=5) as _conn:
                 SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
-                const.THIS_OBJECT.serialize(_conn)
+                const.THIS_OBJECT.send_serialized(_conn)
         except socket.error:
-            use.echo_print(f"Error sending status({const.THIS_OBJECT.status}) at {func_str(signal_status)}")
+            use.echo_print(f"Error sending status({const.THIS_OBJECT.status}) at {func_str(signal_status)}", peer_object)
             peer_object.status = 0  # this makes that user as not active
         add_peer_accordingly(peer_object)
 
 
-def sync_list() -> None:
+def sync_list():
     with const.LOCK_LIST_PEERS:
         list_copy = deque(peer_list.peers())
     while list_copy:
@@ -186,7 +185,7 @@ def notify_leaving_status_to_users():
         try:
             with src.avails.connect.connect_to_peer(peer, to_which=REQ_URI_CONNECT, timeout=5) as _conn:
                 SimplePeerText(_conn, const.I_AM_ACTIVE).send(require_confirmation=False)
-                const.THIS_OBJECT.serialize(_conn)
+                const.THIS_OBJECT.send_serialized(_conn)
         except socket.error:
             use.echo_print(f"Error sending leaving status at {func_str(signal_status)}")
 
@@ -195,8 +194,4 @@ def end_requests_connection():
     notify_leaving_status_to_users()
     _controller.signal_stopping()
     const.THIS_OBJECT.status = 0
-    for sock in connections:
-        try:
-            sock.close()
-        except (socket.error, OSError):
-            pass
+    connections.close_all()

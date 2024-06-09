@@ -7,8 +7,8 @@ from src.managers.thread_manager import thread_handler, TEXT
 
 p_controller = ThreadActuator(None, control_flag=PEER_TEXT_FLAG)
 d_controller = ThreadActuator(None, control_flag=DATA_WEAVER_FLAG)
-thread_handler.register(p_controller, which=TEXT)
-thread_handler.register(d_controller, which=TEXT)
+thread_handler.register_control(p_controller, which=TEXT)
+thread_handler.register_control(d_controller, which=TEXT)
 TIMEOUT = 4
 
 

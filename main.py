@@ -38,7 +38,7 @@ if __name__ == "__main__":
     #         WEBRTC
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    boot_up.set_paths()
+    src.configurations.configure_app.set_paths()
     boot_up.initiate()
     profile_manager.load_profiles_to_program()
     boot_up.initiate_this_object()
@@ -55,16 +55,12 @@ if __name__ == "__main__":
     initiate()
     activity_log("::End Sequence Complete")
 """
-
     python -m pip install --upgrade pip
     pip install websockets
-    pip install requests
-    pip install asyncio
     pip install tqdm
-    {x.__name__}()\\{os.path.relpath(x.__code__.co_filename)
-"""
 """
 
+"""
 {
     admin:{username:admin, password:admin, email:1.1.1.1},
     user:{username:admin, password:admin, email:1.1.1.1},

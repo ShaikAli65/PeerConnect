@@ -61,7 +61,7 @@ class Nomad(object):
         th_controller = ThreadActuator(None, NOMAD_FLAG)
         thread = use.start_thread(self.connectNew, _args=(initial_conn,peer_id))  # name these threads .??
         th_controller.thread = thread
-        thread_handler.register(th_controller, NOMADS)
+        thread_handler.register_control(th_controller, NOMADS)
         self.RecentConnections.addSocket(peer_id, initial_conn)
 
     def __acceptConnections(self):
