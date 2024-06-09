@@ -55,12 +55,13 @@ class ThreadActuator:
         thread: threading.Thread
 
     """
-    __slots__ = 'control_flag', 'reader', 'select_waker', 'thread'
+    __slots__ = 'control_flag', 'reader', 'select_waker', 'thread', 'stopped'
     __annotations__ = {
         'control_flag': bool,
         'reader': BufferedReader | BinaryIO,
         'select_waker': Callable,
-        'thread': threading.Thread
+        'thread': threading.Thread,
+        'stopped': bool
     }
 
     def __init__(self, thread, control_flag=None):
@@ -68,9 +69,7 @@ class ThreadActuator:
         self.control_flag = False
         self.reader, self.select_waker = waker_flag()
         self.thread = thread
-    #
-    # def __call__(self):
-    #     self.signal_stopping()
+        self.stopped = False
 
     def write(self):
         self.select_waker.write(b'x')
@@ -97,8 +96,11 @@ class ThreadActuator:
         self.reader.read(1)
 
     def signal_stopping(self):
-        self.flip()
-        self.write()
+        if not self.stopped:
+            self.flip()
+            self.write()
+            self.stopped = True
+
         # if self.thread:
         #     self.thread.join()
         # self.clear_reader()
