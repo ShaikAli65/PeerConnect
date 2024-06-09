@@ -13,16 +13,20 @@ from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
 from src.avails.dialogs import Dialog
+from src.managers.thread_manager import thread_handler
+
+zipping_processes: set[Process] = set()  # a set to store references of ongoing processes used in case of force stopping
 
 
 def do_handshake(_sock, controller, _content, receiver_obj):
-    bind_addr = (const.THIS_IP, use.get_free_port())
+    bind_addr = (const.THIS_IP, src.avails.connect.get_free_port())
     _content['bind_ip'] = bind_addr
     handshake = DataWeaver(header=const.CMD_RECV_DIR, content=_content, _id=const.THIS_OBJECT.id)
     with connect.create_server(bind_addr, family=const.IP_VERSION, backlog=1) as soc:
         try:
             handshake.send(_sock)
         except (ConnectionResetError,socket.error):
+            # trying once again
             connections = getattr(importlib.import_module('src.core.senders'), 'RecentConnections')
             receiver_sock = connections.add_connection(receiver_obj)
             handshake.send(receiver_sock)
@@ -47,6 +51,7 @@ def directorySender(_data: DataWeaver, recv_sock):
         files = make_file_items([zip_path,])
         _id = receiver_obj.get_file_count()
         controller = ThreadActuator(threading.current_thread())
+        thread_handler.register_control(controller)
         receiver_sock = do_handshake(recv_sock, controller,
                                      {'file_name':os.path.basename(file_path), 'file_id':_id},
                                      receiver_obj)
@@ -60,16 +65,42 @@ def directorySender(_data: DataWeaver, recv_sock):
             zip_path.unlink(missing_ok=True)
 
 
+def directoryReceiver(refer: DataWeaver):
+    controller = ThreadActuator(threading.current_thread())
+    thread_handler.register_control(controller)
+    with connect.create_connection(tuple(refer.content['bind_ip'])) as soc:
+        files = PeerFilePool(_id=refer.content['file_id'], control_flag=thread_handler)
+        files.recv_files(soc)
+    for file in files:
+        process_unzipping(Path(file.path))
+
+
 def process_zipping(receiver_obj, target):
     with tempfile.NamedTemporaryFile(mode='wb+', prefix=f"peer-conn{receiver_obj.get_file_count()}",
                                      suffix='.zip', delete=False, delete_on_close=False) as temp_file:
         temp_path = Path(temp_file.name)
-
-        zipper_process = Process(target=zipDir, args=(temp_path, target))
+        zipper_process = Process(target=zipDir, args=(temp_path, target), name='peer-connect-zipping')
+        zipping_processes.add(zipper_process)
         zipper_process.start()
         zipper_process.join()
         zipper_process.close()
+        zipping_processes.discard(zipper_process)
     return temp_path
+
+
+def process_unzipping(file_path):
+    queue = Queue(1)
+    unzip_process = Process(target=unZipper, args=(file_path, const.PATH_DOWNLOAD, queue), name='peer-connect-unzipping')
+    unzip_process.start()
+    zipping_processes.add(unzip_process)
+    # unzip_process.join()
+    file_name = queue.get()
+    unzip_process.join()
+    unzip_process.close()
+    zipping_processes.discard(unzip_process)
+    print("file_name:", file_name, file_path)
+
+    file_path.unlink()
 
 
 def zipDir(zip_name: Union[str, Path], _target):
@@ -82,27 +113,6 @@ def zipDir(zip_name: Union[str, Path], _target):
         progress.close()
 
 
-def directoryReceiver(refer: DataWeaver):
-    with connect.create_connection(tuple(refer.content['bind_ip'])) as soc:
-        files = PeerFilePool(_id=refer.content['file_id'])
-        files.recv_files(soc)
-    for file in files:
-        process_unzipping(Path(file.path))
-
-
-def process_unzipping(file_path):
-    queue = Queue(1)
-    unzip_process = Process(target=unZipper, args=(file_path, const.PATH_DOWNLOAD, queue))
-    unzip_process.start()
-    # unzip_process.join()
-    file_name = queue.get()
-    unzip_process.join()
-    unzip_process.close()
-    print("file_name:", file_name, file_path)
-
-    file_path.unlink()
-
-
 def unZipper(zip_path, destination_path, name_queue):
     with ZipFile(zip_path, 'r') as zip_ref:
         try:
@@ -112,6 +122,11 @@ def unZipper(zip_path, destination_path, name_queue):
     print(f"::Extracted {zip_path} to {destination_path}")
     name_queue.put(zip_ref.filename)
     return
+
+
+def end_zipping_processes():
+    for process in zipping_processes:
+        process.terminate()
 
 
 @NotInUse
