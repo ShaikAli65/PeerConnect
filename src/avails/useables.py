@@ -1,9 +1,7 @@
 import subprocess
 import platform
-import random
 
 from src.core import *
-from src.configurations.boot_up import is_port_empty
 
 
 def start_thread(_target, _args=()):
@@ -25,6 +23,7 @@ def echo_print(*args) -> None:
     with const.LOCK_PRINT:
         print(*args)
 
+
 def reload_protocol():
     # end_session()
 
@@ -44,13 +43,3 @@ def open_file(content):
     else:
         subprocess.run(["xdg-open", content])
     return None
-
-
-def get_free_port() -> int:
-    """Gets a free port from the system."""
-    random_port = random.randint(1024, 65535)
-    while not is_port_empty(random_port):
-        random_port = random.randint(1024, 65535)
-    return random_port
-
-
