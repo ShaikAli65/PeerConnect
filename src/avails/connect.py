@@ -1,8 +1,11 @@
+import random
+import socket as soc
+
 import select
 import socket
 from typing import Optional
 
-from .constants import *
+import src.avails.constants as const
 
 
 class Socket(socket.socket):
@@ -29,7 +32,7 @@ def wrap_sock(sock):
 
 def create_connection(address, timeout=socket.getdefaulttimeout(), source_address=None) -> Socket:
     # return wrap_sock(socket.create_connection(address, timeout, source_address))
-    address_info = socket.getaddrinfo(address[0], address[1],proto=PROTOCOL)[0]
+    address_info = socket.getaddrinfo(address[0], address[1], proto=const.PROTOCOL)[0]
     address = address_info[4][:2]
     sock_family = address_info[0]
     sock_type = address_info[1]
@@ -43,7 +46,7 @@ def create_connection(address, timeout=socket.getdefaulttimeout(), source_addres
 
 def create_server(address,*, family=-1, backlog=-1, dual_stack=False) -> Socket:
     # sock = socket.create_server(address, family=family, backlog=backlog, reuse_port=reuse_port, dualstack_ipv6=dual_stack)
-    address_info = socket.getaddrinfo(address[0], address[1], family=family, proto=PROTOCOL)[0]
+    address_info = socket.getaddrinfo(address[0], address[1], family=family, proto=const.PROTOCOL)[0]
     address = address_info[4][:2]
     sock_family = address_info[0]
     sock_type = address_info[1]
@@ -71,7 +74,7 @@ def connect_to_peer(_peer_obj=None, peer_id=None, to_which: int = BASIC_URI_CONN
     :param to_which:
     :return:
     """
-    peer_obj = _peer_obj or LIST_OF_PEERS.get_peer(peer_id)
+    peer_obj = _peer_obj or const.LIST_OF_PEERS.get_peer(peer_id)
     addr = peer_obj.req_uri if to_which == REQ_URI_CONNECT else peer_obj.uri
     return create_connection(addr,timeout)
 
@@ -98,3 +101,24 @@ def is_socket_connected(sock:Socket):
             sock.setblocking(True)
         except OSError:
             return False
+
+
+def get_free_port() -> int:
+    """Gets a free port from the system."""
+    random_port = random.randint(1024, 65535)
+    while not is_port_empty(random_port):
+        random_port = random.randint(1024, 65535)
+    return random_port
+
+
+def is_port_empty(port):
+    try:
+        # print(THIS_IP,IP_VERSION)
+        with soc.socket(const.IP_VERSION, soc.SOCK_STREAM) as s:
+            s.bind((const.THIS_IP, port))
+            return True
+    except socket.gaierror:
+        print("ERROR IN SETTING UP NETWORK ")
+        exit(1)
+    except (OSError, socket.error):
+        return False

@@ -6,7 +6,8 @@ import urllib.request
 import ipaddress
 import random
 
-from src.avails import useables as use
+import src.avails.connect
+from src.avails.connect import is_port_empty
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 from src.configurations.configure_app import set_constants
@@ -14,12 +15,13 @@ from src.configurations.configure_app import set_constants
 
 def initiate():
     clear_logs() if const.CLEAR_LOGS else None
-    config_map = configparser.ConfigParser()
+    config_map = configparser.ConfigParser(allow_no_value=True)
     try:
-        config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
+        config_map.read(const.PATH_CONFIG)
     except KeyError:
-        write_default_configurations()
-        config_map.read(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE))
+        write_default_configurations(const.PATH_CONFIG)
+        config_map.read(const.PATH_CONFIG)
+
     set_constants(config_map)
     const.THIS_IP = get_ip()
     const.IP_VERSION = (socket.AF_INET6
@@ -164,24 +166,6 @@ def initiate_this_object():
     const.THIS_OBJECT = RemotePeer(const.USERNAME, const.THIS_IP, const.PORT_THIS, report=const.PORT_REQ, status=1)
 
 
-def set_paths():
-    const.PATH_CURRENT = os.path.join(os.getcwd())
-    const.PATH_PROFILES = os.path.join(const.PATH_CURRENT, 'profiles')
-    const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
-    const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'src', 'webpage')
-    downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-    # check if the directory exists
-    if not os.path.exists(downloads_path):
-        downloads_path = os.path.join(os.path.expanduser('~'), 'Desktop')
-
-    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
-    try:
-        os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)
-    except OSError as e:
-        error_log(f"Error creating directory: {e} from set_paths() at line 70 in core/constants.py")
-        const.PATH_DOWNLOAD = os.path.join(const.PATH_CURRENT, 'fallbacks')
-
-
 def clear_logs():
     with open(os.path.join(const.PATH_LOG, 'error.logs'), 'w') as e:
         e.write('')
@@ -191,44 +175,35 @@ def clear_logs():
         s.write('')
 
 
-def write_default_configurations():
+def write_default_configurations(path):
     default_config_file = (
-        '[NERD_OPTIONS]'
-        'this_port = 48221'
-        'page_port = 12260'
-        'page_port_signals = 42057'
-        'ip_version = 4'
-        'protocol = tcp'
-        'req_port = 35623'
-        'file_port = 35621'
-        'page_serve_port = 40000'
+        '[NERD_OPTIONS]\n'
+        'this_port = 48221\n'
+        'page_port = 12260\n'
+        'page_port_signals = 42057\n'
+        'ip_version = 4\n'
+        'protocol = tcp\n'
+        'req_port = 35623\n'
+        'file_port = 35621\n'
+        'page_serve_port = 40000\n'
         '\n'
-        '[USER_PROFILES]'
-        'admin = admin.ini'
+        '[USER_PROFILES]\n'
+        'admin\n'
     )
     default_profile_file = (
-        '[CONFIGURATIONS]'
-        'username = admin'
-        'server_port = 45000'
-        'serverip = 0.0.0.0'
+        '[USER]\n'
+        'name = admin\n'
+        '\n'
+        '[SERVER]\n'
+        'port = 45000\n'
+        'ip = 0.0.0.0\n'
+        'id = 0\n'
     )
 
-    with open(os.path.join(const.PATH_PROFILES, const.DEFAULT_CONFIG_FILE), 'w+') as config_file:
+    with open(path, 'w+') as config_file:
         config_file.write(default_config_file)
     with open(os.path.join(const.PATH_PROFILES, 'admin.ini'), 'w+') as profile_file:
         profile_file.write(default_profile_file)
-
-
-def is_port_empty(port):
-    try:
-        with soc.socket(const.IP_VERSION, soc.SOCK_STREAM) as s:
-            s.bind((const.THIS_IP, port))
-            return True
-    except socket.gaierror:
-        print("ERROR IN SETTING UP NETWORK ")
-        exit(1)
-    except (OSError, socket.error):
-        return False
 
 
 def validate_ports() -> None:
@@ -236,7 +211,7 @@ def validate_ports() -> None:
                   const.PORT_FILE]
     for i, port in enumerate(ports_list):
         if not is_port_empty(port):
-            ports_list[i] = use.get_free_port()
+            ports_list[i] = src.avails.connect.get_free_port()
             error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE_DATA, const.PORT_PAGE_SIGNALS, const.PORT_REQ, const.PORT_FILE = ports_list
     return None
@@ -284,4 +259,5 @@ def launch_web_page():
             subprocess.Popen(['xdg-open', page_url])
 
     except FileNotFoundError:
-        use.echo_print("::webpage not found, look's like the package you downloaded is corrupted")
+        from src.avails.useables import echo_print
+        echo_print("::webpage not found, look's like the package you downloaded is corrupted")

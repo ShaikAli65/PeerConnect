@@ -114,7 +114,7 @@ def setup_server_connection():
     else:
         return None
     try:
-        const.THIS_OBJECT.serialize(server_connection)
+        const.THIS_OBJECT.send_serialized(server_connection)
     except (socket.error,OSError):
         server_connection.close()
         return
@@ -129,7 +129,7 @@ def end_connection_with_server():
         if connection_status is False:
             return True
         with connect.create_connection((const.SERVER_IP, const.PORT_SERVER), timeout=const.SERVER_TIMEOUT) as end_socket:
-            const.THIS_OBJECT.serialize(end_socket)
+            const.THIS_OBJECT.send_serialized(end_socket)
         print("::sent leaving status to server")
         return True
     except Exception as exp:
