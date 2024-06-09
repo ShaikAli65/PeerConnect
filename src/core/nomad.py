@@ -5,12 +5,12 @@ from types import ModuleType
 import src.avails.connect
 from ..core import *
 from ..avails import useables as use
-from ..avails.remotepeer import RemotePeer
 
 from ..managers import directorymanager, filemanager
 from ..managers.thread_manager import thread_handler, NOMADS
 from ..webpage_handlers import handle_data
 from ..avails.textobject import DataWeaver, SimplePeerText
+from ..avails.container import SocketStore
 
 
 class Nomad(object):
@@ -85,7 +85,7 @@ class Nomad(object):
                 self.__accept_connection()
 
     def end(self):
-        self.socket_handler.stop_loop()
+        self.socket_handler.end_loop()
         self.controller.signal_stopping()
         self.currently_in_connection.fromkeys(self.currently_in_connection, 0)
         # self.main_socket.close() if self.main_socket else None
@@ -93,10 +93,10 @@ class Nomad(object):
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
 
-    def __del__(self):
-        # self.main_socket.close()
-        self.controller.signal_stopping()
-        self.socket_handler.stop_loop()
+    # def __del__(self):
+    #     # self.main_socket.close()
+    #     self.controller.signal_stopping()
+    #     self.socket_handler.end_loop()
 
 
 class SocketLoop(selectors.DefaultSelector):
@@ -105,17 +105,23 @@ class SocketLoop(selectors.DefaultSelector):
         super().__init__()
         # a custom object to be used to wake select call when needed, instead of polling
         self._controller = ThreadActuator(threading.current_thread())
-        thread_handler.register(self._controller, NOMADS)
+        thread_handler.register_control(self._controller, NOMADS)
         self.threads = []
         self.register(self._controller, selectors.EVENT_READ)
         self.currently_in_connection = defaultdict(int)
         self.RecentConnections = getattr(import_module('src.core.senders'), 'RecentConnections')
+        self.connections = SocketStore()
 
-    def register_sock(self, file_desc, peer_id):
-        self.register(file_desc, selectors.EVENT_READ, peer_id)
+    def register_sock(self, sock_desc, peer_id):
+        self.register(sock_desc, selectors.EVENT_READ, peer_id)
         self._controller.write()
         self._controller.clear_reader()
+        self.connections.add_socket(sock_desc)
         use.echo_print(" ".join(str(x) for x in self.get_map()))
+
+    def unregister(self, fileobj):
+        super().unregister(fileobj)
+        self.connections.remove_socket(fileobj)
 
     def start_loop(self):
         controller = self._controller
@@ -164,7 +170,6 @@ class SocketLoop(selectors.DefaultSelector):
         elif _data.header == const.CMD_RECV_DIR:
             self.start_thread(directorymanager.directoryReceiver,_data)
         elif _data.header == const.CMD_CLOSING_HEADER:
-            self.unregister(_conn)
             self.disconnect_user(_conn, self._controller, peer_id)
             return
 
@@ -175,7 +180,9 @@ class SocketLoop(selectors.DefaultSelector):
                 DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
         use.echo_print(f"::Closing connection at {func_str(SocketLoop.disconnect_user)}\n", peer_list.get_peer(_id))
         self.RecentConnections.force_remove(peer_id=_id)
+        self.unregister(_conn)
         thread_handler.delete(_controller, NOMADS)
 
-    def stop_loop(self):
+    def end_loop(self):
         self._controller.signal_stopping()
+        self.connections.close_all()
