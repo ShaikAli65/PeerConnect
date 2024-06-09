@@ -1,3 +1,4 @@
+import socket
 import threading
 
 from collections import deque, defaultdict
@@ -41,10 +42,13 @@ class PeerDict(dict):
     def __str__(self):
         return ', '.join(x.__repr__() for x in self.values())
 
+    def __iter__(self):
+        return self.values().__iter__()
+
 
 class SafeSet:
     """
-    CustomSet is a thread safe flip implementation with additional features.
+    CustomSet is a thread safe set implementation with additional features.
 
     """
     __annotations__ = {
@@ -205,3 +209,23 @@ class FileDict:
             self.__continued.update(self.__current)
             self.__current.clear()
         return
+
+
+class SocketStore:
+    __slots__ = 'storage',
+
+    def __init__(self):
+        self.storage = set()
+
+    def add_socket(self, sock):
+        self.storage.add(sock)
+
+    def remove_socket(self, sock):
+        self.storage.discard(sock)
+
+    def close_all(self):
+        for sock in self.storage:
+            try:
+                sock.close()
+            except socket.error:
+                pass
