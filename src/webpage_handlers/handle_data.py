@@ -155,7 +155,10 @@ async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
                            _id=peer.id)
         # try:
         use.echo_print(f"::signaling page username:{peer.username}\n{_data}")
-        await web_socket.send(_data.dump())
+        try:
+            await web_socket.send(_data.dump())
+        except websockets.exceptions.ConnectionClosedError:
+            pass
         # except Exception as e:
         #     error_log(f"Error sending data at handle_data_flow.py/feed_server_data, exp: {e}")
         # pass
