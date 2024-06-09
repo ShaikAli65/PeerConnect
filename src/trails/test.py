@@ -2,6 +2,7 @@ from importlib import import_module
 from collections import defaultdict
 from typing import Any
 
+import src.avails.connect
 from ..core import *
 from ..avails import useables as use
 from ..avails.remotepeer import RemotePeer
@@ -61,7 +62,7 @@ class Nomad(object):
         th_controller = ThreadActuator(None, NOMAD_FLAG)
         thread = use.start_thread(self.connectNew, _args=(initial_conn,peer_id))  # name these threads .??
         th_controller.thread = thread
-        thread_handler.register(th_controller, NOMADS)
+        thread_handler.register_control(th_controller, NOMADS)
         self.RecentConnections.addSocket(peer_id, initial_conn)
 
     def __acceptConnections(self):
@@ -132,7 +133,7 @@ class Nomad(object):
     def disconnectUser(self, _conn, _controller, _id):
         self.currently_in_connection[_id] -= 1
         with _conn:
-            if use.is_socket_connected(_conn):
+            if src.avails.connect.is_socket_connected(_conn):
                 DataWeaver(header=const.CMD_CLOSING_HEADER).send(_conn)
         use.echo_print(f"::Closing connection at {func_str(Nomad.disconnectUser)}\n", peer_list.get_peer(_id))
         self.RecentConnections.force_remove(peer_id=_id)
