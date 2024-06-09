@@ -34,7 +34,7 @@ PATH_LOG = '..\\..\\logs'
 PATH_PROFILES = '..\\..\\profiles'
 PATH_PAGE = '..\\webpage'
 PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
-
+PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
 
 IP_VERSION = soc.AF_INET
 PROTOCOL = soc.SOCK_STREAM
