@@ -159,9 +159,6 @@ async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
             await web_socket.send(_data.dump())
         except websockets.exceptions.ConnectionClosedError:
             pass
-        # except Exception as e:
-        #     error_log(f"Error sending data at handle_data_flow.py/feed_server_data, exp: {e}")
-        # pass
 
 
 async def end():

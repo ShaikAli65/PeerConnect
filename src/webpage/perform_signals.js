@@ -1,5 +1,5 @@
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const wss = new WebSocket("ws://localhost:50861");
+const wss = new WebSocket("ws://localhost:56733");
 const profileListDiv = document.getElementById('profileList');
 const addProfileBtn = document.getElementById('addProfileBtn');
 const delProfileBtn = document.getElementById('delProfileBtn');
@@ -20,24 +20,28 @@ function initiate_signals()
 function display_profiles(DATA) {
 
     let profiles = Object.getOwnPropertyNames(DATA.content);
-    profiles.forEach(profileName => {
-        const profileElement = createProfileElement(profileName);
+    console.log(profiles)
+    profiles.forEach(profile_id => {
+        console.log(profile_id);
+    });
+    profiles.forEach(profile_id => {
+        const profileElement = createProfileElement(profile_id);
         profileListDiv.appendChild(profileElement);
     });
 }
-function createProfileElement(profileName) {
+function createProfileElement(profile_id) {
     let server_details = "localhost";
     
     try {
-        server_details = DATA.content[profileName].CONFIGURATIONS.server_ip;
+        server_details = DATA.content[profile_id].SERVER;
     }
-    catch (TypeError) {console.log('No server ip found for profile:', profileName)}
+    catch (TypeError) {console.log('No server ip found for profile:', profile_id)}
 
-    const profile = getprofilebox(profileName,server_details);
-    profile.id = "!@#" + profileName;
+    const profile = getprofilebox(profile_id,[server_details.ip, server_details.port, server_details.id]);
+    profile.id = "!@#" + profile_id;
     profile.addEventListener('click', () => {
         profile.classList.add('selected');
-        const siblings = Array.from(profileList.children).filter(
+        const siblings = Array.from(profileListDiv.children).filter(
         sibling => sibling !== profile
         );
         siblings.forEach(sibling => sibling.classList.remove('selected'));
@@ -45,7 +49,8 @@ function createProfileElement(profileName) {
 
   return profile;
 }
-function getprofilebox(profileName, profileDetails) {
+function getprofilebox(profileId, profileDetails) {
+    console.log(profileId,profileDetails)
     const profileBox = document.createElement('div');
     profileBox.classList.add('card');
   
@@ -54,25 +59,69 @@ function getprofilebox(profileName, profileDetails) {
   
     const title = document.createElement('p');
     title.classList.add('text-title');
-    title.textContent = profileName;
+    title.textContent = DATA.content[profileId]['USER'].name;
     
-    const details = document.createElement('p');
-    details.classList.add('text-body');
-    details.textContent = profileDetails;
+    const server_ip = document.createElement('p');
+    const server_port = document.createElement('p');
+    const server_id = document.createElement('p');
+    server_ip.textContent = profileDetails[0];
+    server_port.textContent = profileDetails[1];
+    server_id.textContent = profileDetails[2];
+    server_ip.classList.add('text-body');
+    server_port.classList.add('text-body');
+    server_id.classList.add('text-body');
     
     const EditBtn = document.createElement('button');
     EditBtn.classList.add('card-button');
     EditBtn.textContent = 'Edit';
     cardDetails.appendChild(title);
-    cardDetails.appendChild(details);
-  
+    cardDetails.appendChild(server_id);
+    cardDetails.appendChild(server_ip);
+    cardDetails.appendChild(server_port);
     profileBox.appendChild(cardDetails);
     profileBox.appendChild(EditBtn);
-    EditBtn.addEventListener('click', ()=>{edit_profile(profileBox, cardDetails,title,details,EditBtn)});
+    const details = [server_ip, server_port, server_id]
+    EditBtn.addEventListener('click', ()=>{edit_profile(profileBox, cardDetails, profileId, details, EditBtn)});
     return profileBox;  
 }
 
-function save_changes(profileBox, cardDetails, prevtitle, titleInput,detailsInput,saveBtn) {
+function edit_profile(profileBox, cardDetails, profile_id, details, EditBtn) {
+    var title = document.getElementById('!@#'+profile_id);
+    title = title.querySelector('.card-details p')
+    console.log(title)
+    const saveBtn = document.createElement('button');
+    saveBtn.classList.add('card-button');
+    saveBtn.textContent = 'Save';
+    profileBox.replaceChild(saveBtn, EditBtn);
+    
+    const titleInput = document.createElement('input');
+    titleInput.classList.add('text-title');
+    titleInput.classList.add('editing');
+    let prevtitle = title.textContent;
+    titleInput.value = prevtitle;
+    
+    const detailsInput1 = document.createElement('input');
+    const detailsInput2 = document.createElement('input');
+    const detailsInput3 = document.createElement('input');
+    detailsInput1.value = details[0].textContent;
+    detailsInput2.value = details[1].textContent;
+    detailsInput3.value = details[2].textContent;
+    detailsInput1.classList.add('text-body');
+    detailsInput1.classList.add('editing');
+    detailsInput2.classList.add('text-body');
+    detailsInput2.classList.add('editing');
+    detailsInput3.classList.add('text-body');
+    detailsInput3.classList.add('editing');
+
+    const detailsInput = [detailsInput1, detailsInput2, detailsInput3]
+    cardDetails.replaceChild(titleInput, title);
+    saveBtn.addEventListener('click', () => {save_changes(profileBox, cardDetails, profile_id, titleInput,detailsInput,saveBtn)});
+    cardDetails.replaceChild(detailsInput1, details[0]);
+    cardDetails.replaceChild(detailsInput2, details[1]);
+    cardDetails.replaceChild(detailsInput3, details[2]);
+}
+
+function save_changes(profileBox, cardDetails, profile_id, titleInput,detailsInput,saveBtn) {
     const EditBtn = document.createElement('button');
     EditBtn.classList.add('card-button');
     EditBtn.textContent = 'Edit';
@@ -81,45 +130,49 @@ function save_changes(profileBox, cardDetails, prevtitle, titleInput,detailsInpu
     title.classList.add('text-title');
     title.textContent = titleInput.value;
     
-    const details = document.createElement('p');
-    details.classList.add('text-body');
-    details.textContent = detailsInput.value;
-    console.log('prevtitle:',prevtitle);
-    DATA.content[prevtitle].CONFIGURATIONS.server_ip = detailsInput.value;
-    DATA.content[prevtitle].CONFIGURATIONS.username = titleInput.value;
+    const details1 = document.createElement('p');
+    const details2 = document.createElement('p');
+    const details3 = document.createElement('p');
+    details1.textContent = detailsInput[0].value;
+    details2.textContent = detailsInput[1].value;
+    details3.textContent = detailsInput[2].value;
+    details1.classList.add('text-body');
+    details2.classList.add('text-body');
+    details3.classList.add('text-body');
+
+    // console.log('prevtitle:',profile_id);
+    console.log(DATA.content[profile_id])
+    DATA.content[profile_id].SERVER.ip = detailsInput[0].value;
+    DATA.content[profile_id].SERVER.port = detailsInput[1].value;
+    DATA.content[profile_id].SERVER.id = detailsInput[2].value;
+    DATA.content[profile_id].USER.name = titleInput.value;
+
     profileBox.replaceChild(EditBtn, saveBtn);
     cardDetails.replaceChild(title, titleInput);
-    cardDetails.replaceChild(details, detailsInput);
-    EditBtn.addEventListener('click', ()=>{edit_profile(profileBox, cardDetails,title,details,EditBtn)});
+    cardDetails.replaceChild(details1, detailsInput[0]);
+    cardDetails.replaceChild(details2, detailsInput[1]);
+    cardDetails.replaceChild(details3, detailsInput[2]);
+
+    const details = [details1, details2, details3]
+    EditBtn.addEventListener('click', ()=>{edit_profile(profileBox, cardDetails,profile_id,details,EditBtn)});
 }
 
-function edit_profile(profileBox, cardDetails,title,details,EditBtn) {
-
-    const saveBtn = document.createElement('button');
-    saveBtn.classList.add('card-button');
-    saveBtn.textContent = 'Save';
-    profileBox.replaceChild(saveBtn, EditBtn);
-    const titleInput = document.createElement('input');
-    titleInput.classList.add('text-title');
-    titleInput.classList.add('editing');
-    let prevtitle = title.textContent;
-    titleInput.value = prevtitle;
-    
-    const detailsInput = document.createElement('input');
-    detailsInput.classList.add('text-body');
-    detailsInput.classList.add('editing');
-    detailsInput.value = details.textContent;
-    
-    cardDetails.replaceChild(titleInput, title);
-    saveBtn.addEventListener('click', () => {save_changes(profileBox, cardDetails, prevtitle, titleInput,detailsInput,saveBtn)});
-    cardDetails.replaceChild(detailsInput, details);
-    
-}
 addProfileBtn.addEventListener('click', () => {
     const newProfileName = prompt('Enter the name of the new profile:');
     if (newProfileName) {
-      const newProfileServerIp = prompt('Enter the server ip of the new profile:');
-    DATA.content[newProfileName] = {'CONFIGURATIONS': {'server_ip': newProfileServerIp, 'username': newProfileName, 'server_port': 45000}};
+        const newProfileServerId = prompt('Enter server id:');
+      const newProfileServerIp = prompt('Enter the server ip:');
+      const newProfileServerPort = prompt('Enter server port:')
+    DATA.content[newProfileName] = {
+        'SERVER': {
+            'ip': newProfileServerIp,
+            'port': newProfileServerPort,
+            'id':newProfileServerId
+        },
+        'USER': {
+            'name': newProfileName,
+        }
+    };
       const newProfileElement = createProfileElement(newProfileName);
       profileListDiv.appendChild(newProfileElement);
     }
@@ -151,7 +204,7 @@ function proceed_profiles() {
 
 function send_selected_profile(selected_profile_id) {
     let dict_selected_profile = DATA.content[selected_profile_id];
-    let selected_profile = {'content':dict_selected_profile.CONFIGURATIONS.username,'header':'selected profile','id':''};
+    let selected_profile = {'content':dict_selected_profile,'header':'selected profile','id':''};
     console.log('selected_profile:', selected_profile);
     wss.send(JSON.stringify(selected_profile));
 }
