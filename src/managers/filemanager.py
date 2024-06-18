@@ -49,8 +49,8 @@ def fileSender(file_data: DataWeaver, receiver_sock):
     for file, sock in zip(file_pools, sockets):
         asyncio.run(feed_file_data_to_page({'file_id': file.id}, receiver_id))
         global_files.add_to_current(receiver_id, file)
-        # th_pool.submit(_sock_thread, receiver_id, file, sock)
-        threading.Thread(target=_sock_thread, args=(receiver_id, file, sock)).start()
+        th_pool.submit(_sock_thread, receiver_id, file, sock)
+        # threading.Thread(target=_sock_thread, args=(receiver_id, file, sock)).start()
     #     print("completed mapping threads")  # debug
 
 
@@ -82,8 +82,8 @@ def file_receiver(file_data: DataWeaver):
     th_pool = ThreadPoolExecutor(max_workers=conn_count)
     for file, sock in zip(file_pools, sockets):
         global_files.add_to_current(sender_id, file)
-        # th_pool.submit(_sock_thread, sender_id, file, sock)
-        threading.Thread(target=_sock_thread, args=(sender_id, file, sock)).start()
+        th_pool.submit(_sock_thread, sender_id, file, sock)
+        # threading.Thread(target=_sock_thread, args=(sender_id, file, sock)).start()
 #     th_pool.shutdown()  # wait for all threads to finish  # debug
 #     print("completed mapping threads")  # debug
 #     print('\n'.join(str(x) for x in file_pools))  # debug
