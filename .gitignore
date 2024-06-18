@@ -6,4 +6,3 @@ bin
 .vscode
 .todos
 *.pyc
-*.ini
