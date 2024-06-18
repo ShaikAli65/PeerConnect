@@ -166,7 +166,7 @@ class PeerFilePool:
         sender_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, False)
         return self.__receive_file_loop(self.file_count, sender_sock)
 
-    def __receive_file_loop(self, count: int, sender_sock):
+    def __receive_file_loop(self, count, sender_sock):
         for _ in range(count):
             self.current_file = _FileItem('',0,'',0)
             if not self.controller.to_stop:
@@ -229,7 +229,7 @@ class PeerFilePool:
                 return False
             return True
 
-    def send_files_again(self, receiver_sock: socket.socket):
+    def send_files_again(self, receiver_sock):
         self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
 
         # -> ----------------------
@@ -248,7 +248,7 @@ class PeerFilePool:
         self.send_file_loop(present_iter, receiver_sock)
         return True
 
-    def receive_files_again(self, sender_sock: socket.socket):
+    def receive_files_again(self, sender_sock):
         # -> ----------------------
         start_file = self.current_file
         sender_sock.send(start_file.seeked)
@@ -371,8 +371,10 @@ class _FileGroup:
                 parts.append([file])
                 current_part_size = file_size
 
-        self.grouped_files = [x for x in parts if len(x) > 0]
-        self._re_group_if_needed()
+        self.grouped_files = [x for x in parts if x]
+
+        if len(self.grouped_files) > self.grouping_level:
+            self.re_group(self.grouping_level)
 
     def _adjust_part_size(self):
         if self.grouping_level == GROUP_MIN:
@@ -382,12 +384,6 @@ class _FileGroup:
         if self.grouping_level == GROUP_MID:
             return self.total_size // 4
         return self.total_size
-
-    def _re_group_if_needed(self):
-        max_parts = self.grouping_level
-
-        if len(self.grouped_files) > max_parts:
-            self.re_group(max_parts)
 
     def re_group(self, size):
         """Re-groups the files into the specified number of parts."""
@@ -408,7 +404,6 @@ class _FileGroup:
         if combined_group:
             new_group.append(combined_group)
 
-        # self.grouped_files = [x for x in new_group if len(x) > 0]
         self.grouped_files = new_group
 
     def __len__(self):
