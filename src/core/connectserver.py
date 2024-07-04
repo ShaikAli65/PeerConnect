@@ -8,12 +8,10 @@ from src.core import *
 from src.core import requests_handler
 from src.avails.textobject import SimplePeerText
 from src.avails.remotepeer import RemotePeer
-from src.avails.constants import CONNECT_SERVER_FLAG
-
+from src.managers.thread_manager import ACTUATOR_CONNECT_SERVER as _controller
 
 error_calls = 0
 connection_status = False
-_controller = ThreadActuator(None, control_flag=CONNECT_SERVER_FLAG)
 TIMEOUT = 50  # sec
 
 
@@ -22,21 +20,21 @@ def get_initial_list(no_of_users, initiate_socket):
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
         # try:
-            _nomad = RemotePeer.deserialize(initiate_socket)
-            ping_queue.put(_nomad)
-            requests_handler.signal_status(ping_queue,)
-            use.echo_print(f"::User received from server :\n {_nomad}")
-            server_log(f"::User received from server : {_nomad!r}", 2)
-        # except socket.error as e:
-        #     error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
-        #     if not e.errno == 10054:
-        #         continue
-        #
-        #     end_connection_with_server()
-        #     if len(peer_list) > 0:
-        #         server_log(f"::Server disconnected received some users retrying ...", 4)
-        #         list_error_handler()
-        #     return False
+        _nomad = RemotePeer.deserialize(initiate_socket)
+        ping_queue.put(_nomad)
+        requests_handler.signal_status(ping_queue, )
+        use.echo_print(f"::User received from server :\n {_nomad}")
+        server_log(f"::User received from server : {_nomad!r}", 2)
+    # except socket.error as e:
+    #     error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
+    #     if not e.errno == 10054:
+    #         continue
+    #
+    #     end_connection_with_server()
+    #     if len(peer_list) > 0:
+    #         server_log(f"::Server disconnected received some users retrying ...", 4)
+    #         list_error_handler()
+    #     return False
     return True
 
 
@@ -58,9 +56,9 @@ def list_error_handler():
     req_peer = next(peer_list)
     conn = src.avails.connect.connect_to_peer(_peer_obj=req_peer, to_which=REQ_URI_CONNECT)
     with conn:
-        SimplePeerText(text=const.REQ_FOR_LIST,refer_sock=conn).send()
+        SimplePeerText(text=const.REQ_FOR_LIST, refer_sock=conn).send()
         select.select([conn, _controller], [], [], 100)
-        list_len = struct.unpack('!Q',conn.recv(8))[0]
+        list_len = struct.unpack('!Q', conn.recv(8))[0]
         get_initial_list(list_len, conn)
 
 
@@ -107,7 +105,8 @@ def setup_server_connection():
                 return None
             try:
                 retry_count += 1
-                print(f"\r::Connection refused by server, {f'retrying... {retry_count}' if _controller.to_stop is False else 'returning'}", end='')
+                what = f" {f'retrying... {retry_count}' if _controller.to_stop is False else 'returning'}"
+                print(f"\r::Connection refused by server, {what}", end='')
             except KeyboardInterrupt:
                 return
 
@@ -115,7 +114,7 @@ def setup_server_connection():
         return None
     try:
         const.THIS_OBJECT.send_serialized(server_connection)
-    except (socket.error,OSError):
+    except (socket.error, OSError):
         server_connection.close()
         return
     return server_connection
@@ -128,7 +127,8 @@ def end_connection_with_server():
         const.THIS_OBJECT.status = 0
         if connection_status is False:
             return True
-        with connect.create_connection((const.SERVER_IP, const.PORT_SERVER), timeout=const.SERVER_TIMEOUT) as end_socket:
+        with connect.create_connection((const.SERVER_IP, const.PORT_SERVER),
+                                       timeout=const.SERVER_TIMEOUT) as end_socket:
             const.THIS_OBJECT.send_serialized(end_socket)
         print("::sent leaving status to server")
         return True
