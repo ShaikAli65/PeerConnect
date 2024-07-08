@@ -6,4 +6,5 @@ bin
 .vscode
 .todos
 *.pyc
-*.ini
+profiles/
+!/profiles/admin.ini

@@ -1,9 +1,7 @@
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
-from src.avails import constants
 from src.core import *
 
 
@@ -34,11 +32,11 @@ class ProfileManager:
         :raises ValueError: if required keys were not found
         :return profiles_data: if all required keys were found
         """
+
         profile_data = self.__load_profile_data()
         match profile_data:
             case {
                 'SERVER': {
-                    'id': _,
                     'ip': _,
                     'port': _
                 },
@@ -127,7 +125,7 @@ class ProfileManager:
         cls.__remove_from_main_config(profile_path.name)
 
     def __repr__(self):
-        return f'<Profile name={self.username} server_id={self.server_id} file_path={self.profile_file_path}>'
+        return f'<Profile name={self.username} file_path={self.profile_file_path}>'
 
     @property
     def username(self):
@@ -143,16 +141,12 @@ class ProfileManager:
 
     @property
     def server_port(self):
+        print("adfar")  # debug
         return self.profile_data['SERVER']['port']
-
-    @property
-    def server_id(self):
-        return self.profile_data['SERVER']['id']
 
     def __eq__(self, other):
         if isinstance(other, dict):
             return (self.username == other['USER']['name']
-                    and self.server_id == other['SERVER']['id']
                     and self.server_ip == other['SERVER']['ip'])
         else:
             return self is other
