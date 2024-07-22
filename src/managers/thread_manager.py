@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, Executor
 from src.avails.waiters import ThActuator
 
 socket_resources = set()
-
+GEN = 0
 NOMADS = 1
 REQUESTS = 2
 FILES = 3
@@ -15,6 +15,7 @@ class _ThreadControl:
 
     def __init__(self):
         self.thread_map = {
+            GEN : set(),
             NOMADS: set(),
             REQUESTS: set(),
             FILES: set(),
@@ -24,6 +25,7 @@ class _ThreadControl:
 
     def register_control(self, thread_control: ThActuator, which: int):
         """
+        GEN = 0
         NOMADS = 1
         REQUESTS = 2
         FILES = 3
@@ -51,3 +53,5 @@ class _ThreadControl:
 
 
 thread_handler = _ThreadControl()
+ACTUATOR_CONNECT_SERVER = ThActuator(None)
+thread_handler.register_control(ACTUATOR_CONNECT_SERVER, GEN)

@@ -7,7 +7,6 @@ from typing import BinaryIO, Callable, Union
 
 import src.avails.constants as const
 
-type ThActuator = ThreadActuator
 
 
 def waker_flag() -> tuple[BufferedReader | BinaryIO, BufferedWriter | BinaryIO]:
@@ -114,3 +113,5 @@ class ThreadActuator:
 
     def __repr__(self):
         return self.__str__()
+
+ThActuator = ThreadActuator

@@ -38,7 +38,8 @@ def create_connection(address, timeout=socket.getdefaulttimeout(), source_addres
     sock_family = address_info[0]
     sock_type = address_info[1]
     sock = Socket(family=sock_family,type=sock_type)
-    sock.setsockopt(*args)
+    if args:
+        sock.setsockopt(*args)
     if source_address:
         sock.bind(source_address)
     sock.settimeout(timeout)
