@@ -1,3 +1,4 @@
 !profiles/default_profile.ini
 profiles/*
 logs/*
+.idea
