@@ -60,11 +60,6 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
         current *= factor
 
 
-# Example usage
-timeouts = get_timeouts()
-print(list(timeouts))
-
-
 @functools.wraps(print)
 def echo_print(*args, **kwargs) -> None:
     """Prints the given arguments to the console.
