@@ -158,6 +158,9 @@ def signal_status(queue_in: Queue[RemotePeer]):
         except socket.error:
             use.echo_print(f"Error sending status({const.THIS_OBJECT.status}) at {func_str(signal_status)}", peer_object)
             peer_object.status = 0  # this makes that user as not active
+        except TypeError as tpe:
+            use.echo_print(f"Error sending status({const.THIS_OBJECT.status}) at {func_str(signal_status)}", peer_object.username, tpe)
+            return
         add_peer_accordingly(peer_object)
 
 

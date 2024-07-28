@@ -33,7 +33,11 @@ def create_connection(address, timeout=socket.getdefaulttimeout(), source_addres
                  setting options before connection is initiated
     :return sock: connected sock
     """
+    # try:
     address_info = socket.getaddrinfo(address[0], address[1], type=const.PROTOCOL)[0]
+    # except TypeError as tpe:
+        # print("something wrong with the given address ",tpe)
+        # return 
     address = address_info[4][:2]
     sock_family = address_info[0]
     sock_type = address_info[1]
