@@ -122,9 +122,13 @@ class PeerFilePool:
         receiver_sock.send(struct.pack('!Q', file.size))
         self.calculate_chunk_size(file.size)
 
-        send_progress = tqdm.tqdm(range(file.size),
-                                  f"::sending {file.name[:20]} ... ", unit="B",
-                                  unit_scale=True, unit_divisor=1024)
+        send_progress = tqdm.tqdm(
+            range(file.size),
+            f"::sending {file.name[:20] if len(file.name) > 20 else file.name} ... ",
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024
+        )
 
         self.__send_actual_file(file, receiver_sock, send_progress)
         send_progress.close()
@@ -194,9 +198,13 @@ class PeerFilePool:
         file_item.size = FILE_SIZE
         print('INTIAL FILE ITEM ', file_item)  # debug
         self.calculate_chunk_size(FILE_SIZE)
-        progress = tqdm.tqdm(range(FILE_SIZE),
-                             f"::receiving {FILE_NAME[:20]}... ", unit="B",
-                             unit_scale=True, unit_divisor=1024)
+        progress = tqdm.tqdm(
+            range(FILE_SIZE),
+            f"::receiving {FILE_NAME[:20] if len(FILE_NAME) > 20 else FILE_NAME}... ",
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024
+        )
 
         what = self.__recv_actual_file(sender_sock, file_item, progress)
         progress.close()
