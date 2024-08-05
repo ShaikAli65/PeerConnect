@@ -3,10 +3,12 @@ import struct
 from itertools import count
 from typing import Tuple, Self
 
-from . import connect, constants
+from . import connect, const
 
 
 class RemotePeer:
+    version = const.VERSIONS['RP']
+
     __annotations__ = {
         'username': str,
         'uri': Tuple[str, int],
@@ -17,11 +19,13 @@ class RemotePeer:
         'file_count': int
     }
 
-    __slots__ = 'username', 'uri', 'status', 'callbacks', 'req_uri', 'id', '_file_id'
+    __slots__ = 'username', 'uri', 'status', 'callbacks', 'req_uri', 'id', '_file_id', 'ip'
 
     def __init__(self, username='admin', ip='localhost', port=8088, report=35896,
                  status=0):
         self.username = username
+        ip = str(ip)
+        self.ip = ip
         self.uri = (ip, port)
         self.status = status
         self.callbacks = 0
@@ -31,23 +35,27 @@ class RemotePeer:
 
     async def send_serialized(self, _to_send: connect.Socket):
         serialized = pickle.dumps(self)
+        await _to_send.asendall(struct.pack('!f', self.version))
         await _to_send.asendall(struct.pack('!I', len(serialized)))
         await _to_send.asendall(serialized)
         return True
 
     @property
-    def id_encoded(self):
-        return self.id.encode(constants.FORMAT)
+    def id_encoded(self) -> bytes:
+        return self.id.encode(const.FORMAT)
 
-    def get_file_count(self):
+    def get_file_id(self):
         return next(self._file_id)
 
     def increment_file_count(self):
         return next(self._file_id)
 
-    @staticmethod
-    async def deserialize(sender_sock: connect.Socket):
+    @classmethod
+    async def deserialize(cls, sender_sock: connect.Socket):
         try:
+            version = struct.unpack('!f', await sender_sock.arecv(4))[0]
+            assert version == cls.version, 'versions not matching for remote peer'
+
             size_to_recv = struct.unpack('!I', await sender_sock.arecv(4))[0]
             serialized = await sender_sock.arecv(size_to_recv)
             return pickle.loads(serialized)
