@@ -19,7 +19,7 @@ from src.core import peer_list
 from src.avails import SocketStore
 from . import connected_peers
 from typing import Union, Dict, Tuple, Optional
-from src.avails import const, use
+from src.avails import const, use, WireData
 from . import this_object
 
 
@@ -77,12 +77,9 @@ class Acceptor:
                 self.all_tasks.append(task)
 
     async def start_socket(self):
-        addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION,
-                                                  type=const.PROTOCOL)
+        addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
         sock_family, sock_type, _, _, address = addr_info[0]
-        sock = connect.create_sock(sock_family, sock_type)
-        sock.bind(address)
-        sock.listen(self.back_log)
+        sock = await const.PROTOCOL.create_async_server_sock(self.__loop, address, family=const.IP_VERSION, backlog=self.back_log)
         return sock
 
     async def __accept_connection(self, initial_conn):
@@ -121,11 +118,11 @@ class Acceptor:
         sock = connected_peers.get_socket(peer_id)
 
         while self.currently_in_connection[peer_id]:
-            data = DataWeaver()
             try:
-                await asyncio.wait_for(data.receive(sock), self.max_timeout)
+                data = await asyncio.wait_for(WireData.receive(sock), self.max_timeout)
             except asyncio.TimeoutError:
                 print("timedout", peer_id)
+                continue
             self.__process_data(data)
 
     def __process_data(self, _data):  # noqa # :todo: complete this
@@ -189,7 +186,7 @@ class Connector:
 
     @classmethod
     async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
-        connection_socket = await connect.connect_to_peer(_peer_obj=peer_obj, to_which=connect.BASIC_URI_CONNECT)
+        connection_socket = await connect.connect_to_peer(peer_obj, to_which=connect.BASIC_URI_CONNECT)
         connected_peers.add_peer_sock(peer_obj.id, connection_socket)
         return connection_socket
 
