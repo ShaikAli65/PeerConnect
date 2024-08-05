@@ -1,8 +1,9 @@
-import socket as soc
+import socket
 from sys import platform
 from os import path
 from threading import Lock
 
+# from src.avails.connect import TCPProtocol
 
 CLEAR_LOGS = 1
 USERNAME = 'admin'
@@ -16,7 +17,6 @@ LINUX = platform == "linux"
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 FORMAT = 'utf-8'
-
 
 PORT_THIS = 9000
 PORT_SERVER = 9001
@@ -32,47 +32,51 @@ PATH_PAGE = '../webpage'
 PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
 
-IP_VERSION = soc.AF_INET
-PROTOCOL = soc.SOCK_STREAM
+IP_VERSION = socket.AF_INET
+PROTOCOL = None  # TCPProtocol
 LOCK_PRINT = Lock()
 
+MAX_LOAD = 5
 MAX_CALL_BACKS = 5
 MAX_RETIRES = 7
 
+VERSIONS = {
+    'GLOBAL': 1.1,
+    'RP': 1.0,
+    'FO': 1.0,
+    'DO': 1.0,
+    'WIRE':1.0,
+}
 
-CMD_RECV_FILE_AGAIN = 'this is command to core_/!_recv file again'
-CMD_RECV_FILE = 'this is a command to core_/!_recv a file'
-CMD_CLOSING_HEADER = 'this is a command to core_/!_close connection'
-CMD_TEXT = "this is a message"
-CMD_RECV_DIR = 'this is a command to core_/!_recv dir'
+CMD_RECV_FILE_AGAIN = b'recv file again '
+CMD_RECV_FILE = b'receive file    '
+CMD_CLOSING_HEADER = b'close connection'
+CMD_TEXT = b'this is message '
+CMD_RECV_DIR = b'cmd to recv dir '
 
+CMD_VERIFY_HEADER = b'verify header   '
+VERIFY_OK = b'verify okay     '
+CMD_FILESOCKET_HANDSHAKE = b'file sock open  '
+CMD_FILE_SUCCESS = b'file_success    '
+TEXT_SUCCESS_HEADER = b'str success     '
 
-CMD_VERIFY_HEADER = b'this is a verification header'
-VERIFY_OK = b'verification okay'
-CMD_FILESOCKET_HANDSHAKE = b'this is a command to core_/!_file socket open'
-CMD_FILE_SUCCESS = b'file_success'
-TEXT_SUCCESS_HEADER = b'str recv success'
+REQ_FOR_LIST = b'list of users  '
+I_AM_ACTIVE = b'com notify user'
+SERVER_PING = b' server_/!_ping'
+SOCKET_OK = b'socket_ok      '
 
-REQ_FOR_LIST = b'this is a request to core_/!_list of users'
-I_AM_ACTIVE = b'this is a command to core_/!_notify user'
-SERVER_PING = b'this is a command from server_/!_ping'
-SOCKET_OK = b"socket_ok"
-
-
-SERVER_OK = b'connection accepted'
-REDIRECT = b'redirect'
-LIST_SYNC = b'sync list'
-ACTIVE_PING = b"why_s ur face like that"
-
-HANDLE_MESSAGE_HEADER = 'this is a message'
-HANDLE_END = 'end program'
-HANDLE_COMMAND = 'this is a command'
-HANDLE_FILE_HEADER = 'this is a file'
-HANDLE_CONNECT_USER = 'connect user'
-HANDLE_RELOAD = 'this is command to core_/!_reload'
-HANDLE_DIR_HEADER = 'this is a dir'
+SERVER_OK = b'connect accepted'
+REDIRECT = b'redirect        '
+LIST_SYNC = b'sync list       '
+ACTIVE_PING = b"face like that  "
+HANDLE_MESSAGE_HEADER = 'this is  message'
+HANDLE_END = 'end program     '
+HANDLE_COMMAND = 'this is command '
+HANDLE_FILE_HEADER = 'this is file    '
+HANDLE_CONNECT_USER = 'connect user    '
+HANDLE_RELOAD = 'this is reload  '
+HANDLE_DIR_HEADER = 'this is a dir   '
 HANDLE_POP_DIR_SELECTOR = 'pop dir selector'
-HANDLE_PUSH_FILE_SELECTOR = 'push file selector'
-HANDLE_OPEN_FILE = 'open file'
-HANDLE_SYNC_USERS = 'sync users'
-HANDLE_VERIFICATION = 'handle verification'
+HANDLE_OPEN_FILE = 'open file       '
+HANDLE_SYNC_USERS = 'sync users      '
+HANDLE_VERIFICATION = 'han verification'
