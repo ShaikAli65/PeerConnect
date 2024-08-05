@@ -90,7 +90,7 @@ def get_v4():
 def get_v6():
     if const.WINDOWS:
         back_up = "::1"
-        for sock_tuple in socket.getaddrinfo("", None, socket.AF_INET6, proto=const.PROTOCOL, flags=socket.AI_PASSIVE):
+        for sock_tuple in socket.getaddrinfo("", None, socket.AF_INET6):
             ip, _, _, _ = sock_tuple[4]
             if ipaddress.ip_address(ip).is_link_local:
                 back_up = ip
