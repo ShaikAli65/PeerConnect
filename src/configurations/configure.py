@@ -4,6 +4,7 @@ import socket
 import socket as soc
 
 import src.avails.constants as const
+import src.avails.connect as connect
 from src.managers.profilemanager import ProfileManager
 
 
@@ -22,8 +23,9 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
     const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
     const.PORT_FILE = config_map.getint('NERD_OPTIONS', 'file_port')
-    const.PROTOCOL = soc.SOCK_STREAM if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else soc.SOCK_DGRAM
+    const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
     const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
+    const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
     if const.IP_VERSION == soc.AF_INET6 and not socket.has_ipv6:
         const.IP_VERSION = soc.AF_INET
         print(
@@ -35,11 +37,13 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
 def print_constants():
     line = "{:<15} {:<10}"
+
     with const.LOCK_PRINT:
+        print('GLOBAL VERSION',const.VERSIONS['GLOBAL'])
         print('\n:configuration choices=================================\n'
               f'{line.format("USERNAME", const.USERNAME)}\n'
               f'{line.format("THIS_IP", const.THIS_IP)}\n'
-              f'{line.format("PROTOCOL", "SOCK_STREAM" if const.PROTOCOL == 1 else "SOCK_DGRAM")}\n'
+              f'{line.format("PROTOCOL", str(const.PROTOCOL))}\n'
               f'{line.format("IP_VERSION", 6 if const.IP_VERSION == 23 else 4)}\n'
               f'{line.format("SERVER_IP", const.SERVER_IP)}\n'
               f'{line.format("PORT_THIS", const.PORT_THIS)}\n'
