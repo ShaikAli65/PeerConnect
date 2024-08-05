@@ -1,7 +1,5 @@
 import asyncio
 import queue
-import socket
-import struct
 import time
 
 from .peers import peer_list
@@ -40,7 +38,9 @@ async def get_list_from(initiate_socket):
 
 async def list_error_handler():
     req_peer = next(peer_list)
+    # try:
     conn = await connect.connect_to_peer(_peer_obj=req_peer, to_which=connect.REQ_URI)
+    # except OSError:
     with conn:
         request = SimplePeerText(refer_sock=conn, data=const.REQ_FOR_LIST)
         await request.send()
@@ -49,7 +49,11 @@ async def list_error_handler():
 
 
 async def list_from_forward_control(list_owner: RemotePeer):
-    with connect.connect_to_peer(list_owner, to_which=connect.REQ_URI) as list_connection_socket:
+    # try:
+    conn = await connect.connect_to_peer(_peer_obj=list_owner, to_which=connect.REQ_URI)
+    # except:
+
+    with conn as list_connection_socket:
         await SimplePeerText(list_connection_socket, const.REQ_FOR_LIST).send()
         await get_list_from(list_connection_socket)
 
@@ -80,7 +84,7 @@ async def setup_server_connection():
     conn = None
     for i, timeout in enumerate(use.get_timeouts(0.1)):
         try:
-            conn = await connect.create_connection(address, timeout=const.SERVER_TIMEOUT)
+            conn = await connect.create_connection_async(address, timeout=const.SERVER_TIMEOUT)
             break
         except asyncio.TimeoutError:
             what = f" {f'retrying... {i}'}"
@@ -101,7 +105,10 @@ async def setup_server_connection():
 async def send_quit_status_to_server():
     try:
         this_object.status = 0
-        sock = await connect.create_connection((const.SERVER_IP, const.PORT_SERVER), timeout=const.SERVER_TIMEOUT)
+        sock = await connect.create_connection_async(
+            (const.SERVER_IP, const.PORT_SERVER),
+            timeout=const.SERVER_TIMEOUT
+        )
         with sock:
             this_object.send_serialized(sock)
         use.echo_print("::sent leaving status to server")
