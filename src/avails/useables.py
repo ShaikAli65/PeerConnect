@@ -1,33 +1,14 @@
 # from src.avails.waiters import *
 import functools
 import inspect
-import itertools
 import os
 import platform
+import select
 import subprocess
 from datetime import datetime
 from sys import _getframe  # noqa
 
 from . import const
-
-_CO_NESTED = inspect.CO_NESTED
-_CO_FROM_COROUTINE = inspect.CO_COROUTINE | inspect.CO_ITERABLE_COROUTINE | inspect.CO_ASYNC_GENERATOR
-
-
-# this uses code from curio package
-def from_coroutine(level=2, _cache={}):  # noqa
-    f_code = _getframe(level).f_code
-    if f_code in _cache:
-        return _cache[f_code]
-    if f_code.co_flags & _CO_FROM_COROUTINE:
-        _cache[f_code] = True
-        return True
-    else:
-        if f_code.co_flags & _CO_NESTED and f_code.co_name[0] == '<':
-            return from_coroutine(level + 2)
-        else:
-            _cache[f_code] = False
-            return False
 
 
 def func_str(func_name):
@@ -49,7 +30,7 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
 
     Example:
     >>> list(get_timeouts())
-    [0.0001, 0.0002, 0.0004, 0.0008, 0.0016]
+    [0.001, 0.002, 0.004, 0.008, 0.016]
 
     >>> list(get_timeouts(initial=1, factor=3, max_retries=4, max_value=10))
     [1, 3, 9, 10]
@@ -84,6 +65,89 @@ def open_file(content):
     else:
         subprocess.run(["xdg-open", content])
     return None
+
+
+def wait_for_sock_read(sock, actuator, timeout):
+    reads,_,_ = select.select([sock, actuator], [], [], timeout)
+
+    if actuator.to_stop:
+        return (actuator,)
+
+    return reads
+
+
+def wait_for_sock_write(sock, actuator, timeout):
+    _,writes,_ = select.select([actuator,], [sock,], [], timeout)
+
+    if actuator.to_stop:
+        return [actuator,]
+
+    return writes
+
+
+_CO_NESTED = inspect.CO_NESTED
+_CO_FROM_COROUTINE = inspect.CO_COROUTINE | inspect.CO_ITERABLE_COROUTINE | inspect.CO_ASYNC_GENERATOR
+
+def from_coroutine(level=2, _cache={}):  # noqa
+    f_code = _getframe(level).f_code
+    if f_code in _cache:
+        return _cache[f_code]
+    if f_code.co_flags & _CO_FROM_COROUTINE:
+        _cache[f_code] = True
+        return True
+    else:
+        if f_code.co_flags & _CO_NESTED and f_code.co_name[0] == '<':
+            return from_coroutine(level + 2)
+        else:
+            _cache[f_code] = False
+            return False
+
+
+def awaitable(syncfunc):
+    """
+    # this uses code from curio package
+
+    Author : Dabeaz
+    Repo : https://github.com/dabeaz/curio
+
+    Decorator that allows an asynchronous function to be paired with a
+    synchronous function in a single function call.  The selection of
+    which function executes depends on the calling context.  For example:
+
+        def spam(sock, maxbytes):                       (A)
+            return sock.recv(maxbytes)
+
+        @awaitable(spam)                                (B)
+        async def spam(sock, maxbytes):
+            return await sock.recv(maxbytes)
+
+    In later code, you could use the spam() function in either a synchronous
+    or asynchronous context.  For example:
+
+        def foo():
+            ...
+            r = spam(s, 1024)          # Calls synchronous function (A) above
+            ...
+
+        async def bar():
+            ...
+            r = await spam(s, 1024)    # Calls async function (B) above
+            ...
+
+    """
+    def decorate(asyncfunc):
+        @functools.wraps(asyncfunc)
+        def wrapper(*args, **kwargs):
+            if from_coroutine():
+                return asyncfunc(*args, **kwargs)
+            else:
+                return syncfunc(*args, **kwargs)
+        wrapper._syncfunc = syncfunc
+        wrapper._asyncfunc = asyncfunc
+        wrapper._awaitable = True
+        wrapper.__doc__ = syncfunc.__doc__ or asyncfunc.__doc__
+        return wrapper
+    return decorate
 
 
 class NotInUse:
