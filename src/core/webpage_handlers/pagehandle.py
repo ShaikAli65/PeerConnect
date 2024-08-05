@@ -1,24 +1,14 @@
-import threading
-import time
-import json
 import asyncio
 import importlib
-import struct
-import select
-import selectors
-import os
-import contextvars
-from collections.abc import MutableSet
-from typing import Union, Dict, Tuple, Optional
+import threading
+from typing import Optional
+
 import websockets
-from src.avails import connect
-from src.avails.remotepeer import RemotePeer
-from src.avails.textobject import DataWeaver
-from src.core import peer_list
-import src.avails.useables as use
 
 import src.avails.constants as const
-from logs import *
+import src.avails.useables as use
+from src.avails.remotepeer import RemotePeer
+from src.avails.wire import DataWeaver
 
 main_loop = asyncio.new_event_loop()
 safe_end = threading.Event()
@@ -76,7 +66,7 @@ def end():
         main_loop.stop()
         main_loop.close()
     safe_end.set()
-    # main_loop.call_soon_threadsafe(main_loop.stop)
+    safe_end.clear()
 
 
 def check_closing():
