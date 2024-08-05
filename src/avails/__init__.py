@@ -1,7 +1,9 @@
 import src.avails.constants as const
-from .remotepeer import RemotePeer
-from .textobject import *
 import src.avails.connect as connect
 import src.avails.useables as use
-from .container import PeerDict, FileDict, SafeSet, SocketCache, SocketStore
 
+from .remotepeer import RemotePeer
+from .container import *
+from .waiters import *
+from .fileobject import *
+from .wire import *
