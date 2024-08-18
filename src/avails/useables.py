@@ -8,14 +8,14 @@ import subprocess
 from datetime import datetime
 from sys import _getframe  # noqa
 
-from . import const
+from .constants import MAX_RETIRES, LOCK_PRINT
 
 
 def func_str(func_name):
     return f"{func_name.__name__}()\\{os.path.relpath(func_name.__code__.co_filename)}"
 
 
-def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
+def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0):
     """
     Generate exponential backoff timeout values.
 
@@ -48,7 +48,7 @@ def echo_print(*args, **kwargs) -> None:
     Args:
         *args: The arguments to print.
     """
-    with const.LOCK_PRINT:
+    with LOCK_PRINT:
         print(*args, **kwargs)
 
 

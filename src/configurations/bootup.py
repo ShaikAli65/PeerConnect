@@ -7,13 +7,14 @@ import subprocess
 import urllib.request
 import webbrowser
 
-# from logs import error_log
-
-import src.avails.connect as connect
-import src.avails.constants as const
-from src.avails.useables import NotInUse
-from src.configurations.configure import set_constants
-from src.core.eventloop import set_event_loop
+from src.avails import (
+    RemotePeer,
+    const,
+    connect,
+    use,
+)
+from ..configurations.configure import set_constants
+from ..core.peers import set_current_remote_peer_object
 
 
 def initiate_bootup():
@@ -32,7 +33,8 @@ def initiate_bootup():
                         else socket.AF_INET)
     # print(f"{const.THIS_IP=}")
     validate_ports()
-    set_event_loop()
+    from src.configurations import configure
+    configure.print_constants()
 
 
 def get_ip() -> tuple[str, int]:
@@ -103,8 +105,6 @@ def get_v6():
 
 def get_v6_from_shell():
     try:
-        import subprocess
-
         result = subprocess.run(['ip', '-6', 'addr', 'show'], capture_output=True, text=True)
         output_lines = result.stdout.split('\n')
 
@@ -184,7 +184,7 @@ def validate_ports() -> None:
     return None
 
 
-@NotInUse
+@use.NotInUse
 def retrace_browser_path():
     if const.WINDOWS:
         import winreg

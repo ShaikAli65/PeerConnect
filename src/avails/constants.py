@@ -3,7 +3,6 @@ from sys import platform
 from os import path
 from threading import Lock
 
-# from src.avails.connect import TCPProtocol
 
 CLEAR_LOGS = 1
 USERNAME = 'admin'
@@ -21,6 +20,7 @@ FORMAT = 'utf-8'
 PORT_THIS = 9000
 PORT_SERVER = 9001
 PORT_REQ = 9002
+PORT_NETWORK = 9003
 PORT_PAGE = 12260
 PORT_FILE = 45210
 PORT_PAGE_SERVE = 40000
@@ -33,7 +33,16 @@ PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
 
 IP_VERSION = socket.AF_INET
-PROTOCOL = None  # TCPProtocol
+
+debug = False
+
+if debug:
+    from src.avails.connect import TCPProtocol
+    PROTOCOL = TCPProtocol
+else:
+    PROTOCOL = None
+
+
 LOCK_PRINT = Lock()
 
 MAX_LOAD = 5

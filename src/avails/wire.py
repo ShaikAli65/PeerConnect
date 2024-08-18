@@ -153,7 +153,7 @@ class DataWeaver:
     }
     __slots__ = 'data_lock', '__data'
 
-    def __init__(self, *, header: str = None, content: Union[str, dict, list, tuple] = None,
+    def __init__(self, *, header: Union[str, int] = None, content: Union[str, dict, list, tuple] = None,
                  _id: Union[int, str, tuple] = None,
                  serial_data: str | bytes = None):
         self.data_lock = _threading.Lock()

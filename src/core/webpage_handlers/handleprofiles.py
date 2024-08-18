@@ -1,5 +1,4 @@
-from src.avails import use
-from src.avails.textobject import DataWeaver
+from src.avails import use, DataWeaver
 from src.configurations import configure
 
 from src.managers import ProfileManager, all_profiles, get_profile_from_profile_file_name

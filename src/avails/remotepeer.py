@@ -43,7 +43,10 @@ class RemotePeer:
     @property
     def id_encoded(self) -> bytes:
         return self.id.encode(const.FORMAT)
-
+    # def set_values(self, username, ip, port=None, report=None, status=None):
+    #     self.username = username
+    #     self.ip = ip
+    #     self.
     def get_file_id(self):
         return next(self._file_id)
 

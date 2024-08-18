@@ -9,7 +9,6 @@ from src.avails import const, use
 
 
 class ProfileManager:
-
     """
     This class used to contain a profile instance of profiles
     it is recommended to discard this class's object if an error is raised somewhere in using
@@ -42,7 +41,8 @@ class ProfileManager:
                 'USER': {
                     'name': _
                 }
-            }: return profile_data
+            }:
+                return profile_data
             case _:
                 self.__raise_error()
 
@@ -115,7 +115,8 @@ class ProfileManager:
 
     @classmethod
     def delete_profile(cls, profile_file_name):
-        profile_path = Path(const.PATH_PROFILES, profile_file_name)  # if not profile_username.endswith('.ini') else profile_username)
+        profile_path = Path(const.PATH_PROFILES,
+                            profile_file_name)  # if not profile_username.endswith('.ini') else profile_username)
         if profile_path.is_file():
             try:
                 profile_path.unlink(True)
@@ -184,3 +185,16 @@ def get_profile_from_profile_file_name(profile_file_name) -> Union[ProfileManage
     :param profile_file_name:
     """
     return next((profile for profile in ProfileManager.PROFILE_LIST if profile.file_name == profile_file_name), None)
+
+
+_current_profile = None
+
+
+def set_current_profile(profile):
+    global _current_profile
+    _current_profile = profile
+
+
+def get_current_profile():
+    global _current_profile
+    return _current_profile

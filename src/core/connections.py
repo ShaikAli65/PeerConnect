@@ -1,26 +1,22 @@
-import threading
-import socket
-import time
-import json
 import asyncio
-import os
+import socket
 import textwrap
-
+import threading
 from collections import defaultdict
 from types import ModuleType
+from typing import Optional
 
-from src.avails import DataWeaver, SimplePeerText, RemotePeer
+from src.avails import SimplePeerText, RemotePeer
+from src.avails import SocketStore
 from src.avails import connect
-from src.core import peer_list
+from src.avails import const, use, WireData
+from . import connected_peers
+from . import get_this_remote_peer
+
+
 # from logging import error_log
 # from logging import activity_log
 # from logging import server_log
-
-from src.avails import SocketStore
-from . import connected_peers
-from typing import Union, Dict, Tuple, Optional
-from src.avails import const, use, WireData
-from . import this_object
 
 
 def initiate_connections():
@@ -161,28 +157,26 @@ class Connector:
     _current_connected = connect.Socket()
 
     @classmethod
-    async def connect_peer(cls, peer_obj: RemotePeer):
-        # if _current_connected.id == peer_obj.id:
+    async def connect_peer(cls, peer_obj: RemotePeer) -> connect.Socket:
+        use.echo_print('a connection request made to :', peer_obj.uri)  # debug
         if sock := connected_peers.is_connected(peer_obj.id):
             pr_str = f"cache hit !{textwrap.fill(peer_obj.username, width=10)} and socket is connected"
             use.echo_print(pr_str, sock.getpeername())  # debug
             cls._current_connected = sock
             return sock
         del sock
-        try:
-            peer_sock = await cls._add_connection(peer_obj)
-            await cls._verifier(peer_sock)
-            print(
-                "cache miss --current :",
-                textwrap.fill(peer_obj.username, width=10),
-                peer_sock.getpeername()[:2],
-                peer_sock.getsockname()[:2]
-            )  # debug
-            connected_peers.add_peer_sock(peer_obj.id, peer_sock)
-            cls._current_connected = peer_sock
-            return peer_sock
-        except (socket.error, ConnectionResetError):
-            use.echo_print(f"handle signal to page, that we can't reach {peer_obj.username}, or he is offline")
+        peer_sock = await cls._add_connection(peer_obj)
+        await cls._verifier(peer_sock)
+        use.echo_print(
+            "cache miss --current :",
+            textwrap.fill(peer_obj.username, width=10),
+            peer_sock.getpeername()[:2],
+            peer_sock.getsockname()[:2]
+        )  # debug
+        connected_peers.add_peer_sock(peer_obj.id, peer_sock)
+        cls._current_connected = peer_sock
+        # use.echo_print(f"handle signal to page, that we can't reach {peer_obj.username}, or he is offline")
+        return peer_sock
 
     @classmethod
     async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
@@ -196,12 +190,12 @@ class Connector:
         data = SimplePeerText(connection_socket, const.CMD_VERIFY_HEADER)
         await data.send()
 
-        print("sent header")  # debug
-        data = SimplePeerText(connection_socket, this_object.id_encoded)
+        use.echo_print("sent header")  # debug
+        data = SimplePeerText(connection_socket, get_this_remote_peer().id_encoded)
         await data.send()
 
         # DataWeaver(header=const.CMD_VERIFY_HEADER,content="",_id=const.THIS_OBJECT.id).send(connection_socket)
-        print("Sent verification to ", connection_socket.getpeername())  # debug
+        use.echo_print("Sent verification to ", connection_socket.getpeername())  # debug
         # except json.JSONDecoder:
         #     return False
         return True

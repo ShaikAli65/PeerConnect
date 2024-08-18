@@ -1,7 +1,6 @@
 import configparser
 import os
 import socket
-import socket as soc
 
 import src.avails.constants as const
 import src.avails.connect as connect
@@ -24,14 +23,13 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
     const.PORT_FILE = config_map.getint('NERD_OPTIONS', 'file_port')
     const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
-    const.IP_VERSION = soc.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else soc.AF_INET
+    const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
     const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
-    if const.IP_VERSION == soc.AF_INET6 and not socket.has_ipv6:
-        const.IP_VERSION = soc.AF_INET
+    if const.IP_VERSION == socket.AF_INET6 and not socket.has_ipv6:
+        const.IP_VERSION = socket.AF_INET
         print(
             f"Error reading default_config.ini from set_constants() in {set_constants.__name__}()/{set_constants.__code__.co_filename}")
         return False
-
     return True
 
 

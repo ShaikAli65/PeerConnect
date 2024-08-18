@@ -282,7 +282,7 @@ class SocketCache:
         self.socket_cache.clear()
 
     def __close_all_socks(self):
-        for _, sock in self.socket_cache:
+        for sock in self.socket_cache.values():
             try:
                 sock.close()
             except Exception:  # noqa

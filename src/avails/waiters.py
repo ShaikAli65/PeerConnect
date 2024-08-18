@@ -2,8 +2,8 @@ import os
 import socket
 
 from io import BufferedReader, BufferedWriter
-from platform import platform
 from typing import BinaryIO
+from . import const
 
 
 def _waker_flag_windows():
@@ -18,8 +18,8 @@ def _waker_flag_windows():
     :return:pair of `BufferedReader | BinaryIO, a function which writes to reader` on calling
     """
     w_sock, r_sock = socket.socketpair()
-    w_sock.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,4)
-    r_sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,4)
+    w_sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 0x2)
+    r_sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 0x2)
     read = r_sock.makefile('rb')
     write = w_sock.makefile('wb')
     # write = partial(_write, w_sock.makefile('wb'))
@@ -47,7 +47,7 @@ def _waker_flag_linux():
 
 
 # setting these dynamically at importing stage to reduce condition checking inside functions
-if platform == "win32":
+if const.WINDOWS:
     _waker_flag = _waker_flag_windows
 else:
     _waker_flag = _waker_flag_linux
@@ -69,7 +69,7 @@ class _ThreadActuator:
         thread: threading.Thread
 
     """
-    __slots__ = 'control_flag', 'reader', 'select_waker',
+    __slots__ = 'control_flag', 'reader', 'waker',
 
     __annotations__ = {
         'control_flag': bool,
@@ -79,11 +79,11 @@ class _ThreadActuator:
 
     def __init__(self):
         self.control_flag = False
-        self.reader, self.select_waker = _waker_flag()
+        self.reader, self.waker = _waker_flag()
 
-    def _write(self):
-        self.select_waker.write(b'x')
-        self.select_waker.flush()
+    def wake(self):
+        self.waker.write(b'\x00')
+        self.waker.flush()
 
     def flip(self):
         """
@@ -97,13 +97,13 @@ class _ThreadActuator:
     def to_stop(self):
         return self.control_flag
 
-    def _clear_reader(self):
+    def clear_reader(self):
         self.reader.read(1)
 
     def signal_stopping(self):
         self.flip()
-        self._write()
-        self._clear_reader()
+        self.wake()
+        self.clear_reader()
 
     def fileno(self):
         return self.reader.fileno()

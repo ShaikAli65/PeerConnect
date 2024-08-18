@@ -3,7 +3,7 @@ import os
 from PyQt5.QtCore import Qt as _Qt
 from PyQt5.QtWidgets import QApplication as _QApplication, QFileDialog as _QFileDialog
 
-import constants as const
+import src.avails.constants as const
 
 
 class Dialog:

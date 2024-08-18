@@ -17,7 +17,7 @@ class Socket(_socket.socket):
          This must be set using the set_loop method before any asynchronous methods are called.
     """
 
-    __loop: _asyncio.AbstractEventLoop = None
+    __loop: Optional[_asyncio.AbstractEventLoop] = None
 
     # def __init__(self, family: _socket.AddressFamily | int = -1, _type: _socket.SocketKind | int = -1, proto: int = -1, fileno: int | None = None) -> None:
     #     super().__init__(family, _type, proto, fileno)
@@ -30,6 +30,9 @@ class Socket(_socket.socket):
             loop (asyncio.AbstractEventLoop): The event loop instance.
         """
         self.__loop = loop
+
+    def remove_loop(self):
+        self.__loop = None
 
     def accept(self) -> tuple[Self, tuple[str, int]]:
         """
@@ -79,9 +82,9 @@ class Protocol(ABC):
 
     @staticmethod
     @abstractmethod
-    async def create_async_sock(loop: _asyncio.AbstractEventLoop,
-                                family: _socket.AddressFamily,
-                                fileno: int = None):
+    def create_async_sock(loop: _asyncio.AbstractEventLoop,
+                          family: _socket.AddressFamily,
+                          fileno: int = None):
         """Create an asynchronous socket."""
         return NotImplemented
 
@@ -94,17 +97,17 @@ class Protocol(ABC):
 
     @staticmethod
     @abstractmethod
-    async def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
-                                       bind_address,*,
-                                       family: _socket.AddressFamily = _socket.AF_INET,
-                                       backlog: int | None = None,
-                                       fileno: int = None):
+    def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
+                                 bind_address, *,
+                                 family: _socket.AddressFamily = _socket.AF_INET,
+                                 backlog: int | None = None,
+                                 fileno: int = None):
         """Create an asynchronous server socket."""
         return NotImplemented
 
     @staticmethod
     @abstractmethod
-    def create_sync_server_sock(bind_address,*,
+    def create_sync_server_sock(bind_address, *,
                                 family: _socket.AddressFamily = _socket.AF_INET,
                                 backlog: int | None = None,
                                 fileno: int = None):
@@ -123,9 +126,9 @@ class Protocol(ABC):
 class TCPProtocol(Protocol):
 
     @staticmethod
-    async def create_async_sock(loop: _asyncio.AbstractEventLoop,
-                                family: _socket.AddressFamily = _socket.AF_INET,
-                                fileno: Optional[int] = None) -> Socket:
+    def create_async_sock(loop: _asyncio.AbstractEventLoop,
+                          family: _socket.AddressFamily = _socket.AF_INET,
+                          fileno: Optional[int] = None) -> Socket:
         sock = Socket(family, _socket.SOCK_STREAM, -1, fileno)
         sock.setblocking(False)
         sock.set_loop(loop)
@@ -134,14 +137,14 @@ class TCPProtocol(Protocol):
     @staticmethod
     def create_sync_sock(family: _socket.AddressFamily = _socket.AF_INET,
                          fileno: Optional[int] = None):
-        return Socket(family, _socket.SOCK_STREAM, fileno)
+        return Socket(family, _socket.SOCK_STREAM, -1, fileno)
 
     @staticmethod
-    async def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
-                                       bind_address,*,
-                                       family: _socket.AddressFamily = _socket.AF_INET,
-                                       backlog: int | None = None,
-                                       fileno: Optional[int] = None):
+    def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
+                                 bind_address, *,
+                                 family: _socket.AddressFamily = _socket.AF_INET,
+                                 backlog: int | None = None,
+                                 fileno: Optional[int] = None):
         server_sock = Socket(family, _socket.SOCK_STREAM, -1, fileno)
         server_sock.bind(bind_address)
         server_sock.setblocking(False)
@@ -150,7 +153,7 @@ class TCPProtocol(Protocol):
         return server_sock
 
     @staticmethod
-    def create_sync_server_sock(bind_address,*,
+    def create_sync_server_sock(bind_address, *,
                                 family: _socket.AddressFamily = _socket.AF_INET,
                                 backlog: int | None = None,
                                 fileno: Optional[int] = None):
@@ -160,14 +163,14 @@ class TCPProtocol(Protocol):
         return server_sock
 
     @classmethod
-    async def create_connection_async(cls, loop: _asyncio.AbstractEventLoop, address,timeout=None) -> Socket:
+    async def create_connection_async(cls, loop: _asyncio.AbstractEventLoop, address, timeout=None) -> Socket:
         try:
             addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
             addr_family, sock_type, _, _, address = addr_info[0]
         except TypeError as tpe:
             useables.echo_print("something wrong with the given address ", tpe)
             raise
-        sock = await cls.create_async_sock(loop, addr_family)
+        sock = cls.create_async_sock(loop, addr_family)
 
         try:
             if timeout:
@@ -188,9 +191,9 @@ class TCPProtocol(Protocol):
 class UDPProtocol(Protocol):
 
     @staticmethod
-    async def create_async_sock(loop: _asyncio.AbstractEventLoop,
-                                family: _socket.AddressFamily = _socket.AF_INET,
-                                fileno: Optional[int] = None):
+    def create_async_sock(loop: _asyncio.AbstractEventLoop,
+                          family: _socket.AddressFamily = _socket.AF_INET,
+                          fileno: Optional[int] = None):
         sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
         sock.setblocking(False)
         sock.set_loop(loop)
@@ -202,34 +205,34 @@ class UDPProtocol(Protocol):
         return Socket(family, _socket.SOCK_DGRAM, -1, fileno)
 
     @staticmethod
-    async def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
-                                       bind_address,*,
-                                       family: _socket.AddressFamily = _socket.AF_INET,
-                                       backlog: int | None = None,
-                                       fileno: Optional[int] = None):
-        server_sock = Socket(family, _socket.SOCK_DGRAM, -1 , fileno)
+    def create_async_server_sock(loop: _asyncio.AbstractEventLoop,
+                                 bind_address, *,
+                                 family: _socket.AddressFamily = _socket.AF_INET,
+                                 backlog: int | None = None,
+                                 fileno: Optional[int] = None):
+        server_sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
         server_sock.setblocking(False)
         server_sock.set_loop(loop)
         server_sock.bind(bind_address)
-        server_sock.listen(backlog)
+        # server_sock.listen(backlog)
         return server_sock
 
     @staticmethod
-    def create_sync_server_sock(bind_address,*,
+    def create_sync_server_sock(bind_address, *,
                                 family: _socket.AddressFamily = _socket.AF_INET,
                                 backlog: int | None = None,
                                 fileno: Optional[int] = None):
         server_sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
         server_sock.bind(bind_address)
-        server_sock.listen(backlog)
+        # server_sock.listen(backlog)
         return server_sock
 
     @classmethod
-    async def create_connection_async(cls, loop: _asyncio.AbstractEventLoop, address,timeout=None) -> Socket:
+    async def create_connection_async(cls, loop: _asyncio.AbstractEventLoop, address, timeout=None) -> Socket:
         addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
         addr_family, sock_type, _, _, address = addr_info[0]
 
-        sock = await cls.create_async_sock(loop, addr_family)
+        sock = cls.create_async_sock(loop, addr_family)
         sock.connect(address)
         return sock
 
@@ -282,7 +285,7 @@ def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0
         try:
             return create_connection_sync(address, addr_family=sock_family, sock_type=sock_type, timeout=timeout)
         except (OSError, _socket.error) as exp:
-            useables.echo_print("got ", exp, "retry count", retry_count)
+            useables.echo_print("got exception at connect_to_peer", exp, "retry count", retry_count)
             retry_count += 1
             if retry_count >= retries:
                 raise
@@ -312,6 +315,7 @@ async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, tim
     """
 
     address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
+    address = address[:2]
     create_connection = const.PROTOCOL.create_connection_async
     loop = _asyncio.get_running_loop()
     retry_count = 0

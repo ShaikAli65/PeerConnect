@@ -1,5 +1,6 @@
 import functools
 import itertools
+import multiprocessing
 import os
 import pickle
 import socket
@@ -29,6 +30,20 @@ def stringify_size(size):
     return f"{size:.2f} {sizes[index]}"
 
 
+def shorten_path(path, max_length):
+    if len(path) <= max_length:
+        return path
+    parts = path.split(os.sep)
+    if len(parts) <= 2:
+        return path
+    short_path = f"{parts[0]}{os.sep}...{os.sep}{parts[-1]}"
+    for i in range(1, len(parts) - 1):
+        short_path = f"{os.sep.join(parts[:i + 1])}{os.sep}...{os.sep}{os.sep.join(parts[-1 - i:])}"
+        if len(short_path) <= max_length:
+            return short_path
+    return f"{short_path[:max_length - 3]}..."
+
+
 class _FileItem:
     __annotations__ = {
         'name': str,
@@ -49,17 +64,20 @@ class _FileItem:
     def __str__(self):
         size_str = stringify_size(self.size)
         name_str = f"...{self.name[-20:]}" if len(self.name) > 20 else self.name
-
-        str_str = f"_FileItem({name_str}, {size_str}, {self.path[:10]}{'...' if len(self.path) > 10 else ''})"
+        str_str = f"_FileItem({name_str}, {size_str}, {shorten_path(os.path.split(self.path)[0],20)}"
         # str_str = f"_FileItem({name_str}, {size_str}, {self.path})"
         return str_str
         # return f'{self.name}'
 
     def serialize(self, receiver_sock):
+        b = receiver_sock.getblocking()
         obj = pickle.dumps(self)
         size = struct.pack('!I', len(obj))
+        # :todo guard this send in _FileItem
+        receiver_sock.setblocking(True)
         receiver_sock.send(size)
         receiver_sock.send(obj)
+        receiver_sock.setblocking(b)
 
     @classmethod
     def deserialize(cls, sender_sock) -> Self:
@@ -132,16 +150,17 @@ class PeerFilePool:
 
     def send_file_loop(self, current_iter, receiver_sock):
         for file in current_iter:
-            if self.to_stop or self.__send_file(receiver_sock, file=file) is False:
+            if (not self.to_stop or self.__send_file(receiver_sock, file=file)) is False:
                 return False
             next(self.current_file)
         return True
 
     def __send_file(self, receiver_sock, file: _FileItem):
+        print('sending file data', f"[PID:{os.getpid()}]")  # debug
         file.serialize(receiver_sock)
         send_progress = tqdm.tqdm(
             range(file.size),
-            f"::sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
+            f"[PID:{multiprocessing.current_process().ident}] sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
             unit="B",
             unit_scale=True,
             unit_divisor=1024
@@ -154,10 +173,10 @@ class PeerFilePool:
     def __send_actual_file(self, receiver_sock, file, send_progress):
         sock_send = receiver_sock.send
         send_progress.update(file.seeked)
-        back_off = use.get_timeouts(max_retries=self.retries)
+        # back_off = use.get_timeouts(max_retries=self.retries)
         chunk_size = self.calculate_chunk_size(file.size)
-        wait_sock_write = functools.partial(use.wait_for_sock_write, receiver_sock, self.to_stop)
-
+        wait_sock_write = functools.partial(use.wait_for_sock_write, receiver_sock, self.to_stop, None)
+        print('sending file item', file)  # debug
         with open(file.path, 'rb') as f:
             f_read = f.read
             f.seek(file.seeked)
@@ -168,16 +187,17 @@ class PeerFilePool:
                     break
                 try:
                     sock_send(chunk)  # possible: connection reset err
-                except BlockingIOError:
-                    try:
-                        wait_sock_write(next(back_off))
-                        continue
-                    except StopIteration:
-                        file.seeked = seek  # can be ignored mostly for now
-                        return False
+                except BlockingIOError as be:
+                    # try:
+                    # print('got ', be)
+                    wait_sock_write()
+                    continue
+                    # except StopIteration:
+                    #     file.seeked = seek  # can be ignored mostly for now
+                    #     return False
                 except ConnectionResetError:
                     break
-                send_progress.update(len(chunk))
+                # send_progress.update(len(chunk))
                 seek += len(chunk)
 
         file.seeked = seek  # can be ignored mostly for now
@@ -244,7 +264,6 @@ class PeerFilePool:
                             continue
                         except StopIteration:
                             return False
-
                     if not data:
                         break
                     f_write(data)  # possible: No Space Left
@@ -267,7 +286,7 @@ class PeerFilePool:
             print("SOMETHING WRONG IN RECEIVING FILE SEEK", reads)
             return
         start_file.seeked = struct.unpack('!Q', receiver_sock.recv(8))[0]
-        progress = tqdm.tqdm(range(start_file.size), f"::sending {start_file.name[:20]} ... ", unit="B",
+        progress = tqdm.tqdm(range(start_file.size), f"[PID:{multiprocessing.current_process().ident}]sending {start_file.name[:20]}... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
         self.__send_actual_file(receiver_sock, start_file, progress)
         progress.close()
@@ -280,7 +299,7 @@ class PeerFilePool:
         # -> ----------------------
         start_file = self.current_file
         sender_sock.send(start_file.seeked)
-        progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]} ... ", unit="B",
+        progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]}... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
         what = self.__recv_actual_file(sender_sock, start_file, progress)
         if not what:

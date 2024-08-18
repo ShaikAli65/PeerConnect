@@ -7,6 +7,8 @@ import struct
 from pathlib import Path
 import multiprocessing
 from typing import Literal
+import enum
+
 
 # from typing import
 
@@ -23,9 +25,8 @@ from src.avails import (
     use, RemotePeer,
 )
 
-from src.core import peer_list, connections, this_object
-from . import submit, FILE, SEND_COMMAND, RECEIVE_COMMAND
-
+from src.core import peer_list, connections, get_this_remote_peer
+from . import processmanager
 
 all_files = FileDict()
 
@@ -50,18 +51,22 @@ def get_id_for_file(peer_obj: RemotePeer):
     return peer_obj.get_file_id()
 
 
-class FileSender:
-    version = const.VERSIONS['FO']
+class STATE(enum.Enum):
     PREPARING = 1
     CONNECTING = 2
     ABORTING = 3
     SENDING = 4
     COMPLETED = 5
+    RECEIVING = 6
+
+
+class FileSender:
+    version = const.VERSIONS['FO']
 
     def __init__(self, file_list: list[str | Path]):
-        self.state = self.PREPARING
+        self.state = STATE.PREPARING
         self.file_list = [FileItem(os.path.getsize(x), x, seeked=0) for x in file_list]
-        self.process_handle = None
+        self.file_handle = None
 
     async def send_files(self, peer_id):
 
@@ -70,30 +75,40 @@ class FileSender:
         server_sock, addr = self._prepare_socket()
         tell_header = self._prepare_header(addr, file_id)
 
-        self.state = self.CONNECTING
+        use.echo_print('changing state to connection')  # debug
+        self.state = STATE.CONNECTING
 
         conn_sock = await connections.Connector.connect_peer(peer_obj)
         await conn_sock.asendall(tell_header)
-        conn_sock = await server_sock.aaccept()
+        use.echo_print('sent file header')  # debug
+        use.echo_print('waiting for connection', addr)  # debug
+        conn_sock, addr = await server_sock.aaccept()
+        server_sock.close()
+        del server_sock
+        use.echo_print('got connection', addr)  # debug
+        # conn_sock.set_loop(asyncio.get_running_loop())
 
-        self.state = self.SENDING
-        self.process_handle, result = submit(
+        use.echo_print('changing state to sending')  # debug
+        self.state = STATE.SENDING
+        # :todo: improve this making it a task taking longer time
+        self.file_handle, result = processmanager.submit(
             asyncio.get_running_loop(),
-            FILE,
+            processmanager.FILE,
             self.file_list,
             file_id,
             conn_sock,
-            SEND_COMMAND
+            processmanager.SEND_COMMAND,
         )
 
         result = await result
-        self.state = self.COMPLETED
+        self.state = STATE.COMPLETED
+        print('completed sending', result)
         return result
 
     def _prepare_header(self, addr, file_id):
         data = WireData(
             header=const.CMD_RECV_FILE,
-            _id=this_object.id_encoded,
+            _id=get_this_remote_peer().id_encoded,
             version=self.version,
             groups=len(self.file_list),
             file_id=file_id,
@@ -103,11 +118,12 @@ class FileSender:
         return data_size + data
 
     @staticmethod
-    def _prepare_socket():
+    def _prepare_socket() -> tuple[connect.Socket, tuple[str, int]]:
         port = connect.get_free_port()
-        main_sock = const.PROTOCOL.create_sync_sock(const.IP_VERSION)
-        addr = (this_object.ip, port)
+        main_sock = const.PROTOCOL.create_async_sock(asyncio.get_running_loop(), const.IP_VERSION)
+        addr = (get_this_remote_peer().ip, port)  # :todo change this
         main_sock.bind(addr)
+        main_sock.listen(2)
         return main_sock, addr
 
     async def status(self):
@@ -119,22 +135,35 @@ class FileSender:
 
 
 class FileReceiver:
-    PREPARING = 1
-    CONNECTING = 2
-    SENDING = 3
-    COMPLETED = 4
 
     def __init__(self, data:WireData):
-        self.state = self.PREPARING
+        self.state = STATE.PREPARING
         self.peer_id = data.id
         self.group_count = data['groups']
         self.addr = data['addr']
+        self.file_id = data['file_id']
+        self.file_handle = None
+        self.result = None
 
     async def recv_file(self):
-        self.state = self.CONNECTING
-        sock = await self.prepare_connections()
-        # sock.
-        ...
+        self.state = STATE.CONNECTING
+        conn_sock = await self._prepare_connections()
+        self.file_handle, result = processmanager.submit(
+            asyncio.get_running_loop(),
+            processmanager.FILE,
+            None,
+            self.file_id,
+            conn_sock,
+            processmanager.RECEIVE_COMMAND,
+        )
 
-    async def prepare_connections(self):
+        self.state = STATE.RECEIVING
+        self.result = await result
+        self.state = STATE.COMPLETED
+        use.echo_print('completed receiving')
+
+    async def _prepare_connections(self, ):
         return await connect.create_connection_async(self.addr)
+
+
+__all__ = ['FileSender', 'FileReceiver', 'get_id_for_file', 'open_file_selector', 'open_dir_selector', 'all_files']

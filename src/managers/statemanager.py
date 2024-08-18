@@ -41,8 +41,8 @@ class State:
     async def enter_state(self):
         loop = asyncio.get_event_loop()
         x = loop.time()
-        echo_print(f"[{x - math.floor(x):.4f}s] entering state :", self.name, end=' ')
-        print("func:", self.func.__name__, 'is coro :', self.is_coro)
+        echo_print(f"[{x - math.floor(x):.5f}s] CORO:{self.is_coro} entering state :", self.name, end=' ')
+        print("func:", self.func.__name__)
         if self.is_coro:
             ret_val = await self.func()
         else:
@@ -97,9 +97,12 @@ class StateManager:
         """
 
         while self.close is False:
-            current_state: State = await self.state_queue.get()
-
-            await current_state.enter_state()
+            try:
+                current_state: State = await self.state_queue.get()
+                await current_state.enter_state()
+            except KeyboardInterrupt:
+                print('received keyboard interrupt finalizing')
+                exit(1)
 
 
 END_STATE = State('Final State', func=lambda: None)

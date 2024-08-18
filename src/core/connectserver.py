@@ -5,7 +5,7 @@ import time
 from .peers import peer_list
 from src.avails import *
 
-from src.core import this_object
+from src.core import get_this_remote_peer
 
 
 async def get_initial_list(no_of_users, initiate_socket):
@@ -95,7 +95,7 @@ async def setup_server_connection():
     if conn is None:
         return
     try:
-        await this_object.send_serialized(conn)
+        await get_this_remote_peer().send_serialized(conn)
     except (socket.error, OSError):
         conn.close()
         return
@@ -104,13 +104,13 @@ async def setup_server_connection():
 
 async def send_quit_status_to_server():
     try:
-        this_object.status = 0
+        get_this_remote_peer().status = 0
         sock = await connect.create_connection_async(
             (const.SERVER_IP, const.PORT_SERVER),
             timeout=const.SERVER_TIMEOUT
         )
         with sock:
-            this_object.send_serialized(sock)
+            get_this_remote_peer().send_serialized(sock)
         use.echo_print("::sent leaving status to server")
         return True
     except Exception as exp:
