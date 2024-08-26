@@ -30,7 +30,6 @@ class RequestProtocol(protocol.KademliaProtocol):
 class EndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
-        data = data.decode()
         print("Received:", data, "from", addr)  # debug
         if data == REQUESTS.NETWORK_FIND:
             this_rp = get_this_remote_peer()
