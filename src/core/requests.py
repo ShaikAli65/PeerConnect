@@ -21,7 +21,7 @@ class RequestProtocol(protocol.KademliaProtocol):
         super().__init__(source_node, storage, ksize)
 
     def rpc_gossip(self, sender, nodeid, message):
-        print('got message from ', nodeid, message)
+        print('got message from ', nodeid, message)  # debug
         if message['ttl'] == 0:
             return
         message['ttl'] -= 1
@@ -29,7 +29,7 @@ class RequestProtocol(protocol.KademliaProtocol):
 
     async def call_gossip(self, message):
         for node in routing.TableTraverser(self.router, self.source_node):
-            print('sending gossip message', node)
+            print('sending gossip message', node)  # debug
             address = (node.ip, node.port)
             await self.gossip(address, self.source_node.id, message)
 
@@ -37,14 +37,16 @@ class RequestProtocol(protocol.KademliaProtocol):
 class EndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
-        print("Received:", data.decode(),"from", addr)
+        print("Received:", data.decode(),"from", addr)  # debug
         this_rp = get_this_remote_peer()
-        self.transport.sendto(pickle.dumps(this_rp.network_uri), addr)
+        data_payload = pickle.dumps(this_rp.network_uri)
+        print("sending data", data_payload)  # debug
+        self.transport.sendto(data_payload, addr)
         self.transport.close()
 
     def connection_made(self, transport):
         self.transport = transport
-        print("Connection made", self.transport)
+        print("Connection made", self.transport)  # debug
 
 
 async def initiate():
