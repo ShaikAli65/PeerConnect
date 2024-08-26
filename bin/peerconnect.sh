@@ -1,5 +1,7 @@
 #!/bin/bash
 
+git pull
+
 runner="py"
 if command -v python3 &>/dev/null; then
     runner="python3"
