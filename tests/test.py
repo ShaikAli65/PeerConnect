@@ -27,12 +27,12 @@ async def test_gossip():
 def test_initial_states():
     s1 = State("setpaths", configure.set_paths)
     s2 = State("boot_up initiating", bootup.initiate_bootup)
-    s5 = State("adding shit", test)
-    s3 = State("loading profiles", profilemanager.load_profiles_to_program)
-    s4 = State("printing configurations", configure.print_constants)
+    s3 = State("adding shit", test)
+    s4 = State("loading profiles", profilemanager.load_profiles_to_program)
+    s5 = State("printing configurations", configure.print_constants)
     # s4 = State("connecting to servers",connectserver.initiate_connection)
     # s4 = State("connecting to servers",connectserver.initiate_connection)
-    s5 = State("checking for gossip", test_gossip)
-    s6 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s6 = State("checking for gossip", test_gossip)
+    s7 = State("initiating comms", connections.initiate_connections, is_blocking=True)
 
-    return s1, s2, s3, s4, s5, s6
+    return s1, s2, s3, s4, s5, s6, s7

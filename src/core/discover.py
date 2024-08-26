@@ -39,8 +39,9 @@ async def wait_for_replies(ip, port, timeout=5):
 
 
 async def search_network():
-    ip, port = const.THIS_IP, const.PORT_NETWORK
+    ip, port = const.THIS_IP, const.PORT_REQ
     print(ip,port)
     task = asyncio.create_task(wait_for_replies(ip, port))
     await ping_all(port)
+    print('sent broadcast to network')
     return await task

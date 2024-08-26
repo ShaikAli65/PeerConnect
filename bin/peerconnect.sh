@@ -48,7 +48,7 @@ if [ "$lines" -ne 32 ]; then
   install
 fi
 
-$runner main.py
+$runner ../main.py
 
 deactivate
 

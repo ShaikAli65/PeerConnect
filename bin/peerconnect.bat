@@ -14,8 +14,7 @@ if not exist "%FLAG_FILE%" (
     call "%VENV_DIR%\Scripts\activate.bat"
 )
 
-cd ..
-python main.py
+python ..\main.py
 
 rem Deactivate and remove the virtual environment
 deactivate
