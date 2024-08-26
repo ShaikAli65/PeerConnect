@@ -1,5 +1,5 @@
 #!/bin/bash
-
+clear
 git pull
 
 runner="py"
@@ -20,7 +20,8 @@ install() {
 setup_environment() {
     echo "Setting up..."
     $runner -m venv ../venv
-    source ./venv/bin/activate
+    source ../venv/bin/activate
+
 }
 
 re_setup() {
@@ -28,7 +29,7 @@ re_setup() {
   setup_environment
 }
 
-if [ ! -f "venv/bin/activate" ]; then
+if [ ! -f "../venv/bin/activate" ]; then
   setup_environment
 fi
 

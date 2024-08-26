@@ -1,4 +1,5 @@
 @echo off
+cls
 git stash
 git pull
 
