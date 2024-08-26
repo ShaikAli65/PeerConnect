@@ -9,6 +9,17 @@ from src.avails import const
 from src.core import get_this_remote_peer
 
 
+class REQUESTS:
+    __slots__ = ()
+    REDIRECT = b'redirect        '
+    LIST_SYNC = b'sync list       '
+    ACTIVE_PING = b'Y face like that'
+    REQ_FOR_LIST = b'list of users  '
+    I_AM_ACTIVE = b'com notify user'
+    NETWORK_FIND = b'network find    '
+    NETWORK_FIND_REPLY = b'networkfindreply'
+
+
 class RequestProtocol(protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
@@ -68,14 +79,3 @@ async def initiate():
         allow_broadcast=True,
     )
     print('started requests endpoint at', this_rp.req_uri)  # debug
-
-
-class REQUESTS:
-    __slots__ = ()
-    REDIRECT = b'redirect        '
-    LIST_SYNC = b'sync list       '
-    ACTIVE_PING = b'Y face like that'
-    REQ_FOR_LIST = b'list of users  '
-    I_AM_ACTIVE = b'com notify user'
-    NETWORK_FIND = b'network find    '
-    NETWORK_FIND_REPLY = b'network find reply '
