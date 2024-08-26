@@ -2,6 +2,7 @@ import asyncio
 import pickle
 import socket
 import struct
+import time
 
 import kademlia.protocol
 import kademlia.routing
@@ -16,12 +17,13 @@ class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
     ...
 
 
-def ping_all(sock, port, *, times=1):
+def ping_all(sock, port, *, times=4):
     this_id = get_this_remote_peer().id
-    for _ in range(times):
-        req_payload = WireData(REQUESTS.NETWORK_FIND, this_id)
+    req_payload = WireData(REQUESTS.NETWORK_FIND, this_id)
+    for delay in use.get_timeouts(max_retries=times):
         req_payload.sendto(sock, ('<broadcast>', port))
-        print("sent ", _, "time")  # debug
+        time.sleep(delay)
+        print("sent broadcast")  # debug
 
 
 async def wait_for_replies(sock, timeout=5):
