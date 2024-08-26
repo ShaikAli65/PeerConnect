@@ -1,4 +1,5 @@
 @echo off
+git stash
 git pull
 
 set "FLAG_FILE=setup_completed.txt"
