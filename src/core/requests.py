@@ -77,7 +77,7 @@ async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport
     node_addr = await discover.search_network()
     if node_addr is not None:
         print('bootstrapping kademlia with', node_addr)  # debug
-        await server.bootstrap_node(node_addr)
+        await server.bootstrap([node_addr,])
 
     transport, proto = await loop.create_datagram_endpoint(
         EndPoint,

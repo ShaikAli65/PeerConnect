@@ -12,11 +12,6 @@ from .requests import REQUESTS
 from ..avails import connect, const, use, WireData
 
 
-class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
-
-    ...
-
-
 def ping_all(sock, port, *, times=4):
     this_id = get_this_remote_peer().id
     req_payload = WireData(REQUESTS.NETWORK_FIND, this_id)
