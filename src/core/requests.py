@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import pickle
 import socket
 
@@ -7,6 +8,10 @@ from kademlia import protocol, network, routing
 
 from src.avails import const, WireData
 from src.core import get_this_remote_peer
+
+logger = logging.getLogger()
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.DEBUG)
 
 
 class REQUESTS:
