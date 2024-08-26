@@ -2,7 +2,6 @@ import asyncio
 import logging
 import pickle
 import socket
-from urllib import request
 
 import kademlia.network
 from kademlia import protocol, network, routing
@@ -12,7 +11,7 @@ from src.core import get_this_remote_peer
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class REQUESTS:
