@@ -37,7 +37,7 @@ class EndPoint(asyncio.DatagramProtocol):
             connect_uri = pickle.dumps(this_rp.network_uri)
             payload_len = struct.pack('!I', len(connect_uri))
             data_payload = header + payload_len + connect_uri
-            print("sending data", data_payload)  # debug
+            print("sending data", data_payload, "to", addr)  # debug
             self.transport.sendto(data_payload, addr)
             self.transport.close()
 
