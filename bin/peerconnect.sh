@@ -13,6 +13,7 @@ else
 fi
 
 install() {
+    $runner -m pip install --upgrade pip
     $runner -m pip install -r requirements.txt
 }
 
