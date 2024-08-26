@@ -1,6 +1,7 @@
 import asyncio
 import pickle
 import socket
+import struct
 
 import kademlia.protocol
 import kademlia.routing
@@ -22,6 +23,7 @@ def ping_all(sock, port, *, times=3):
 
 
 async def wait_for_replies(sock, timeout=5):
+    print("waiting for replies at", sock)
     while True:
         try:
             data, ipaddr = await asyncio.wait_for(sock.arecvfrom(16), timeout=timeout)
@@ -30,7 +32,8 @@ async def wait_for_replies(sock, timeout=5):
                 continue
             try:
                 if data == REQUESTS.NETWORK_FIND_REPLY:
-                    data_len = await sock.arecv(4)
+                    print("reply detected", data, REQUESTS.NETWORK_FIND_REPLY)
+                    data_len = struct.unpack('!I', await sock.arecv(4))[0]
                     node_contact_ipaddr = await sock.arecv(data_len)
                     data = pickle.loads(node_contact_ipaddr)
                     print("got an ip", data)
