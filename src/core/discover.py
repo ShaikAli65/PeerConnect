@@ -19,10 +19,9 @@ def ping_all(ip, port, *, times=5):
     s = connect.UDPProtocol.create_async_sock(asyncio.get_running_loop(), const.IP_VERSION)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     s.bind((ip, port))
-    with s:
-        for _ in range(times):
-            s.sendto(const.ACTIVE_PING, ('<broadcast>', port))
-            print("sent ", _, "time")
+    for _ in range(times):
+        s.sendto(const.ACTIVE_PING, ('<broadcast>', port))
+        print("sent ", _, "time")
     return s
 
 
