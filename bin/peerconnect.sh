@@ -52,4 +52,9 @@ $runner ../main.py
 
 deactivate
 
+read -p -r "Clear screen before setup? (y/n): " CLEAR_SCREEN
+
+if [[ "$CLEAR_SCREEN" == [Yy] ]]; then
+    clear
+fi
  # --force-reinstall

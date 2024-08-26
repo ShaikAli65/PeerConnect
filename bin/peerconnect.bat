@@ -20,5 +20,10 @@ rem Deactivate and remove the virtual environment
 deactivate
 cd ..
 rmdir /s /q "%VENV_DIR%"
+rem Prompt the user to clear the screen
+set /p CLEAR_SCREEN="Clear screen before setup? (y/n): "
 
+if /i "%CLEAR_SCREEN%"=="y" (
+    cls
+)
 exit

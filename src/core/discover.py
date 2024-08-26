@@ -27,12 +27,18 @@ def ping_all(ip, port, *, times=5):
 
 async def wait_for_replies(sock, timeout=5):
     with sock:
-        try:
-            data, ipaddr = await asyncio.wait_for(sock.arecvfrom(16), timeout=timeout)
-            print("some data came ", data, ipaddr)
-            return pickle.loads(data)
-        except TimeoutError:
-            return use.echo_print(f"Time Out Reached at {use.func_str(wait_for_replies)}")
+        while True:
+            try:
+                data, ipaddr = await asyncio.wait_for(sock.arecvfrom(16), timeout=timeout)
+                print("some data came ", data, ipaddr)
+                if ipaddr == sock.getsockname():
+                    continue
+                try:
+                    return pickle.loads(data)
+                except (pickle.PickleError, pickle.PicklingError, pickle.UnpicklingError):
+                    return None
+            except TimeoutError:
+                return use.echo_print(f"Time Out Reached at {use.func_str(wait_for_replies)}")
 
 
 async def search_network():
