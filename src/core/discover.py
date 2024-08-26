@@ -36,7 +36,7 @@ async def wait_for_replies(sock, timeout=5):
             if data[0].match_header(REQUESTS.NETWORK_FIND_REPLY):
                 print("reply detected")
                 print("got some data", data)
-                return data[0]['']
+                return data[0]['connect_uri']
         except asyncio.TimeoutError:
             print(f'timeout reached at {use.func_str(wait_for_replies)}')
             return None
