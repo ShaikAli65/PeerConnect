@@ -6,7 +6,7 @@ import socket
 import kademlia.network
 from kademlia import protocol, network, routing
 
-from src.avails import const, WireData
+from src.avails import const, WireData, use
 from src.core import get_this_remote_peer
 
 logger = logging.getLogger()
@@ -30,7 +30,7 @@ class RequestProtocol(protocol.KademliaProtocol):
         super().__init__(source_node, storage, ksize)
 
     async def rpc_gossip(self, sender, nodeid, message):
-        print('got message from ',sender, nodeid, message)  # debug
+        print('got remote call for function with name', use.echo_print(RequestProtocol.rpc_gossip), sender, nodeid, message)  # debug
         if message['ttl'] == 0:
             return
         message['ttl'] -= 1

@@ -26,7 +26,7 @@ def ping_all(sock, port, *, times=4):
         print("sent broadcast")  # debug
 
 
-async def wait_for_replies(sock, timeout=5):
+async def wait_for_replies(sock, timeout=6):
     print("waiting for replies at", sock)
     while True:
         try:
