@@ -50,5 +50,5 @@ async def search_network():
     s.bind((ip, port))
     with s:
         ping_all(s, port)
-        print('sent broadcast to network')  # debug
+        print('sent broadcast to network at port', ip, port)  # debug
         return await wait_for_replies(s)
