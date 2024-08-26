@@ -4,6 +4,7 @@ import socket as _socket
 from abc import ABC, abstractmethod
 from asyncio import AbstractEventLoop
 from functools import wraps
+from socket import socket
 from typing import IO, Self, Optional
 
 from . import const, useables
@@ -375,12 +376,13 @@ def get_free_port() -> int:
 
 def is_port_empty(port):
     try:
+        addr = ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
         t, u = False, False
         with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
-            s.bind((const.THIS_IP, port))
+            s.bind(addr)
             t = True
         with _socket.socket(const.IP_VERSION, _socket.SOCK_DGRAM) as s:
-            s.bind((const.THIS_IP, port))
+            s.bind(addr)
             u = True
         return t and u
 
