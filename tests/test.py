@@ -28,7 +28,9 @@ def test():
 
 
 async def test_gossip():
-    await requests.initiate()
+    requests_data = await requests.initiate()
+    gossip_message = {'message': 'hi for all', 'ttl':3}
+    await requests_data[0].protocol.call_gossip(gossip_message)
 
 
 def test_initial_states():

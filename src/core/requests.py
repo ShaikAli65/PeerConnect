@@ -3,6 +3,7 @@ import pickle
 import socket
 import struct
 
+import kademlia.network
 from kademlia import protocol, network, routing
 
 from src.avails import const, WireData
@@ -25,7 +26,7 @@ class RequestProtocol(protocol.KademliaProtocol):
         super().__init__(source_node, storage, ksize)
 
     def rpc_gossip(self, sender, nodeid, message):
-        print('got message from ', nodeid, message)  # debug
+        print('got message from ',sender, nodeid, message)  # debug
         if message['ttl'] == 0:
             return
         message['ttl'] -= 1
@@ -41,7 +42,12 @@ class RequestProtocol(protocol.KademliaProtocol):
 class EndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
-        req_data = WireData.load_from(data)
+        try:
+            req_data = WireData.load_from(data)
+        except pickle.UnpicklingError as pe:
+            print('data illformed', pe, data)
+            return
+
         print("Received:", req_data, "from", addr)  # debug
         if req_data.match_header(REQUESTS.NETWORK_FIND):
             this_rp = get_this_remote_peer()
@@ -56,7 +62,7 @@ class EndPoint(asyncio.DatagramProtocol):
         print("Connection made", self.transport)  # debug
 
 
-async def initiate():
+async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport, EndPoint]:
     from . import discover
     loop = asyncio.get_running_loop()
     this_rp = get_this_remote_peer()
@@ -78,4 +84,4 @@ async def initiate():
         allow_broadcast=True,
     )
     print('started requests endpoint at', this_rp.req_uri)  # debug
-
+    return server, transport, proto
