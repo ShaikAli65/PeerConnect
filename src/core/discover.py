@@ -19,7 +19,7 @@ def ping_all(ip, port, *, times=5):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     s.bind((ip, port))
     for _ in range(times):
-        s.sendto(const.ACTIVE_PING, ('<broadcast>', port))
+        s.sendto(REQUESTS.NETWORK_FIND, ('<broadcast>', port))
         print("sent ", _, "time")
     return s
 
