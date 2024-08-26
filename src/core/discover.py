@@ -15,13 +15,14 @@ class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
     ...
 
 
-async def ping_all(port, *, times=5):
+async def ping_all(ip, port, *, times=5):
     s = connect.UDPProtocol.create_sync_sock(const.IP_VERSION)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-    for _ in range(times):
-        s.sendto(const.ACTIVE_PING, ('<broadcast>', port))
-        print("sent ", _, "time")
+    s.bind((ip, port))
+    with s:
+        for _ in range(times):
+            s.sendto(const.ACTIVE_PING, ('<broadcast>', port))
+            print("sent ", _, "time")
 
 
 async def wait_for_replies(ip, port, timeout=5):
@@ -41,7 +42,8 @@ async def wait_for_replies(ip, port, timeout=5):
 async def search_network():
     ip, port = const.THIS_IP, const.PORT_REQ
     print(ip,port)
+
     task = asyncio.create_task(wait_for_replies(ip, port))
-    await ping_all(port)
+    await ping_all(ip, port)
     print('sent broadcast to network')
     return await task

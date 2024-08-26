@@ -37,8 +37,7 @@ class RequestProtocol(protocol.KademliaProtocol):
 class EndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
-        print("Received:", data.decode())
-
+        print("Received:", data.decode(),"from", addr)
         this_rp = get_this_remote_peer()
         self.transport.sendto(pickle.dumps(this_rp.network_uri), addr)
         self.transport.close()
