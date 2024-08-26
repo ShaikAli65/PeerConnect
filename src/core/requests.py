@@ -68,4 +68,4 @@ async def initiate():
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
     )
-    print('started requests endpoint')  # debug
+    print('started requests endpoint at', this_rp.req_uri)  # debug

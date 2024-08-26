@@ -19,7 +19,7 @@ def test():
     set_current_remote_peer_object(
         RemotePeer(
             'test',
-            ip='localhost',
+            ip=const.THIS_IP,
             conn_port=const.PORT_THIS,
             req_port=const.PORT_REQ,
             net_port=const.PORT_NETWORK,
