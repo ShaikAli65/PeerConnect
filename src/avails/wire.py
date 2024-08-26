@@ -342,7 +342,9 @@ class WireData:
         return pickle.loads(data), addr
 
     @staticmethod
-    def load(data: bytes):
+    def load_from(data: bytes):
+        payload_len = struct.unpack('!I', data[:4])[0]
+        data = data[4: payload_len + 4]
         return pickle.loads(data)
 
     def match_header(self, data):
@@ -357,3 +359,6 @@ class WireData:
 
     def __str__(self):
         return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+
+    def __repr__(self):
+        return str(self)

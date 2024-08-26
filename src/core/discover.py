@@ -31,6 +31,7 @@ async def wait_for_replies(sock, timeout=5):
             data: tuple[WireData, tuple[str, int]] = await asyncio.wait_for(WireData.receive_datagram(sock), timeout)
             print("some data came ", data)
             if data[1] == sock.getsockname():
+                print('ignoring echo')
                 continue
             if data[0].match_header(REQUESTS.NETWORK_FIND_REPLY):
                 print("reply detected")
