@@ -307,7 +307,7 @@ class DataWeaver:
 class WireData:
     version = _const.VERSIONS['WIRE']
 
-    def __init__(self, header, _id, version=version, *args, **kwargs):
+    def __init__(self, header, _id, *args,version=version, **kwargs):
         self.id = _id
         self._header = header
         self.version = version
@@ -342,3 +342,6 @@ class WireData:
     @property
     def header(self):
         return self._header
+
+    def __str__(self):
+        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"

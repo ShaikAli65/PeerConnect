@@ -5,7 +5,7 @@ import struct
 
 from kademlia import protocol, network, routing
 
-from src.avails import const
+from src.avails import const, WireData
 from src.core import get_this_remote_peer
 
 
@@ -44,12 +44,10 @@ class EndPoint(asyncio.DatagramProtocol):
         print("Received:", data, "from", addr)  # debug
         if data == REQUESTS.NETWORK_FIND:
             this_rp = get_this_remote_peer()
-            header = REQUESTS.NETWORK_FIND_REPLY
-            connect_uri = pickle.dumps(this_rp.network_uri)
-            payload_len = struct.pack('!I', len(connect_uri))
-            data_payload = header + payload_len + connect_uri
-            print("sending data", data_payload, "to", addr)  # debug
-            self.transport.sendto(data_payload, addr)
+            self.transport.sendto(REQUESTS.NETWORK_FIND_REPLY, addr)
+            data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=None, connect_uri=this_rp.network_uri)
+            print("sending as reply", data_payload)
+            self.transport.sendto(bytes(data_payload), addr)
             self.transport.close()
 
     def connection_made(self, transport):
@@ -79,3 +77,4 @@ async def initiate():
         allow_broadcast=True,
     )
     print('started requests endpoint at', this_rp.req_uri)  # debug
+

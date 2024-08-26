@@ -15,7 +15,6 @@ from src.core import peers
 def test():
     const.SERVER_IP = const.THIS_IP
     const.PORT_SERVER = 45000
-    configure.print_constants()
     set_current_remote_peer_object(
         RemotePeer(
             'test',
@@ -43,4 +42,4 @@ def test_initial_states():
     s6 = State("checking for gossip", test_gossip)
     s7 = State("initiating comms", connections.initiate_connections, is_blocking=True)
 
-    return s1, s2, s3, s4, s5, s6, s7
+    return tuple(locals().values())

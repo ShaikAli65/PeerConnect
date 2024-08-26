@@ -7,7 +7,7 @@ import kademlia.protocol
 import kademlia.routing
 
 from .requests import REQUESTS
-from ..avails import connect, const, use
+from ..avails import connect, const, use, WireData
 
 
 class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
@@ -32,16 +32,13 @@ async def wait_for_replies(sock, timeout=5):
                 continue
             try:
                 if data == REQUESTS.NETWORK_FIND_REPLY:
-                    print("reply detected", data, REQUESTS.NETWORK_FIND_REPLY)
-                    data_len = struct.unpack('!I', await sock.arecv(4))[0]
-                    node_contact_ipaddr = await sock.arecv(data_len)
-                    data = pickle.loads(node_contact_ipaddr)
-                    print("got an ip", data)
-                    return data
+                    print("reply detected")
+                    data = await asyncio.wait_for(WireData.receive(sock), timeout)
+                    print("got some data", data)
             except (pickle.PickleError, pickle.PicklingError, pickle.UnpicklingError):
                 return None
-        except TimeoutError:
-            return use.echo_print(f"Time Out Reached at {use.func_str(wait_for_replies)}")
+        except asyncio.TimeoutError:
+            return None
 
 
 async def search_network():
