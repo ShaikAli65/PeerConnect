@@ -30,14 +30,12 @@ async def wait_for_replies(sock, timeout=5):
             print("some data came ", data, ipaddr)
             if ipaddr == sock.getsockname():
                 continue
-            try:
-                if data == REQUESTS.NETWORK_FIND_REPLY:
-                    print("reply detected")
-                    data = await asyncio.wait_for(WireData.receive(sock), timeout)
-                    print("got some data", data)
-            except (pickle.PickleError, pickle.PicklingError, pickle.UnpicklingError):
-                return None
+            if data == REQUESTS.NETWORK_FIND_REPLY:
+                print("reply detected")
+                data = await asyncio.wait_for(WireData.receive(sock), timeout)
+                print("got some data", data)
         except asyncio.TimeoutError:
+
             return None
 
 

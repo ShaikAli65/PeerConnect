@@ -48,7 +48,6 @@ class EndPoint(asyncio.DatagramProtocol):
             data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=None, connect_uri=this_rp.network_uri)
             print("sending as reply", data_payload)
             self.transport.sendto(bytes(data_payload), addr)
-            self.transport.close()
 
     def connection_made(self, transport):
         self.transport = transport
