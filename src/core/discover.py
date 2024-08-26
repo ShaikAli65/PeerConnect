@@ -21,7 +21,7 @@ def ping_all(sock, port, *, times=1):
     for _ in range(times):
         req_payload = WireData(REQUESTS.NETWORK_FIND, this_id)
         req_payload.sendto(sock, ('<broadcast>', port))
-        print("sent ", _, "time")
+        print("sent ", _, "time")  # debug
 
 
 async def wait_for_replies(sock, timeout=5):
@@ -29,13 +29,13 @@ async def wait_for_replies(sock, timeout=5):
     while True:
         try:
             data: tuple[WireData, tuple[str, int]] = await asyncio.wait_for(WireData.receive_datagram(sock), timeout)
-            print("some data came ", data)
+            print("some data came ", data)  # debug
             if data[1] == sock.getsockname():
-                print('ignoring echo')
+                print('ignoring echo')  # debug
                 continue
             if data[0].match_header(REQUESTS.NETWORK_FIND_REPLY):
-                print("reply detected")
-                print("got some data", data)
+                print("reply detected")  # debug
+                print("got some data", data)  # debug
                 return data[0]['connect_uri']
         except asyncio.TimeoutError:
             print(f'timeout reached at {use.func_str(wait_for_replies)}')
@@ -50,5 +50,5 @@ async def search_network():
     s.bind((ip, port))
     with s:
         ping_all(s, port)
-        print('sent broadcast to network')
+        print('sent broadcast to network')  # debug
         return await wait_for_replies(s)

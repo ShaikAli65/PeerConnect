@@ -45,7 +45,7 @@ class EndPoint(asyncio.DatagramProtocol):
         try:
             req_data = WireData.load_from(data)
         except pickle.UnpicklingError as pe:
-            print('data illformed', pe, data)
+            print('data illformed:', pe, data)
             return
 
         print("Received:", req_data, "from", addr)  # debug
@@ -55,7 +55,7 @@ class EndPoint(asyncio.DatagramProtocol):
             data_payload.sendto(self.transport, addr)
             # self.transport.sendto(bytes(data_payload), addr)
             # self.transport.sendto(REQUESTS.NETWORK_FIND_REPLY, addr)
-            print("sending as reply", data_payload)
+            print("sending as reply", data_payload)  # debug
 
     def connection_made(self, transport):
         self.transport = transport
@@ -78,10 +78,10 @@ async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport
 
     transport, proto = await loop.create_datagram_endpoint(
         EndPoint,
-        local_addr=this_rp.req_uri,
+        local_addr=('0.0.0.0', this_rp._req_port),
         family=const.IP_VERSION,
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
     )
-    print('started requests endpoint at', this_rp.req_uri)  # debug
+    print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     return server, transport, proto

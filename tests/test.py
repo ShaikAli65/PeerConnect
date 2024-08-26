@@ -24,7 +24,7 @@ def test():
             net_port=const.PORT_NETWORK,
         )
     )
-    print(peers.get_this_remote_peer())
+    # print(peers.get_this_remote_peer())
 
 
 async def test_gossip():
