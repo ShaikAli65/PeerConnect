@@ -29,12 +29,12 @@ class RequestProtocol(protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
 
-    def rpc_gossip(self, sender, nodeid, message):
+    async def rpc_gossip(self, sender, nodeid, message):
         print('got message from ',sender, nodeid, message)  # debug
         if message['ttl'] == 0:
             return
         message['ttl'] -= 1
-        self.call_gossip(message)
+        await self.call_gossip(message)
 
     async def call_gossip(self, message):
         for node in routing.TableTraverser(self.router, self.source_node):

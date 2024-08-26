@@ -31,6 +31,8 @@ def test():
 async def test_gossip():
     requests_data = await requests.initiate()
     gossip_message = {'message': 'hi for all', 'ttl':3}
+    await asyncio.sleep(15)
+    print('sending gossip message\a')
     await requests_data[0].protocol.call_gossip(gossip_message)
 
 
