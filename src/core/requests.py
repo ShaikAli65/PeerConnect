@@ -2,6 +2,7 @@ import asyncio
 import logging
 import pickle
 import socket
+from urllib import request
 
 import kademlia.network
 from kademlia import protocol, network, routing
@@ -40,7 +41,8 @@ class RequestProtocol(protocol.KademliaProtocol):
         for node in routing.TableTraverser(self.router, self.source_node):
             print('sending gossip message', node)  # debug
             address = (node.ip, node.port)
-            await self.gossip(address, self.source_node.id, message)
+            result = await self.gossip(address, self.source_node.id, message)
+            self.handle_call_response(result, node)
 
 
 class EndPoint(asyncio.DatagramProtocol):
@@ -60,6 +62,8 @@ class EndPoint(asyncio.DatagramProtocol):
             # self.transport.sendto(bytes(data_payload), addr)
             # self.transport.sendto(REQUESTS.NETWORK_FIND_REPLY, addr)
             print("sending as reply", data_payload)  # debug
+        elif req_data.match_header(REQUESTS.NETWORK_FIND_REPLY):
+            ...
 
     def connection_made(self, transport):
         self.transport = transport
@@ -75,9 +79,13 @@ async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport
     await server.listen(port=const.PORT_NETWORK)
 
     node_addr = await discover.search_network()
-    if node_addr is not None:
-        print('bootstrapping kademlia with', node_addr)  # debug
-        await server.bootstrap([node_addr,])
+
+    try:
+        if node_addr is not None:
+            print('bootstrapping kademlia with', node_addr)  # debug
+            await server.bootstrap([node_addr,])
+    except Exception as e:
+        print(e)
 
     transport, proto = await loop.create_datagram_endpoint(
         EndPoint,
