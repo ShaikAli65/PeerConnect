@@ -21,6 +21,7 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
     const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
     const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
+    const.PORT_NETWORK = config_map.getint('NERD_OPTIONS', 'network_port')
     const.PORT_FILE = config_map.getint('NERD_OPTIONS', 'file_port')
     const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
     const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
@@ -36,33 +37,29 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 def print_constants():
     line = "{:<15} {:<10}"
 
+    print_string = (
+        f'\n:configuration choices{"=" * 32}\n'
+        f'{line.format("USERNAME", const.USERNAME)}\n'
+        f'{line.format("THIS_IP", const.THIS_IP)}\n'
+        f'{line.format("PROTOCOL", str(const.PROTOCOL))}\n'
+        f'{line.format("IP_VERSION", 6 if const.IP_VERSION == 23 else 4)}\n'
+        f'{line.format("SERVER_IP", const.SERVER_IP)}\n'
+        f'{line.format("PORT_THIS", const.PORT_THIS)}\n'
+        f'{line.format("SERVER_PORT", const.PORT_SERVER)}\n'
+        f'{line.format("NETWORK_PORT", const.PORT_NETWORK)}\n'
+        f'{line.format("PAGE_PORT", const.PORT_PAGE)}\n'
+        f'{line.format("PORT_REQ", const.PORT_REQ)}\n'
+        f'{"=" * 56}\n'
+    )
     with const.LOCK_PRINT:
-        print('GLOBAL VERSION',const.VERSIONS['GLOBAL'])
-        print('\n:configuration choices=================================\n'
-              f'{line.format("USERNAME", const.USERNAME)}\n'
-              f'{line.format("THIS_IP", const.THIS_IP)}\n'
-              f'{line.format("PROTOCOL", str(const.PROTOCOL))}\n'
-              f'{line.format("IP_VERSION", 6 if const.IP_VERSION == 23 else 4)}\n'
-              f'{line.format("SERVER_IP", const.SERVER_IP)}\n'
-              f'{line.format("PORT_THIS", const.PORT_THIS)}\n'
-              f'{line.format("SERVER_PORT", const.PORT_SERVER)}\n'
-              f'{line.format("PAGE_PORT", const.PORT_PAGE)}\n'
-              f'{line.format("PORT_REQ", const.PORT_REQ)}\n'
-              '========================================================\n'
-              )
-    return
-    #
+        print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
+        return print(print_string)
+
     # print("current path: ", const.PATH_CURRENT)
     # print("config path: ", const.PATH_PROFILES)
     # print("log path: ", const.PATH_LOG)
     # print("page path: ", const.PATH_PAGE)
     # print("download path: ", const.PATH_DOWNLOAD)
-
-
-def set_selected_profile(profile: ProfileManager):
-    const.USERNAME = profile.username
-    const.SERVER_IP = profile.server_ip
-    const.PORT_SERVER = profile.server_port
 
 
 def set_paths():

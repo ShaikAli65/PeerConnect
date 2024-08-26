@@ -6,7 +6,7 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Optional
 
-from src.avails import SimplePeerText, RemotePeer
+from src.avails import SimplePeerBytes, RemotePeer
 from src.avails import SocketStore
 from src.avails import connect
 from src.avails import const, use, WireData
@@ -14,13 +14,9 @@ from . import connected_peers
 from . import get_this_remote_peer
 
 
-# from logging import error_log
-# from logging import activity_log
-# from logging import server_log
-
-
-def initiate_connections():
-    ...
+async def initiate_connections():
+    acceptor = Acceptor()
+    await acceptor.initiate()
 
 
 class Acceptor:
@@ -34,7 +30,6 @@ class Acceptor:
         '__loop': asyncio.AbstractEventLoop,
     }
 
-    # __slots__ = 'address', 'controller', 'selector', 'main_socket', 'currently_in_connection', 'RecentConnections', 'socket_handler'
     _instance = None
     _initialized = False
     current_socks = SocketStore()
@@ -49,14 +44,14 @@ class Acceptor:
             return
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
         self.stopping = False
-        use.echo_print("::Initiating Acceptor ", self.address)
         self.main_socket: Optional[connect.Socket] = None
         self.back_log = 4
         self.currently_in_connection = defaultdict(int)
-        self._initialized = True
         self.__loop = asyncio.get_running_loop()
         self.all_tasks = []
         self.max_timeout = 90
+        use.echo_print("::Initiating Acceptor ", self.address)
+        self._initialized = True
 
     def set_loop(self, loop):
         self.__loop = loop
@@ -64,18 +59,18 @@ class Acceptor:
     async def initiate(self):
         self.main_socket = await self.start_socket()
         use.echo_print("::Listening for connections", self.main_socket)
-        initial_backoff = use.get_timeouts()
+        # initial_backoff = use.get_timeouts()
         with self.main_socket:
             while not self.stopping:
                 initial_conn, _ = await self.main_socket.aaccept()
-                use.echo_print(f"New connection from {_}")
+                use.echo_print(f"New connection from {_}", initial_conn)
                 task = asyncio.create_task(self.__accept_connection(initial_conn))
                 self.all_tasks.append(task)
 
     async def start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
         sock_family, sock_type, _, _, address = addr_info[0]
-        sock = await const.PROTOCOL.create_async_server_sock(self.__loop, address, family=const.IP_VERSION, backlog=self.back_log)
+        sock = const.PROTOCOL.create_async_server_sock(self.__loop, address, family=const.IP_VERSION, backlog=self.back_log)
         return sock
 
     async def __accept_connection(self, initial_conn):
@@ -95,17 +90,13 @@ class Acceptor:
         :param _conn: connection from peer
         :returns peer_id: if verification is successful else None (implying socket to be removed)
         """
-        hand_shake = SimplePeerText(_conn)
+        hand_shake = SimplePeerBytes(_conn)
         hand_shake = await hand_shake.receive(cmp_string=const.CMD_VERIFY_HEADER)
         if not hand_shake:
             return None
 
-        peer_id = await SimplePeerText(_conn).receive()
+        peer_id = await SimplePeerBytes(_conn).receive()
         peer_id = peer_id.decode()
-        #
-        # if peer_id not in peer_list:
-        #     return None
-        #
         self.currently_in_connection[peer_id] += 1
         use.echo_print("verified peer", peer_id)  # debug
         return peer_id
@@ -187,11 +178,11 @@ class Connector:
     @classmethod
     async def _verifier(cls, connection_socket):
         # try:
-        data = SimplePeerText(connection_socket, const.CMD_VERIFY_HEADER)
+        data = SimplePeerBytes(connection_socket, const.CMD_VERIFY_HEADER)
         await data.send()
 
         use.echo_print("sent header")  # debug
-        data = SimplePeerText(connection_socket, get_this_remote_peer().id_encoded)
+        data = SimplePeerBytes(connection_socket, get_this_remote_peer().id_encoded)
         await data.send()
 
         # DataWeaver(header=const.CMD_VERIFY_HEADER,content="",_id=const.THIS_OBJECT.id).send(connection_socket)

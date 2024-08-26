@@ -42,7 +42,7 @@ async def list_error_handler():
     conn = await connect.connect_to_peer(_peer_obj=req_peer, to_which=connect.REQ_URI)
     # except OSError:
     with conn:
-        request = SimplePeerText(refer_sock=conn, data=const.REQ_FOR_LIST)
+        request = SimplePeerBytes(refer_sock=conn, data=const.REQ_FOR_LIST)
         await request.send()
         list_len = struct.unpack('!Q',await conn.arecv(8))[0]
         await get_initial_list(list_len, conn)
@@ -54,7 +54,7 @@ async def list_from_forward_control(list_owner: RemotePeer):
     # except:
 
     with conn as list_connection_socket:
-        await SimplePeerText(list_connection_socket, const.REQ_FOR_LIST).send()
+        await SimplePeerBytes(list_connection_socket, const.REQ_FOR_LIST).send()
         await get_list_from(list_connection_socket)
 
 
@@ -65,7 +65,7 @@ async def initiate_connection():
         use.echo_print("\n::Can't connect to server")
         return False
     with server_connection:
-        text = SimplePeerText(server_connection)
+        text = SimplePeerBytes(server_connection)
         if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
             use.echo_print('\n::Connection accepted by server')
             await get_list_from(server_connection)

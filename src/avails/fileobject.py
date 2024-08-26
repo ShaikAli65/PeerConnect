@@ -14,6 +14,7 @@ from typing import Union
 import select
 import tqdm
 
+import src.avails.connect
 from src.avails import (
     Actuator,
     const,
@@ -53,6 +54,7 @@ class _FileItem:
         'ext': str,
     }
     __slots__ = 'name', 'size', 'path', 'seeked', 'ext'
+    TIMEOUT = 5
 
     def __init__(self, size, path, seeked):
         name, self.ext = os.path.splitext(path)
@@ -69,25 +71,36 @@ class _FileItem:
         return str_str
         # return f'{self.name}'
 
-    def serialize(self, receiver_sock):
-        b = receiver_sock.getblocking()
+    def serialize(self, receiver_sock, timeout=TIMEOUT):
+        _timeout = receiver_sock.gettimeout()
+        receiver_sock.settimeout(timeout)
         obj = pickle.dumps(self)
         size = struct.pack('!I', len(obj))
-        # :todo guard this send in _FileItem
-        receiver_sock.setblocking(True)
-        receiver_sock.send(size)
-        receiver_sock.send(obj)
-        receiver_sock.setblocking(b)
+        try:
+            receiver_sock.send(size)
+            receiver_sock.sendall(obj)
+        except (TimeoutError, OSError):
+            return False
+        finally:
+            receiver_sock.settimeout(_timeout)
+        return True
 
     @classmethod
-    def deserialize(cls, sender_sock) -> Self:
+    def deserialize(cls, sender_sock, timeout=TIMEOUT) -> Self:
         """
-        Factory method which returns un pickled `_FileItem` from socket
+        Factory method which returns un pickled `_FileItem` from provided socket
         """
-        raw_length = sender_sock.recv(4)
-        length_to_recv = struct.unpack('!I', raw_length)
-        data = sender_sock.recv(length_to_recv)
-        return pickle.loads(data)
+        _timeout = sender_sock.gettimeout()
+        sender_sock.settimeout(timeout)
+        try:
+            raw_size = sender_sock.recv(4)
+            size = struct.pack('!I', raw_size)
+            data = sender_sock.recv(size)
+            return pickle.loads(data)
+        except (TimeoutError, OSError):
+            return None
+        finally:
+            sender_sock.settimeout(_timeout)
 
     def __repr__(self):
         return (f"_FileItem({self.name[:10]}, "  # {'...' if len(self.name) > 10 else ''}
@@ -140,7 +153,6 @@ class PeerFilePool:
         receiver_sock.setblocking(False)
 
         raw_file_count = struct.pack('!I', self.file_count)
-        # print("sent file count ", raw_file_count)  # debug
         receiver_sock.send(raw_file_count)
 
         self.current_file, iterator = itertools.tee(self.file_items)
@@ -157,7 +169,8 @@ class PeerFilePool:
 
     def __send_file(self, receiver_sock, file: _FileItem):
         print('sending file data', f"[PID:{os.getpid()}]")  # debug
-        file.serialize(receiver_sock)
+        if not file.serialize(receiver_sock):
+            return False
         send_progress = tqdm.tqdm(
             range(file.size),
             f"[PID:{multiprocessing.current_process().ident}] sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
@@ -172,7 +185,7 @@ class PeerFilePool:
 
     def __send_actual_file(self, receiver_sock, file, send_progress):
         sock_send = receiver_sock.send
-        send_progress.update(file.seeked)
+        # send_progress.update(file.seeked)
         # back_off = use.get_timeouts(max_retries=self.retries)
         chunk_size = self.calculate_chunk_size(file.size)
         wait_sock_write = functools.partial(use.wait_for_sock_write, receiver_sock, self.to_stop, None)
@@ -205,7 +218,6 @@ class PeerFilePool:
 
     def recv_files(self, sender_sock: socket.socket):
         sender_sock.setblocking(False)
-
         reads = use.wait_for_sock_read(sender_sock, self.to_stop, 10)
         if self.to_stop in reads:
             use.echo_print("returning from receiving files actuator signalled")
@@ -229,6 +241,9 @@ class PeerFilePool:
 
     def __recv_file(self, sender_sock):
         file_item = _FileItem.deserialize(sender_sock)
+        if not file_item:
+            return False
+
         file_item.name = self.__validatename(file_item.name)
         file_item.path = os.path.join(const.PATH_DOWNLOAD, file_item.name)
         progress = tqdm.tqdm(

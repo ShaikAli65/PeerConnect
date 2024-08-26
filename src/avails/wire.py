@@ -5,8 +5,9 @@ import threading as _threading
 from collections import defaultdict
 from typing import Union
 
-from . import const as _const
+from . import const as _const, Actuator
 from .connect import Socket as _Socket
+from .useables import wait_for_sock_read
 
 
 class SendRecv:
@@ -37,14 +38,13 @@ class SendRecv:
         return deserializer(data)
 
 
-class SimplePeerText:
+class SimplePeerBytes:
     """
-    Encapsulates text operations for peer-to-peer file transfer.
+    Encapsulates byte operations for peer-to-peer file transfer.
     Accepts A connected socket
-    Allows sending and receiving text/strings over sockets, managing text information,
+    Allows sending and receiving bytes over sockets, managing byte information,
     handling potential conflicts with sending/receiving texts, and providing string-like
     behavior for iteration and size retrieval.
-    The text is encoded in UTF-8 format(if not changed), and stored as bytes,
     all comparisons are done on the stored bytes.
     This Class Does Not Provide Any Error Handling Should Be Handled At Calling Functions.
     """
@@ -55,13 +55,14 @@ class SimplePeerText:
         'sock': _Socket,
         'id': str,
     }
-    __slots__ = 'raw_text', 'text_len_packed', '_sock', 'id', 'chunk_size', 'controller',
+    __slots__ = 'raw_bytes', 'text_len_packed', '_sock', 'id', 'chunk_size', 'controller',
 
     def __init__(self, refer_sock: _Socket, data=b'', *, chunk_size=512):
-        self.raw_text = data
-        self.text_len_packed = struct.pack('!I', len(self.raw_text))
+        self.raw_bytes = data
+        self.text_len_packed = struct.pack('!I', len(self.raw_bytes))
         self._sock = refer_sock
         self.chunk_size = chunk_size
+        self.controller = None  # used by synchronous send and receive to control loops and waiting operations
 
     async def send(self, *, require_confirmation=False) -> bool:
         """
@@ -76,14 +77,14 @@ class SimplePeerText:
 
         """
         await self._sock.asendall(self.text_len_packed)
-        await self._sock.asendall(self.raw_text)
+        await self._sock.asendall(self.raw_bytes)
         if require_confirmation:
             return await self.__recv_cnf_header()
         return True
 
     async def receive(self, cmp_string: Union[str, bytes] = '', *, require_confirmation=False) -> Union[bool, bytes]:
         """
-        Receive text over the socket.
+        Receive text over the socket asynchronously.
         Better to check for `truthy` and `falsy` values for cmp_string as this function may return empty bytes.
 
         Parameters:
@@ -95,19 +96,67 @@ class SimplePeerText:
                         otherwise returns the received text as bytes.
         """
         text_length = struct.unpack('!I', await self._sock.arecv(4))[0]
-        self.raw_text = await self._sock.arecv(text_length)
+        self.raw_bytes = await self._sock.arecv(text_length)
         if require_confirmation:
             await self.__send_cnf_header()
         if cmp_string:
-            return self.raw_text == cmp_string
-        return self.raw_text
+            return self.raw_bytes == cmp_string
+        return self.raw_bytes
 
     async def __send_cnf_header(self):
         await self._sock.asendall(_const.TEXT_SUCCESS_HEADER)
 
     async def __recv_cnf_header(self):
-        data = self._sock.arecv(16)
+        data = await self._sock.arecv(16)
         return data == _const.TEXT_SUCCESS_HEADER
+
+    def send_sync(self, require_confirmation=False) -> bool:
+        self._sock.send(self.text_len_packed)
+        self._sock.sendall(self.raw_bytes)
+        if require_confirmation:
+            data = self._sock.recv(16)
+            return data == _const.TEXT_SUCCESS_HEADER
+        return True
+
+    def receive_sync(self, cmp_string: Union[str, bytes] = '', *, controller=None, require_confirmation=False) -> Union[bool, bytes]:
+        """
+        Receive text over the socket synchronously.
+        Better to check for `truthy` and `falsy` values for cmp_string as this function may return empty bytes.
+
+        Parameters:
+        - cmp_string [str, bytes]: Optional comparison string for validation.
+        supports both string and byte string, resolves accordingly.
+
+        Returns:
+        - [bool, bytes]: If cmp_string is provided, returns True if received text matches cmp_string,
+                        otherwise returns the received text as bytes.
+        """
+        text_length = struct.unpack('!I', self._sock.recv(4))[0]
+        received_data = bytearray()
+        b = self._sock.getblocking()
+        self._sock.setblocking(False)
+        self.controller = controller or Actuator()
+        try:
+            recv = self._sock.recv
+            while text_length > 0:
+                if self.controller.to_stop:
+                    break
+                try:
+                    chunk = recv(min(self.chunk_size, text_length))
+                    if not chunk:
+                        break
+                    text_length -= len(chunk)
+                    received_data.extend(chunk)
+                except BlockingIOError:
+                    wait_for_sock_read(self._sock, self.controller, None)
+        finally:
+            self._sock.setblocking(b)
+
+        if require_confirmation:
+            self._sock.sendall(_const.TEXT_SUCCESS_HEADER)
+        if cmp_string:
+            return self.raw_bytes == cmp_string
+        return self.raw_bytes
 
     def __str__(self):
         """
@@ -117,28 +166,29 @@ class SimplePeerText:
         - str: The decoded string representation of the stored text.
 
         """
-        return self.raw_text.decode(_const.FORMAT)
+        return self.raw_bytes.decode(_const.FORMAT)
 
     def __repr__(self):
-        return (f"SimplePeerText(refer_sock='{self._sock.__repr__()}',"
-                f" text='{self.raw_text}',"
-                f" chunk_size={self.chunk_size},"
-                )
+        return (
+            f"SimplePeerText(refer_sock='{self._sock.__repr__()}',"
+            f" text='{self.raw_bytes}',"
+            f" chunk_size={self.chunk_size},"
+        )
 
     def __len__(self):
-        return len(self.raw_text.decode(_const.FORMAT))
+        return len(self.raw_bytes.decode(_const.FORMAT))
 
     def __iter__(self):
-        return self.raw_text.__iter__()
+        return self.raw_bytes.__iter__()
 
     def __eq__(self, other:bytes):
-        return self.raw_text == other
+        return self.raw_bytes == other
 
     def __ne__(self, other):
-        return self.raw_text != other
+        return self.raw_bytes != other
 
     def __hash__(self):
-        return hash(self.raw_text)
+        return hash(self.raw_bytes)
 
 
 class DataWeaver:
@@ -183,25 +233,25 @@ class DataWeaver:
     async def send(self, receiver_sock):
         """
         Sends data as _json string to the provided socket,
-        This function is written on top of :class: `SimplePeerText`'s send function
+        This function is written on top of :class: `SimplePeerBytes`'s send function
         Args:
             :param receiver_sock:
 
         Returns:
             :returns True if sends text successfully else False:
         """
-        return await SimplePeerText(receiver_sock, self.dump().encode(_const.FORMAT)).send()
+        return await SimplePeerBytes(receiver_sock, self.dump().encode(_const.FORMAT)).send()
 
     async def receive(self, sender_sock):
         """
         Receives a text string from the specified sender socket and sets the values of the TextObject instance.
-        Written on top of :class: `SimplePeerText`'s receive function
+        Written on top of :class: `SimplePeerBytes`'s receive function
 
         :param sender_sock: The sender socket from which to receive the text string.
         Returns:
             The updated TextObject instance
         """
-        text_string = SimplePeerText(sender_sock)
+        text_string = SimplePeerBytes(sender_sock)
         if await text_string.receive():
             self.__set_values(_json.loads(str(text_string)))
         return self
@@ -257,7 +307,7 @@ class DataWeaver:
 class WireData:
     version = _const.VERSIONS['WIRE']
 
-    def __init__(self, _id, header, version=version, *args, **kwargs):
+    def __init__(self, header, _id, version=version, *args, **kwargs):
         self.id = _id
         self._header = header
         self.version = version

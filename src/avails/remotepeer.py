@@ -1,7 +1,7 @@
 import pickle
 import struct
 from itertools import count
-from typing import Tuple, Self
+from typing import Tuple
 
 from . import connect, const
 
@@ -19,18 +19,23 @@ class RemotePeer:
         'file_count': int
     }
 
-    __slots__ = 'username', 'uri', 'status', 'callbacks', 'req_uri', 'id', '_file_id', 'ip'
+    __slots__ = 'username', '_conn_port', 'status', 'callbacks', '_req_port', 'id', '_file_id', 'ip','_network_port'
 
-    def __init__(self, username='admin', ip='localhost', port=8088, report=35896,
+    def __init__(self,
+                 username='admin',
+                 ip='localhost',
+                 conn_port=8088,
+                 req_port=8089,
+                 net_port=8090,
                  status=0):
         self.username = username
-        ip = str(ip)
-        self.ip = ip
-        self.uri = (ip, port)
+        self.ip = str(ip)
+        self._conn_port = conn_port
         self.status = status
         self.callbacks = 0
-        self.req_uri = (ip, report)
-        self.id = f'{ip}{port}'
+        self._req_port = req_port
+        self._network_port = net_port
+        self.id = f'{self.ip}{conn_port}'
         self._file_id = count()
 
     async def send_serialized(self, _to_send: connect.Socket):
@@ -47,7 +52,12 @@ class RemotePeer:
     #     self.username = username
     #     self.ip = ip
     #     self.
+
     def get_file_id(self):
+        """
+        gets a unique id (uses :func:itertools.count) to assign to a file sent to peer represented
+        by this object
+        """
         return next(self._file_id)
 
     def increment_file_count(self):
@@ -58,23 +68,46 @@ class RemotePeer:
         try:
             version = struct.unpack('!f', await sender_sock.arecv(4))[0]
             assert version == cls.version, 'versions not matching for remote peer'
-
             size_to_recv = struct.unpack('!I', await sender_sock.arecv(4))[0]
             serialized = await sender_sock.arecv(size_to_recv)
+
             return pickle.loads(serialized)
         except Exception as e:
             print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
-            return RemotePeer(username="N/A", ip=sender_sock.getpeername()[0], port=sender_sock.getpeername()[1], )
+            return RemotePeer(username="N/A", ip=sender_sock.getpeername()[0], conn_port=sender_sock.getpeername()[1], )
+
+    @property
+    def uri(self):
+        return self.ip, self._conn_port
+
+    @property
+    def req_uri(self):
+        return self.ip, self._req_port
+
+    @property
+    def network_uri(self):
+        return self.ip, self._network_port
 
     def __reduce__(self):
-        return self.__class__, (self.username, self.uri[0], self.uri[1], self.req_uri[1], self.status), {'id': self.id}
+        return (
+            self.__class__,
+            (
+                self.username,
+                self.ip,
+                self._conn_port,
+                self._req_port,
+                self._network_port,
+                self.status
+            ),
+            {'id': self.id},
+        )
 
     def __setstate__(self, state):
         for key, value in state.items():
             setattr(self, key, value)
 
     def __repr__(self):
-        return f'RemotePeer({self.username}, {self.uri[0]}, {self.uri[1]}, {self.req_uri[1]}, {self.status})'
+        return f'RemotePeer({self.username}, {self.ip}, {self._conn_port}, {self._req_port}, {self._network_port}, {self.status})'
 
     def __bool__(self):
         return bool(self.username or self.id or self.req_uri or self.uri)

@@ -14,6 +14,7 @@ from src.avails import (
     use,
 )
 from ..configurations.configure import set_constants
+import src.core.eventloop
 from ..core.peers import set_current_remote_peer_object
 
 
@@ -33,8 +34,6 @@ def initiate_bootup():
                         else socket.AF_INET)
     # print(f"{const.THIS_IP=}")
     validate_ports()
-    from src.configurations import configure
-    configure.print_constants()
 
 
 def get_ip() -> tuple[str, int]:
@@ -175,12 +174,12 @@ def write_default_configurations(path):
 
 def validate_ports() -> None:
     ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ,
-                  const.PORT_FILE]
+                  const.PORT_FILE, const.PORT_NETWORK]
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port):
             ports_list[i] = connect.get_free_port()
             # error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
-    const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, const.PORT_FILE = ports_list
+    const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, const.PORT_FILE, const.PORT_NETWORK = ports_list
     return None
 
 

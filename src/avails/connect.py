@@ -1,9 +1,12 @@
 import asyncio as _asyncio
 import random
 import socket as _socket
-from typing import IO, Self, Optional
-from . import const, useables
 from abc import ABC, abstractmethod
+from asyncio import AbstractEventLoop
+from functools import wraps
+from typing import IO, Self, Optional
+
+from . import const, useables
 
 
 class Socket(_socket.socket):
@@ -49,18 +52,23 @@ class Socket(_socket.socket):
             custom_socket.setblocking(True)
         return custom_socket, addr
 
+    @wraps(AbstractEventLoop.sock_accept)
     async def aaccept(self):
         return await self.__loop.sock_accept(self)
 
+    @wraps(AbstractEventLoop.sock_recv)
     async def arecv(self, bufsize):
         return await self.__loop.sock_recv(self, bufsize)
 
+    @wraps(AbstractEventLoop.sock_connect)
     async def aconnect(self, __address) -> Self:
         return await self.__loop.sock_connect(self, __address)
 
+    @wraps(AbstractEventLoop.sock_sendall)
     async def asendall(self, data):
         return await self.__loop.sock_sendall(self, data)
 
+    @wraps(AbstractEventLoop.sock_sendfile)
     async def asendfile(self, file: IO[bytes],
                         offset: int = 0,
                         count: int | None = None,
@@ -68,17 +76,25 @@ class Socket(_socket.socket):
                         fallback: bool | None = None):
         return await self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
 
+    @wraps(AbstractEventLoop.sock_sendto)
+    async def asendto(self, data, address):
+        return await self.__loop.sock_sendto(self, data, address)
+
+    @wraps(AbstractEventLoop.sock_recv_into)
     async def arecv_into(self, buffer):
         return await self.__loop.sock_recv_into(self, buffer)
 
+    @wraps(AbstractEventLoop.sock_recvfrom_into)
     async def arecvfrom_into(self, buffsize):
         return await self.__loop.sock_recvfrom(self, buffsize)
 
+    @wraps(AbstractEventLoop.sock_recvfrom)
     async def arecvfrom(self, buffsize):
         return await self.__loop.sock_recvfrom(self, buffsize)
 
 
 class Protocol(ABC):
+    __slots__ = ()
 
     @staticmethod
     @abstractmethod
@@ -124,6 +140,7 @@ class Protocol(ABC):
 
 
 class TCPProtocol(Protocol):
+    __slots__ = ()
 
     @staticmethod
     def create_async_sock(loop: _asyncio.AbstractEventLoop,
@@ -189,12 +206,13 @@ class TCPProtocol(Protocol):
 
 
 class UDPProtocol(Protocol):
+    __slots__ = ()
 
     @staticmethod
     def create_async_sock(loop: _asyncio.AbstractEventLoop,
                           family: _socket.AddressFamily = _socket.AF_INET,
                           fileno: Optional[int] = None):
-        sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
+        sock = Socket(family, _socket.SOCK_DGRAM, _socket.IPPROTO_UDP, fileno)
         sock.setblocking(False)
         sock.set_loop(loop)
         return sock

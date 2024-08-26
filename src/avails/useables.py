@@ -1,12 +1,14 @@
-# from src.avails.waiters import *
 import functools
 import inspect
 import os
 import platform
+import socket
+
 import select
 import subprocess
 from datetime import datetime
 from sys import _getframe  # noqa
+
 
 from .constants import MAX_RETIRES, LOCK_PRINT
 
@@ -42,14 +44,14 @@ def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0
 
 
 @functools.wraps(print)
-def echo_print(*args, **kwargs) -> None:
+def echo_print(*args, **kwargs):
     """Prints the given arguments to the console.
 
     Args:
         *args: The arguments to print.
     """
     with LOCK_PRINT:
-        print(*args, **kwargs)
+        return print(*args, **kwargs)
 
 
 def open_file(content):
@@ -77,12 +79,25 @@ def wait_for_sock_read(sock, actuator, timeout):
 
 
 def wait_for_sock_write(sock, actuator, timeout):
-    _,writes,_ = select.select([actuator,], [sock,], [], timeout)
+    _, writes, _ = select.select([actuator,], [sock,], [], timeout)
 
     if actuator.to_stop:
         return [actuator,]
 
     return writes
+
+
+def send_data_with_retries(sock:socket.socket, data:bytes, chunk_size, retries):
+    b = sock.getblocking()
+    mm_data = memoryview(data)
+    stop = False
+    sock.setblocking(False)
+    send_func = sock.send
+    for _ in get_timeouts(max_retries=retries):
+        i = 0
+        while i < len(mm_data):
+            sent = send_func(mm_data[i: i + chunk_size])
+            i += sent
 
 
 _CO_NESTED = inspect.CO_NESTED
@@ -161,7 +176,7 @@ class NotInUse:
         """
         Decorator class to mark functions as not in use or not fully tested.
         :raises ValueError : if function gets called
-        Args:
+        :Args:
         - function: The function to be decorated.
         """
         self.__doc__ = """This class is used to mark functions that are not currently in use or haven't been fully tested.

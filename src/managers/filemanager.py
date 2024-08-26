@@ -1,22 +1,11 @@
 import asyncio
-import functools
-import itertools
+import enum
 import os
-import socket
 import struct
 from pathlib import Path
-import multiprocessing
-from typing import Literal
-import enum
-
-
-# from typing import
 
 from src.avails import (
-    DataWeaver,
     dialogs,
-    FileGroup,
-    PeerFilePool,
     FileItem,
     FileDict,
     const,
@@ -24,7 +13,6 @@ from src.avails import (
     WireData,
     use, RemotePeer,
 )
-
 from src.core import peer_list, connections, get_this_remote_peer
 from . import processmanager
 
@@ -34,14 +22,6 @@ all_files = FileDict()
 async def open_file_selector():
     loop = asyncio.get_running_loop()
     result = loop.run_in_executor(None, dialogs.Dialog.open_file_dialog_window)
-    await result
-
-    return result.result()
-
-
-async def open_dir_selector():
-    loop = asyncio.get_running_loop()
-    result = loop.run_in_executor(None, dialogs.Dialog.open_directory_dialog_window)
     await result
 
     return result.result()
@@ -90,7 +70,7 @@ class FileSender:
 
         use.echo_print('changing state to sending')  # debug
         self.state = STATE.SENDING
-        # :todo: improve this making it a task taking longer time
+        # :todo: improve this making it a asyncio.task, taking longer time at send_files
         self.file_handle, result = processmanager.submit(
             asyncio.get_running_loop(),
             processmanager.FILE,
@@ -121,7 +101,7 @@ class FileSender:
     def _prepare_socket() -> tuple[connect.Socket, tuple[str, int]]:
         port = connect.get_free_port()
         main_sock = const.PROTOCOL.create_async_sock(asyncio.get_running_loop(), const.IP_VERSION)
-        addr = (get_this_remote_peer().ip, port)  # :todo change this
+        addr = (get_this_remote_peer().ip, port)
         main_sock.bind(addr)
         main_sock.listen(2)
         return main_sock, addr
@@ -166,4 +146,4 @@ class FileReceiver:
         return await connect.create_connection_async(self.addr)
 
 
-__all__ = ['FileSender', 'FileReceiver', 'get_id_for_file', 'open_file_selector', 'open_dir_selector', 'all_files']
+__all__ = ['FileSender', 'FileReceiver', 'get_id_for_file', 'open_file_selector', 'all_files']

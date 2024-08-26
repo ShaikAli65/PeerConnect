@@ -1,7 +1,12 @@
 from src.avails import use, DataWeaver
 from src.configurations import configure
 
-from src.managers import ProfileManager, all_profiles, get_profile_from_profile_file_name
+from src.managers import (
+    ProfileManager,
+    set_current_profile,
+    all_profiles,
+    get_profile_from_profile_file_name
+)
 
 
 async def align_profiles(_websocket):
@@ -10,10 +15,9 @@ async def align_profiles(_websocket):
     await configure_further_profile_data(_websocket)
 
     selected_profile = await get_selected_profile(_websocket)
-    configure.set_selected_profile(selected_profile)
+    set_current_profile(selected_profile)
     use.echo_print('::profile selected and updated', selected_profile)
-
-    # const.HOLD_PROFILE_SETUP.set()
+    # HOLD_PROFILE_SETUP.set()
 
 
 async def send_profiles(_websocket):
@@ -69,6 +73,7 @@ async def configure_further_profile_data(_websocket):
         profile_object = get_profile_from_profile_file_name(profile_name)
         if profile_object is None:
             ProfileManager.add_profile(profile_name, profile_settings)
+            use.echo_print("added profile :", profile_name, profile_settings)
             continue
 
         for header, content in profile_settings.items():

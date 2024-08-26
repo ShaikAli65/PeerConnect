@@ -152,6 +152,14 @@ class ProfileManager:
         else:
             return self is other
 
+    def __str__(self):
+        return (f"<ProfileManager(\n"
+                f"\tserver_ip={self.server_ip},\n"
+                f"\tusername={self.username},\n"
+                f"\tfile_name={self.file_name},\n"
+                f"\tserver_port={self.server_port}\n"
+                f")>")
+
 
 def all_profiles() -> dict:
     """
