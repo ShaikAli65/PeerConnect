@@ -13,6 +13,7 @@ from src.avails import (
     connect,
     use,
 )
+from ..avails.useables import echo_print
 from ..configurations.configure import set_constants
 import src.core.eventloop
 from ..core.peers import set_current_remote_peer_object
@@ -178,7 +179,7 @@ def validate_ports() -> None:
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port):
             ports_list[i] = connect.get_free_port()
-            # error_log(f"Port is not empty. choosing another port: {ports_list[i]}")
+            echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, const.PORT_FILE, const.PORT_NETWORK = ports_list
     return None
 

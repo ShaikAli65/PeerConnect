@@ -375,8 +375,14 @@ def get_free_port() -> int:
 
 def is_port_empty(port):
     try:
+        t, u = False, False
         with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
             s.bind((const.THIS_IP, port))
-            return True
+            t = True
+        with _socket.socket(const.IP_VERSION, _socket.SOCK_DGRAM) as s:
+            s.bind((const.THIS_IP, port))
+            u = True
+        return t and u
+
     except (OSError, _socket.error, _socket.gaierror):
         return False

@@ -1,8 +1,8 @@
-REM @echo off
+@echo off
 git pull
 
 set "FLAG_FILE=setup_completed.txt"
-set "VENV_DIR=venv"
+set "VENV_DIR=../venv"
 
 
 if not exist "%FLAG_FILE%" (

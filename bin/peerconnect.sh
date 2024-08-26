@@ -19,7 +19,7 @@ install() {
 
 setup_environment() {
     echo "Setting up..."
-    $runner -m venv venv
+    $runner -m venv ../venv
     source ./venv/bin/activate
 }
 
