@@ -5,4 +5,7 @@
 .vscode
 __pycache__
 .venv
-bin/setup_completed.txt
+bin/*
+!bin/peerconnect.bat
+!bin/peerconnect.sh
+!bin/requirements.txt
