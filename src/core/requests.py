@@ -1,7 +1,6 @@
 import asyncio
 import pickle
 import socket
-import struct
 
 import kademlia.network
 from kademlia import protocol, network, routing
@@ -65,11 +64,10 @@ class EndPoint(asyncio.DatagramProtocol):
 async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport, EndPoint]:
     from . import discover
     loop = asyncio.get_running_loop()
-    this_rp = get_this_remote_peer()
 
     server = network.Server()
     server.protocol_class = RequestProtocol
-    await server.listen(*this_rp.network_uri[::-1])
+    await server.listen(port=const.PORT_NETWORK)
 
     node_addr = await discover.search_network()
     if node_addr is not None:
@@ -78,7 +76,7 @@ async def initiate() -> tuple[kademlia.network.Server, asyncio.DatagramTransport
 
     transport, proto = await loop.create_datagram_endpoint(
         EndPoint,
-        local_addr=('0.0.0.0', this_rp._req_port),
+        local_addr=('0.0.0.0', const.PORT_REQ),
         family=const.IP_VERSION,
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
