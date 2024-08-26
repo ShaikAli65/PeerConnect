@@ -16,7 +16,15 @@ def test():
     const.SERVER_IP = const.THIS_IP
     const.PORT_SERVER = 45000
     configure.print_constants()
-    set_current_remote_peer_object(RemotePeer('test', const.THIS_IP,report=int(input('enter port no'))))
+    set_current_remote_peer_object(
+        RemotePeer(
+            'test',
+            ip='localhost',
+            conn_port=const.PORT_THIS,
+            req_port=const.PORT_REQ,
+            net_port=const.PORT_NETWORK,
+        )
+    )
     print(peers.get_this_remote_peer())
 
 
