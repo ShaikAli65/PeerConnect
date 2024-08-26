@@ -1,5 +1,6 @@
 #!/bin/bash
 clear
+git stash
 git pull
 
 runner="py"
