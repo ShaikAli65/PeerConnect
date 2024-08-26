@@ -320,14 +320,26 @@ class WireData:
     async def send(self, sock):
         serial_data = bytes(self)
         payload_len = struct.pack('!I', len(serial_data))
-        await sock.asendall(payload_len)
-        await sock.asendall(serial_data)
+        await sock.asendall(payload_len + serial_data)
+
+    def sendto(self, sock, addr):
+        serial_data = bytes(self)
+        assert len(serial_data) <= _const.MAX_DATAGRAM_SIZE, "data gram size should be lesser than const.MAX_DATAGRAM_SIZE"
+        payload_len = struct.pack('!I', len(serial_data))
+        sock.sendto(payload_len + serial_data, addr)
 
     @staticmethod
     async def receive(sock:_Socket):
         payload_len = struct.unpack('!I', await sock.arecv(4))[0]
         data = await sock.arecv(payload_len)
         return pickle.loads(data)
+
+    @staticmethod
+    async def receive_datagram(sock:_Socket):
+        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_SIZE)
+        payload_len = struct.unpack('!I', data[:4])[0]
+        data = data[4: payload_len + 4]
+        return pickle.loads(data), addr
 
     @staticmethod
     def load(data: bytes):

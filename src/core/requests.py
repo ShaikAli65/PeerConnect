@@ -44,10 +44,11 @@ class EndPoint(asyncio.DatagramProtocol):
         print("Received:", data, "from", addr)  # debug
         if data == REQUESTS.NETWORK_FIND:
             this_rp = get_this_remote_peer()
-            self.transport.sendto(REQUESTS.NETWORK_FIND_REPLY, addr)
             data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=None, connect_uri=this_rp.network_uri)
+            data_payload.sendto(self.transport, addr)
+            # self.transport.sendto(bytes(data_payload), addr)
+            # self.transport.sendto(REQUESTS.NETWORK_FIND_REPLY, addr)
             print("sending as reply", data_payload)
-            self.transport.sendto(bytes(data_payload), addr)
 
     def connection_made(self, transport):
         self.transport = transport

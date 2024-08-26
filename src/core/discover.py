@@ -6,6 +6,7 @@ import struct
 import kademlia.protocol
 import kademlia.routing
 
+from . import get_this_remote_peer
 from .requests import REQUESTS
 from ..avails import connect, const, use, WireData
 
@@ -15,10 +16,11 @@ class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
     ...
 
 
-def ping_all(sock, port, *, times=3):
-
+def ping_all(sock, port, *, times=1):
+    this_id = get_this_remote_peer().id
     for _ in range(times):
-        sock.sendto(REQUESTS.NETWORK_FIND, ('<broadcast>', port))
+        req_payload = WireData(REQUESTS.NETWORK_FIND, this_id)
+        req_payload.sendto(sock, ('<broadcast>', port))
         print("sent ", _, "time")
 
 
@@ -26,16 +28,16 @@ async def wait_for_replies(sock, timeout=5):
     print("waiting for replies at", sock)
     while True:
         try:
-            data, ipaddr = await asyncio.wait_for(sock.arecvfrom(16), timeout=timeout)
-            print("some data came ", data, ipaddr)
-            if ipaddr == sock.getsockname():
+            data: tuple[WireData, tuple[str, int]] = await asyncio.wait_for(WireData.receive_datagram(sock), timeout)
+            print("some data came ", data)
+            if data[1] == sock.getsockname():
                 continue
-            if data == REQUESTS.NETWORK_FIND_REPLY:
+            if data[0].match_header(REQUESTS.NETWORK_FIND_REPLY):
                 print("reply detected")
-                data = await asyncio.wait_for(WireData.receive(sock), timeout)
                 print("got some data", data)
+                return data[0]['']
         except asyncio.TimeoutError:
-
+            print(f'timeout reached at {use.func_str(wait_for_replies)}')
             return None
 
 
