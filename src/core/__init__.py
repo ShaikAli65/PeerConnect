@@ -13,6 +13,17 @@ state_handle = StateManager()
 PROFILE_WAIT = _asyncio.Event()
 
 
+class REQUESTS:
+    __slots__ = ()
+    REDIRECT = b'redirect        '
+    LIST_SYNC = b'sync list       '
+    ACTIVE_PING = b'Y face like that'
+    REQ_FOR_LIST = b'list of users  '
+    I_AM_ACTIVE = b'com notify user'
+    NETWORK_FIND = b'network find    '
+    NETWORK_FIND_REPLY = b'network find reply '
+
+
 __all__ = [
     'requests',
     'get_current_profile',
@@ -23,4 +34,5 @@ __all__ = [
     'PROFILE_WAIT',
     'connected_peers',
     'state_handle',
+    'REQUESTS',
 ]

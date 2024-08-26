@@ -8,7 +8,7 @@ import kademlia.routing
 
 from src.core import get_this_remote_peer
 from ..avails import connect, const, use, RemotePeer
-
+from . import REQUESTS
 
 class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
 
@@ -34,7 +34,11 @@ async def wait_for_replies(sock, timeout=5):
                 if ipaddr == sock.getsockname():
                     continue
                 try:
-                    return pickle.loads(data)
+                    if data == REQUESTS.NETWORK_FIND_REPLY:
+                        data_len = await sock.arecv(4)
+                        node_contact_ipaddr = await sock.arecv(data_len)
+                    return pickle.loads(node_contact_ipaddr)
+
                 except (pickle.PickleError, pickle.PicklingError, pickle.UnpicklingError):
                     return None
             except TimeoutError:

@@ -1,3 +1,4 @@
+import struct
 import threading
 import socket
 import time
@@ -9,8 +10,7 @@ import pickle
 from src.avails import DataWeaver, SimplePeerBytes, RemotePeer
 from src.avails import connect
 from kademlia import protocol, network, routing
-from src.core import peer_list, get_this_remote_peer,set_current_remote_peer_object, discover
-
+from src.core import get_this_remote_peer, discover, REQUESTS
 
 from typing import Union, Dict, Tuple
 from src.avails import const
@@ -37,12 +37,17 @@ class RequestProtocol(protocol.KademliaProtocol):
 class EndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
-        print("Received:", data.decode(),"from", addr)  # debug
-        this_rp = get_this_remote_peer()
-        data_payload = pickle.dumps(this_rp.network_uri)
-        print("sending data", data_payload)  # debug
-        self.transport.sendto(data_payload, addr)
-        self.transport.close()
+        data = data.decode()
+        print("Received:", data, "from", addr)  # debug
+        if data == REQUESTS.NETWORK_FIND:
+            this_rp = get_this_remote_peer()
+            header = REQUESTS.NETWORK_FIND_REPLY
+            connect_uri = pickle.dumps(this_rp.network_uri)
+            payload_len = struct.pack('!I', len(connect_uri))
+            data_payload = header + payload_len + connect_uri
+            print("sending data", data_payload)  # debug
+            self.transport.sendto(data_payload, addr)
+            self.transport.close()
 
     def connection_made(self, transport):
         self.transport = transport
