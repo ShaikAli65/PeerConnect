@@ -2,13 +2,12 @@ import asyncio
 import pickle
 import socket
 
-import kademlia.network
 import kademlia.protocol
 import kademlia.routing
 
-from src.core import get_this_remote_peer
-from ..avails import connect, const, use, RemotePeer
-from . import REQUESTS
+from .requests import REQUESTS
+from ..avails import connect, const, use
+
 
 class CustomKademliaProtocol(kademlia.protocol.KademliaProtocol):
 

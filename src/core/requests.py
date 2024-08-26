@@ -1,19 +1,12 @@
-import struct
-import threading
-import socket
-import time
-import json
 import asyncio
-import os
 import pickle
+import socket
+import struct
 
-from src.avails import DataWeaver, SimplePeerBytes, RemotePeer
-from src.avails import connect
 from kademlia import protocol, network, routing
-from src.core import get_this_remote_peer, discover, REQUESTS
 
-from typing import Union, Dict, Tuple
 from src.avails import const
+from src.core import get_this_remote_peer
 
 
 class RequestProtocol(protocol.KademliaProtocol):
@@ -55,6 +48,7 @@ class EndPoint(asyncio.DatagramProtocol):
 
 
 async def initiate():
+    from . import discover
     loop = asyncio.get_running_loop()
     this_rp = get_this_remote_peer()
 
@@ -75,3 +69,14 @@ async def initiate():
         allow_broadcast=True,
     )
     print('started requests endpoint at', this_rp.req_uri)  # debug
+
+
+class REQUESTS:
+    __slots__ = ()
+    REDIRECT = b'redirect        '
+    LIST_SYNC = b'sync list       '
+    ACTIVE_PING = b'Y face like that'
+    REQ_FOR_LIST = b'list of users  '
+    I_AM_ACTIVE = b'com notify user'
+    NETWORK_FIND = b'network find    '
+    NETWORK_FIND_REPLY = b'network find reply '
