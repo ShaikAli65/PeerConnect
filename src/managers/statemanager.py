@@ -2,12 +2,13 @@ import asyncio
 import functools
 import inspect
 import math
-from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
-from asyncio import Queue as _queue
 import threading
-from typing import Optional
-from src.avails.useables import echo_print
+from asyncio import Queue as _queue
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from typing import Iterable
+from typing import Optional
+
+from src.avails.useables import echo_print
 
 
 class State:
@@ -32,8 +33,10 @@ class State:
         if inspect.ismethod(func):
             self.func.__func__.__name__ = func.__name__
         else:
-            self.func.__name__ = func.__name__
-
+            if hasattr(func, __name__):
+                self.func.__name__ = func.__name__
+            else:
+                self.func.__name__ = inspect.currentframe().f_code.co_name
         # self.func_name = func.__name__
         self.actuator = controller
         self.event = event_to_wait
