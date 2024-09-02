@@ -1,12 +1,7 @@
-import asyncio
 import os
 
-from src.configurations import bootup
-from src.configurations import configure
-from src.core import requests, state_handle, connections, PROFILE_WAIT
+from src.core import Dock
 from src.core.webpage_handlers import pagehandle
-from src.managers import profilemanager
-from src.managers.statemanager import State
 from tests.test import *
 
 
@@ -16,7 +11,7 @@ def initial_states():
     s3 = State("loading profiles", profilemanager.load_profiles_to_program)
     s4 = State("printing configurations", configure.print_constants)
     s5 = State("launching webpage", pagehandle.initiate_pagehandle)
-    s6 = State("waiting for profile choice", PROFILE_WAIT.wait)
+    s6 = State("waiting for profile choice", Dock.PROFILE_WAIT.wait)
     # s7 = State("initiating requests", requests.initiate_requests, is_blocking=True)
     s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
 
@@ -24,9 +19,9 @@ def initial_states():
 
 
 async def initiate(states):
-    await state_handle.put_states(states)
+    await Dock.state_handle.put_states(states)
 
-    await state_handle.process_states()
+    await Dock.state_handle.process_states()
 
 
 if __name__ == '__main__':
