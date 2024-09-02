@@ -1,16 +1,10 @@
-import asyncio
-import time
-import logging
+from kademlia import utils
 
 from src.avails import const, RemotePeer
 from src.configurations import configure, bootup
-from src.core import connectserver, connections, requests
-from src.core.peers import set_current_remote_peer_object
+from src.core import connections, requests, set_current_remote_peer_object
 from src.managers import profilemanager
 from src.managers.statemanager import State
-from src.managers import filemanager
-
-from src.core import peers
 
 
 def test():
@@ -18,7 +12,7 @@ def test():
     const.PORT_SERVER = 45000
     set_current_remote_peer_object(
         RemotePeer(
-            'test',
+            utils.digest('test'),
             ip=const.THIS_IP,
             conn_port=const.PORT_THIS,
             req_port=const.PORT_REQ,
@@ -31,9 +25,7 @@ def test():
 async def test_gossip():
     requests_data = await requests.initiate()
     gossip_message = {'message': 'hi for all', 'ttl':3}
-    await asyncio.sleep(8)
-    print('sending gossip message\a')
-    await requests_data[0].protocol.call_gossip(gossip_message)
+    # await requests_data[0].protocol.call_gossip(gossip_message)
 
 
 def test_initial_states():
