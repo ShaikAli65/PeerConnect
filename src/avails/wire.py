@@ -1,43 +1,63 @@
 import json as _json
-import pickle
+# import pickle
 import struct
 import threading as _threading
 from collections import defaultdict
 from typing import Union
 
+import umsgpack
+
 from . import const as _const, Actuator
 from .connect import Socket as _Socket
-from .useables import wait_for_sock_read
+from .useables import wait_for_sock_read, NotInUse
 
 
-class SendRecv:
+class Wire:
     @staticmethod
-    async def send_async(sock: _Socket, obj, serializer:pickle.dumps = None):
-        data = serializer(obj)
+    async def send_async(sock: _Socket, data:bytes):
         data_size = struct.pack('!I',len(data))
         await sock.asendall(data_size)
         await sock.asendall(data)
 
     @staticmethod
-    def send(sock: _Socket, obj, serializer=pickle.dumps):
-        data = serializer(obj)
+    def send(sock: _Socket, data:bytes):
         data_size = struct.pack('!I',len(data))
         sock.sendall(data_size)
         sock.sendall(data)
 
     @staticmethod
-    async def receive_async(sock: _Socket, deserializer=pickle.loads):
-        data_size = struct.unpack('!I', await sock.arecv(4))[0]
-        data = await sock.arecv(data_size)
-        return deserializer(data)
+    def send_datagram(sock: _Socket, address, data:bytes):
+        data_size = struct.pack('!I',len(data))
+        sock.sendto(data_size + data, address)
 
     @staticmethod
-    def receive(sock: _Socket, deserializer=pickle.loads):
+    async def receive_async(sock: _Socket):
+        data_size = struct.unpack('!I', await sock.arecv(4))[0]
+        data = await sock.arecv(data_size)
+        return data
+
+    @staticmethod
+    def receive(sock: _Socket):
         data_size = struct.unpack('!I', sock.recv(4))[0]
         data = sock.recv(data_size)
-        return deserializer(data)
+        return data
+
+    @staticmethod
+    def recv_datagram(sock: _Socket):
+        data, addr = sock.recvfrom(_const.MAX_DATAGRAM_SIZE)
+        data_size = struct.unpack('!I', data[:4])[0]
+        data = sock.recv(data[4: data_size + 4])
+        return data, addr
+
+    @staticmethod
+    async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
+        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_SIZE)
+        data_size = struct.unpack('!I', data[:4])[0]
+        data = data[4: data_size + 4]
+        return data, addr
 
 
+@NotInUse
 class SimplePeerBytes:
     """
     Encapsulates byte operations for peer-to-peer file transfer.
@@ -219,7 +239,7 @@ class DataWeaver:
         """
         Modifies data in _json 's string format and,
         returns _json string representation of the data
-        :return str:
+        :return: string
         """
         with self.data_lock:
             return _json.dumps(self.__data)
@@ -229,32 +249,6 @@ class DataWeaver:
 
     def match_header(self, _header) -> bool:
         return self.__data['header'] == _header
-
-    async def send(self, receiver_sock):
-        """
-        Sends data as _json string to the provided socket,
-        This function is written on top of :class: `SimplePeerBytes`'s send function
-        Args:
-            :param receiver_sock:
-
-        Returns:
-            :returns True if sends text successfully else False:
-        """
-        return await SimplePeerBytes(receiver_sock, self.dump().encode(_const.FORMAT)).send()
-
-    async def receive(self, sender_sock):
-        """
-        Receives a text string from the specified sender socket and sets the values of the TextObject instance.
-        Written on top of :class: `SimplePeerBytes`'s receive function
-
-        :param sender_sock: The sender socket from which to receive the text string.
-        Returns:
-            The updated TextObject instance
-        """
-        text_string = SimplePeerBytes(sender_sock)
-        if await text_string.receive():
-            self.__set_values(_json.loads(str(text_string)))
-        return self
 
     def __set_values(self, data_value: dict):
         self.__data = data_value
@@ -294,11 +288,13 @@ class DataWeaver:
         self.__data['id'] = _id
 
     def __str__(self):
-        return (f"--------------------------------------------------\n"
-                f"header  : {self.header}\n"
-                f"content : {self.content.strip(' \n')}\n"
-                f"id      : {self.id}\n"
-                f"--------------------------------------------------")
+        return (
+            f"{'-' * 50}\n"
+            f"header  : {self.header}\n"
+            f"content : {self.content.strip(' \n')}\n"
+            f"id      : {self.id}\n"
+            f"{'-' * 50}\n"
+        )
 
     def __repr__(self):
         return f'DataWeaver({self.__data})'
@@ -307,7 +303,7 @@ class DataWeaver:
 class WireData:
     version = _const.VERSIONS['WIRE']
 
-    def __init__(self, header, _id, *args,version=version, **kwargs):
+    def __init__(self, header, _id, *args, version=version, **kwargs):
         self.id = _id
         self._header = header
         self.version = version
@@ -315,37 +311,20 @@ class WireData:
         self.ancillary_data = args
 
     def __bytes__(self):
-        return pickle.dumps(self)
+        list_of_attributes = [
+            self.id,
+            self._header,
+            self.ancillary_data,
+            self.version,
+            self.body,
+        ]
+        return umsgpack.dumps(list_of_attributes)
 
-    async def send(self, sock):
-        serial_data = bytes(self)
-        payload_len = struct.pack('!I', len(serial_data))
-        await sock.asendall(payload_len + serial_data)
-
-    def sendto(self, sock, addr):
-        serial_data = bytes(self)
-        assert len(serial_data) <= _const.MAX_DATAGRAM_SIZE, "data gram size should be lesser than const.MAX_DATAGRAM_SIZE"
-        payload_len = struct.pack('!I', len(serial_data))
-        sock.sendto(payload_len + serial_data, addr)
-
-    @staticmethod
-    async def receive(sock:_Socket):
-        payload_len = struct.unpack('!I', await sock.arecv(4))[0]
-        data = await sock.arecv(payload_len)
-        return pickle.loads(data)
-
-    @staticmethod
-    async def receive_datagram(sock:_Socket):
-        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_SIZE)
-        payload_len = struct.unpack('!I', data[:4])[0]
-        data = data[4: payload_len + 4]
-        return pickle.loads(data), addr
-
-    @staticmethod
-    def load_from(data: bytes):
-        payload_len = struct.unpack('!I', data[:4])[0]
-        data = data[4: payload_len + 4]
-        return pickle.loads(data)
+    @classmethod
+    def load_from(cls, data: bytes):
+        list_of_attributes = umsgpack.loads(data)
+        header, _id, *args, version, body = list_of_attributes
+        return cls(header, _id, *args, version=version, **body)
 
     def match_header(self, data):
         return self.header == data
