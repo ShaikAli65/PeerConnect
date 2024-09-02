@@ -11,7 +11,7 @@ from src.avails import (
     use,
     const,
     PeerFilePool,
-    SimplePeerBytes,
+    Wire,
     FileItem
 )
 
@@ -146,16 +146,16 @@ class DirectoryTaskHandle(TaskHandle):
     def __send_path(self, path: Path, parent, end_with):
         path = path.relative_to(parent)
         final_path = (path.as_posix() + end_with).encode(const.FORMAT)
-        SimplePeerBytes(self.socket, final_path).send_sync()
+        Wire.send(self.socket, final_path)
         return final_path.decode(const.FORMAT)
 
     def recv_dir(self):
         while True:
-            path = SimplePeerBytes(self.socket)
-            if not path.receive_sync():
+            path = Wire.receive(self.socket)
+            if not path:
                 print("I am done")
                 return
-            rel_path = str(path)
+            rel_path = path.decode(const.FORMAT)
             abs_path = Path(const.PATH_DOWNLOAD, rel_path[:-1])
             if rel_path.endswith("/"):
                 os.makedirs(abs_path, exist_ok=True)
