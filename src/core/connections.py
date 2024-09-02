@@ -6,12 +6,18 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Optional
 
-from src.avails import SimplePeerBytes, RemotePeer
-from src.avails import SocketStore
-from src.avails import connect
-from src.avails import const, use, WireData
-from . import connected_peers
-from . import get_this_remote_peer
+# from . import connected_peers
+from . import get_this_remote_peer, Dock
+
+from src.avails import (
+    Wire,
+    RemotePeer,
+    SocketStore,
+    connect,
+    const,
+    use,
+    WireData,
+)
 
 
 async def initiate_connections():
@@ -78,7 +84,7 @@ class Acceptor:
             peer_id = await self.verify(initial_conn)
             if not peer_id:
                 return
-            connected_peers.add_peer_sock(peer_id, initial_conn)
+            Dock.connected_peers.add_peer_sock(peer_id, initial_conn)
             await self.handle_peer(peer_id)
         except (socket.error, OSError) as e:
             # error_log(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")
@@ -90,23 +96,27 @@ class Acceptor:
         :param _conn: connection from peer
         :returns peer_id: if verification is successful else None (implying socket to be removed)
         """
-        hand_shake = SimplePeerBytes(_conn)
-        hand_shake = await hand_shake.receive(cmp_string=const.CMD_VERIFY_HEADER)
-        if not hand_shake:
+        hand_shake = await Wire.receive_async(_conn)
+        if not hand_shake == const.CMD_VERIFY_HEADER:
             return None
-
-        peer_id = await SimplePeerBytes(_conn).receive()
-        peer_id = peer_id.decode()
+        # hand_shake = SimplePeerBytes(_conn)
+        # hand_shake = await hand_shake.receive(cmp_string=const.CMD_VERIFY_HEADER)
+        # if not hand_shake:
+        #     return None
+        # peer_id = await SimplePeerBytes(_conn).receive()
+        peer_id = await Wire.receive_async(_conn)
+        peer_id = peer_id.decode(const.FORMAT)
         self.currently_in_connection[peer_id] += 1
         use.echo_print("verified peer", peer_id)  # debug
         return peer_id
 
     async def handle_peer(self, peer_id):
-        sock = connected_peers.get_socket(peer_id)
+        sock = Dock.connected_peers.get_socket(peer_id)
 
         while self.currently_in_connection[peer_id]:
             try:
-                data = await asyncio.wait_for(WireData.receive(sock), self.max_timeout)
+                raw_data = await asyncio.wait_for(Wire.receive_async(sock), self.max_timeout)
+                data = WireData.load_from(raw_data)
             except asyncio.TimeoutError:
                 print("timedout", peer_id)
                 continue
@@ -150,7 +160,7 @@ class Connector:
     @classmethod
     async def connect_peer(cls, peer_obj: RemotePeer) -> connect.Socket:
         use.echo_print('a connection request made to :', peer_obj.uri)  # debug
-        if sock := connected_peers.is_connected(peer_obj.id):
+        if sock := Dock.connected_peers.is_connected(peer_obj.id):
             pr_str = f"cache hit !{textwrap.fill(peer_obj.username, width=10)} and socket is connected"
             use.echo_print(pr_str, sock.getpeername())  # debug
             cls._current_connected = sock
@@ -164,7 +174,7 @@ class Connector:
             peer_sock.getpeername()[:2],
             peer_sock.getsockname()[:2]
         )  # debug
-        connected_peers.add_peer_sock(peer_obj.id, peer_sock)
+        Dock.connected_peers.add_peer_sock(peer_obj.id, peer_sock)
         cls._current_connected = peer_sock
         # use.echo_print(f"handle signal to page, that we can't reach {peer_obj.username}, or he is offline")
         return peer_sock
@@ -172,21 +182,13 @@ class Connector:
     @classmethod
     async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
         connection_socket = await connect.connect_to_peer(peer_obj, to_which=connect.BASIC_URI_CONNECT)
-        connected_peers.add_peer_sock(peer_obj.id, connection_socket)
+        Dock.connected_peers.add_peer_sock(peer_obj.id, connection_socket)
         return connection_socket
 
     @classmethod
     async def _verifier(cls, connection_socket):
-        # try:
-        data = SimplePeerBytes(connection_socket, const.CMD_VERIFY_HEADER)
-        await data.send()
-
+        await Wire.send_async(connection_socket, const.CMD_VERIFY_HEADER)
         use.echo_print("sent header")  # debug
-        data = SimplePeerBytes(connection_socket, get_this_remote_peer().id_encoded)
-        await data.send()
-
-        # DataWeaver(header=const.CMD_VERIFY_HEADER,content="",_id=const.THIS_OBJECT.id).send(connection_socket)
+        await Wire.send_async(connection_socket, get_this_remote_peer().id)
         use.echo_print("Sent verification to ", connection_socket.getpeername())  # debug
-        # except json.JSONDecoder:
-        #     return False
         return True
