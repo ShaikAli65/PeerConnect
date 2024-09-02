@@ -13,7 +13,7 @@ from src.avails import (
     WireData,
     use, RemotePeer,
 )
-from src.core import peer_list, connections, get_this_remote_peer
+from src.core import Dock, connections, get_this_remote_peer
 from . import processmanager
 
 all_files = FileDict()
@@ -50,7 +50,7 @@ class FileSender:
 
     async def send_files(self, peer_id):
 
-        peer_obj = peer_list.get_peer(peer_id)
+        peer_obj = Dock.peer_list.get_peer(peer_id)
         file_id = get_id_for_file(peer_obj)
         server_sock, addr = self._prepare_socket()
         tell_header = self._prepare_header(addr, file_id)
@@ -88,7 +88,7 @@ class FileSender:
     def _prepare_header(self, addr, file_id):
         data = WireData(
             header=const.CMD_RECV_FILE,
-            _id=get_this_remote_peer().id_encoded,
+            _id=get_this_remote_peer().id,
             version=self.version,
             groups=len(self.file_list),
             file_id=file_id,

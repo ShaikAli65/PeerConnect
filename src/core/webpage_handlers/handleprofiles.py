@@ -1,5 +1,4 @@
 from src.avails import use, DataWeaver
-from src.configurations import configure
 
 from src.managers import (
     ProfileManager,
@@ -50,7 +49,6 @@ async def configure_further_profile_data(_websocket):
     """
     profiles_data structure
     {
-         # cause these are unique
         file_name : {
             'USER' : {
                 'name' : *,

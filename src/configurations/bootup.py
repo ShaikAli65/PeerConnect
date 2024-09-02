@@ -7,16 +7,13 @@ import subprocess
 import urllib.request
 import webbrowser
 
-from src.avails import (
-    RemotePeer,
+
+from ..avails import (
     const,
     connect,
     use,
 )
-from ..avails.useables import echo_print
 from ..configurations.configure import set_constants
-import src.core.eventloop
-from ..core.peers import set_current_remote_peer_object
 
 
 def initiate_bootup():
@@ -180,7 +177,7 @@ def validate_ports() -> None:
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port):
             ports_list[i] = connect.get_free_port()
-            echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
+            use.echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, const.PORT_FILE, const.PORT_NETWORK = ports_list
     return None
 

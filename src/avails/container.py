@@ -1,11 +1,11 @@
+import asyncio
 import contextlib
 import socket
 import threading
-
 from collections import deque, defaultdict, OrderedDict
 from typing import Union
 
-from . import connect
+from . import connect, RemotePeer
 
 """
 This module contains simple storages used across the peer connect
@@ -23,23 +23,62 @@ class PeerDict(dict):
 
     def __init__(self):
         super().__init__()
-        self.__lock = threading.Lock()
+        # self.__lock = threading.Lock()
+        self.__lock = asyncio.Lock()
 
     def get_peer(self, peer_id):  # -> RemotePeer:
-        with self.__lock:
-            return self.__getitem__(peer_id)
+        return self.get(peer_id, None)
 
     def add_peer(self, peer_obj):  # RemotePeer):
-        with self.__lock:
+        # with self.__lock:
+        if isinstance(peer_obj, bytes):
+            peer_obj = RemotePeer.load_from(peer_obj)
             self.__setitem__(peer_obj.id, peer_obj)
+            return
+        self[peer_obj.id] = peer_obj
+
+    def extend(self, iterable_of_peer_objects):
+        for peer_obj in iterable_of_peer_objects:
+            self[peer_obj.id] = peer_obj
+
+    def search_relevant_peers(self, search_string) -> list:
+        """
+        Searches for relevant peers based on the search string, taking into account
+        potential changes in dictionary size during iteration.
+
+        Uses a copy of the current peer IDs to avoid modification errors.
+        Provides an option to use a lock for safety if the GIL is not guaranteed
+        (e.g., Jython).
+
+        Args:
+            search_string (str): The string to search for relevance.
+
+        Returns:
+            list: A list of relevant RemotePeer objects.
+        """
+
+        if not hasattr(self, '_gil_safe'):  # Check if GIL safety has been determined
+            self._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL
+
+        peer_ids = list(self.keys())  # Create a copy of peer IDs
+
+        return_list = []
+        for peer_id in peer_ids:
+            try:
+                peer = self[peer_id]  # May raise KeyError if removed concurrently
+            except KeyError:
+                continue  # Skip removed peer
+
+            if peer.is_relevant(search_string):
+                return_list.append(peer)
+
+        return return_list
 
     def remove_peer(self, peer_id):
-        with self.__lock:
-            return self.pop(peer_id, None)
+        return self.pop(peer_id, None)
 
     def peers(self):  # -> ValuesView[RemotePeer]:
-        with self.__lock:
-            return self.values()
+        return self.values()
 
     def clear(self):
         with self.__lock:
@@ -55,7 +94,6 @@ class PeerDict(dict):
 class SafeSet:
     """
     SafeSet is a thread safe set implementation with additional features.
-
     """
     __annotations__ = {
         '__list': set,
@@ -232,7 +270,7 @@ class SocketStore:
 
     def close_all(self):
         for sock in self.storage:
-            with contextlib.suppress(OSError,socket.error):
+            with contextlib.suppress(OSError, socket.error):
                 sock.close()
 
 
@@ -241,6 +279,7 @@ class SocketCache:
     Maintains a pool of sockets
 
     """
+
     def __init__(self, max_limit=4):
         self.socket_cache: dict[str: connect.Socket] = OrderedDict()
         self.max_limit = max_limit

@@ -3,7 +3,7 @@
 *.logs
 .idea
 .vscode
-__pycache__/
+__pycache__/*
 *.pyc
 *venv
 bin/*

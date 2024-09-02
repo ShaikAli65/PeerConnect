@@ -1,18 +1,25 @@
 import asyncio
 import queue
 import time
+import struct
+import socket
+from src.avails import (
+    RemotePeer,
+    Wire,
+    use,
+    connect,
+    const,
+)
 
-from .peers import peer_list
-from src.avails import *
-
-from src.core import get_this_remote_peer
+from src.core import get_this_remote_peer, Dock
 
 
 async def get_initial_list(no_of_users, initiate_socket):
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
         # try:
-        _nomad = await RemotePeer.deserialize(initiate_socket)
+        raw_data = await Wire.receive_async(initiate_socket)
+        _nomad = await RemotePeer.load_from(raw_data)
         ping_queue.put(_nomad)
         # requests_handler.signal_status(ping_queue, )
         use.echo_print(f"::User received from server :\n {_nomad}")
@@ -37,13 +44,14 @@ async def get_list_from(initiate_socket):
 
 
 async def list_error_handler():
-    req_peer = next(peer_list)
+    req_peer = next(iter(Dock.peer_list.peers()))
     # try:
     conn = await connect.connect_to_peer(_peer_obj=req_peer, to_which=connect.REQ_URI)
     # except OSError:
     with conn:
-        request = SimplePeerBytes(refer_sock=conn, data=const.REQ_FOR_LIST)
-        await request.send()
+        await Wire.send_async(conn, const.REQ_FOR_LIST)
+        # request = SimplePeerBytes(refer_sock=conn, data=const.REQ_FOR_LIST)
+        # await request.send()
         list_len = struct.unpack('!Q',await conn.arecv(8))[0]
         await get_initial_list(list_len, conn)
 
@@ -54,7 +62,8 @@ async def list_from_forward_control(list_owner: RemotePeer):
     # except:
 
     with conn as list_connection_socket:
-        await SimplePeerBytes(list_connection_socket, const.REQ_FOR_LIST).send()
+        await Wire.send_async(list_connection_socket, const.REQ_FOR_LIST)
+        # await SimplePeerBytes(list_connection_socket, const.REQ_FOR_LIST).send()
         await get_list_from(list_connection_socket)
 
 
@@ -65,13 +74,16 @@ async def initiate_connection():
         use.echo_print("\n::Can't connect to server")
         return False
     with server_connection:
-        text = SimplePeerBytes(server_connection)
-        if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
+        text = await Wire.receive_async(server_connection)
+        # text = SimplePeerBytes(server_connection)
+        # if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
+        if text == const.SERVER_OK:
             use.echo_print('\n::Connection accepted by server')
             await get_list_from(server_connection)
-        elif text.__eq__(const.REDIRECT):
+        elif text == const.REDIRECT:
             # server may send a peer's details to get list from
-            recv_list_user = await RemotePeer.deserialize(server_connection)
+            raw_data = await Wire.receive_async(server_connection)
+            recv_list_user = RemotePeer.load_from(raw_data)
             use.echo_print('::Connection redirected by server to : ', recv_list_user.req_uri)
             await list_from_forward_control(recv_list_user)
         else:
@@ -95,7 +107,8 @@ async def setup_server_connection():
     if conn is None:
         return
     try:
-        await get_this_remote_peer().send_serialized(conn)
+        this_peer = get_this_remote_peer()
+        await Wire.send_async(conn, bytes(this_peer))
     except (socket.error, OSError):
         conn.close()
         return
@@ -110,7 +123,8 @@ async def send_quit_status_to_server():
             timeout=const.SERVER_TIMEOUT
         )
         with sock:
-            get_this_remote_peer().send_serialized(sock)
+            this_peer = get_this_remote_peer()
+            await Wire.send_async(sock, bytes(this_peer))
         use.echo_print("::sent leaving status to server")
         return True
     except Exception as exp:
