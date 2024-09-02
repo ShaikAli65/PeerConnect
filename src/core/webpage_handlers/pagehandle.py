@@ -111,6 +111,7 @@ async def feed_user_data_to_page(_data, ip):
                        content=_data,
                        _id=f"{ip}")
     print(f"::Sending data to page: {ip}\n{_data}")
+    await get_websocket(DATA).send(_data.dump())
 
 
 async def feed_file_data_to_page(_data, _id):
@@ -120,3 +121,4 @@ async def feed_file_data_to_page(_data, _id):
                        content=_data,
                        _id=_id)
     print(f"::Sending data to page: {_id}\n{_data}")
+    await get_websocket(DATA).send(_data.dump())
