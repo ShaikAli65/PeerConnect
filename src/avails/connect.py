@@ -54,44 +54,44 @@ class Socket(_socket.socket):
         return custom_socket, addr
 
     @wraps(AbstractEventLoop.sock_accept)
-    async def aaccept(self):
-        return await self.__loop.sock_accept(self)
+    def aaccept(self):
+        return self.__loop.sock_accept(self)
 
     @wraps(AbstractEventLoop.sock_recv)
-    async def arecv(self, bufsize):
-        return await self.__loop.sock_recv(self, bufsize)
+    def arecv(self, bufsize):
+        return self.__loop.sock_recv(self, bufsize)
 
     @wraps(AbstractEventLoop.sock_connect)
-    async def aconnect(self, __address) -> Self:
-        return await self.__loop.sock_connect(self, __address)
+    def aconnect(self, __address) -> Self:
+        return self.__loop.sock_connect(self, __address)
 
     @wraps(AbstractEventLoop.sock_sendall)
-    async def asendall(self, data):
-        return await self.__loop.sock_sendall(self, data)
+    def asendall(self, data):
+        return self.__loop.sock_sendall(self, data)
 
     @wraps(AbstractEventLoop.sock_sendfile)
-    async def asendfile(self, file: IO[bytes],
-                        offset: int = 0,
-                        count: int | None = None,
-                        *,
-                        fallback: bool | None = None):
-        return await self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
+    def asendfile(self, file: IO[bytes],
+                  offset: int = 0,
+                  count: int | None = None,
+                  *,
+                  fallback: bool | None = None):
+        return self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
 
     @wraps(AbstractEventLoop.sock_sendto)
-    async def asendto(self, data, address):
-        return await self.__loop.sock_sendto(self, data, address)
+    def asendto(self, data, address):
+        return self.__loop.sock_sendto(self, data, address)
 
     @wraps(AbstractEventLoop.sock_recv_into)
-    async def arecv_into(self, buffer):
-        return await self.__loop.sock_recv_into(self, buffer)
+    def arecv_into(self, buffer):
+        return self.__loop.sock_recv_into(self, buffer)
 
     @wraps(AbstractEventLoop.sock_recvfrom_into)
-    async def arecvfrom_into(self, buffsize):
-        return await self.__loop.sock_recvfrom(self, buffsize)
+    def arecvfrom_into(self, buffsize):
+        return self.__loop.sock_recvfrom(self, buffsize)
 
     @wraps(AbstractEventLoop.sock_recvfrom)
-    async def arecvfrom(self, buffsize):
-        return await self.__loop.sock_recvfrom(self, buffsize)
+    def arecvfrom(self, buffsize):
+        return self.__loop.sock_recvfrom(self, buffsize)
 
 
 class Protocol(ABC):
@@ -377,7 +377,6 @@ def get_free_port() -> int:
 def is_port_empty(port):
     try:
         addr = ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
-        t, u = False, False
         with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
             s.bind(addr)
             t = True
@@ -385,6 +384,5 @@ def is_port_empty(port):
             s.bind(addr)
             u = True
         return t and u
-
     except (OSError, _socket.error, _socket.gaierror):
         return False
