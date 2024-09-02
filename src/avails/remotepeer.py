@@ -1,9 +1,9 @@
-import pickle
-import struct
 from itertools import count
 from typing import Tuple
 
-from . import connect, const
+import umsgpack
+
+from . import const
 
 
 class RemotePeer:
@@ -19,9 +19,10 @@ class RemotePeer:
         'file_count': int
     }
 
-    __slots__ = 'username', '_conn_port', 'status', 'callbacks', '_req_port', 'id', '_file_id', 'ip','_network_port'
+    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', '_file_id', 'ip','_network_port', 'long_id'
 
     def __init__(self,
+                 peer_id=b'\x00',
                  username='admin',
                  ip='localhost',
                  conn_port=8088,
@@ -32,26 +33,34 @@ class RemotePeer:
         self.ip = str(ip)
         self._conn_port = conn_port
         self.status = status
-        self.callbacks = 0
         self._req_port = req_port
         self._network_port = net_port
-        self.id = f'{self.ip}{conn_port}'
+        self.id = peer_id or f'{self.ip}{conn_port}'
+        self.long_id = int(peer_id.hex(), 16)
         self._file_id = count()
 
-    async def send_serialized(self, _to_send: connect.Socket):
-        serialized = pickle.dumps(self)
-        await _to_send.asendall(struct.pack('!f', self.version))
-        await _to_send.asendall(struct.pack('!I', len(serialized)))
-        await _to_send.asendall(serialized)
-        return True
+    def same_home_as(self, node):
+        return self.ip == node.ip and self.req_uri == node.req_uri and self.uri == node.uri
 
-    @property
-    def id_encoded(self) -> bytes:
-        return self.id.encode(const.FORMAT)
-    # def set_values(self, username, ip, port=None, report=None, status=None):
-    #     self.username = username
-    #     self.ip = ip
-    #     self.
+    def distance_to(self, node):
+        """
+        Get the distance between this node and another.
+        """
+        return self.long_id ^ node.long_id
+
+    def __iter__(self):
+        """
+        Enables use of RemotePeer as a tuple - i.e., tuple(node) works.
+        """
+        return iter([
+            self.id,
+            self.username,
+            self.ip,
+            self._conn_port,
+            self._req_port,
+            self._network_port,
+            self.status,
+        ])
 
     def get_file_id(self):
         """
@@ -62,19 +71,6 @@ class RemotePeer:
 
     def increment_file_count(self):
         return next(self._file_id)
-
-    @classmethod
-    async def deserialize(cls, sender_sock: connect.Socket):
-        try:
-            version = struct.unpack('!f', await sender_sock.arecv(4))[0]
-            assert version == cls.version, 'versions not matching for remote peer'
-            size_to_recv = struct.unpack('!I', await sender_sock.arecv(4))[0]
-            serialized = await sender_sock.arecv(size_to_recv)
-
-            return pickle.loads(serialized)
-        except Exception as e:
-            print(f"::Exception while deserializing at remote_peer.py/avails: {e}")
-            return RemotePeer(username="N/A", ip=sender_sock.getpeername()[0], conn_port=sender_sock.getpeername()[1], )
 
     @property
     def uri(self):
@@ -88,23 +84,22 @@ class RemotePeer:
     def network_uri(self):
         return self.ip, self._network_port
 
-    def __reduce__(self):
-        return (
-            self.__class__,
-            (
-                self.username,
-                self.ip,
-                self._conn_port,
-                self._req_port,
-                self._network_port,
-                self.status
-            ),
-            {'id': self.id},
-        )
+    @classmethod
+    def load_from(cls, data: bytes):
+        list_of_attrs = umsgpack.loads(data)
+        return cls(*list_of_attrs)
 
-    def __setstate__(self, state):
-        for key, value in state.items():
-            setattr(self, key, value)
+    def is_relavent(self, match_string):
+        """
+        Used to qualify this remote peer object as a valid
+        entity for a search string
+        """
+        if match_string in self.username:
+            return True
+
+    def __bytes__(self):
+        list_of_attributes = list(self)
+        return umsgpack.dumps(list_of_attributes)
 
     def __repr__(self):
         return f'RemotePeer({self.username}, {self.ip}, {self._conn_port}, {self._req_port}, {self._network_port}, {self.status})'
@@ -127,3 +122,8 @@ class RemotePeer:
         if not isinstance(obj, RemotePeer):
             return NotImplemented
         return self.uri == obj.uri and self.username == obj.username
+
+    def __lt__(self, obj) -> bool:
+        if not isinstance(obj, RemotePeer):
+            return NotImplemented
+        return self.long_id < obj.long_id
