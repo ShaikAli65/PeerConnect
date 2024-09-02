@@ -32,7 +32,7 @@ if not exist "%FLAG_FILE%" (
     )
 
     echo Setting up virtual environment ...
-    set "VENV_DIR=..\venv"
+    set "VENV_DIR=..\.venv"
     %runner% -m venv "%VENV_DIR%"
     echo "Created venv at: %VENV_DIR%"
 
@@ -45,14 +45,14 @@ if not exist "%FLAG_FILE%" (
     call "%VENV_DIR%\Scripts\activate.bat"
 )
 
-@REM rmdir /s /q "%VENV_DIR%"
+REM rmdir /s /q "%VENV_DIR%"
 %runner% ../main.py
 
 deactivate
 
-set /p CLEAR_SCREEN="Clear screen before setup? (y/n): "
-if /i "%CLEAR_SCREEN%"=="y" (
-    cls
-)
+rem set /p CLEAR_SCREEN="Clear screen before setup? (y/n): "
+rem if /i "%CLEAR_SCREEN%"=="y" (
+rem     cls
+rem )
 
 goto :eof
