@@ -1,16 +1,32 @@
 import asyncio as _asyncio
+from asyncio import DatagramTransport
+from typing import Optional
 
-from .peers import get_this_remote_peer, set_current_remote_peer_object
-from .peers import peer_list
-from ..avails import SocketCache as _SocketCache
+import kademlia.network
+from ..avails import SocketCache as _SocketCache, PeerDict, RemotePeer
 from ..managers.profilemanager import get_current_profile
 from ..managers.statemanager import StateManager
-from . import requests
 
 
-connected_peers = _SocketCache()
-state_handle = StateManager()
-PROFILE_WAIT = _asyncio.Event()
+class Dock:
+    state_handle = StateManager()
+    connected_peers = _SocketCache()
+    PROFILE_WAIT = _asyncio.Event()
+    peer_list = PeerDict()
+    server_in_network = False
+    _this_object: Optional[RemotePeer] = None
+    kademlia_network_server: Optional[kademlia.network.Server] = None
+    requests_endpoint: Optional[DatagramTransport] = None
+    protocol = None
+
+
+def get_this_remote_peer():
+    return Dock._this_object
+
+
+def set_current_remote_peer_object(remote_peer):
+    Dock._this_object = remote_peer
+
 
 __all__ = [
     'requests',
@@ -18,8 +34,5 @@ __all__ = [
     'StateManager',
     'get_this_remote_peer',
     'set_current_remote_peer_object',
-    'peer_list',
-    'PROFILE_WAIT',
-    'connected_peers',
-    'state_handle',
+    'Dock',
 ]
