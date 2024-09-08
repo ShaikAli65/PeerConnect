@@ -1,11 +1,9 @@
-import functools
 from typing import override
 
 from kademlia import crawling
 
-from src.avails import RemotePeer
+from src.avails import RemotePeer, use
 from src.core import Dock
-from src.managers.statemanager import State
 
 node_list_ids = [
     b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
@@ -37,7 +35,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     node_list_ids = node_list_ids
 
     async def find(self):
-        return await self._find(self.protocol.call_find_peer_list)
+        return await self._find(self.protocol.  call_find_peer_list)
 
     @override
     async def _handle_found_values(self, values):
@@ -57,6 +55,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
         if list_of_peers:
             cls.initial_list.extend(list_of_peers)
+
             return list_of_peers
 
         return []
@@ -64,42 +63,35 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
 class SearchCrawler:
     node_list_ids = node_list_ids
-    responsible_peers_mapping_to_list_ids = {}
     list_id_mapper_handle = None
 
     @classmethod
-    def add_responsible_peers_for_peer_lists_to_cache(cls, list_id, responsible_peers):
-        cls.responsible_peers_mapping_to_list_ids[list_id] = responsible_peers
-
-    @classmethod
-    async def get_relevant_peers_for_list_ids(cls, node_server, list_id_index):
-        if list_id_index == len(cls.node_list_ids):
-            return
-        list_id = cls.node_list_ids[list_id_index]
+    async def get_relevant_peers_for_list_id(cls, node_server, list_id):
         peer = RemotePeer(list_id)
         nearest = node_server.protocol.router.find_neighbors(peer)
-        crawler = crawling.NodeSpiderCrawl(node_server.protocol, peer, nearest, node_server.ksize, node_server.alpha)
-        responsible_nodes = await crawler.find()
-        cls.add_responsible_peers_for_peer_lists_to_cache(list_id, responsible_nodes)
-        await Dock.state_handle.put_state(
-            State(
-                'get_relevant_peers_for_list_ids',
-                functools.partial(
-                    cls.get_relevant_peers_for_list_ids,
-                    node_server,
-                    list_id_index + 1,
-                )
-            )
+        crawler = crawling.NodeSpiderCrawl(
+            node_server.protocol,
+            peer,
+            nearest,
+            node_server.ksize,
+            node_server.alpha
         )
+        responsible_nodes = await crawler.find()
+        return responsible_nodes
 
     @classmethod
     async def search_for_nodes(cls, node_server, search_string):
-        if len(cls.responsible_peers_mapping_to_list_ids) == 0:
-            await cls.get_relevant_peers_for_list_ids(node_server, 0)
-        list_of_set_of_responsible_peers = list(cls.responsible_peers_mapping_to_list_ids.values())
-        for set_of_responsible_peers in list_of_set_of_responsible_peers:
-            peer = set_of_responsible_peers[0]
-            await node_server.protocol.call_search_peers(peer, search_string)
+        relevant_peers = []
+        local_peer_list = use.search_relevant_peers(Dock.peer_list, search_string)
+        # yield local_peer_list
+        relevant_peers.extend(local_peer_list)
+        for list_id in cls.node_list_ids:
+            peers = await cls.get_relevant_peers_for_list_id(node_server, list_id)
+            for peer in peers:
+                _peers = await node_server.protocol.call_search_peers(peer, search_string)
+                relevant_peers.extend(_peers)
+                # yield _peers
+        return relevant_peers
 
 
 def get_more_peers():
