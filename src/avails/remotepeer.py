@@ -23,8 +23,8 @@ class RemotePeer:
 
     def __init__(self,
                  peer_id=b'\x00',
-                 username='admin',
-                 ip='localhost',
+                 username=None,
+                 ip=None,
                  conn_port=8088,
                  req_port=8089,
                  net_port=8090,

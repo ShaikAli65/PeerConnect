@@ -5,7 +5,7 @@ import threading
 from collections import deque, defaultdict, OrderedDict
 from typing import Union
 
-from . import connect, RemotePeer
+from . import connect, RemotePeer, useables
 
 """
 This module contains simple storages used across the peer connect
@@ -41,39 +41,6 @@ class PeerDict(dict):
         for peer_obj in iterable_of_peer_objects:
             self[peer_obj.id] = peer_obj
 
-    def search_relevant_peers(self, search_string) -> list:
-        """
-        Searches for relevant peers based on the search string, taking into account
-        potential changes in dictionary size during iteration.
-
-        Uses a copy of the current peer IDs to avoid modification errors.
-        Provides an option to use a lock for safety if the GIL is not guaranteed
-        (e.g., Jython).
-
-        Args:
-            search_string (str): The string to search for relevance.
-
-        Returns:
-            list: A list of relevant RemotePeer objects.
-        """
-
-        if not hasattr(self, '_gil_safe'):  # Check if GIL safety has been determined
-            self._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL
-
-        peer_ids = list(self.keys())  # Create a copy of peer IDs
-
-        return_list = []
-        for peer_id in peer_ids:
-            try:
-                peer = self[peer_id]  # May raise KeyError if removed concurrently
-            except KeyError:
-                continue  # Skip removed peer
-
-            if peer.is_relevant(search_string):
-                return_list.append(peer)
-
-        return return_list
-
     def remove_peer(self, peer_id):
         return self.pop(peer_id, None)
 
@@ -89,85 +56,6 @@ class PeerDict(dict):
 
     def __iter__(self):
         return self.values().__iter__()
-
-
-class SafeSet:
-    """
-    SafeSet is a thread safe set implementation with additional features.
-    """
-    __annotations__ = {
-        '__list': set,
-        '__lock': threading.Lock
-    }
-
-    __slots__ = '__list', '__lock', 'changes'
-
-    def __init__(self):
-        self.__list = set()
-        self.__lock = threading.Lock()
-        self.changes = deque()
-
-    def add(self, item):
-        with self.__lock:
-            self.__list.add(item)
-        if item in self.changes:
-            self.changes.remove(item)
-
-    def sync_remove(self, item):
-        with self.__lock:
-            self.__list.discard(item)
-            self.changes.appendleft(item)
-
-    def discard(self, item, include_changes=True):
-        with self.__lock:
-            self.__list.discard(item)
-            if include_changes:
-                self.changes.appendleft(item)
-
-    def pop(self):
-        with self.__lock:
-            return self.__list.pop()
-
-    def copy(self):
-        with self.__lock:
-            return self.__list.copy()
-
-    def clear(self):
-        with self.__lock:
-            self.__list.clear()
-
-    def clear_changes(self):
-        with self.__lock:
-            self.changes.clear()
-
-    def getchanges(self):
-        r = self.changes.copy()
-        self.changes.clear()
-        return r
-
-    def __iter__(self):
-        with self.__lock:
-            return self.__list.__iter__()
-
-    def __getitem__(self, index):
-        with self.__lock:
-            return self.__list.__getattribute__(index)
-
-    def __len__(self):
-        with self.__lock:
-            return len(self.__list)
-
-    def __str__(self):
-        with self.__lock:
-            return "[" + " ".join([str(i.id) for i in self.__list]) + "]"
-
-    def __contains__(self, item):
-        with self.__lock:
-            return item in self.__list
-
-    def __del__(self):
-        with self.__lock:
-            self.__list.clear()
 
 
 class FileDict:
@@ -276,7 +164,7 @@ class SocketStore:
 
 class SocketCache:
     """
-    Maintains a pool of sockets
+    Maintains a pool of active sockets between peers
 
     """
 
@@ -332,3 +220,83 @@ class SocketCache:
 
     def __del__(self):
         self.__close_all_socks()
+
+
+@useables.NotInUse
+class SafeSet:
+    """
+    SafeSet is a thread safe set implementation with additional features.
+    """
+    __annotations__ = {
+        '__list': set,
+        '__lock': threading.Lock
+    }
+
+    __slots__ = '__list', '__lock', 'changes'
+
+    def __init__(self):
+        self.__list = set()
+        self.__lock = threading.Lock()
+        self.changes = deque()
+
+    def add(self, item):
+        with self.__lock:
+            self.__list.add(item)
+        if item in self.changes:
+            self.changes.remove(item)
+
+    def sync_remove(self, item):
+        with self.__lock:
+            self.__list.discard(item)
+            self.changes.appendleft(item)
+
+    def discard(self, item, include_changes=True):
+        with self.__lock:
+            self.__list.discard(item)
+            if include_changes:
+                self.changes.appendleft(item)
+
+    def pop(self):
+        with self.__lock:
+            return self.__list.pop()
+
+    def copy(self):
+        with self.__lock:
+            return self.__list.copy()
+
+    def clear(self):
+        with self.__lock:
+            self.__list.clear()
+
+    def clear_changes(self):
+        with self.__lock:
+            self.changes.clear()
+
+    def getchanges(self):
+        r = self.changes.copy()
+        self.changes.clear()
+        return r
+
+    def __iter__(self):
+        with self.__lock:
+            return self.__list.__iter__()
+
+    def __getitem__(self, index):
+        with self.__lock:
+            return self.__list.__getattribute__(index)
+
+    def __len__(self):
+        with self.__lock:
+            return len(self.__list)
+
+    def __str__(self):
+        with self.__lock:
+            return "[" + " ".join([str(i.id) for i in self.__list]) + "]"
+
+    def __contains__(self, item):
+        with self.__lock:
+            return item in self.__list
+
+    def __del__(self):
+        with self.__lock:
+            self.__list.clear()

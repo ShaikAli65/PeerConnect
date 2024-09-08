@@ -100,12 +100,7 @@ def initiate():
     sock.connect(("localhost", 8090))
     print('connected')
     with sock:
-        s = time.monotonic()
         send_directory(sock, parent)
-        e = time.monotonic()
-
-    print(e - s, "sec")
-
     print("sent directory")
 
 
