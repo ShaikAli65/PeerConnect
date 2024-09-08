@@ -3,13 +3,16 @@ import logging
 import socket
 
 import umsgpack
-from . import discover
+from . import discover, gossip
 from src.avails import const, WireData, use, Wire, connect, RemotePeer
 from src.core import get_this_remote_peer, Dock, peers
+from .gossip import RumorMongerProtocol
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
+
+# :todo: write gossip protocol 
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
@@ -20,7 +23,6 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         except umsgpack.UnpackException as ue:
             print('data illformed:', ue, data)
             return
-
         print("Received:", req_data, "from", addr)  # debug
         if req_data.match_header(REQUESTS.NETWORK_FIND):
             this_rp = get_this_remote_peer()
@@ -30,6 +32,9 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         elif req_data.match_header(REQUESTS.NETWORK_FIND_REPLY):
             bootstrap_node_addr = req_data['connect_uri']
             Dock.kademlia_network_server.bootstrap([bootstrap_node_addr])
+        elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
+            gossip_protocol = gossip.get_gossip()
+            gossip_protocol.message_arrived(req_data)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -46,6 +51,7 @@ class REQUESTS:
     I_AM_ACTIVE = b'com notify user'
     NETWORK_FIND = b'network find    '
     NETWORK_FIND_REPLY = b'networkfindreply'
+    GOSSIP_MESSAGE = b'gossip message'
 
 
 async def initiate():
@@ -72,6 +78,7 @@ async def initiate():
     Dock.kademlia_network_server = server
     print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     await server.add_this_peer_to_lists()
+    await gossip.join_gossip(server)
     print('added this peer object')  # debug
     return server, transport, proto
 
