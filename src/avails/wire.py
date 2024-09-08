@@ -341,3 +341,21 @@ class WireData:
 
     def __repr__(self):
         return str(self)
+
+
+class GossipMessage(WireData):
+    @property
+    def message(self):
+        return self.body.get('message', None)
+
+    @message.setter
+    def message(self, data):
+        self.body['message'] = data
+
+    @property
+    def ttl(self):
+        return self.body.get('ttl', None)
+
+    @ttl.setter
+    def ttl(self, ttl):
+        self.body['ttl'] = ttl
