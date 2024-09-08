@@ -4,7 +4,6 @@ import socket as _socket
 from abc import ABC, abstractmethod
 from asyncio import AbstractEventLoop
 from functools import wraps
-from socket import socket
 from typing import IO, Self, Optional
 
 from . import const, useables
@@ -54,44 +53,44 @@ class Socket(_socket.socket):
         return custom_socket, addr
 
     @wraps(AbstractEventLoop.sock_accept)
-    def aaccept(self):
-        return self.__loop.sock_accept(self)
+    async def aaccept(self):
+        return await self.__loop.sock_accept(self)
 
     @wraps(AbstractEventLoop.sock_recv)
-    def arecv(self, bufsize):
-        return self.__loop.sock_recv(self, bufsize)
+    async def arecv(self, bufsize):
+        return await self.__loop.sock_recv(self, bufsize)
 
     @wraps(AbstractEventLoop.sock_connect)
-    def aconnect(self, __address) -> Self:
-        return self.__loop.sock_connect(self, __address)
+    async def aconnect(self, __address) -> Self:
+        return await self.__loop.sock_connect(self, __address)
 
     @wraps(AbstractEventLoop.sock_sendall)
-    def asendall(self, data):
-        return self.__loop.sock_sendall(self, data)
+    async def asendall(self, data):
+        return await self.__loop.sock_sendall(self, data)
 
     @wraps(AbstractEventLoop.sock_sendfile)
-    def asendfile(self, file: IO[bytes],
-                  offset: int = 0,
-                  count: int | None = None,
-                  *,
-                  fallback: bool | None = None):
-        return self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
+    async def asendfile(self, file: IO[bytes],
+                        offset: int = 0,
+                        count: int | None = None,
+                        *,
+                        fallback: bool | None = None):
+        return await self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
 
     @wraps(AbstractEventLoop.sock_sendto)
-    def asendto(self, data, address):
-        return self.__loop.sock_sendto(self, data, address)
+    async def asendto(self, data, address):
+        return await self.__loop.sock_sendto(self, data, address)
 
     @wraps(AbstractEventLoop.sock_recv_into)
-    def arecv_into(self, buffer):
-        return self.__loop.sock_recv_into(self, buffer)
+    async def arecv_into(self, buffer):
+        return await self.__loop.sock_recv_into(self, buffer)
 
     @wraps(AbstractEventLoop.sock_recvfrom_into)
-    def arecvfrom_into(self, buffsize):
-        return self.__loop.sock_recvfrom(self, buffsize)
+    async def arecvfrom_into(self, buffsize):
+        return await self.__loop.sock_recvfrom(self, buffsize)
 
     @wraps(AbstractEventLoop.sock_recvfrom)
-    def arecvfrom(self, buffsize):
-        return self.__loop.sock_recvfrom(self, buffsize)
+    async def arecvfrom(self, buffsize):
+        return await self.__loop.sock_recvfrom(self, buffsize)
 
 
 class Protocol(ABC):
