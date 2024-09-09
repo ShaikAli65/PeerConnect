@@ -1,23 +1,20 @@
 import asyncio
-import functools
 import logging
-from collections import defaultdict
 from typing import override
 
 import kademlia.node
 import kademlia.protocol
-from kademlia import crawling, network, routing, storage
+from kademlia import crawling, network, routing
 
 from src.avails import RemotePeer, use, const
 from src.core import Dock, get_this_remote_peer, peers
-from src.managers.statemanager import State
+from src.core.peers import Storage
 
 log = logging.getLogger(__name__)
 
 
 class RequestProtocol(kademlia.protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
-        # RPCProtocol.__init__(self)
         super().__init__(source_node, storage, ksize)
         self.router = routing.RoutingTable(self, ksize, source_node)
         self.storage = storage
@@ -196,25 +193,6 @@ class PeerServer(network.Server):
             self.storage.store_peers_in_list(list_key.id, peer_objs)
         results = [self.protocol.call_store_peers_in_list(n, list_key, peer_objs) for n in relevant_peers]
         return any(await asyncio.gather(*results))
-
-
-class Storage(storage.ForgetfulStorage):
-    node_lists_ids = set(peers.node_list_ids)
-    peer_data_storage = defaultdict(set)
-
-    def get_list_of_peers(self, list_key):
-        if list_key in self.peer_data_storage:
-            return list(self.peer_data_storage.get(list_key))
-        return None
-
-    def all_peers_in_lists(self):
-        return self.peer_data_storage.items()
-
-    def store_peers_in_list(self, list_key, list_of_peers):
-        if list_key in self.node_lists_ids:
-            self.peer_data_storage[list_key] |= set(list_of_peers)
-            Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
-        return True
 
 
 network.Server.protocol_class = RequestProtocol

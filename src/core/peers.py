@@ -1,6 +1,7 @@
+from collections import defaultdict
 from typing import override
 
-from kademlia import crawling
+from kademlia import crawling, storage
 
 from src.avails import RemotePeer, use
 from src.core import Dock
@@ -106,3 +107,22 @@ def search_for_nodes_with_name(search_string):
     """
     peer_server = Dock.kademlia_network_server
     return SearchCrawler.search_for_nodes(peer_server, search_string)
+
+
+class Storage(storage.ForgetfulStorage):
+    node_lists_ids = set(node_list_ids)
+    peer_data_storage = defaultdict(set)
+
+    def get_list_of_peers(self, list_key):
+        if list_key in self.peer_data_storage:
+            return list(self.peer_data_storage.get(list_key))
+        return None
+
+    def all_peers_in_lists(self):
+        return self.peer_data_storage.items()
+
+    def store_peers_in_list(self, list_key, list_of_peers):
+        if list_key in self.node_lists_ids:
+            self.peer_data_storage[list_key] |= set(list_of_peers)
+            Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
+        return True
