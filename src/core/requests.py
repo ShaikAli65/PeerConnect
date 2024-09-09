@@ -3,26 +3,28 @@ import logging
 import socket
 
 import umsgpack
+
+from src.avails import Wire, WireData, connect, const, use
+from src.core import Dock, get_this_remote_peer
 from . import discover, gossip
-from src.avails import const, WireData, use, Wire, connect, RemotePeer
-from src.core import get_this_remote_peer, Dock, peers
-from .gossip import RumorMongerProtocol
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
-# :todo: write gossip protocol 
+# :todo: write consensus protocol for replying a network find request
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data_payload, addr):
         try:
+            data = Wire.load_datagram(data_payload)
             req_data = WireData.load_from(data)
         except umsgpack.UnpackException as ue:
-            print('data illformed:', ue, data)
+            print('data illformed:', ue, data_payload)
             return
+
         print("Received:", req_data, "from", addr)  # debug
         if req_data.match_header(REQUESTS.NETWORK_FIND):
             this_rp = get_this_remote_peer()
@@ -88,8 +90,11 @@ async def search_network():
     print(ip,port)
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS.NETWORK_FIND, this_id)
-    s = connect.UDPProtocol.create_async_sock(asyncio.get_running_loop(), const.IP_VERSION)
-    s.bind((ip, port))
+    s = connect.UDPProtocol.create_async_server_sock(
+        asyncio.get_running_loop(),
+        (ip, port),
+        family=const.IP_VERSION
+    )
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     with s:
         await ping_network(s, port, ping_data)

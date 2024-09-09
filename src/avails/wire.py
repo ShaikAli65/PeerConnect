@@ -1,5 +1,4 @@
 import json as _json
-# import pickle
 import struct
 import threading as _threading
 from collections import defaultdict
@@ -7,9 +6,9 @@ from typing import Union
 
 import umsgpack
 
-from . import const as _const, Actuator
+from . import Actuator, const as _const
 from .connect import Socket as _Socket
-from .useables import wait_for_sock_read, NotInUse
+from .useables import NotInUse, wait_for_sock_read
 
 
 class Wire:
@@ -17,18 +16,18 @@ class Wire:
     async def send_async(sock: _Socket, data:bytes):
         data_size = struct.pack('!I',len(data))
         await sock.asendall(data_size)
-        await sock.asendall(data)
+        return await sock.asendall(data)
 
     @staticmethod
     def send(sock: _Socket, data:bytes):
         data_size = struct.pack('!I',len(data))
         sock.sendall(data_size)
-        sock.sendall(data)
+        return sock.sendall(data)
 
     @staticmethod
-    def send_datagram(sock: _Socket, address, data:bytes):
+    def send_datagram(sock: _Socket, address, data: bytes):
         data_size = struct.pack('!I',len(data))
-        sock.sendto(data_size + data, address)
+        return sock.sendto(data_size + data, address)
 
     @staticmethod
     async def receive_async(sock: _Socket):
@@ -50,11 +49,166 @@ class Wire:
         return data, addr
 
     @staticmethod
+    def load_datagram(data_payload):
+        data_size = struct.unpack('!I', data_payload[:4])[0]
+        return data_size[4: data_size + 4]
+
+    @staticmethod
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
         data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_SIZE)
         data_size = struct.unpack('!I', data[:4])[0]
         data = data[4: data_size + 4]
         return data, addr
+
+
+class DataWeaver:
+    """
+    A wrapper class purposely designed to store data (as {header, content, id} format)
+    provides send and receive functions
+    """
+
+    __annotations__ = {
+        'data_lock': _threading.Lock,
+        '__data': dict
+    }
+    __slots__ = 'data_lock', '__data'
+
+    def __init__(self, *, header: Union[str, int] = None, content: Union[str, dict, list, tuple] = None,
+                 _id: Union[int, str, tuple] = None,
+                 serial_data: str | bytes = None):
+        self.data_lock = _threading.Lock()
+        if serial_data:
+            self.__data: dict = _json.loads(serial_data)
+        else:
+            self.__data: dict = defaultdict(str)
+            self.__data['header'] = header
+            self.__data['content'] = content
+            self.__data['id'] = _id
+
+    def dump(self):
+        """
+        Modifies data in _json 's string format and,
+        returns _json string representation of the data
+        :return: string
+        """
+        with self.data_lock:
+            return _json.dumps(self.__data)
+
+    def match_content(self, _content) -> bool:
+        return self.__data['content'] == _content
+
+    def match_header(self, _header) -> bool:
+        return self.__data['header'] == _header
+
+    def __set_values(self, data_value: dict):
+        self.__data = data_value
+        self.header = self.__data['header']
+        self.content = self.__data['content']
+        self.id = self.__data['id']
+
+    def __getitem__(self, key):
+        return self.__data[key]
+
+    def __setitem__(self, key, value):
+        with self.data_lock:
+            self.__data[key] = value
+
+    @property
+    def content(self):
+        return self.__data['content']
+
+    @content.setter
+    def content(self, _content):
+        self.__data['content'] = _content
+
+    @property
+    def header(self):
+        return self.__data['header']
+
+    @header.setter
+    def header(self, _header):
+        self.__data['header'] = _header
+
+    @property
+    def id(self):
+        return self.__data['id']
+
+    @id.setter
+    def id(self, _id):
+        self.__data['id'] = _id
+
+    def __str__(self):
+        return (
+            f"{'-' * 50}\n"
+            f"header  : {self.header}\n"
+            f"content : {self.content.strip(' \n')}\n"
+            f"id      : {self.id}\n"
+            f"{'-' * 50}\n"
+        )
+
+    def __repr__(self):
+        return f'DataWeaver({self.__data})'
+
+
+class WireData:
+    version = _const.VERSIONS['WIRE']
+
+    def __init__(self, header, _id, *args, version=version, **kwargs):
+        self.id = _id
+        self._header = header
+        self.version = version
+        self.body = kwargs
+        self.ancillary_data = args
+
+    def __bytes__(self):
+        list_of_attributes = [
+            self.id,
+            self._header,
+            self.ancillary_data,
+            self.version,
+            self.body,
+        ]
+        return umsgpack.dumps(list_of_attributes)
+
+    @classmethod
+    def load_from(cls, data: bytes):
+        list_of_attributes = umsgpack.loads(data)
+        header, _id, *args, version, body = list_of_attributes
+        return cls(header, _id, *args, version=version, **body)
+
+    def match_header(self, data):
+        return self.header == data
+
+    def __getitem__(self, item):
+        return self.body[item]
+
+    @property
+    def header(self):
+        return self._header
+
+    def __str__(self):
+        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+
+    def __repr__(self):
+        return str(self)
+
+
+class GossipMessage(WireData):
+    @property
+    def message(self):
+        return self.body.get('message', None)
+
+    @message.setter
+    def message(self, data):
+        self.body['message'] = data
+
+    @property
+    def ttl(self):
+        return self.body.get('ttl', None)
+
+    @ttl.setter
+    def ttl(self, ttl):
+        self.body['ttl'] = ttl
 
 
 @NotInUse
@@ -210,152 +364,3 @@ class SimplePeerBytes:
     def __hash__(self):
         return hash(self.raw_bytes)
 
-
-class DataWeaver:
-    """
-    A wrapper class purposely designed to store data (as {header, content, id} format)
-    provides send and receive functions
-    """
-
-    __annotations__ = {
-        'data_lock': _threading.Lock,
-        '__data': dict
-    }
-    __slots__ = 'data_lock', '__data'
-
-    def __init__(self, *, header: Union[str, int] = None, content: Union[str, dict, list, tuple] = None,
-                 _id: Union[int, str, tuple] = None,
-                 serial_data: str | bytes = None):
-        self.data_lock = _threading.Lock()
-        if serial_data:
-            self.__data: dict = _json.loads(serial_data)
-        else:
-            self.__data: dict = defaultdict(str)
-            self.__data['header'] = header
-            self.__data['content'] = content
-            self.__data['id'] = _id
-
-    def dump(self):
-        """
-        Modifies data in _json 's string format and,
-        returns _json string representation of the data
-        :return: string
-        """
-        with self.data_lock:
-            return _json.dumps(self.__data)
-
-    def match_content(self, _content) -> bool:
-        return self.__data['content'] == _content
-
-    def match_header(self, _header) -> bool:
-        return self.__data['header'] == _header
-
-    def __set_values(self, data_value: dict):
-        self.__data = data_value
-        self.header = self.__data['header']
-        self.content = self.__data['content']
-        self.id = self.__data['id']
-
-    def __getitem__(self, key):
-        return self.__data[key]
-
-    def __setitem__(self, key, value):
-        with self.data_lock:
-            self.__data[key] = value
-
-    @property
-    def content(self):
-        return self.__data['content']
-
-    @content.setter
-    def content(self, _content):
-        self.__data['content'] = _content
-
-    @property
-    def header(self):
-        return self.__data['header']
-
-    @header.setter
-    def header(self, _header):
-        self.__data['header'] = _header
-
-    @property
-    def id(self):
-        return self.__data['id']
-
-    @id.setter
-    def id(self, _id):
-        self.__data['id'] = _id
-
-    def __str__(self):
-        return (
-            f"{'-' * 50}\n"
-            f"header  : {self.header}\n"
-            f"content : {self.content.strip(' \n')}\n"
-            f"id      : {self.id}\n"
-            f"{'-' * 50}\n"
-        )
-
-    def __repr__(self):
-        return f'DataWeaver({self.__data})'
-
-
-class WireData:
-    version = _const.VERSIONS['WIRE']
-
-    def __init__(self, header, _id, *args, version=version, **kwargs):
-        self.id = _id
-        self._header = header
-        self.version = version
-        self.body = kwargs
-        self.ancillary_data = args
-
-    def __bytes__(self):
-        list_of_attributes = [
-            self.id,
-            self._header,
-            self.ancillary_data,
-            self.version,
-            self.body,
-        ]
-        return umsgpack.dumps(list_of_attributes)
-
-    @classmethod
-    def load_from(cls, data: bytes):
-        list_of_attributes = umsgpack.loads(data)
-        header, _id, *args, version, body = list_of_attributes
-        return cls(header, _id, *args, version=version, **body)
-
-    def match_header(self, data):
-        return self.header == data
-
-    def __getitem__(self, item):
-        return self.body[item]
-
-    @property
-    def header(self):
-        return self._header
-
-    def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
-
-    def __repr__(self):
-        return str(self)
-
-
-class GossipMessage(WireData):
-    @property
-    def message(self):
-        return self.body.get('message', None)
-
-    @message.setter
-    def message(self, data):
-        self.body['message'] = data
-
-    @property
-    def ttl(self):
-        return self.body.get('ttl', None)
-
-    @ttl.setter
-    def ttl(self, ttl):
-        self.body['ttl'] = ttl

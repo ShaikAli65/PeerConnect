@@ -1,5 +1,5 @@
 import os
-
+import asyncio
 from src.core import Dock
 from src.core.webpage_handlers import pagehandle
 from tests.test import *
