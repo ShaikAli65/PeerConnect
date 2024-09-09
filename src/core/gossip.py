@@ -5,13 +5,19 @@ Rumor-Mongering implementation of gossip protocol
 import asyncio
 import random
 import time
-from collections import deque
 
-from src.avails import RemotePeer, WireData, connect, const
-from src.core import Dock, discover
+from src.avails import GossipMessage, Wire, WireData, connect, const
+from src.core import Dock
 
 
 class MessageItem:
+    __slots__ = 'message_id', 'peer_list', 'time_in'
+    __annotations__ = {
+        'message_id': int,
+        'peer_list': list[int],
+        'time_in': float,
+    }
+
     def __init__(self, message_id, time_in, peer_list):
         _l = list(peer_list)
         random.shuffle(_l)
@@ -59,7 +65,7 @@ class MessageList:
 
     @staticmethod
     def _get_list_of_peers():
-        return Dock.peer_list
+        return list(Dock.peer_list)
 
     def push(self, message):
         peer_list = self._get_list_of_peers()
@@ -76,30 +82,38 @@ class MessageList:
 
 
 class RumorMongerProtocol:
-    message_list = MessageList(const.MAX_TTL_FOR_GOSSIP)
+    messages = MessageList(const.MAX_TTL_FOR_GOSSIP)
     alpha = 2  # no.of nodes to forward a gossip at once
 
     @classmethod
     def message_arrived(cls, data:WireData):
-        if data.id in cls.message_list.dropped:
+        if data.id in cls.messages.dropped:
             return
-        if data.id in cls.message_list:
+        if data.id in cls.messages:
             for _ in range(cls.alpha):
-                peer = cls.message_list.get_random_peer_to_send_message(data.id)
-                cls.forward_payload(data, peer)
+                peer_id = cls.messages.get_random_peer_to_send_message(data.id)
+                cls.forward_payload(data, peer_id)
             return
-        cls.message_list.push(data)
+        cls.messages.push(data)
         return cls.message_arrived(data)
 
+    @classmethod
+    def gossip_message(cls, message: GossipMessage):
+        cls.messages.push(message)
+        for _ in range(cls.alpha):
+            peer_id = cls.messages.get_random_peer_to_send_message(message.id)
+            cls.forward_payload(message, peer_id)
+
     @staticmethod
-    def forward_payload(message, peer_obj: RemotePeer):
+    def forward_payload(message, peer_id):
+        peer_obj = Dock.peer_list.get_peer(peer_id)
         sock = connect.UDPProtocol.create_sync_sock(const.IP_VERSION)
-        return sock.sendto(message, peer_obj.req_uri)
+        return Wire.send_datagram(sock, peer_obj.req_uri, bytes(message))
 
 
 def get_gossip():
     return RumorMongerProtocol
 
 
-def join_gossip(kademlia_server: discover.PeerServer):
+def join_gossip(kademlia_server):
     pass
