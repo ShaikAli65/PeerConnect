@@ -4,7 +4,7 @@ import socket
 
 import umsgpack
 
-from src.avails import Wire, WireData, connect, const, use
+from src.avails import Wire, WireData, connect, const, use, wire
 from src.core import Dock, get_this_remote_peer
 from . import discover, gossip
 
@@ -36,7 +36,8 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             Dock.kademlia_network_server.bootstrap([bootstrap_node_addr])
         elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
             gossip_protocol = gossip.get_gossip()
-            gossip_protocol.message_arrived(req_data)
+            gossip_message = wire.GossipMessage.wrap_gossip(req_data)
+            gossip_protocol.message_arrived(gossip_message)
 
     def connection_made(self, transport):
         self.transport = transport

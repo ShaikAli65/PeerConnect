@@ -26,10 +26,12 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         self.welcome_if_new(s)
         return s
 
+    @override
     def rpc_ping(self, sender, sender_peer):
         self._check_in(sender_peer)
         return self.source_node.id
 
+    @override
     def rpc_store(self, sender, sender_peer, key, value):
         source = self._check_in(sender_peer)
         log.debug("got a store request from %s, storing '%s'='%s'",
@@ -37,6 +39,7 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         self.storage[key] = value
         return True
 
+    @override
     def rpc_find_node(self, sender, sender_peer, key):
         source = self._check_in(sender_peer)
         log.info("finding neighbors of %i in local table",
@@ -45,6 +48,7 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         neighbors = self.router.find_neighbors(node, exclude=source)
         return list(map(tuple, neighbors))
 
+    @override
     def rpc_find_value(self, sender, sender_peer, key):
         # source = self._check_in(sender_peer)
         self._check_in(sender_peer)
@@ -71,23 +75,27 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         relevant_peers = use.search_relevant_peers(Dock.peer_list, search_string)
         return list(map(bytes, relevant_peers))
 
+    @override
     async def call_find_node(self, node_to_ask, node_to_find):
         address = (node_to_ask.ip, node_to_ask.port)
         result = await self.find_node(address, self.source_node_serialized,
                                       node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
+    @override
     async def call_find_value(self, node_to_ask, node_to_find):
         address = (node_to_ask.ip, node_to_ask.port)
         result = await self.find_value(address, self.source_node_serialized,
                                        node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
+    @override
     async def call_ping(self, node_to_ask):
         address = (node_to_ask.ip, node_to_ask.port)
         result = await self.ping(address, self.source_node_serialized)
         return self.handle_call_response(result, node_to_ask)
 
+    @override
     async def call_store(self, node_to_ask, key, value):
         address = (node_to_ask.ip, node_to_ask.port)
         result = await self.store(address, self.source_node_serialized, key, value)
@@ -133,6 +141,22 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         self._send_peer_lists(peer)
         self.router.add_contact(peer)
         Dock.peer_list.add_peer(peer)
+
+    @override
+    def handle_call_response(self, result, node):
+        """
+        If we get a response, add the node to the routing table.  If
+        we get no response, make sure it's removed from the routing table.
+        """
+        if not result[0]:
+            log.warning("no response from %s, removing from router", node)
+            self.router.remove_contact(node)
+            Dock.peer_list.remove_peer(node)  # added line specific to application
+            return result
+
+        log.info("got successful response from %s", node)
+        self.welcome_if_new(node)
+        return result
 
 
 class PeerServer(network.Server):

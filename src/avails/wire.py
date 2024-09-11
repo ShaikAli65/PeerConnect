@@ -193,24 +193,65 @@ class WireData:
         return str(self)
 
 
-class GossipMessage(WireData):
+class GossipMessage:
+
+    def __init__(self, message: WireData):
+        self.actual_data: WireData = message
+    
+    @staticmethod
+    def wrap_gossip(data: WireData):
+        return GossipMessage(data)
+
     @property
     def message(self):
-        return self.body.get('message', None)
+        return self.actual_data.body.get('message', None)
 
     @message.setter
     def message(self, data):
-        self.body['message'] = data
+        self.actual_data.body['message'] = data
 
     @property
     def ttl(self):
-        return self.body.get('ttl', None)
+        return self.actual_data.body.get('ttl', None)
 
     @ttl.setter
     def ttl(self, ttl):
-        self.body['ttl'] = ttl
+        self.actual_data.body['ttl'] = ttl
 
+    @property
+    def created(self):
+        return self.actual_data.body['created']
 
+    @created.setter
+    def created(self, value):
+        self.actual_data.body['created'] = value
+    
+    @property
+    def start_time(self):
+        return self.actual_data.body['start_time']
+
+    @start_time.setter
+    def start_time(self, value):
+        self.actual_data.body['start_time'] = value
+    
+    @property
+    def id(self):
+        return self.actual_data.id
+    
+    @id.setter
+    def id(self, value):
+        self.actual_data.id = value
+    
+    def __bytes__(self):
+        list_of_attributes = [
+            self.actual_data.id,
+            self.actual_data._header,
+            self.actual_data.ancillary_data,
+            self.actual_data.version,
+            self.actual_data.body,
+        ]
+        return umsgpack.dumps(list_of_attributes)    
+    
 @NotInUse
 class SimplePeerBytes:
     """

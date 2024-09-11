@@ -4,15 +4,16 @@ import logging
 import multiprocessing
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from multiprocessing.connection import wait
 from multiprocessing.managers import BaseManager
 
 from src.avails import (
+    Actuator,
     const,
-    use, Actuator,
+    use
 )
-from src.avails.handles import TaskHandleProxy, FileTaskHandle, DirectoryTaskHandle
+from src.avails.handles import DirectoryTaskHandle, FileTaskHandle, TaskHandleProxy
 
 
 class HandleRepr:  # :todo try this using named tuple
@@ -74,10 +75,12 @@ class ProcessControl:
         self.proceed = True
         # self.task_wait_check = Actuator()
         self.task_wait_check = threading.Event()
+
         self.task_queue = task_q
         self.result_submission_queue = result_q
         self.handle_proxy_queue = handle_proxy_q
         self.connection_pipe = connection_pipe
+
         self.std_color = COLORS[self.ident % 5]
         self.print_lock = print_lock
 
@@ -198,11 +201,12 @@ def submit(loop: asyncio.AbstractEventLoop, handle_code, *args, **kwargs):
         return handle, fut
     else:
         _check_process()
+        # go with a process execution
         ProcessStore.task_queue.put_nowait(HandleRepr(handle_code, *args, **kwargs))
         handle_proxy = ProcessStore.handle_proxy_return_queue.get()
         f = Future()
-        fut = asyncio.wrap_future(f,loop=loop)
-        ProcessStore.add_handle(handle_proxy.ident, (handle_proxy,f))
+        fut = asyncio.wrap_future(f, loop=loop)
+        ProcessStore.add_handle(handle_proxy.ident, (handle_proxy, f))
         return handle_proxy, fut
 
 
@@ -248,8 +252,8 @@ def get_handle(self, handle_id):
 
 
 def register_classes(manager=ProcessManager):
-    ProcessManager.register(FILE, FileTaskHandle, TaskHandleProxy)
-    ProcessManager.register(DIRECTORY, DirectoryTaskHandle, TaskHandleProxy)
+    manager.register(FILE, FileTaskHandle, TaskHandleProxy)
+    manager.register(DIRECTORY, DirectoryTaskHandle, TaskHandleProxy)
 
 
 multiprocessing.log_to_stderr(logging.DEBUG)
