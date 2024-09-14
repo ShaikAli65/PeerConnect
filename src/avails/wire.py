@@ -1,6 +1,7 @@
 import json as _json
 import struct
 import threading as _threading
+from asyncio import DatagramTransport
 from collections import defaultdict
 from typing import Union
 
@@ -21,11 +22,10 @@ class Wire:
     @staticmethod
     def send(sock: _Socket, data:bytes):
         data_size = struct.pack('!I',len(data))
-        sock.sendall(data_size)
-        return sock.sendall(data)
+        return sock.sendall(data_size + data)
 
     @staticmethod
-    def send_datagram(sock: _Socket, address, data: bytes):
+    def send_datagram(sock: _Socket | DatagramTransport, address, data: bytes):
         data_size = struct.pack('!I',len(data))
         return sock.sendto(data_size + data, address)
 
@@ -51,7 +51,7 @@ class Wire:
     @staticmethod
     def load_datagram(data_payload):
         data_size = struct.unpack('!I', data_payload[:4])[0]
-        return data_size[4: data_size + 4]
+        return data_payload[4: data_size + 4]
 
     @staticmethod
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
@@ -138,13 +138,11 @@ class DataWeaver:
         self.__data['id'] = _id
 
     def __str__(self):
-        return (
-            f"{'-' * 50}\n"
-            f"header  : {self.header}\n"
-            f"content : {self.content.strip(' \n')}\n"
-            f"id      : {self.id}\n"
-            f"{'-' * 50}\n"
-        )
+        return "\n".join([f"{'-' * 50}",
+                          f"header  : {self.header}",
+                          f"content : {self.content}",
+                          f"id      : {self.id}",
+                          f"{'-' * 50}"])
 
     def __repr__(self):
         return f'DataWeaver({self.__data})'
@@ -153,7 +151,7 @@ class DataWeaver:
 class WireData:
     version = _const.VERSIONS['WIRE']
 
-    def __init__(self, header, _id, *args, version=version, **kwargs):
+    def __init__(self, header=None, _id=None, *args, version=version, **kwargs):
         self.id = _id
         self._header = header
         self.version = version
@@ -162,8 +160,8 @@ class WireData:
 
     def __bytes__(self):
         list_of_attributes = [
-            self.id,
             self._header,
+            self.id,
             self.ancillary_data,
             self.version,
             self.body,
@@ -177,7 +175,7 @@ class WireData:
         return cls(header, _id, *args, version=version, **body)
 
     def match_header(self, data):
-        return self.header == data
+        return self._header == data
 
     def __getitem__(self, item):
         return self.body[item]
@@ -187,7 +185,7 @@ class WireData:
         return self._header
 
     def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+        return f"<WireData(header={self._header}, id={self.id}, body={self.body}, ancillary={self.ancillary_data})>"
 
     def __repr__(self):
         return str(self)
@@ -195,9 +193,9 @@ class WireData:
 
 class GossipMessage:
 
-    def __init__(self, message: WireData):
+    def __init__(self, message: WireData = WireData()):
         self.actual_data: WireData = message
-    
+
     @staticmethod
     def wrap_gossip(data: WireData):
         return GossipMessage(data)
@@ -220,38 +218,35 @@ class GossipMessage:
 
     @property
     def created(self):
-        return self.actual_data.body['created']
+        return self.actual_data.body.get('created', None)
 
     @created.setter
     def created(self, value):
         self.actual_data.body['created'] = value
-    
-    @property
-    def start_time(self):
-        return self.actual_data.body['start_time']
 
-    @start_time.setter
-    def start_time(self, value):
-        self.actual_data.body['start_time'] = value
-    
+    @property
+    def header(self):
+        return self.actual_data.header
+
+    @header.setter
+    def header(self, value):
+        self.actual_data._header = value
+
     @property
     def id(self):
         return self.actual_data.id
-    
+
     @id.setter
     def id(self, value):
         self.actual_data.id = value
     
     def __bytes__(self):
-        list_of_attributes = [
-            self.actual_data.id,
-            self.actual_data._header,
-            self.actual_data.ancillary_data,
-            self.actual_data.version,
-            self.actual_data.body,
-        ]
-        return umsgpack.dumps(list_of_attributes)    
-    
+        return bytes(self.actual_data)
+
+    def __repr__(self):
+        return f"<GossipMessage(id={self.id}, created={self.created}, ttl={self.ttl}, message={self.message[:11]},)>"
+
+
 @NotInUse
 class SimplePeerBytes:
     """
