@@ -1,11 +1,18 @@
 import asyncio
 import logging
-from typing import override
+import sys
+
+# Python version check
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    # Define a no-op decorator for Python versions < 3.11
+    def override(method):
+        return method
 
 import kademlia.node
 import kademlia.protocol
 from kademlia import crawling, network, routing
-
 from src.avails import RemotePeer, use, const
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
@@ -13,23 +20,40 @@ from src.core.peers import Storage
 log = logging.getLogger(__name__)
 
 
+class RPCFindResponse(crawling.RPCFindResponse):
+    @override
+    def get_node_list(self):
+        """
+        Get the node list in the response.  If there's no value, this should
+        be set.
+        """
+        nodelist = self.response[1] or []
+        return [RemotePeer(*nodeple) for nodeple in nodelist]
+
+
+# monkey-patching to custom RPCFindResponce
+crawling.RPCFindResponse = RPCFindResponse
+kademlia.node.Node = RemotePeer
+
+
 class RequestProtocol(kademlia.protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
-        self.router = routing.RoutingTable(self, ksize, source_node)
+        self.router = AnotherRoutingTable(self, ksize, source_node)
         self.storage = storage
         self.source_node = source_node
         self.source_node_serialized = bytes(source_node)
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
+        # print("checking in", s, self.router.is_new_node(s))  # debug
         self.welcome_if_new(s)
         return s
 
     @override
     def rpc_ping(self, sender, sender_peer):
         self._check_in(sender_peer)
-        return self.source_node.id
+        return self.source_node_serialized
 
     @override
     def rpc_store(self, sender, sender_peer, key, value):
@@ -46,6 +70,7 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
                  source.long_id)
         node = RemotePeer(key)
         neighbors = self.router.find_neighbors(node, exclude=source)
+        # print("found neighbours", neighbors)
         return list(map(tuple, neighbors))
 
     @override
@@ -77,28 +102,28 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
 
     @override
     async def call_find_node(self, node_to_ask, node_to_find):
-        address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_node(address, self.source_node_serialized,
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.find_node(node_to_ask.network_uri, self.source_node_serialized,
                                       node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_find_value(self, node_to_ask, node_to_find):
-        address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_value(address, self.source_node_serialized,
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.find_value(node_to_ask.network_uri, self.source_node_serialized,
                                        node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_ping(self, node_to_ask):
-        address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.ping(address, self.source_node_serialized)
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.ping(node_to_ask.network_uri, self.source_node_serialized)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_store(self, node_to_ask, key, value):
-        address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.store(address, self.source_node_serialized, key, value)
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.store(node_to_ask.network_uri, self.source_node_serialized, key, value)
         return self.handle_call_response(result, node_to_ask)
 
     async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
@@ -114,8 +139,8 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         return self.handle_call_response(result, peer_to_ask)
 
     async def call_search_peers(self, peer_to_ask: RemotePeer, search_string):
-        add0ress = peer_to_ask.network_uri
-        result = await self.search_peers(add0ress, self.source_node_serialized, search_string)
+        # add0ress = peer_to_ask.network_uri
+        result = await self.search_peers(peer_to_ask.network_uri, self.source_node_serialized, search_string)
         self.handle_call_response(result, peer_to_ask)
         return list(map(RemotePeer.load_from, result[1]))
 
@@ -131,38 +156,39 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
                 this_closest = self.source_node.distance_to(keynode) < first
             if not neighbors or (new_node_close and this_closest):  # noqa
                 for i in peer_list:
-                    asyncio.ensure_future(self.call_store_peers_in_list(peer, list_key, [i,]))
+                    asyncio.ensure_future(self.call_store_peers_in_list(peer, list_key, [i, ]))
 
     @override
     def welcome_if_new(self, peer):
+        if self.router.is_new_node(peer):
+            self._send_peer_lists(peer)
         super().welcome_if_new(peer)
-        if not self.router.is_new_node(peer):
-            return
-        self._send_peer_lists(peer)
-        self.router.add_contact(peer)
+
+
+class AnotherRoutingTable(routing.RoutingTable):
+    @override
+    def add_contact(self, peer):
+        print("adding a new peer to router", peer)
+        super().add_contact(peer)
         Dock.peer_list.add_peer(peer)
 
     @override
-    def handle_call_response(self, result, node):
-        """
-        If we get a response, add the node to the routing table.  If
-        we get no response, make sure it's removed from the routing table.
-        """
-        if not result[0]:
-            log.warning("no response from %s, removing from router", node)
-            self.router.remove_contact(node)
-            Dock.peer_list.remove_peer(node)  # added line specific to application
-            return result
-
-        log.info("got successful response from %s", node)
-        self.welcome_if_new(node)
-        return result
+    def remove_contact(self, peer):
+        super().remove_contact(peer)
+        Dock.peer_list.remove_peer(peer.id)
 
 
 class PeerServer(network.Server):
     def __init__(self, ksize=20, alpha=3, node=None, storage=None):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
+
+    @override
+    async def bootstrap(self, addrs):
+        valid_peers = await super().bootstrap(addrs)
+        for peer in valid_peers:
+            Dock.peer_list.add_peer(peer)
+        return valid_peers
 
     async def get_list_of_nodes(self, list_key):
         # if this node has it, return it
@@ -172,7 +198,7 @@ class PeerServer(network.Server):
         node = RemotePeer(list_key)
         nearest = self.protocol.router.find_neighbors(node)
         if not nearest:
-            # log.warning("There are no known neighbors to get key %s", key)
+            log.warning("There are no known neighbors to get key %s", list_key)
             return None
         peer_list_getter = peers.PeerListGetter(self.protocol, node, nearest,
                                                 self.ksize, self.alpha)
@@ -192,11 +218,20 @@ class PeerServer(network.Server):
                 prev_closest_xor = current_xor
         return nearest_list_id
 
+    @override
+    async def bootstrap_node(self, addr):
+        result = await self.protocol.ping(addr, bytes(self.node))
+        return RemotePeer.load_from(result[1]) if result[0] else None
+
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
-        await self.store_nodes_in_list(closest_list_id, [self.node,])
-        await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
-        self.add_this_peer_future = asyncio.ensure_future(self.add_this_peer_to_lists())
+        if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
+            print('added this peer object')  # debug
+        else:
+            print("failed adding this peer object to lists")
+            await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
+            self.add_this_peer_future = asyncio.ensure_future(self.add_this_peer_to_lists())
+            print("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -204,8 +239,8 @@ class PeerServer(network.Server):
 
         nearest = self.protocol.router.find_neighbors(list_key)
         if not nearest:
-            # log.warning("There are no known neighbors to set key %s",
-            #             dkey.hex())
+            log.info("There are no known neighbors to set key %s",
+                     list_key_id.hex())
             return False
         spider = crawling.NodeSpiderCrawl(self.protocol, list_key, nearest,
                                           self.ksize, self.alpha)
