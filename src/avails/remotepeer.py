@@ -35,7 +35,7 @@ class RemotePeer:
         self.status = status
         self._req_port = req_port
         self._network_port = net_port
-        self.id = peer_id or f'{self.ip}{conn_port}'
+        self.id = peer_id
         self.long_id = int(peer_id.hex(), 16)
         self._file_id = count()
 
@@ -99,6 +99,7 @@ class RemotePeer:
 
     def __bytes__(self):
         list_of_attributes = list(self)
+        # print("bytifying", list_of_attributes, "*"*50)  # debug
         return umsgpack.dumps(list_of_attributes)
 
     def __repr__(self):
@@ -108,12 +109,7 @@ class RemotePeer:
         return bool(self.username or self.id or self.req_uri or self.uri)
 
     def __str__(self):
-        return (
-            "---------------------------\n"
-            f"Username: {self.username[0:18]}\n"
-            f"ID      : {self.id}\n"
-            "---------------------------\n"
-        )
+        return repr(self)
 
     def __hash__(self) -> int:
         return hash(self.uri)
