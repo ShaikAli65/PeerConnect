@@ -117,10 +117,12 @@ class Acceptor:
             try:
                 raw_data = await asyncio.wait_for(Wire.receive_async(sock), self.max_timeout)
                 data = WireData.load_from(raw_data)
+                self.__process_data(data)
             except asyncio.TimeoutError:
                 print("timedout", peer_id)
                 continue
-            self.__process_data(data)
+            except TypeError as tp:
+                print("got type error possible data illformed", tp)
 
     def __process_data(self, _data):  # noqa # :todo: complete this
         if _data.header == const.CMD_TEXT:
