@@ -24,16 +24,21 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         except umsgpack.UnpackException as ue:
             print('data illformed:', ue, data_payload)
             return
-
+        except TypeError as tp:
+            print("got type error possible data ill formed",tp)
+            print("data", umsgpack.loads(data))
+            return
         print("Received:", req_data, "from", addr)  # debug
         if req_data.match_header(REQUESTS.NETWORK_FIND):
             this_rp = get_this_remote_peer()
-            data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=None, connect_uri=this_rp.network_uri)
-            self.transport.sendto(bytes(data_payload), addr)
+            data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=get_this_remote_peer().id, connect_uri=this_rp.network_uri)
+            Wire.send_datagram(self.transport, addr, bytes(data_payload))
             print("sending as reply", data_payload)  # debug
+
         elif req_data.match_header(REQUESTS.NETWORK_FIND_REPLY):
-            bootstrap_node_addr = req_data['connect_uri']
-            Dock.kademlia_network_server.bootstrap([bootstrap_node_addr])
+            bootstrap_node_addr = tuple(req_data['connect_uri'])
+            asyncio.ensure_future(Dock.kademlia_network_server.bootstrap([bootstrap_node_addr]))
+
         elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
             gossip_protocol = gossip.get_gossip()
             gossip_message = wire.GossipMessage.wrap_gossip(req_data)
@@ -60,8 +65,8 @@ class REQUESTS:
 async def initiate():
     loop = asyncio.get_running_loop()
     server = discover.get_new_kademlia_server()
-    await server.listen(port=const.PORT_NETWORK)
 
+    await server.listen(port=const.PORT_NETWORK)
     node_addr = await search_network()
     if node_addr is not None:
         print('bootstrapping kademlia with', node_addr)  # debug
@@ -82,13 +87,12 @@ async def initiate():
     print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     await server.add_this_peer_to_lists()
     await gossip.join_gossip(server)
-    print('added this peer object')  # debug
     return server, transport, proto
 
 
 async def search_network():
     ip, port = const.THIS_IP, const.PORT_REQ
-    print(ip,port)
+    print(ip, port)
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS.NETWORK_FIND, this_id)
     s = connect.UDPProtocol.create_async_server_sock(
@@ -98,7 +102,7 @@ async def search_network():
     )
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     with s:
-        await ping_network(s, port, ping_data)
+        await ping_network(s, port, ping_data, times=2)  # debug
         print('sent broadcast to network at port', ip, port)  # debug
         return await wait_for_replies(s)
 
@@ -110,7 +114,7 @@ async def ping_network(sock, port, req_payload, *, times=4):
         await asyncio.sleep(delay)
 
 
-async def wait_for_replies(sock, timeout=6):
+async def wait_for_replies(sock, timeout=3):
     print("waiting for replies at", sock)
     while True:
         try:
@@ -118,15 +122,19 @@ async def wait_for_replies(sock, timeout=6):
         except asyncio.TimeoutError:
             print(f'timeout reached at {use.func_str(wait_for_replies)}')
             return None
-        data = WireData.load_from(raw_data)
-        print("some data came ", data)  # debug
+        try:
+            data = WireData.load_from(raw_data)
+            print("some data came ", data)  # debug
+        except TypeError as tp:
+            print(f"got error at {use.func_str(wait_for_replies)}", tp)
+            return
         if addr == sock.getsockname():
             print('ignoring echo')  # debug
             continue
         if data.match_header(REQUESTS.NETWORK_FIND_REPLY):
             print("reply detected")  # debug
             print("got some data", data)  # debug
-            return data['connect_uri']
+            return tuple(data['connect_uri'])
 
 
 async def end_requests():
