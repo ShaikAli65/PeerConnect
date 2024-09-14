@@ -58,7 +58,7 @@ async def handle_client(web_socket: websockets.WebSocketServerProtocol):
         if handle_function:
             async for data in web_socket:
                 use.echo_print("data from page:", data, '\a')
-                use.echo_print(f"forwarding to {use.func_str(handle_function).split('\\')[4]}")
+                use.echo_print(f"forwarding to {use.func_str(handle_function)}")
                 await handle_function(data, web_socket)
                 if safe_end.is_set():
                     return
