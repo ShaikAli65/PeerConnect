@@ -1,4 +1,3 @@
-
 """
 Rumor-Mongering implementation of gossip protocol
 """
@@ -55,7 +54,8 @@ class MessageList:
 
     def _disseminate(self):
         current_time = self._get_current_clock()
-        for message_id in self.message_list:
+        current_message_ids = list(self.message_list)
+        for message_id in current_message_ids:
             message_item = self.message_list[message_id]
             if self._is_old_enough(current_time, message_item.time_in):
                 self.message_list.pop(message_id)
@@ -73,7 +73,7 @@ class MessageList:
 
     @staticmethod
     def _get_list_of_peers():
-        return set(Dock.peer_list)
+        return set(Dock.peer_list.keys())
 
     def push(self, message: GossipMessage):
         message_item = MessageItem(
@@ -98,6 +98,7 @@ class MessageList:
         return item in self.message_list
 
     def sample_peers(self, message_id, sample_size):
+        # using reserviour sampling algorithm
         _m:MessageItem = self.message_list[message_id]
         peer_list = self._get_list_of_peers() - _m.peer_list
         reservoir = []
@@ -124,45 +125,57 @@ class RumorMongerProtocol:
 
     @classmethod
     def message_arrived(cls, data: GossipMessage):
+        print("got a message to gossip", data)
         if not cls.should_gossip(data):
             return
+        print("gossiping message to", end=" ")
         if data.id in cls.messages:
             sampled_peers = cls.messages.sample_peers(data.id, cls.alpha)
             for peer_id in sampled_peers:
-                cls.forward_payload(data, peer_id)
+                p = cls.forward_payload(data, peer_id)
+                print(p,end=", ")
             return
-        cls.messages.push(data)
-        return cls.message_arrived(data)
+        print('')
+        cls.gossip_message(data)
 
     @classmethod
     def should_gossip(cls, message):
         if message.id in cls.messages.dropped:
+            print("not gossiping due to message id found in dropped", message.id)
             return False
-        elapsed_time = time.monotonic() - message.created
+        elapsed_time = time.time() - message.created
         if elapsed_time > cls.global_gossip_ttl:
+            print("not gossiping, global timeout reached", elapsed_time)
             return False
         # Decrease gossip chance based on time
-        gossip_chance = max(0.4, (cls.global_gossip_ttl - elapsed_time) / cls.global_gossip_ttl)
-        # Minimum 40% chance
-        return random.random() < gossip_chance
+        gossip_chance = max(0.6, (cls.global_gossip_ttl - elapsed_time) / cls.global_gossip_ttl)
+        # Minimum 60% chance
+        if not (w := random.random() < gossip_chance):
+            print("not gossiping probability check failed")
+        return w
 
     @classmethod
     def gossip_message(cls, message: GossipMessage):
+        print("gossiping new message", message, "to", end="")
         cls.messages.push(message)
         sampled_peers = cls.messages.sample_peers(message.id, cls.alpha)
         for peer_id in sampled_peers:
-            cls.forward_payload(message, peer_id)
+            p = cls.forward_payload(message, peer_id)
+            print(p, end=", ")
+
+        print("")
 
     @classmethod
     def forward_payload(cls, message, peer_id):
         peer_obj = Dock.peer_list.get_peer(peer_id)
         if peer_obj is not None:
             return Wire.send_datagram(cls.send_sock, peer_obj.req_uri, bytes(message))
+        return peer_obj
 
 
 def get_gossip():
     return RumorMongerProtocol
 
 
-def join_gossip(kademlia_server):
-    pass
+async def join_gossip(kademlia_server):
+    get_gossip().initiate()
