@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import socket
 
 import umsgpack
@@ -8,9 +7,6 @@ from src.avails import Wire, WireData, connect, const, use, wire
 from src.core import Dock, get_this_remote_peer
 from . import discover, gossip
 
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
 
 # :todo: write consensus protocol for replying a network find request
 
@@ -18,35 +14,63 @@ logger.setLevel(logging.INFO)
 class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data_payload, addr):
+        req_data = self.unpack_datagram(data_payload)
+        if not req_data:
+            return  # Failed to unpack
+        print("Received: %s from %s" % (req_data, addr))
+        self.handle_request(req_data, addr)
+
+    @staticmethod
+    def unpack_datagram(data_payload):
+        """ Unpack the datagram and handle exceptions """
         try:
             data = Wire.load_datagram(data_payload)
-            req_data = WireData.load_from(data)
+            return WireData.load_from(data)
         except umsgpack.UnpackException as ue:
-            print('data illformed:', ue, data_payload)
-            return
+            return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
         except TypeError as tp:
-            print("got type error possible data ill formed",tp)
-            print("data", umsgpack.loads(data))
-            return
-        print("Received:", req_data, "from", addr)  # debug
+            return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+
+    def handle_request(self, req_data, addr):
+        """ Handle different request types based on the header """
         if req_data.match_header(REQUESTS.NETWORK_FIND):
-            this_rp = get_this_remote_peer()
-            data_payload = WireData(header=REQUESTS.NETWORK_FIND_REPLY, _id=get_this_remote_peer().id, connect_uri=this_rp.network_uri)
-            Wire.send_datagram(self.transport, addr, bytes(data_payload))
-            print("sending as reply", data_payload)  # debug
-
+            self.handle_network_find(addr)
         elif req_data.match_header(REQUESTS.NETWORK_FIND_REPLY):
-            bootstrap_node_addr = tuple(req_data['connect_uri'])
-            asyncio.ensure_future(Dock.kademlia_network_server.bootstrap([bootstrap_node_addr]))
-
+            self.handle_network_find_reply(req_data)
         elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
-            gossip_protocol = gossip.get_gossip()
-            gossip_message = wire.GossipMessage.wrap_gossip(req_data)
-            gossip_protocol.message_arrived(gossip_message)
+            self.handle_gossip_message(req_data)
+
+    def handle_network_find(self, addr):
+        """ Handle NETWORK_FIND request """
+        this_rp = get_this_remote_peer()
+        data_payload = WireData(
+            header=REQUESTS.NETWORK_FIND_REPLY,
+            _id=this_rp.id,
+            connect_uri=this_rp.network_uri
+        )
+        if self.transport:
+            Wire.send_datagram(self.transport, addr, bytes(data_payload))
+            print("Sent NETWORK_FIND_REPLY: %s to %s" % (data_payload, addr))
+        else:
+            print("Transport not available for sending reply to %s" % addr)
+
+    @staticmethod
+    def handle_network_find_reply(req_data):
+        """ Handle NETWORK_FIND_REPLY request """
+        bootstrap_node_addr = tuple(req_data['connect_uri'])
+        asyncio.ensure_future(Dock.kademlia_network_server.bootstrap([bootstrap_node_addr]))
+        print("Bootstrap initiated to: %s" % bootstrap_node_addr)
+
+    @staticmethod
+    def handle_gossip_message(req_data):
+        """ Handle GOSSIP_MESSAGE request """
+        gossip_protocol = gossip.get_gossip()
+        gossip_message = wire.GossipMessage.wrap_gossip(req_data)
+        gossip_protocol.message_arrived(gossip_message)
+        print("Gossip message received and processed: %s" % gossip_message)
 
     def connection_made(self, transport):
         self.transport = transport
-        print("Connection made", self.transport)  # debug
 
 
 class REQUESTS:
@@ -142,4 +166,3 @@ async def end_requests():
     Dock.kademlia_network_server.stop()
     Dock.requests_endpoint.close()
     Dock.requests_endpoint = None
-
