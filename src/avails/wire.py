@@ -11,6 +11,8 @@ from . import Actuator, const as _const
 from .connect import Socket as _Socket
 from .useables import NotInUse, wait_for_sock_read
 
+actuator = Actuator()
+
 
 class Wire:
     @staticmethod
@@ -36,10 +38,31 @@ class Wire:
         return data
 
     @staticmethod
-    def receive(sock: _Socket):
-        data_size = struct.unpack('!I', sock.recv(4))[0]
-        data = sock.recv(data_size)
-        return data
+    def receive(sock: _Socket, timeout=None, controller=actuator):
+        b = sock.getblocking()
+        length_buf = bytearray()
+        while len(length_buf) < 4:
+            try:
+                data = sock.recv(4 - len(length_buf))
+                if data == b'':  # If socket connection is closed prematurely
+                    sock.setblocking(b)
+                    raise ConnectionError("got empty bytes in a stream socket")
+                length_buf += data
+            except BlockingIOError:
+                wait_for_sock_read(sock, controller, timeout)
+        data_length = struct.unpack('!I', length_buf)[0]
+
+        received_data = bytearray()
+        while len(received_data) < data_length:
+            try:
+                chunk = sock.recv(data_length - len(received_data))
+                if chunk == b'':  # Again, handle premature disconnection
+                    raise ConnectionError("connection closed during data reception")
+                received_data += chunk
+            except BlockingIOError:
+                wait_for_sock_read(sock, controller, timeout)
+        sock.setblocking(b)
+        return received_data
 
     @staticmethod
     def recv_datagram(sock: _Socket):
