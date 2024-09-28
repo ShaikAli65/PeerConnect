@@ -14,7 +14,6 @@ def initial_states():
     s6 = State("waiting for profile choice", Dock.PROFILE_WAIT.wait)
     s7 = State("initiating requests", requests.initiate, is_blocking=True)
     # s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
-
     return s1, s2, s3, s4, s5,  # s6, s7,
 
 

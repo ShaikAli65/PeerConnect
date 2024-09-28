@@ -20,7 +20,6 @@ def restart():
 def receive_restart_signal(data):
     s = State('restarting',func=restart)
     Dock.state_handle.state_queue.put(s)
-    ...
 
 
 async def search_for_user(data, websocket):
