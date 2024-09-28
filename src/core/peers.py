@@ -83,16 +83,14 @@ class SearchCrawler:
     @classmethod
     async def search_for_nodes(cls, node_server, search_string):
         relevant_peers = []
-        local_peer_list = use.search_relevant_peers(Dock.peer_list, search_string)
-        # yield local_peer_list
-        relevant_peers.extend(local_peer_list)
+        for peer in use.search_relevant_peers(Dock.peer_list, search_string):
+            yield peer
+
         for list_id in cls.node_list_ids:
             peers = await cls.get_relevant_peers_for_list_id(node_server, list_id)
             for peer in peers:
                 _peers = await node_server.protocol.call_search_peers(peer, search_string)
-                relevant_peers.extend(_peers)
-                # yield _peers
-        return relevant_peers
+                yield _peers
 
 
 def get_more_peers():
@@ -103,7 +101,8 @@ def get_more_peers():
 def search_for_nodes_with_name(search_string):
     """
     searches for nodes relevant to given :param:search_string
-    :returns: a list of peers that matches with the search_string
+    Returns:
+         a generator of peers that matches with the search_string
     """
     peer_server = Dock.kademlia_network_server
     return SearchCrawler.search_for_nodes(peer_server, search_string)

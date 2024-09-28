@@ -1,6 +1,3 @@
-"""
-Rumor-Mongering implementation of gossip protocol
-"""
 import asyncio
 import random
 import time
@@ -114,6 +111,10 @@ class MessageList:
 
 
 class RumorMongerProtocol:
+    """
+    Rumor-Mongering implementation of gossip protocol
+    """
+
     messages = MessageList(const.NODE_POV_GOSSIP_TTL)
     alpha = 4  # no.of nodes to forward a gossip at once
     send_sock = None

@@ -168,8 +168,7 @@ def awaitable(syncfunc):
 
 def search_relevant_peers(peer_list, search_string) -> list:
     """
-    Searches for relevant peers based on the search string, taking into account
-    potential changes in dictionary size during iteration.
+    Searches for relevant peers based on the search string,
 
     Uses a copy of the current peer IDs to avoid modification errors.
     Provides an option to use a lock for safety if the GIL is not guaranteed
@@ -179,25 +178,20 @@ def search_relevant_peers(peer_list, search_string) -> list:
         search_string (str): The string to search for relevance.
         peer_list(PeerDict): The dictionary of id to peer object mapping
     Returns:
-        list: A list of relevant RemotePeer objects.
+        yields peers
     """
-
     if not hasattr(peer_list, '_gil_safe'):  # Check if GIL safety has been determined
         peer_list._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL
 
-    peer_ids = list(peer_list.keys())  # Create a copy of peer IDs
+    peer_ids = list(peer_list.keys())
 
-    return_list = []
     for peer_id in peer_ids:
         try:
             peer = peer_list[peer_id]  # May raise KeyError if removed concurrently
         except KeyError:
             continue  # Skip removed peer
-
         if peer.is_relevant(search_string):
-            return_list.append(peer)
-
-    return return_list
+            yield peer
 
 
 class NotInUse:
