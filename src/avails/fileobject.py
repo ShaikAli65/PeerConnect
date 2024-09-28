@@ -8,15 +8,14 @@ import struct
 import sys
 from math import isclose
 from pathlib import Path
-from typing import Iterator, Self
-from typing import Union
+from typing import Iterator, Union
 
 import select
 import tqdm
 
-import src.avails.connect
 from src.avails import (
     Actuator,
+    Wire,
     const,
     use,
 )
@@ -54,7 +53,6 @@ class _FileItem:
         'ext': str,
     }
     __slots__ = 'name', 'size', 'path', 'seeked', 'ext'
-    TIMEOUT = 5
 
     def __init__(self, size, path, seeked):
         name, self.ext = os.path.splitext(path)
@@ -71,36 +69,12 @@ class _FileItem:
         return str_str
         # return f'{self.name}'
 
-    def serialize(self, receiver_sock, timeout=TIMEOUT):
-        _timeout = receiver_sock.gettimeout()
-        receiver_sock.settimeout(timeout)
-        obj = pickle.dumps(self)
-        size = struct.pack('!I', len(obj))
-        try:
-            receiver_sock.send(size)
-            receiver_sock.sendall(obj)
-        except (TimeoutError, OSError):
-            return False
-        finally:
-            receiver_sock.settimeout(_timeout)
-        return True
+    @staticmethod
+    def load_from(data: bytes):
+        return pickle.loads(data)
 
-    @classmethod
-    def deserialize(cls, sender_sock, timeout=TIMEOUT) -> Self:
-        """
-        Factory method which returns un pickled `_FileItem` from provided socket
-        """
-        _timeout = sender_sock.gettimeout()
-        sender_sock.settimeout(timeout)
-        try:
-            raw_size = sender_sock.recv(4)
-            size = struct.pack('!I', raw_size)
-            data = sender_sock.recv(size)
-            return pickle.loads(data)
-        except (TimeoutError, OSError):
-            return None
-        finally:
-            sender_sock.settimeout(_timeout)
+    def __bytes__(self):
+        return pickle.dumps(self)
 
     def __repr__(self):
         return (f"_FileItem({self.name[:10]}, "  # {'...' if len(self.name) > 10 else ''}
@@ -139,14 +113,14 @@ class PeerFilePool:
 
         self.to_stop = actuator or Actuator()
         self.to_stop.flip()
-        # setting event thus reducing ~not'ting~ of self.proceed() in most of the loop checkings
+        # setting underlying event thus reducing ~not'ting~ of self.proceed() in most of the loop's conditional checkings
         self.__error_extension = error_ext
         self.file_items: set[_FileItem] = set(file_items or [])
         self.id = _id
         self.current_file: Iterator[_FileItem] | _FileItem = self.file_items.__iter__()
         # this can be _FileItem() while recieving pointing to currently receiving file item
-        # (we don't use ~self.file_items as list in case of receiving because it's redundent two store files details both ways)
         # and iterator while sending
+        # (we don't use ~self.file_items as list in case of receiving because it's redundent two store files details both ways)
         self.file_count = len(self.file_items)
 
     def send_files(self, receiver_sock):
@@ -162,33 +136,42 @@ class PeerFilePool:
 
     def send_file_loop(self, current_iter, receiver_sock):
         for file in current_iter:
-            if (not self.to_stop or self.__send_file(receiver_sock, file=file)) is False:
+            if (not self.to_stop or self.send_file(receiver_sock, file=file)) is False:
                 return False
             next(self.current_file)
         return True
 
-    def __send_file(self, receiver_sock, file: _FileItem):
+    def send_file(self, receiver_sock, file: _FileItem):
         print('sending file data', f"[PID:{os.getpid()}]")  # debug
-        if not file.serialize(receiver_sock):
+        try:
+            Wire.send(receiver_sock, bytes(file))
+        except (OSError, BlockingIOError):  # :todo fix thissssss
             return False
+
         send_progress = tqdm.tqdm(
             range(file.size),
-            f"[PID:{multiprocessing.current_process().ident}] sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
+            f"[PID:{multiprocessing.current_process().ident}]"
+            f" sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
             unit="B",
             unit_scale=True,
             unit_divisor=1024
         )
 
-        result = self.__send_actual_file(receiver_sock, file, send_progress)
+        result = self.send_actual_file(receiver_sock, file, send_progress)
         send_progress.close()
         return result
 
-    def __send_actual_file(self, receiver_sock, file, send_progress):
+    def send_actual_file(self, receiver_sock, file, send_progress):
         sock_send = receiver_sock.send
         # send_progress.update(file.seeked)
         # back_off = use.get_timeouts(max_retries=self.retries)
         chunk_size = self.calculate_chunk_size(file.size)
-        wait_sock_write = functools.partial(use.wait_for_sock_write, receiver_sock, self.to_stop, None)
+        wait_sock_write = functools.partial(
+            use.wait_for_sock_write,
+            receiver_sock,
+            self.to_stop,
+            None
+        )
         print('sending file item', file)  # debug
         with open(file.path, 'rb') as f:
             f_read = f.read
@@ -201,13 +184,9 @@ class PeerFilePool:
                 try:
                     sock_send(chunk)  # possible: connection reset err
                 except BlockingIOError as be:
-                    # try:
-                    # print('got ', be)
                     wait_sock_write()
                     continue
-                    # except StopIteration:
                     #     file.seeked = seek  # can be ignored mostly for now
-                    #     return False
                 except ConnectionResetError:
                     break
                 # send_progress.update(len(chunk))
@@ -227,20 +206,21 @@ class PeerFilePool:
         raw_file_count = sender_sock.recv(4) or b'\x00\x00\x00\x00'
         self.file_count = struct.unpack('!I', raw_file_count)[0]
         print("received file count", self.file_count)  # debug
-        return self.__receive_file_loop(self.file_count, sender_sock)
+        return self.receive_file_loop(self.file_count, sender_sock)
 
-    def __receive_file_loop(self, count, sender_sock):
+    def receive_file_loop(self, count, sender_sock):
         for _ in range(count):
             if not self.to_stop:
                 return
-            if self.__recv_file(sender_sock) is False:
+            if self.recv_file(sender_sock) is False:
                 return
             print("completed receiving", self.current_file)  # debug
             self.file_count -= 1
         return True
 
-    def __recv_file(self, sender_sock):
-        file_item = _FileItem.deserialize(sender_sock)
+    def recv_file(self, sender_sock):
+        data = Wire.receive(sender_sock, controller=self.to_stop)
+        file_item = _FileItem.load_from(data)
         if not file_item:
             return False
 
@@ -254,11 +234,11 @@ class PeerFilePool:
             unit_divisor=1024
         )
         self.current_file = file_item
-        what = self.__recv_actual_file(sender_sock, file_item, progress)
+        what = self.recv_actual_file(sender_sock, file_item, progress)
         progress.close()
         return what
 
-    def __recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
+    def recv_actual_file(self, sender_sock, file_item: _FileItem, progress):
         mode = 'xb' if file_item.seeked == 0 else 'rb+'  # if seeked == 0 that means we need to create file newly
         chunk_size = self.calculate_chunk_size(file_item.size)
         back_off = use.get_timeouts(max_retries=self.retries)
@@ -281,7 +261,7 @@ class PeerFilePool:
                             return False
                     if not data:
                         break
-                    f_write(data)  # possible: No Space Left
+                    f_write(data)  # :todo possible: No Space Left
                     size -= len(data)
                     progress.update(len(data))
         finally:
@@ -303,7 +283,7 @@ class PeerFilePool:
         start_file.seeked = struct.unpack('!Q', receiver_sock.recv(8))[0]
         progress = tqdm.tqdm(range(start_file.size), f"[PID:{multiprocessing.current_process().ident}]sending {start_file.name[:20]}... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
-        self.__send_actual_file(receiver_sock, start_file, progress)
+        self.send_actual_file(receiver_sock, start_file, progress)
         progress.close()
         # -> ---------------------- file continuation part
 
@@ -316,7 +296,7 @@ class PeerFilePool:
         sender_sock.send(start_file.seeked)
         progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]}... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
-        what = self.__recv_actual_file(sender_sock, start_file, progress)
+        what = self.recv_actual_file(sender_sock, start_file, progress)
         if not what:
             use.echo_print('got error again returning')  # debug
             progress.close()
@@ -324,7 +304,7 @@ class PeerFilePool:
         self._remove_error_ext(start_file)
         # -> ---------------------- file continuation part
 
-        self.__receive_file_loop(self.file_count, sender_sock)
+        self.receive_file_loop(self.file_count, sender_sock)
         return True
 
     def _add_error_ext(self, file_item: _FileItem):
