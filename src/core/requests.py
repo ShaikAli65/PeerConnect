@@ -99,7 +99,7 @@ async def initiate():
 
     transport, proto = await loop.create_datagram_endpoint(
         RequestsEndPoint,
-        local_addr=('0.0.0.0', const.PORT_REQ),
+        local_addr=('0.0.0.0' if const.IP_VERSION == socket.AF_INET else '::', const.PORT_REQ),
         family=const.IP_VERSION,
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
