@@ -10,10 +10,9 @@ from src.avails import (
     connect,
     use,
     const,
-    PeerFilePool,
     Wire,
-    FileItem
 )
+from src.core import transfers
 
 
 class TaskHandle:
@@ -79,7 +78,7 @@ class FileTaskHandle(TaskHandle):
 
     def start(self):
         use.echo_print('starting ', self.function_code, 'with', self.socket)  # debug
-        self.file_pool = PeerFilePool(self.file_pool, _id=self.files_id)
+        self.file_pool = transfers.PeerFilePool(self.file_pool, _id=self.files_id)
         self._result = getattr(self.file_pool, self.function_code)(self.socket)
         print('completed file task', self._result)  # debug
         return self._handle_id, self._result
@@ -168,7 +167,7 @@ class DirectoryTaskHandle(TaskHandle):
 
     def recv_file(self, file_path):
         size = self.socket.recv(8)
-        file_item = FileItem(size, file_path, 0)
+        file_item = transfers.FileItem(size, file_path, 0)
 
         ...
 

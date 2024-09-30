@@ -2,10 +2,10 @@ import asyncio
 import contextlib
 import socket
 import threading
-from collections import deque, defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict
 from typing import Union
 
-from . import connect, RemotePeer, useables
+from . import connect
 
 """
 This module contains simple storages used across the peer connect
@@ -31,10 +31,6 @@ class PeerDict(dict):
 
     def add_peer(self, peer_obj):  # RemotePeer):
         # with self.__lock:
-        if isinstance(peer_obj, bytes):
-            peer_obj = RemotePeer.load_from(peer_obj)
-            self.__setitem__(peer_obj.id, peer_obj)
-            return
         self[peer_obj.id] = peer_obj
 
     def extend(self, iterable_of_peer_objects):
@@ -221,82 +217,3 @@ class SocketCache:
     def __del__(self):
         self.__close_all_socks()
 
-
-@useables.NotInUse
-class SafeSet:
-    """
-    SafeSet is a thread safe set implementation with additional features.
-    """
-    __annotations__ = {
-        '__list': set,
-        '__lock': threading.Lock
-    }
-
-    __slots__ = '__list', '__lock', 'changes'
-
-    def __init__(self):
-        self.__list = set()
-        self.__lock = threading.Lock()
-        self.changes = deque()
-
-    def add(self, item):
-        with self.__lock:
-            self.__list.add(item)
-        if item in self.changes:
-            self.changes.remove(item)
-
-    def sync_remove(self, item):
-        with self.__lock:
-            self.__list.discard(item)
-            self.changes.appendleft(item)
-
-    def discard(self, item, include_changes=True):
-        with self.__lock:
-            self.__list.discard(item)
-            if include_changes:
-                self.changes.appendleft(item)
-
-    def pop(self):
-        with self.__lock:
-            return self.__list.pop()
-
-    def copy(self):
-        with self.__lock:
-            return self.__list.copy()
-
-    def clear(self):
-        with self.__lock:
-            self.__list.clear()
-
-    def clear_changes(self):
-        with self.__lock:
-            self.changes.clear()
-
-    def getchanges(self):
-        r = self.changes.copy()
-        self.changes.clear()
-        return r
-
-    def __iter__(self):
-        with self.__lock:
-            return self.__list.__iter__()
-
-    def __getitem__(self, index):
-        with self.__lock:
-            return self.__list.__getattribute__(index)
-
-    def __len__(self):
-        with self.__lock:
-            return len(self.__list)
-
-    def __str__(self):
-        with self.__lock:
-            return "[" + " ".join([str(i.id) for i in self.__list]) + "]"
-
-    def __contains__(self, item):
-        with self.__lock:
-            return item in self.__list
-
-    def __del__(self):
-        with self.__lock:
-            self.__list.clear()

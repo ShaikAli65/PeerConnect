@@ -41,8 +41,6 @@ if debug:
     PROTOCOL = TCPProtocol
 else:
     PROTOCOL = None
-
-
 LOCK_PRINT = Lock()
 
 MAX_LOAD = 5

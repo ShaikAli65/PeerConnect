@@ -6,7 +6,6 @@ from pathlib import Path
 
 from src.avails import (
     dialogs,
-    FileItem,
     FileDict,
     const,
     connect,
@@ -14,6 +13,8 @@ from src.avails import (
     use, RemotePeer,
 )
 from src.core import Dock, connections, get_this_remote_peer
+from src.core import transfers
+
 from . import processmanager
 
 all_files = FileDict()
@@ -45,7 +46,7 @@ class FileSender:
 
     def __init__(self, file_list: list[str | Path]):
         self.state = STATE.PREPARING
-        self.file_list = [FileItem(os.path.getsize(x), x, seeked=0) for x in file_list]
+        self.file_list = [transfers.FileItem(os.path.getsize(x), x, seeked=0) for x in file_list]
         self.file_handle = None
 
     async def send_files(self, peer_id):
