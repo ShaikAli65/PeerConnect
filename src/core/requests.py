@@ -1,9 +1,7 @@
 import asyncio
 import socket
 
-import umsgpack
-
-from src.avails import Wire, WireData, connect, const, use, wire
+from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer
 from . import discover, gossip
 
@@ -14,22 +12,11 @@ from . import discover, gossip
 class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def datagram_received(self, data_payload, addr):
-        req_data = self.unpack_datagram(data_payload)
+        req_data = unpack_datagram(data_payload)
         if not req_data:
             return  # Failed to unpack
         print("Received: %s from %s" % (req_data, addr))
         self.handle_request(req_data, addr)
-
-    @staticmethod
-    def unpack_datagram(data_payload):
-        """ Unpack the datagram and handle exceptions """
-        try:
-            data = Wire.load_datagram(data_payload)
-            return WireData.load_from(data)
-        except umsgpack.UnpackException as ue:
-            return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
-        except TypeError as tp:
-            return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
 
     def handle_request(self, req_data, addr):
         """ Handle different request types based on the header """
