@@ -3,7 +3,9 @@ from asyncio import DatagramTransport
 from typing import Optional
 
 import kademlia.network
-from ..avails import SocketCache as _SocketCache, PeerDict, RemotePeer
+
+from . import transfers, webpage_handlers
+from ..avails import PeerDict, RemotePeer, SocketCache as _SocketCache
 from ..managers.profilemanager import get_current_profile
 from ..managers.statemanager import StateManager
 
@@ -35,4 +37,6 @@ __all__ = [
     'get_this_remote_peer',
     'set_current_remote_peer_object',
     'Dock',
+    'transfers',
+    'webpage_handlers',
 ]

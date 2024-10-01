@@ -183,13 +183,6 @@ class PeerServer(network.Server):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
 
-    @override
-    async def bootstrap(self, addrs):
-        valid_peers = await super().bootstrap(addrs)
-        for peer in valid_peers:
-            Dock.peer_list.add_peer(peer)
-        return valid_peers
-
     async def get_list_of_nodes(self, list_key):
         # if this node has it, return it
         if self.storage.get_list_of_peers(list_key) is not None:
