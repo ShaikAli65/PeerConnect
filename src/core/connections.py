@@ -76,7 +76,12 @@ class Acceptor:
     async def start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
         sock_family, sock_type, _, _, address = addr_info[0]
-        sock = const.PROTOCOL.create_async_server_sock(self.__loop, address, family=const.IP_VERSION, backlog=self.back_log)
+        sock = const.PROTOCOL.create_async_server_sock(
+            self.__loop,
+            address,
+            family=const.IP_VERSION,
+            backlog=self.back_log
+        )
         return sock
 
     async def __accept_connection(self, initial_conn):
@@ -112,7 +117,6 @@ class Acceptor:
 
     async def handle_peer(self, peer_id):
         sock = Dock.connected_peers.get_socket(peer_id)
-
         while self.currently_in_connection[peer_id]:
             try:
                 raw_data = await asyncio.wait_for(Wire.receive_async(sock), self.max_timeout)
