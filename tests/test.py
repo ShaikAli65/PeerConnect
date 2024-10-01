@@ -8,8 +8,8 @@ from kademlia import utils
 
 from src.avails import GossipMessage, RemotePeer, WireData, const
 from src.configurations import bootup, configure
-from src.core import Dock, get_this_remote_peer, peers, requests, set_current_remote_peer_object
-from src.core.gossip import get_gossip
+from src.core import get_this_remote_peer, peers, requests, set_current_remote_peer_object
+from src.core import get_gossip
 from src.managers import profilemanager
 from src.managers.statemanager import State
 

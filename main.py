@@ -2,6 +2,7 @@ import os
 import asyncio
 from src.core import Dock
 from src.core.webpage_handlers import pagehandle
+from src.managers.statemanager import StateManager
 from tests.test import *
 
 
@@ -18,8 +19,8 @@ def initial_states():
 
 
 async def initiate(states):
+    Dock.state_handle = StateManager()
     await Dock.state_handle.put_states(states)
-
     await Dock.state_handle.process_states()
 
 

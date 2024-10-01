@@ -173,11 +173,3 @@ class RumorMongerProtocol:
         if peer_obj is not None:
             return Wire.send_datagram(cls.send_sock, peer_obj.req_uri, bytes(message))
         return peer_obj
-
-
-def get_gossip():
-    return RumorMongerProtocol
-
-
-async def join_gossip(kademlia_server):
-    get_gossip().initiate()

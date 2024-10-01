@@ -13,7 +13,7 @@ from src.avails import (
     const,
     use
 )
-from src.avails.handles import DirectoryTaskHandle, FileTaskHandle, TaskHandleProxy
+from src.core.handles import DirectoryTaskHandle, FileTaskHandle, TaskHandleProxy
 
 
 class HandleRepr:  # :todo try this using named tuple

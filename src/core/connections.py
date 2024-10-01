@@ -6,7 +6,6 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Optional
 
-# from . import connected_peers
 from . import get_this_remote_peer, Dock
 
 from src.avails import (

@@ -2,8 +2,9 @@ import asyncio
 import socket
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
-from src.core import Dock, get_this_remote_peer
-from . import discover, gossip
+from src.core import Dock, get_this_remote_peer, join_gossip
+from . import discover
+from .transfers import gossip
 
 
 # :todo: write consensus protocol for replying a network find request
@@ -97,7 +98,7 @@ async def initiate():
     Dock.kademlia_network_server = server
     print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     await server.add_this_peer_to_lists()
-    await gossip.join_gossip(server)
+    await join_gossip(server)
     return server, transport, proto
 
 

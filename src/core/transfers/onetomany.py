@@ -4,10 +4,10 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 
-from src.avails import RemotePeer, Wire, WireData, unpack_datagram, const
+from src.avails import RemotePeer, WireData, const, unpack_datagram
 from . import HEADERS
-from .. import get_this_remote_peer
 from ..connections import Connector
+from .. import get_this_remote_peer
 
 
 def next_power_of_two(n):
