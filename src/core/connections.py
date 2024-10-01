@@ -158,6 +158,7 @@ class Acceptor:
 
 class Connector:
     _current_connected = connect.Socket()
+    # :todo: make this more advanced such that it can handle mulitple requests related to same socket
 
     @classmethod
     async def connect_peer(cls, peer_obj: RemotePeer) -> connect.Socket:

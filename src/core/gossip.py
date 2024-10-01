@@ -96,6 +96,7 @@ class MessageList:
 
     def sample_peers(self, message_id, sample_size):
         # using reserviour sampling algorithm
+        # :todo: try working with bloom filters
         _m:MessageItem = self.message_list[message_id]
         peer_list = self._get_list_of_peers() - _m.peer_list
         reservoir = []
