@@ -423,3 +423,13 @@ class SimplePeerBytes:
     def __hash__(self):
         return hash(self.raw_bytes)
 
+
+def unpack_datagram(data_payload):
+    """ Unpack the datagram and handle exceptions """
+    try:
+        data = Wire.load_datagram(data_payload)
+        return WireData.load_from(data)
+    except umsgpack.UnpackException as ue:
+        return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
+    except TypeError as tp:
+        return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
