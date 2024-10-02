@@ -32,8 +32,7 @@ The dev branch is a complete rewrite using Python’s asynchronous features, aim
 
 - **Distributed Hash Tables (DHT)**: Implements the **Kademlia** protocol for maintaining decentralized peer connections.
 - **Advanced P2P Protocols**: Incorporates sophisticated algorithms for peer communication and gossiping:
-  - **HyParView**: A protocol for maintaining highly connected and robust overlay networks.
-  - **Palm Tree Protocol**: A distributed tree-based communication model.
+  - **HyParView/Palm Tree Protocol**: A protocol for maintaining highly connected and robust overlay networks, distributed tree-based communication model.
   - **Rumor-Mongering**: Epidemic-based message dissemination protocol.
   - **Custom Gossip Protocol**: A lightweight, under-development gossip protocol designed for efficient large-scale peer messaging.
   
