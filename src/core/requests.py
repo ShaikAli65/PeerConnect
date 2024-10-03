@@ -1,10 +1,14 @@
 import asyncio
 import socket
+import threading
+from wsgiref.util import request_uri
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer, join_gossip
-from . import discover
-from .transfers import gossip
+from . import discover, get_gossip
+from . import transfers
+from ..avails.useables import awaitable
+from ..managers import gossip_manager
 
 
 # :todo: write consensus protocol for replying a network find request
@@ -27,6 +31,8 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             self.handle_network_find_reply(req_data)
         elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
             self.handle_gossip_message(req_data)
+        elif req_data.match_header(transfers.HEADERS.GOSSIP_CREATE_SESSION):
+            self.handle_gossip_session(req_data, addr)
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
@@ -52,10 +58,13 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
     @staticmethod
     def handle_gossip_message(req_data):
         """ Handle GOSSIP_MESSAGE request """
-        gossip_protocol = gossip.get_gossip()
+        gossip_protocol = get_gossip()
         gossip_message = wire.GossipMessage.wrap_gossip(req_data)
         gossip_protocol.message_arrived(gossip_message)
-        print("Gossip message received and processed: %s" % gossip_message)
+
+    @staticmethod
+    def handle_gossip_session(req_data, addr):
+        asyncio.ensure_future(gossip_manager.new_gossip_request_arrived(req_data, addr))
 
     def connection_made(self, transport):
         self.transport = transport
@@ -63,7 +72,6 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
 class REQUESTS:
     __slots__ = ()
-
     REDIRECT = b'redirect        '
     LIST_SYNC = b'sync list       '
     ACTIVE_PING = b'Y face like that'
