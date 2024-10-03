@@ -46,7 +46,7 @@ async def get_list_from(initiate_socket):
 async def list_error_handler():
     req_peer = next(iter(Dock.peer_list.peers()))
     # try:
-    conn = await connect.connect_to_peer(_peer_obj=req_peer, to_which=connect.REQ_URI)
+    conn = await connect.connect_to_peer(_peer_obj=req_peer)
     # except OSError:
     with conn:
         await Wire.send_async(conn, const.REQ_FOR_LIST)
@@ -58,7 +58,7 @@ async def list_error_handler():
 
 async def list_from_forward_control(list_owner: RemotePeer):
     # try:
-    conn = await connect.connect_to_peer(_peer_obj=list_owner, to_which=connect.REQ_URI)
+    conn = await connect.connect_to_peer(_peer_obj=list_owner)
     # except:
 
     with conn as list_connection_socket:
