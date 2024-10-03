@@ -247,7 +247,7 @@ class UDPProtocol(Protocol):
 
     @classmethod
     async def create_connection_async(cls, loop: _asyncio.AbstractEventLoop, address, timeout=None) -> Socket:
-        addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
+        addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_DGRAM)
         addr_family, sock_type, _, _, address = addr_info[0]
 
         sock = cls.create_async_sock(loop, addr_family)
@@ -310,7 +310,7 @@ def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0
 
 
 def resolve_address(_peer_obj, to_which):
-    addr = _peer_obj.req_uri if to_which == REQ_URI else _peer_obj.uri
+    addr = getattr(_peer_obj, to_which)
     address_info = _socket.getaddrinfo(addr[0], addr[1], type=_socket.SOCK_STREAM)[0]
     address = address_info[4]  # [:2]
     sock_family = address_info[0]
@@ -319,7 +319,7 @@ def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0.001, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0.01, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -334,12 +334,10 @@ async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, tim
 
     address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
     address = address[:2]
-    create_connection = const.PROTOCOL.create_connection_async
-    loop = _asyncio.get_running_loop()
     retry_count = 0
     for timeout in useables.get_timeouts(timeout, max_retries=retries):
         try:
-            return await create_connection(loop, address, timeout)
+            return await create_connection_async(address, timeout)
         except (OSError, _socket.error) as exp:
             useables.echo_print("got ", exp, "retry count", retry_count)
             retry_count += 1
