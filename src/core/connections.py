@@ -7,6 +7,7 @@ from types import ModuleType
 from typing import Optional
 
 from . import get_this_remote_peer, Dock
+from .transfers import HEADERS
 
 from src.avails import (
     Wire,
@@ -17,6 +18,7 @@ from src.avails import (
     use,
     WireData,
 )
+from ..managers import gossip_manager
 
 
 async def initiate_connections():
@@ -92,7 +94,7 @@ class Acceptor:
             await self.handle_peer(peer_id)
         except (socket.error, OSError) as e:
             # error_log(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")
-            use.echo_print(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")
+            use.echo_print(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")  # debug
             initial_conn.close()
 
     async def verify(self, _conn):
@@ -100,19 +102,16 @@ class Acceptor:
         :param _conn: connection from peer
         :returns peer_id: if verification is successful else None (implying socket to be removed)
         """
-        hand_shake = await Wire.receive_async(_conn)
-        if not hand_shake == const.CMD_VERIFY_HEADER:
-            return None
-        # hand_shake = SimplePeerBytes(_conn)
-        # hand_shake = await hand_shake.receive(cmp_string=const.CMD_VERIFY_HEADER)
-        # if not hand_shake:
-        #     return None
-        # peer_id = await SimplePeerBytes(_conn).receive()
-        peer_id = await Wire.receive_async(_conn)
-        peer_id = peer_id.decode(const.FORMAT)
-        self.currently_in_connection[peer_id] += 1
-        use.echo_print("verified peer", peer_id)  # debug
-        return peer_id
+        data = await Wire.receive_async(_conn)
+        hand_shake = WireData.load_from(data)
+        if hand_shake.match_header(const.CMD_VERIFY_HEADER):
+            peer_id = hand_shake.id
+            self.currently_in_connection[peer_id] += 1
+            use.echo_print("verified peer", peer_id)  # debug
+            return peer_id
+        if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
+            use.echo_print("got a gossip stream link connection request delegating to gossip manager", _conn)  # debug
+            return gossip_manager.update_gossip_stream_socket(_conn, hand_shake)
 
     async def handle_peer(self, peer_id):
         sock = Dock.connected_peers.get_socket(peer_id)
@@ -187,14 +186,16 @@ class Connector:
 
     @classmethod
     async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
-        connection_socket = await connect.connect_to_peer(peer_obj, to_which=connect.BASIC_URI_CONNECT)
+        connection_socket = await connect.connect_to_peer(peer_obj)
         Dock.connected_peers.add_peer_sock(peer_obj.id, connection_socket)
         return connection_socket
 
     @classmethod
     async def _verifier(cls, connection_socket):
-        await Wire.send_async(connection_socket, const.CMD_VERIFY_HEADER)
-        use.echo_print("sent header")  # debug
-        await Wire.send_async(connection_socket, get_this_remote_peer().id)
+        verification_data = WireData(
+            header=const.CMD_VERIFY_HEADER,
+            _id=get_this_remote_peer().id,
+        )
+        await Wire.send_async(connection_socket, bytes(verification_data))
         use.echo_print("Sent verification to ", connection_socket.getpeername())  # debug
         return True
