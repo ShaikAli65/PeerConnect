@@ -1,9 +1,11 @@
+import dataclasses
 import json as _json
 import struct
 import threading as _threading
 from asyncio import DatagramTransport
 from collections import defaultdict
-from typing import Union
+from dataclasses import dataclass
+from typing import Optional, Union
 
 import umsgpack
 
@@ -11,24 +13,28 @@ from . import Actuator, const as _const
 from .connect import Socket as _Socket
 from .useables import NotInUse, wait_for_sock_read
 
-actuator = Actuator()
+controller = Actuator()
 
 
 class Wire:
     @staticmethod
-    async def send_async(sock: _Socket, data:bytes):
-        data_size = struct.pack('!I',len(data))
+    async def send_async(sock: _Socket, data: bytes):
+        data_size = struct.pack('!I', len(data))
         await sock.asendall(data_size)
         return await sock.asendall(data)
 
     @staticmethod
-    def send(sock: _Socket, data:bytes):
-        data_size = struct.pack('!I',len(data))
+    def send(sock: _Socket, data: bytes):
+        data_size = struct.pack('!I', len(data))
         return sock.sendall(data_size + data)
 
     @staticmethod
     def send_datagram(sock: _Socket | DatagramTransport, address, data: bytes):
-        data_size = struct.pack('!I',len(data))
+        data_size = struct.pack('!I', len(data))
+        if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
+            raise ValueError(f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
+                             f"got a packet of size {len(data)} + 4bytes size")
+
         return sock.sendto(data_size + data, address)
 
     @staticmethod
@@ -38,7 +44,7 @@ class Wire:
         return data
 
     @staticmethod
-    def receive(sock: _Socket, timeout=None, controller=actuator):
+    def receive(sock: _Socket, timeout=None, controller=controller):
         b = sock.getblocking()
         length_buf = bytearray()
         while len(length_buf) < 4:
@@ -66,10 +72,8 @@ class Wire:
 
     @staticmethod
     def recv_datagram(sock: _Socket):
-        data, addr = sock.recvfrom(_const.MAX_DATAGRAM_SIZE)
-        data_size = struct.unpack('!I', data[:4])[0]
-        data = sock.recv(data[4: data_size + 4])
-        return data, addr
+        data, addr = sock.recvfrom(_const.MAX_DATAGRAM_RECV_SIZE)
+        return Wire.load_datagram(data), addr
 
     @staticmethod
     def load_datagram(data_payload):
@@ -78,10 +82,8 @@ class Wire:
 
     @staticmethod
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
-        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_SIZE)
-        data_size = struct.unpack('!I', data[:4])[0]
-        data = data[4: data_size + 4]
-        return data, addr
+        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_RECV_SIZE)
+        return Wire.load_datagram(data), addr
 
 
 class DataWeaver:
@@ -203,6 +205,9 @@ class WireData:
     def __getitem__(self, item):
         return self.body[item]
 
+    def __setitem__(self, key, value):
+        self.body[key] = value
+
     @property
     def header(self):
         return self._header
@@ -215,7 +220,6 @@ class WireData:
 
 
 class GossipMessage:
-
     def __init__(self, message: WireData = WireData()):
         self.actual_data: WireData = message
 
@@ -262,7 +266,7 @@ class GossipMessage:
     @id.setter
     def id(self, value):
         self.actual_data.id = value
-    
+
     def __bytes__(self):
         return bytes(self.actual_data)
 
@@ -351,7 +355,13 @@ class SimplePeerBytes:
             return data == _const.TEXT_SUCCESS_HEADER
         return True
 
-    def receive_sync(self, cmp_string: Union[str, bytes] = '', *, controller=None, require_confirmation=False) -> Union[bool, bytes]:
+    def receive_sync(
+            self,
+            cmp_string: Union[str, bytes] = '',
+            *,
+            controller=None,
+            require_confirmation=False
+    ) -> Union[bool, bytes]:
         """
         Receive text over the socket synchronously.
         Better to check for `truthy` and `falsy` values for cmp_string as this function may return empty bytes.
@@ -414,7 +424,7 @@ class SimplePeerBytes:
     def __iter__(self):
         return self.raw_bytes.__iter__()
 
-    def __eq__(self, other:bytes):
+    def __eq__(self, other: bytes):
         return self.raw_bytes == other
 
     def __ne__(self, other):
@@ -424,7 +434,7 @@ class SimplePeerBytes:
         return hash(self.raw_bytes)
 
 
-def unpack_datagram(data_payload):
+def unpack_datagram(data_payload) -> Optional[WireData]:
     """ Unpack the datagram and handle exceptions """
     try:
         data = Wire.load_datagram(data_payload)
@@ -433,3 +443,47 @@ def unpack_datagram(data_payload):
         return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
         return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+
+
+@dataclass(slots=True, frozen=True)
+class PalmTreeResponse:
+    """
+    peer_id(str) : id of peer who created this responce
+    addr(tuple[str,int]) : datagram endpoint address at where peer is reachable
+    session_key(str) : echoing back the session_key received
+    """
+    peer_id: str
+    passive_addr: tuple[str, int]
+    active_addr: tuple[str, int]
+    session_key: str
+
+    def __bytes__(self):
+        return umsgpack.dumps(dataclasses.asdict(self))
+
+    @staticmethod
+    def load_from(data: bytes):
+        return PalmTreeResponse(**umsgpack.loads(data))
+
+
+@dataclass(slots=True)
+class RumorMessageItem:
+    message_id: int
+    time_in: float
+    creation_time: float
+    peer_list: set[str]
+
+    def __next__(self):
+        return self.peer_list.pop()
+
+    def __eq__(self, other):
+        return self.message_id == other.message_id
+
+    def __hash__(self):
+        return self.message_id
+
+    def __lt__(self, other):
+        return self.time_in < other.time_in
+
+    @property
+    def id(self):
+        return self.message_id
