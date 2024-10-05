@@ -7,6 +7,10 @@ from . import const
 
 
 class RemotePeer:
+    """
+    This Follows a structure that is required by kademila package's Node
+    and added extra things used by code
+    """
     version = const.VERSIONS['RP']
 
     __annotations__ = {

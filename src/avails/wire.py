@@ -472,8 +472,9 @@ class RumorMessageItem:
 @dataclass(slots=True, frozen=True)
 class PalmTreeInformResponse:
     """
-    peer_id(str) : id of peer who created this responce
-    addr(tuple[str,int]) : datagram endpoint address at where peer is reachable
+    peer_id(str) : id of peer who created this response
+    passive_addr(tuple[str, int]) : datagram endpoint address at where peer is reachable
+    active_addr(tuple[str, int]) : stream endpoint address
     session_key(str) : echoing back the session_key received
     """
     peer_id: str

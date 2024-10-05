@@ -22,12 +22,6 @@ class GossipSessionRegistry:
         del cls.current_sessions[session_id]
 
 
-def schedule_gossip_session(session: PalmTreeSession, passive_sock, active_endpoint_addr):
-    session_mediator = PalmTreeMediator(session, passive_sock, active_endpoint_addr)
-    session_mediator.start_session()
-    GossipSessionRegistry.add_session(mediator=session_mediator)
-
-
 async def new_gossip_request_arrived(req_data: WireData, addr):
     loop = asyncio.get_event_loop()
     connection = await connect.UDPProtocol.create_connection_async(loop, addr)
@@ -51,6 +45,10 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
     Wire.send_datagram(connection, addr, bytes(response))
 
 
+def get_active_endpoint_address():
+    return get_this_remote_peer().uri
+
+
 def get_passive_endpoint(addr, loop):
     datagram_endpoint_addr = (get_this_remote_peer().ip, connect.get_free_port())
     datagram_endpoint = connect.UDPProtocol.create_async_server_sock(
@@ -60,10 +58,6 @@ def get_passive_endpoint(addr, loop):
         backlog=3
     )
     return datagram_endpoint, datagram_endpoint_addr
-
-
-def get_active_endpoint_address():
-    return get_this_remote_peer().uri
 
 
 def get_active_endpoint_socket1():
@@ -76,6 +70,12 @@ def get_active_endpoint_socket1():
         backlog=3
     )
     return stream_endpoint, stream_endpoint_addr
+
+
+def schedule_gossip_session(session: PalmTreeSession, passive_sock, active_endpoint_addr):
+    session_mediator = PalmTreeMediator(session, passive_sock, active_endpoint_addr)
+    session_mediator.start_session()
+    GossipSessionRegistry.add_session(mediator=session_mediator)
 
 
 def update_gossip_stream_socket(connection_sock: connect.Socket, data: WireData):
