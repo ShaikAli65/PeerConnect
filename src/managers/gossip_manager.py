@@ -2,7 +2,7 @@ import asyncio
 
 from src.avails import PalmTreeInformResponse, Wire, WireData, connect, const
 from src.core import get_this_remote_peer
-from src.core.transfers import PalmTreeMediator, PalmTreeSession
+from src.core.transfers import PalmTreeMediator, PalmTreeProtocol, PalmTreeSession
 
 
 class GossipSessionRegistry:
@@ -31,14 +31,15 @@ def schedule_gossip_session(session: PalmTreeSession, passive_sock, active_endpo
 async def new_gossip_request_arrived(req_data: WireData, addr):
     loop = asyncio.get_event_loop()
     connection = await connect.UDPProtocol.create_connection_async(loop, addr)
-    stream_endpoint_addr = get_active_endpoint()
+    stream_endpoint_addr = get_active_endpoint_address()
     datagram_endpoint, datagram_endpoint_addr = get_passive_endpoint(addr, loop)
     session = PalmTreeSession(
         originater_id=req_data.id,
         adjacent_peers=req_data['adjacent_peers'],
         id=req_data['session_id'],
         key=req_data['session_key'],
-        max_forwards=req_data['max_forwards']
+        max_forwards=req_data['max_forwards'],
+        link_wait=PalmTreeProtocol.request_timeout,
     )
     response = PalmTreeInformResponse(
         peer_id=get_this_remote_peer().id,
@@ -61,7 +62,7 @@ def get_passive_endpoint(addr, loop):
     return datagram_endpoint, datagram_endpoint_addr
 
 
-def get_active_endpoint():
+def get_active_endpoint_address():
     return get_this_remote_peer().uri
 
 
@@ -80,4 +81,4 @@ def get_active_endpoint_socket1():
 def update_gossip_stream_socket(connection_sock: connect.Socket, data: WireData):
     session_id = data['session_id']
     mediator = GossipSessionRegistry.get_session(session_id)
-    mediator.add_stream_link(data, connection_sock)
+    return mediator.add_stream_link(data, connection_sock)
