@@ -287,7 +287,6 @@ class PalmTreeProtocol:
                 message_id=tree_check_message_id,
                 session_id=self.session.id,
             )
-
         # initial_peers = self.adjacency_list[self.center_peer]
         # if not initial_peers:
         #     # :todo: handle the case where all the peers adjacent to center peer went offline
@@ -357,6 +356,11 @@ class PalmTreeLink:
     def is_online(self):
         return self.status == self.ONLINE
 
+    def clear(self):
+        self.status = PalmTreeLink.OFFLINE
+        self.connection.close()
+        self.connection = None
+
     def __eq__(self, other):
         return other.id == self.id and self.right == other.right
 
@@ -422,6 +426,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 self.passive_server_sock,
                 link_type=PalmTreeLink.PASSIVE
             )
+            passive_link.status = PalmTreeLink.ONLINE
             self.all_links[peer_id] = (passive_link, active_link)
         self.session.max_forwards = min(len(self.all_links), self.session.max_forwards)
 
@@ -438,7 +443,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             _id=this_peer_id,
         )
         if len(self.active_links) > self.session.max_forwards:
-            self.transport.sendto(bytes(gossip_link_reject_message),addr)
+            self.transport.sendto(bytes(gossip_link_reject_message), addr)
             return
 
         sender_id = tree_check_packet.id
@@ -467,7 +472,8 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
     def gossip_downgrade_connection(self, data: WireData, addr:tuple[str, int]):
         peer_id = data.id
         if peer_id in self.active_links:
-            del self.active_links[peer_id]
+            a_link = self.active_links.pop(peer_id)
+            a_link.clear()
             self.passive_links[peer_id] = self.all_links[peer_id][PalmTreeLink.PASSIVE]
 
     def gossip_upgrade_connection(self, data: WireData, addr:tuple[str, int]):
