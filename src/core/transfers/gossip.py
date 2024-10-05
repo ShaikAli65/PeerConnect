@@ -169,7 +169,8 @@ class PalmTreeProtocol:
             self.adjacency_list[center_peer.id],
             session_key,
             session_id,
-            self.max_forwards
+            self.max_forwards,
+            self.request_timeout,
         )
 
         addr = (get_this_remote_peer().ip, get_free_port())
@@ -302,18 +303,23 @@ class PalmTreeSession:
         `adjacent_peers(list[str])` : all the peers to whom we should be in contact
         `session_key(str)` : session key used to encrypt data
         `session_id(int)` : self-explanatory
-        `max_forwards` : maximum number of resends this instance should perform for every packet received
+        `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
+        `link_wait`(double) : timeout for any i/o operations
     """
     originater_id: str
     adjacent_peers: list[str]
     id: int
     key: str
     max_forwards: int
+    link_wait: int
 
 
 class PalmTreeLink:
-    PASSIVE = 0
-    ACTIVE = 1
+    PASSIVE = 0x00
+    ACTIVE = 0x01
+    ONLINE = 0x01
+    OFFLINE = 0x00
+
     id_factory = count()
 
     def __init__(self, a, b, peer_id, connection: connect.Socket = None, link_type: int = PASSIVE):
@@ -324,7 +330,6 @@ class PalmTreeLink:
             peer_id = id of peer on the other side
             connection = a passive socket used to communicate between both ends
             link_type = ACTIVE (stream socket) or PASSIVE (datagram socket)
-
         """
         self.type = link_type
         self.left = a
@@ -332,6 +337,7 @@ class PalmTreeLink:
         self.connection = connection
         self.peer_id = peer_id
         self.id = next(self.id_factory)
+        self.status = self.OFFLINE
 
     async def send_active_message(self, message: bytes):
         await Wire.send_async(sock=self.connection, data=message)
@@ -346,6 +352,10 @@ class PalmTreeLink:
     @property
     def is_active(self):
         return self.type == self.ACTIVE
+
+    @property
+    def is_online(self):
+        return self.status == self.ONLINE
 
     def __eq__(self, other):
         return other.id == self.id and self.right == other.right
@@ -421,25 +431,38 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             self.active_links[peer_id].connection = connection
         # stream connections are assumed to be active connections for now
 
-    def gossip_tree_check(self, data: WireData, addr):
+    def gossip_tree_check(self, tree_check_packet: WireData, addr):
+        this_peer_id = get_this_remote_peer().id
         gossip_link_reject_message = WireData(
             header=HEADERS.GOSSIP_DOWNGRADE_CONN,
-            _id=get_this_remote_peer().id,
+            _id=this_peer_id,
         )
         if len(self.active_links) > self.session.max_forwards:
             self.transport.sendto(bytes(gossip_link_reject_message),addr)
             return
 
-        sender_id = data.id
+        sender_id = tree_check_packet.id
         if sender_id in self.all_links:
+            upgrade_conn_packet = WireData(
+                header=HEADERS.GOSSIP_UPGRADE_CONN,
+                _id=this_peer_id,
+            )
             self.active_links[sender_id] = self.all_links[sender_id][PalmTreeLink.ACTIVE]
+            self.transport.sendto(bytes(upgrade_conn_packet), addr)
 
-        data.id = get_this_remote_peer().id
+        tree_check_packet.id = this_peer_id
         sampled_peer_ids = random.sample(list(self.all_links), self.session.max_forwards)
         for peer_id in sampled_peer_ids:
             passive_link, active_link = self.all_links[peer_id]
-            passive_link.send_passive_message(bytes(data))
+            passive_link.send_passive_message(bytes(tree_check_packet))
             self.active_links[peer_id] = self.all_links[peer_id][PalmTreeLink.ACTIVE]
+
+        self.passive_links.update(
+            {
+                peer_id: self.all_links[peer_id][PalmTreeLink.PASSIVE]
+                for peer_id in set(self.all_links) - set(self.active_links)
+            }
+        )
 
     def gossip_downgrade_connection(self, data: WireData, addr:tuple[str, int]):
         peer_id = data.id
@@ -448,4 +471,23 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             self.passive_links[peer_id] = self.all_links[peer_id][PalmTreeLink.PASSIVE]
 
     def gossip_upgrade_connection(self, data: WireData, addr:tuple[str, int]):
-        ...
+        peer_id = data.id
+        if peer_id not in self.active_links:
+            return
+        link = self.active_links[peer_id]
+        asyncio.create_task(self.activate_link(link))
+
+    async def activate_link(self, link: PalmTreeLink):
+        if link.is_online:
+            return
+        stream_sock = await connect.create_connection_async(link.right, self.session.link_wait)
+        await Wire.send_async(
+            stream_sock,
+            bytes(
+                WireData(
+                    header=HEADERS.GOSSIP_UPDATE_STREAM_LINK,
+                    _id=get_this_remote_peer().id,
+                    session_id=self.session.id,
+                )
+            )
+        )
