@@ -1,6 +1,6 @@
 import asyncio
 
-from src.avails import PalmTreeResponse, Wire, WireData, connect, const
+from src.avails import PalmTreeInformResponse, Wire, WireData, connect, const
 from src.core import get_this_remote_peer
 from src.core.transfers import PalmTreeMediator, PalmTreeSession
 
@@ -40,7 +40,7 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
         key=req_data['session_key'],
         max_forwards=req_data['max_forwards']
     )
-    response = PalmTreeResponse(
+    response = PalmTreeInformResponse(
         peer_id=get_this_remote_peer().id,
         active_addr=stream_endpoint_addr,
         passive_addr=datagram_endpoint_addr,

@@ -445,26 +445,6 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
         return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
 
 
-@dataclass(slots=True, frozen=True)
-class PalmTreeResponse:
-    """
-    peer_id(str) : id of peer who created this responce
-    addr(tuple[str,int]) : datagram endpoint address at where peer is reachable
-    session_key(str) : echoing back the session_key received
-    """
-    peer_id: str
-    passive_addr: tuple[str, int]
-    active_addr: tuple[str, int]
-    session_key: str
-
-    def __bytes__(self):
-        return umsgpack.dumps(dataclasses.asdict(self))
-
-    @staticmethod
-    def load_from(data: bytes):
-        return PalmTreeResponse(**umsgpack.loads(data))
-
-
 @dataclass(slots=True)
 class RumorMessageItem:
     message_id: int
@@ -487,3 +467,23 @@ class RumorMessageItem:
     @property
     def id(self):
         return self.message_id
+
+
+@dataclass(slots=True, frozen=True)
+class PalmTreeInformResponse:
+    """
+    peer_id(str) : id of peer who created this responce
+    addr(tuple[str,int]) : datagram endpoint address at where peer is reachable
+    session_key(str) : echoing back the session_key received
+    """
+    peer_id: str
+    passive_addr: tuple[str, int]
+    active_addr: tuple[str, int]
+    session_key: str
+
+    def __bytes__(self):
+        return umsgpack.dumps(dataclasses.asdict(self))
+
+    @staticmethod
+    def load_from(data: bytes):
+        return PalmTreeInformResponse(**umsgpack.loads(data))

@@ -31,7 +31,7 @@ def get_gossip():
     return Dock.global_gossip
 
 
-async def join_gossip(kademlia_server):
+def join_gossip(kademlia_server):
     from .transfers import RumorMongerProtocol
     Dock.global_gossip = RumorMongerProtocol()
     get_gossip().initiate()
