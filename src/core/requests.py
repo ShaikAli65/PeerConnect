@@ -1,17 +1,11 @@
 import asyncio
+import random
 import socket
-import threading
-from wsgiref.util import request_uri
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer, join_gossip
-from . import discover, get_gossip
-from . import transfers
-from ..avails.useables import awaitable
+from . import discover, get_gossip, transfers
 from ..managers import gossip_manager
-
-
-# :todo: write consensus protocol for replying a network find request
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
@@ -36,6 +30,11 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
+        if random.random() < 0.6:
+            print(f"probability check failed not replying to for network find {addr}")
+            # a simple probabililty check to decrease number of replies
+            # :todo: write consensus protocol for replying a network find request
+            return
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=REQUESTS.NETWORK_FIND_REPLY,
