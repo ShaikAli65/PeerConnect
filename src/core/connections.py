@@ -6,19 +6,11 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Optional
 
-from . import get_this_remote_peer, Dock
+from src.avails import (RemotePeer, SocketStore, Wire, WireData, connect, const, use)
+from . import Dock, get_this_remote_peer
 from .transfers import HEADERS
-
-from src.avails import (
-    Wire,
-    RemotePeer,
-    SocketStore,
-    connect,
-    const,
-    use,
-    WireData,
-)
-from ..managers import gossip_manager
+from .webpage_handlers import pagehandle
+from ..managers import directorymanager, filemanager, gossip_manager
 
 
 async def initiate_connections():
@@ -97,21 +89,25 @@ class Acceptor:
             use.echo_print(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")  # debug
             initial_conn.close()
 
-    async def verify(self, _conn):
+    async def verify(self, connection):
         """
-        :param _conn: connection from peer
+        :param connection: connection from peer
         :returns peer_id: if verification is successful else None (implying socket to be removed)
         """
-        data = await Wire.receive_async(_conn)
+        data = await Wire.receive_async(connection)
         hand_shake = WireData.load_from(data)
-        if hand_shake.match_header(const.CMD_VERIFY_HEADER):
+        if hand_shake.match_header(HEADERS.CMD_VERIFY_HEADER):
             peer_id = hand_shake.id
             self.currently_in_connection[peer_id] += 1
             use.echo_print("verified peer", peer_id)  # debug
             return peer_id
+
+        if hand_shake.match_header(HEADERS.CMD_FILE_CONN):
+            return filemanager.connection_arrived(connection, hand_shake)
+
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
-            use.echo_print("got a gossip stream link connection request delegating to gossip manager", _conn)  # debug
-            return gossip_manager.update_gossip_stream_socket(_conn, hand_shake)
+            use.echo_print("got a gossip stream link connection request delegating to gossip manager", connection)  # debug
+            return gossip_manager.update_gossip_stream_socket(connection, hand_shake)
 
     async def handle_peer(self, peer_id):
         sock = Dock.connected_peers.get_socket(peer_id)
@@ -126,22 +122,18 @@ class Acceptor:
             except TypeError as tp:
                 print("got type error possible data illformed", tp)
 
-    def __process_data(self, _data):  # noqa # :todo: complete this
-        if _data.header == const.CMD_TEXT:
-            # page_handle.feed_user_data_to_page(_data.content, _data.id)
-            ...
-        elif _data.header == const.CMD_RECV_FILE:
-            # self.start_thread(filemanager.file_receiver, _data)
-            ...
-        elif _data.header == const.CMD_RECV_FILE_AGAIN:
-            # self.start_thread(filemanager.re_receive_file, _data)
-            ...
-        elif _data.header == const.CMD_RECV_DIR:
-            # self.start_thread(directorymanager.directoryReceiver, _data)
-            ...
-        elif _data.header == const.CMD_CLOSING_HEADER:
-            # self.disconnect_user(_conn, self._controller, peer_id)
-            ...
+    @staticmethod
+    def __process_data(data: WireData):
+        if data.match_header(HEADERS.CMD_TEXT):
+            pagehandle.new_message_arrived(data)
+        elif data.match_header(HEADERS.CMD_RECV_FILE):
+            filemanager.new_file_recv_request(data)
+        elif data.match_header(HEADERS.CMD_RECV_FILE_AGAIN):
+            filemanager.new_file_recv_request(data)
+        elif data.match_header(HEADERS.CMD_RECV_DIR):
+            directorymanager.new_directory_transfer_request(data)
+        elif data.match_header(HEADERS.CMD_CLOSING_HEADER):
+            directorymanager.new_directory_transfer_request(data)
 
     async def reset_socket(self):
         self.main_socket.close()
