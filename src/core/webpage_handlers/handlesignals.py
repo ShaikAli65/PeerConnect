@@ -1,15 +1,11 @@
-import websockets
+from sys import stderr
 
-from src.avails import DataWeaver
+from src.avails import DataWeaver, use
 from src.core import Dock, peers
-from src.core.webpage_handlers.handleprofiles import align_profiles
+from src.core.webpage_handlers.handleprofiles import align_profiles, set_selected_profile
 from src.managers.statemanager import State
-
-HANDLE_SEND_PROFILE = 'send profiles'
-HANDLE_SEND_PEER_LIST = 'send peer list'
-HANDLE_SEARCH_FOR_NAME = 'search name'
-HANDLE_SEARCH_RESPONSE = 'result for search name'
-HANDLE_SEND_PEER_LIST_RESPONSE = 'result for send peer list'
+from .pagehandle import dispatch_data
+from ..transfers import HEADERS
 
 
 def restart():
@@ -17,42 +13,58 @@ def restart():
     ...
 
 
-def receive_restart_signal(data):
+def receive_restart_signal(data: DataWeaver):
     s = State('restarting',func=restart)
     Dock.state_handle.state_queue.put(s)
 
 
-async def search_for_user(data, websocket):
+async def search_for_user(data: DataWeaver):
     search_string = data['search_string']
     print('got a search request', search_string)
     peer_list = await peers.search_for_nodes_with_name(search_string)
     print('sending list', peer_list)
     response_data = DataWeaver(
-        header=HANDLE_SEARCH_RESPONSE,
+        header=HEADERS.HANDLE_SEARCH_RESPONSE,
         content=[{'name': peer.username, 'id': peer.id} for peer in peer_list],
     )
-    await websocket.send(response_data.dump())
+    await dispatch_data(response_data)
 
 
-async def send_list(data: DataWeaver, websocket):
+async def send_list(data: DataWeaver):
     print('got a send list request')
     peer_list = await peers.get_more_peers()
     print('sending list', peer_list)
     response_data = DataWeaver(
-        header=HANDLE_SEARCH_RESPONSE,
+        header=HEADERS.HANDLE_SEARCH_RESPONSE,
         content=[{'name': peer.username, 'id': peer.id} for peer in peer_list],
     )
-    await websocket.send(response_data.dump())
+    await dispatch_data(response_data)
 
 
-async def handler(data:str, websocket: websockets.WebSocketServerProtocol):
-    print("handlesignals handler", data)
-    data = DataWeaver(serial_data=data)
-    if data.match_header(HANDLE_SEND_PROFILE):
-        await align_profiles(websocket)
-    elif data.match_header(HANDLE_SEND_PEER_LIST):
-        await send_list(data, websocket)
-    elif data.match_header(HANDLE_SEARCH_FOR_NAME):
-        await search_for_user(data, websocket)
-    elif data.match_header(b''):
-        ...
+async def connect_peer(handle_data: DataWeaver):
+    ...
+
+
+async def sync_users(handle_data: DataWeaver):
+    ...
+
+
+function_dict = {
+    HEADERS.HANDLE_CONNECT_USER: connect_peer,
+    HEADERS.HANDLE_SYNC_USERS: sync_users,
+    HEADERS.HANDLE_SEND_PROFILES: align_profiles,
+    HEADERS.HANDLE_SET_PROFILE: set_selected_profile,
+    HEADERS.HANDLE_SEARCH_FOR_NAME:search_for_user,
+    HEADERS.HANDLE_SEND_PEER_LIST: send_list,
+}
+
+
+async def handler(signal_data:DataWeaver):
+    print("handlesignals handler", signal_data)
+    func = handler
+    try:
+        func = function_dict[signal_data.header]
+        await func(signal_data)
+    except Exception as exp:
+        print(f"Got an exception at handlesignals - {use.func_str(func)}", exp, file=stderr)
+        raise
