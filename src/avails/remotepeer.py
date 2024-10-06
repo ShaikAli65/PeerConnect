@@ -10,6 +10,7 @@ class RemotePeer:
     """
     This Follows a structure that is required by kademila package's Node
     and added extra things used by code
+    Warning : If any attributes are added then they should be added to __iter__ method
     """
     version = const.VERSIONS['RP']
 
@@ -20,10 +21,9 @@ class RemotePeer:
         'callbacks': int,
         'req_uri': Tuple[str, int],
         'id': str,
-        'file_count': int
     }
 
-    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', '_file_id', 'ip','_network_port', 'long_id'
+    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip','_network_port', 'long_id'
 
     def __init__(self,
                  peer_id=b'\x00',
@@ -41,7 +41,6 @@ class RemotePeer:
         self._network_port = net_port
         self.id = peer_id
         self.long_id = int(peer_id.hex(), 16)
-        self._file_id = count()
 
     def same_home_as(self, node):
         return self.ip == node.ip and self.req_uri == node.req_uri and self.uri == node.uri
@@ -65,16 +64,6 @@ class RemotePeer:
             self._network_port,
             self.status,
         ])
-
-    def get_file_id(self):
-        """
-        gets a unique id (uses :func:itertools.count) to assign to a file sent to peer represented
-        by this object
-        """
-        return next(self._file_id)
-
-    def increment_file_count(self):
-        return next(self._file_id)
 
     @property
     def uri(self):
