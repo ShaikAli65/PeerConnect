@@ -1,51 +1,83 @@
+import asyncio
 import asyncio as _asyncio
 import importlib
+import itertools
 import threading
 from typing import Optional, Union
 
 import websockets
 
-import src.avails.constants as const
-import src.avails.useables as use
-from src.avails.remotepeer import RemotePeer
-from src.avails.wire import DataWeaver
-
+from src.avails import DataWeaver, WireData, const, use
 
 PAGE_HANDLE_WAIT = _asyncio.Event()
 safe_end = threading.Event()
+
 DATA = 0x00
 SIGNAL = 0x01
-SOCK_TYPE_DATA = DATA
-SOCK_TYPE_SIGNAL = SIGNAL
-connections: list[Optional[websockets.WebSocketServerProtocol]] = [None, None]
 
 
-def get_websocket(type_id: Union[DATA, SIGNAL]):
-    global connections
-    return connections[type_id]
+class WebSocketRegistry:
+    SOCK_TYPE_DATA = DATA
+    SOCK_TYPE_SIGNAL = SIGNAL
+    connections: list[Optional[websockets.WebSocketServerProtocol]] = [None, None]
+    message_queue = asyncio.Queue()
+    connections_completed = _asyncio.Event()
+
+    @classmethod
+    def get_websocket(cls, type_id: Union[DATA, SIGNAL]):
+        return cls.connections[type_id]
+
+    @classmethod
+    def set_websocket(cls, type_id: Union[DATA, SIGNAL], websocket):
+        cls.connections[type_id] = websocket
+
+    @classmethod
+    def send_data(cls, data, type_of_data):
+        cls.message_queue.put((data, type_of_data))
+
+    @classmethod
+    async def start_data_sender(cls):
+        while True:
+            data_packet, data_type = await cls.message_queue.get()
+            if safe_end.is_set():
+                return
+            await cls.get_websocket(data_type).send(data_packet)
+
+    @classmethod
+    def clear(cls):
+        cls.message_queue.put(None)
+        for i in cls.connections:
+            if i is not None:
+                i.close()
+        del cls.connections
 
 
-def _set_websocket(type_id: Union[DATA, SIGNAL], websocket):
-    global connections
-    connections[type_id] = websocket
+class ReplyRegistry:
+    messages_to_futures_mapping: dict[str, _asyncio.Future] = {}
+    id_factory = itertools.count()
 
+    @classmethod
+    def register_reply(cls, data: DataWeaver):
+        data.id = next(cls.id_factory)
+        fut = asyncio.get_event_loop().create_future()
+        cls.messages_to_futures_mapping[data.id] = fut
+        return fut
 
-def _close_websockets():
-    global connections
-    for i in connections:
-        if i is not None:
-            i.close()
-    del connections
+    @classmethod
+    def reply_arrived(cls, data: DataWeaver):
+        if data.id in cls.messages_to_futures_mapping:
+            fut = cls.messages_to_futures_mapping[data.id]
+            fut.set_result(data)
 
 
 def get_verified_type(data: DataWeaver, web_socket):
-    if data.match_header(SOCK_TYPE_DATA):
+    if data.match_header(WebSocketRegistry.SOCK_TYPE_DATA):
         print("page data connected")  # debug
-        _set_websocket(SIGNAL, web_socket)
+        WebSocketRegistry.set_websocket(SIGNAL, web_socket)
         return importlib.import_module('src.core.webpage_handlers.handledata').handler
-    if data.match_header(SOCK_TYPE_SIGNAL):
+    if data.match_header(WebSocketRegistry.SOCK_TYPE_SIGNAL):
         print("page signals connected")  # debug
-        _set_websocket(DATA, web_socket)
+        WebSocketRegistry.set_websocket(DATA, web_socket)
         return importlib.import_module('src.core.webpage_handlers.handlesignals').handler
 
 
@@ -59,7 +91,10 @@ async def handle_client(web_socket: websockets.WebSocketServerProtocol):
             async for data in web_socket:
                 use.echo_print("data from page:", data, '\a')
                 use.echo_print(f"forwarding to {use.func_str(handle_function)}")
-                await handle_function(data, web_socket)
+                parsed_data = DataWeaver(serial_data=data)
+                if parsed_data.is_reply:
+                    ReplyRegistry.reply_arrived(parsed_data)
+                _asyncio.create_task(handle_function(parsed_data))
                 if safe_end.is_set():
                     return
         else:
@@ -77,13 +112,33 @@ async def start_websocket_server():
 
 
 async def initiate_pagehandle():
-    asyncio.create_task(start_websocket_server())  # noqa
+    asyncio.create_task(WebSocketRegistry.start_data_sender())
+    await start_websocket_server()
 
 
 def end():
     global PAGE_HANDLE_WAIT
     PAGE_HANDLE_WAIT.set()
-    _close_websockets()
+    safe_end.set()
+    WebSocketRegistry.clear()
+
+
+async def dispatch_data(data: DataWeaver, expect_reply=False):
+    if check_closing():
+        return
+    print(f"::Sending data to page: {data}")
+    if expect_reply:
+        await ReplyRegistry.register_reply(data)
+    WebSocketRegistry.send_data(data, data.type)
+
+
+def new_message_arrived(message_data: WireData):
+    d = DataWeaver(
+        header=message_data.header,
+        content=message_data['message'],
+        _id=message_data.id,
+    )
+    WebSocketRegistry.send_data(d, DATA)
 
 
 def check_closing():
@@ -91,34 +146,3 @@ def check_closing():
         use.echo_print("Can't send data to page, safe_end is flip", safe_end)
         return True
     return False
-
-
-async def feed_user_status(peer: RemotePeer):
-    if check_closing():
-        return
-    _data = DataWeaver(header=const.HANDLE_COMMAND,
-                       content=peer.username if peer.status else 0,
-                       _id=peer.id)
-
-    use.echo_print(f"::signaling page username:{peer.username}\n{_data}")
-    await get_websocket(SIGNAL).send(_data.dump())
-
-
-async def feed_user_data_to_page(_data, ip):
-    if check_closing():
-        return
-    _data = DataWeaver(header="this is a message",
-                       content=_data,
-                       _id=f"{ip}")
-    print(f"::Sending data to page: {ip}\n{_data}")
-    await get_websocket(DATA).send(_data.dump())
-
-
-async def feed_file_data_to_page(_data, _id):
-    if check_closing():
-        return
-    _data = DataWeaver(header=const.HANDLE_FILE_HEADER,
-                       content=_data,
-                       _id=_id)
-    print(f"::Sending data to page: {_id}\n{_data}")
-    await get_websocket(DATA).send(_data.dump())
