@@ -104,28 +104,14 @@ class PeerFilePool:
 
     __slots__ = 'file_items', 'to_stop', '__error_extension', 'id', 'current_file', 'file_count'
 
-    def __init__(self,
-                 file_items: list[_FileItem] = None, *,
-                 _id,
-                 actuator: Actuator = None,
-                 error_ext='.invalid',
-                 ):
-
-        self.to_stop = actuator or Actuator()
-        self.to_stop.flip()
-        # setting underlying event thus reducing ~not'ting~ of self.proceed() in most of the loop's conditional checkings
+    def __init__(self, file_items: list[_FileItem] = None, *, _id, error_ext='.invalid'):
         self.__error_extension = error_ext
         self.file_items: set[_FileItem] = set(file_items or [])
         self.id = _id
         self.current_file: Iterator[_FileItem] | _FileItem = self.file_items.__iter__()
-        # this can be _FileItem() while recieving pointing to currently receiving file item
-        # and iterator while sending
-        # (we don't use ~self.file_items as list in case of receiving because it's redundent two store files details both ways)
         self.file_count = len(self.file_items)
 
     def send_files(self, receiver_sock):
-        receiver_sock.setblocking(False)
-
         raw_file_count = struct.pack('!I', self.file_count)
         receiver_sock.send(raw_file_count)
 
@@ -203,7 +189,7 @@ class PeerFilePool:
             return
         if sender_sock not in reads:
             return
-        raw_file_count = sender_sock.recv(4) or b'\x00\x00\x00\x00'
+        raw_file_count = sender_sock.recv(4) or b'\x00' * 4
         self.file_count = struct.unpack('!I', raw_file_count)[0]
         print("received file count", self.file_count)  # debug
         return self.receive_file_loop(self.file_count, sender_sock)
