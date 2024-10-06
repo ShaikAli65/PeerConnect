@@ -1,4 +1,5 @@
 from src.avails import use, DataWeaver
+from src.core.webpage_handlers.pagehandle import dispatch_data
 
 from src.managers import (
     ProfileManager,
@@ -8,43 +9,31 @@ from src.managers import (
 )
 
 
-async def align_profiles(_websocket):
-    await send_profiles(_websocket)
+async def align_profiles(signal_data: DataWeaver):
+    further_data = await send_profiles()
+    await configure_further_profile_data(further_data)
 
-    await configure_further_profile_data(_websocket)
 
-    selected_profile = await get_selected_profile(_websocket)
+async def send_profiles():
+    userdata = DataWeaver(
+        header="this is a profiles list",
+        content=all_profiles()
+    )
+    use.echo_print('::profiles sent')
+    return await dispatch_data(userdata, expect_reply=True)
+
+
+async def set_selected_profile(page_data: DataWeaver):
+    selected_profile = page_data
+    for profile in ProfileManager.PROFILE_LIST:
+        if profile == selected_profile.content:
+            selected_profile = profile
+            break
     set_current_profile(selected_profile)
     use.echo_print('::profile selected and updated', selected_profile)
-    # HOLD_PROFILE_SETUP.set()
 
 
-async def send_profiles(_websocket):
-    userdata = DataWeaver(header="this is a profiles list",
-                          content=all_profiles())
-
-    await _websocket.send(userdata.dump())
-    use.echo_print('::profiles sent')
-
-
-async def get_selected_profile(_websocket):
-    data = await _websocket.recv()
-    # print("selected",data)  # debug
-    selected_profile = DataWeaver(serial_data=data)
-    if selected_profile.header == "selected profile":
-        for profile in ProfileManager.PROFILE_LIST:
-            if profile == selected_profile.content:
-                return profile
-
-
-async def configure_further_profile_data(_websocket):
-
-    raw_profile_data = await _websocket.recv()
-    # print(raw_profile_data)  # debug
-    profiles_data = DataWeaver(serial_data=raw_profile_data)
-    if not profiles_data.header == "new profile list":
-        return profiles_data
-
+async def configure_further_profile_data(profiles_data):
     profiles_data = profiles_data.content
     """
     profiles_data structure
@@ -64,9 +53,12 @@ async def configure_further_profile_data(_websocket):
     if removed_profiles := set(all_profiles()) - set(profiles_data):
         for profile_file_name in removed_profiles:
             ProfileManager.delete_profile(profile_file_name)
-
-        ProfileManager.PROFILE_LIST = [profile for profile in ProfileManager.PROFILE_LIST if profile.username not in removed_profiles]
+        ProfileManager.PROFILE_LIST = [
+            profile for profile in ProfileManager.PROFILE_LIST
+            if profile.username not in removed_profiles
+        ]
         use.echo_print("deleted profiles :", removed_profiles)
+
     for profile_name, profile_settings in profiles_data.items():
         profile_object = get_profile_from_profile_file_name(profile_name)
         if profile_object is None:
