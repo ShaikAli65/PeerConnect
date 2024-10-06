@@ -59,36 +59,3 @@ VERSIONS = {
     'DO': 1.0,
     'WIRE':1.0,
 }
-
-CMD_RECV_FILE_AGAIN = b'recv file again '
-CMD_RECV_FILE = b'receive file    '
-CMD_CLOSING_HEADER = b'close connection'
-CMD_TEXT = b'this is message '
-CMD_RECV_DIR = b'cmd to recv dir '
-
-CMD_VERIFY_HEADER = b'verify header   '
-VERIFY_OK = b'verify okay     '
-CMD_FILESOCKET_HANDSHAKE = b'file sock open  '
-CMD_FILE_SUCCESS = b'file_success    '
-TEXT_SUCCESS_HEADER = b'str success     '
-
-REQ_FOR_LIST = b'list of users  '
-I_AM_ACTIVE = b'com notify user'
-SERVER_PING = b' server_/!_ping'
-SOCKET_OK = b'socket_ok      '
-
-SERVER_OK = b'connect accepted'
-REDIRECT = b'redirect        '
-LIST_SYNC = b'sync list       '
-ACTIVE_PING = b"face like that  "
-HANDLE_MESSAGE_HEADER = 'this is  message'
-HANDLE_END = 'end program     '
-HANDLE_COMMAND = 'this is command '
-HANDLE_FILE_HEADER = 'this is file    '
-HANDLE_CONNECT_USER = 'connect user    '
-HANDLE_RELOAD = 'this is reload  '
-HANDLE_DIR_HEADER = 'this is a dir   '
-HANDLE_POP_DIR_SELECTOR = 'pop dir selector'
-HANDLE_OPEN_FILE = 'open file       '
-HANDLE_SYNC_USERS = 'sync users      '
-HANDLE_VERIFICATION = 'han verification'
