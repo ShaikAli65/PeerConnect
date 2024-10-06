@@ -36,7 +36,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     node_list_ids = node_list_ids
 
     async def find(self):
-        return await self._find(self.protocol.  call_find_peer_list)
+        return await self._find(self.protocol.call_find_peer_list)
 
     @override
     async def _handle_found_values(self, values):
@@ -49,7 +49,6 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
         if cls.previously_fetched_index >= len(cls.node_list_ids) - 1:
             cls.previously_fetched_index = 0
-
         find_list_id = cls.node_list_ids[cls.previously_fetched_index]
         list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
         cls.previously_fetched_index += 1
@@ -82,7 +81,6 @@ class SearchCrawler:
 
     @classmethod
     async def search_for_nodes(cls, node_server, search_string):
-        relevant_peers = []
         for peer in use.search_relevant_peers(Dock.peer_list, search_string):
             yield peer
 

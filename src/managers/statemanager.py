@@ -17,7 +17,7 @@ class State:
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
-            asyncio.create_task(_func())  # noqa
+            return asyncio.create_task(_func())
 
         @functools.wraps(func)
         def wrap_in_thread(_func):
@@ -46,13 +46,14 @@ class State:
         x = loop.time()
         echo_print(f"[{x - math.floor(x):.5f}s] CORO:{self.is_coro} entering state :", self.name, end=' ')
         print("func:", self.func.__name__)
+
+        if self.event:
+            await self.event.wait()
+
         if self.is_coro:
             ret_val = await self.func()
         else:
             ret_val = self.func()
-
-        if self.event:
-            await self.event.wait()
 
         return ret_val
 
@@ -81,10 +82,13 @@ class StateManager:
         self._initialized = True
         self.last_state = None
         self.global_wait = threading.Event()
+        self.all_tasks: list[asyncio.Task] = []
 
     def signal_stopping(self):
         self.close = True
         self.state_queue.put(None)
+        for t in self.all_tasks:
+            t.cancel("finalizing from state manager")
 
     async def put_state(self, state: Optional[State]):
         await self.state_queue.put(state)
@@ -96,13 +100,15 @@ class StateManager:
     async def process_states(self):
         """
         Main event loop for the program
-        different functions add states to get processed
+        different points in code wrap functions in states to get processed
         """
-
         while self.close is False:
             try:
                 current_state: State = await self.state_queue.get()
-                await current_state.enter_state()
+                r = await current_state.enter_state()
+                if isinstance(r, asyncio.Task):
+                    self.all_tasks.append(r)
+
             except KeyboardInterrupt:
                 print('received keyboard interrupt finalizing')
                 exit(1)

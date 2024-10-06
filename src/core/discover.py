@@ -184,10 +184,6 @@ class PeerServer(network.Server):
         self.add_this_peer_future = None
 
     async def get_list_of_nodes(self, list_key):
-        # if this node has it, return it
-        if self.storage.get_list_of_peers(list_key) is not None:
-            return [RemotePeer.load_from(data) for data in self.storage.get_list_of_peers(list_key)]
-
         node = RemotePeer(list_key)
         nearest = self.protocol.router.find_neighbors(node)
         if not nearest:

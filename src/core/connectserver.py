@@ -12,6 +12,7 @@ from src.avails import (
 )
 
 from src.core import get_this_remote_peer, Dock
+from src.core.transfers import HEADERS
 
 
 async def get_initial_list(no_of_users, initiate_socket):
@@ -49,8 +50,8 @@ async def list_error_handler():
     conn = await connect.connect_to_peer(_peer_obj=req_peer)
     # except OSError:
     with conn:
-        await Wire.send_async(conn, const.REQ_FOR_LIST)
-        # request = SimplePeerBytes(refer_sock=conn, data=const.REQ_FOR_LIST)
+        await Wire.send_async(conn, HEADERS.REQ_FOR_LIST)
+        # request = SimplePeerBytes(refer_sock=conn, data=HEADERS.REQ_FOR_LIST)
         # await request.send()
         list_len = struct.unpack('!Q',await conn.arecv(8))[0]
         await get_initial_list(list_len, conn)
@@ -62,8 +63,8 @@ async def list_from_forward_control(list_owner: RemotePeer):
     # except:
 
     with conn as list_connection_socket:
-        await Wire.send_async(list_connection_socket, const.REQ_FOR_LIST)
-        # await SimplePeerBytes(list_connection_socket, const.REQ_FOR_LIST).send()
+        await Wire.send_async(list_connection_socket, HEADERS.REQ_FOR_LIST)
+        # await SimplePeerBytes(list_connection_socket, HEADERS.REQ_FOR_LIST).send()
         await get_list_from(list_connection_socket)
 
 
@@ -77,10 +78,10 @@ async def initiate_connection():
         text = await Wire.receive_async(server_connection)
         # text = SimplePeerBytes(server_connection)
         # if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
-        if text == const.SERVER_OK:
+        if text == HEADERS.SERVER_OK:
             use.echo_print('\n::Connection accepted by server')
             await get_list_from(server_connection)
-        elif text == const.REDIRECT:
+        elif text == HEADERS.REDIRECT:
             # server may send a peer's details to get list from
             raw_data = await Wire.receive_async(server_connection)
             recv_list_user = RemotePeer.load_from(raw_data)
