@@ -281,8 +281,8 @@ async def create_connection_async(address, timeout=None) -> Socket:
     return sock
 
 
-BASIC_URI_CONNECT = 13
-REQ_URI = 12
+BASIC_URI_CONNECT = 0x01
+REQ_URI = 0x02
 
 
 def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0.001, retries: int = 1) -> Socket:
