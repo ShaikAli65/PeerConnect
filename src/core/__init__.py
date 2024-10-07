@@ -3,7 +3,6 @@ from typing import Optional
 
 import kademlia.network
 
-import src.core.discover
 from src.avails import (
     PeerDict as _PeerDict,
     RemotePeer as _RemotePeer,

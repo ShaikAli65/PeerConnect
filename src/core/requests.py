@@ -30,11 +30,11 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
-        if random.random() < 0.6:
-            print(f"probability check failed not replying to for network find {addr}")
-            # a simple probabililty check to decrease number of replies
-            # :todo: write consensus protocol for replying a network find request
-            return
+        # if random.random() < 0.6:
+        #     print(f"probability check failed not replying to for network find {addr}")
+        #     # a simple probabililty check to decrease number of replies
+        #     # :todo: write consensus protocol for replying a network find request
+        #     return
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=REQUESTS.NETWORK_FIND_REPLY,
@@ -105,7 +105,7 @@ async def initiate():
     Dock.kademlia_network_server = server
     print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     await server.add_this_peer_to_lists()
-    await join_gossip(server)
+    join_gossip(server)
     return server, transport, proto
 
 
