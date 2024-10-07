@@ -1,14 +1,11 @@
 import asyncio
 import enum
-import os
-import struct
 from itertools import count
 from pathlib import Path
 
 from src.avails import (FileDict, Wire, WireData, connect, const, dialogs, use)
 from src.core import Dock, connections, get_this_remote_peer, transfers
 from . import processmanager
-from ..avails.useables import awaitable
 from ..core.transfers import HEADERS, PeerFilePool
 
 
@@ -50,10 +47,13 @@ class FileSender:
 
     def __init__(self, file_list: list[str | Path]):
         self.state = STATE.PREPARING
-        self.file_list = [transfers.FileItem(os.path.getsize(x), x, seeked=0) for x in file_list]
+        self.file_list = [transfers.FileItem(x, seeked=0) for x in file_list]
         self.file_handle = None
         self.file_id = FileRegistry.get_id_for_file()
-        self.file_pool = None
+        self.file_pool = PeerFilePool(
+            self.file_list,
+            _id=self.file_id,
+        )
 
     async def send_files(self, peer_id):
         peer_obj = Dock.peer_list.get_peer(peer_id)
@@ -73,10 +73,6 @@ class FileSender:
             await self.authorize_connection(connection)
             use.echo_print('changing state to sending')  # debug
             self.state = STATE.SENDING
-            self.file_pool = PeerFilePool(
-                self.file_list,
-                _id=self.file_id,
-            )
         self.state = STATE.COMPLETED
         print('completed sending')
 
