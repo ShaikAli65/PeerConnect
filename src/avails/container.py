@@ -25,8 +25,8 @@ class PeerDict(dict):
         # self.__lock = threading.Lock()
         self.__lock = asyncio.Lock()
 
-    from src.avails import RemotePeer
-    # RemotePeer = 1
+    # from src.avails import RemotePeer
+    RemotePeer = 1
 
     def get_peer(self, peer_id) -> RemotePeer:
         return self.get(peer_id, None)

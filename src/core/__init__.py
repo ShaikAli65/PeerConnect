@@ -3,6 +3,7 @@ from typing import Optional
 
 import kademlia.network
 
+import src.core.discover
 from src.avails import (
     PeerDict as _PeerDict,
     RemotePeer as _RemotePeer,
@@ -19,7 +20,11 @@ class Dock:
     protocol = None
     global_gossip = None
     _this_object: Optional[_RemotePeer] = None
-    kademlia_network_server: Optional[kademlia.network.Server] = None
+
+    # import src.core.discover
+    # type server = src.core.discover.PeerServer
+    type server = kademlia.network.Server
+    kademlia_network_server: Optional[server] = None
     requests_endpoint: Optional[_asyncio.DatagramTransport] = None
 
 
