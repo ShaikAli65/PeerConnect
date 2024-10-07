@@ -123,3 +123,7 @@ class Storage(storage.ForgetfulStorage):
             self.peer_data_storage[list_key] |= set(list_of_peers)
             Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
         return True
+
+
+async def get_remote_peer(peer_id):
+    return await Dock.kademlia_network_server.get_remote_peer(peer_id)

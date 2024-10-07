@@ -2,6 +2,8 @@ import asyncio
 import logging
 import sys
 
+from kademlia.crawling import NodeSpiderCrawl
+
 # Python version check
 if sys.version_info >= (3, 12):
     from typing import override
@@ -183,6 +185,11 @@ class PeerServer(network.Server):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
 
+    @override
+    async def bootstrap_node(self, addr):
+        result = await self.protocol.ping(addr, bytes(self.node))
+        return RemotePeer.load_from(result[1]) if result[0] else None
+
     async def get_list_of_nodes(self, list_key):
         node = RemotePeer(list_key)
         nearest = self.protocol.router.find_neighbors(node)
@@ -206,11 +213,6 @@ class PeerServer(network.Server):
                 nearest_list_id = i
                 prev_closest_xor = current_xor
         return nearest_list_id
-
-    @override
-    async def bootstrap_node(self, addr):
-        result = await self.protocol.ping(addr, bytes(self.node))
-        return RemotePeer.load_from(result[1]) if result[0] else None
 
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
@@ -241,6 +243,17 @@ class PeerServer(network.Server):
             self.storage.store_peers_in_list(list_key.id, peer_objs)
         results = [self.protocol.call_store_peers_in_list(n, list_key, peer_objs) for n in relevant_peers]
         return any(await asyncio.gather(*results))
+
+    async def get_remote_peer(self, peer_id):
+        node = RemotePeer(peer_id=peer_id)
+        nodes = self.protocol.router.find_neighbors(node)
+
+        spider = NodeSpiderCrawl(self.protocol,node, nodes,
+                                 self.ksize, self.alpha)
+        found_peers = await spider.find()
+        for peer in found_peers:
+            if peer.id == peer_id:
+                return peer
 
 
 network.Server.protocol_class = RequestProtocol
