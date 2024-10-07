@@ -1,3 +1,4 @@
+import enum
 import itertools
 import mmap
 import multiprocessing
@@ -124,6 +125,12 @@ else:
     FileItem = _FileItem
 
 
+class StatusCodes(enum.Enum):
+    PAUSED = 5
+    ABORTING = 6
+    COMPLETED = 7
+
+
 class PeerFilePool:
     retries = 8
     chunk_size = 1024 * 512,
@@ -200,7 +207,11 @@ class PeerFilePool:
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
         self.file_count = await self.__get_int_from_sender(recv_function)
         print("received file count", self.file_count)  # debug
-        return await self.receive_file_loop(self.file_count, recv_function)
+        w = await self.receive_file_loop(self.file_count, recv_function)
+        if w:
+            return StatusCodes.COMPLETED, self
+        else:
+            return StatusCodes.PAUSED, False
 
     async def receive_file_loop(self, count, recv_function):
         for _ in range(count):
