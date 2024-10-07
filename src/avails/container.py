@@ -1,8 +1,7 @@
 import asyncio
 import contextlib
 import socket
-import threading
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import Union
 
 from . import connect
@@ -26,7 +25,10 @@ class PeerDict(dict):
         # self.__lock = threading.Lock()
         self.__lock = asyncio.Lock()
 
-    def get_peer(self, peer_id):  # -> RemotePeer:
+    # from src.avails import RemotePeer
+    RemotePeer = 1
+
+    def get_peer(self, peer_id) -> RemotePeer:
         return self.get(peer_id, None)
 
     def add_peer(self, peer_obj):  # RemotePeer):
@@ -55,38 +57,32 @@ class PeerDict(dict):
 
 
 class FileDict:
-    __slots__ = '__continued', '__completed', '__current', '__lock'
+    __slots__ = '__continued', '__completed', '__current',
     __annotations__ = {
         '__continued': dict,
         '__completed': dict,
         '__current': dict,
-        '__lock': threading.Lock
     }
 
     def __init__(self):
         self.__continued = defaultdict(set)  # str: flip[PeerFilePool]
         self.__completed = defaultdict(set)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
-        self.__lock = threading.Lock()
 
     def add_to_current(self, peer_id, file_pool):
-        with self.__lock:
-            self.__current[peer_id].add(file_pool)
+        self.__current[peer_id].add(file_pool)
 
     def add_to_completed(self, peer_id, file_pool):
-        with self.__lock:
-            self.__current[peer_id].discard(file_pool)
-            self.__completed[peer_id].add(file_pool)
+        self.__current[peer_id].discard(file_pool)
+        self.__completed[peer_id].add(file_pool)
 
     def add_to_continued(self, peer_id, file_pool):
-        with self.__lock:
-            self.__current[peer_id].discard(file_pool)
-            self.__continued[peer_id].add(file_pool)
+        self.__current[peer_id].discard(file_pool)
+        self.__continued[peer_id].add(file_pool)
 
     def swap(self, peer_id, file_pool):
-        with self.__lock:
-            self.__continued[peer_id].remove(file_pool)
-            self.__completed[peer_id].add(file_pool)
+        self.__continued[peer_id].remove(file_pool)
+        self.__completed[peer_id].add(file_pool)
 
     def get_running_file(self, peer_id, file_id):
         return next(file for file in self.__current[peer_id] if file.id == file_id)
@@ -114,26 +110,22 @@ class FileDict:
 
     @property
     def continued(self):
-        with self.__lock:
-            return self.__continued.values()
+        return self.__continued.values()
 
     @property
     def completed(self):
-        with self.__lock:
-            return self.__completed.values()
+        return self.__completed.values()
 
     @property
     def current(self):
-        with self.__lock:
-            return self.__current.values()
+        return self.__current.values()
 
     def stop_all_files(self):
-        with self.__lock:
-            for file_set in self.__current.values():
-                for file in file_set:
-                    file.break_loop()
-            self.__continued.update(self.__current)
-            self.__current.clear()
+        for file_set in self.__current.values():
+            for file in file_set:
+                file.break_loop()
+        self.__continued.update(self.__current)
+        self.__current.clear()
         return
 
 
@@ -216,4 +208,3 @@ class SocketCache:
 
     def __del__(self):
         self.__close_all_socks()
-

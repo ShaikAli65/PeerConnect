@@ -11,27 +11,29 @@ from src.avails import (
 
 
 class Dock:
-    state_handle = None
     connected_peers = _SocketCache()
     PROFILE_WAIT = _asyncio.Event()
     peer_list = _PeerDict()
     server_in_network = False
+    state_handle = None
+    protocol = None
+    global_gossip = None
     _this_object: Optional[_RemotePeer] = None
     kademlia_network_server: Optional[kademlia.network.Server] = None
     requests_endpoint: Optional[_asyncio.DatagramTransport] = None
-    protocol = None
-    global_gossip = None
 
 
 def get_this_remote_peer():
-    return Dock._this_object
+    return Dock._this_object  # noqa
 
 
 def get_gossip():
     return Dock.global_gossip
 
 
-async def join_gossip(kademlia_server):
+def join_gossip(kademlia_server):
+    from .transfers import RumorMongerProtocol
+    Dock.global_gossip = RumorMongerProtocol()
     get_gossip().initiate()
 
 
