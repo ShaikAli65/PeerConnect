@@ -57,8 +57,8 @@ class Socket(_socket.socket):
         return await self.__loop.sock_accept(self)
 
     @wraps(AbstractEventLoop.sock_recv)
-    async def arecv(self, bufsize):
-        return await self.__loop.sock_recv(self, bufsize)
+    def arecv(self, bufsize):
+        return self.__loop.sock_recv(self, bufsize)
 
     @wraps(AbstractEventLoop.sock_connect)
     async def aconnect(self, __address) -> Self:
@@ -281,11 +281,11 @@ async def create_connection_async(address, timeout=None) -> Socket:
     return sock
 
 
-BASIC_URI_CONNECT = 0x01
+BASIC_URI = 0x01
 REQ_URI = 0x02
 
 
-def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0.001, retries: int = 1) -> Socket:
+def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -319,7 +319,7 @@ def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, timeout=0.01, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.01, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -328,8 +328,8 @@ async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI_CONNECT, tim
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
     :param retries: if given tries reconnecting with exponential backoffs using :func:`useables.get_timeouts`
-            uses :param timeout: as initial value
-    :return:
+    :param timeout: uses as initial value
+    :returns: connected socket
     """
 
     address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
