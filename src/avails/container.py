@@ -57,15 +57,17 @@ class PeerDict(dict):
 
 
 class FileDict:
-    __slots__ = '__continued', '__completed', '__current',
+    __slots__ = '__continued', '__completed', '__current', '__scheduled'
     __annotations__ = {
         '__continued': dict,
         '__completed': dict,
         '__current': dict,
+        '__scheduled': dict,
     }
 
     def __init__(self):
         self.__continued = defaultdict(set)  # str: flip[PeerFilePool]
+        self.__scheduled = {}
         self.__completed = defaultdict(set)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
 
@@ -76,13 +78,16 @@ class FileDict:
         self.__current[peer_id].discard(file_pool)
         self.__completed[peer_id].add(file_pool)
 
+    def add_to_scheduled(self, file_handle):
+        self.__scheduled[file_handle.id] = file_handle
+
     def add_to_continued(self, peer_id, file_pool):
-            self.__current[peer_id].discard(file_pool)
-            self.__continued[peer_id].add(file_pool)
+        self.__current[peer_id].discard(file_pool)
+        self.__continued[peer_id].add(file_pool)
 
     def swap(self, peer_id, file_pool):
-            self.__continued[peer_id].remove(file_pool)
-            self.__completed[peer_id].add(file_pool)
+        self.__continued[peer_id].remove(file_pool)
+        self.__completed[peer_id].add(file_pool)
 
     def get_running_file(self, peer_id, file_id):
         return next(file for file in self.__current[peer_id] if file.id == file_id)
@@ -92,6 +97,9 @@ class FileDict:
 
     def get_continued_file(self, peer_id, file_id):
         return next(file for file in self.__continued[peer_id] if file.id == file_id)
+
+    def get_scheduled(self, file_id):
+        return self.__scheduled.get(file_id, None)
 
     def get_file(self, peer_id, file_id):
         try:
@@ -208,4 +216,3 @@ class SocketCache:
 
     def __del__(self):
         self.__close_all_socks()
-
