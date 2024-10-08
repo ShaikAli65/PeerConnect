@@ -42,7 +42,8 @@ class _FileItem:
     def __init__(self, path, seeked):
         self.path: Path = path
         self.seeked = seeked
-        self.size = self.path.stat().st_size
+        if self.path.exists():
+            self.size = self.path.stat().st_size
         self._name = self.path.name
 
     def __str__(self):
@@ -58,14 +59,13 @@ class _FileItem:
     @name.setter
     def name(self, value):
         self._name = value
-        new_path = self.path.with_name(self.name)
-        self.path.rename(new_path)
+        self.path = self.path.with_name(self.name)
 
     @staticmethod
     def load_from(data: bytes, file_parent_path):
         name, size, seeked = umsgpack.loads(data)
         file = FileItem(Path(file_parent_path, name), seeked)
-        file.name = name
+        file._name = name
         file.size = size
         return file
 
@@ -162,7 +162,7 @@ class PeerFilePool:
 
     async def send_file_loop(self, current_iter, send_function):
         for file in current_iter:
-            if (not self.to_stop or await self.send_file(send_function, file=file)) is False:
+            if (self.to_stop or await self.send_file(send_function, file=file)) is False:
                 return False
             next(self.current_file)
         return True
@@ -172,6 +172,8 @@ class PeerFilePool:
         file_object = bytes(file)
         file_packet = struct.pack('!I', len(file_object)) + file_object
         await send_function(file_packet)  # possible : any sort of socket/connection errors
+        print("file item sent", file)
+
         send_progress = tqdm.tqdm(
             range(file.size),
             f"[PID:{multiprocessing.current_process().ident}]"
@@ -180,14 +182,14 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        result = self.send_actual_file(send_function, file, send_progress)
+        result = await self.send_actual_file(send_function, file, send_progress)
         send_progress.close()
         return result
 
     async def send_actual_file(self, send_function, file, send_progress):
         send_progress.update(file.seeked)
         chunk_size = self.calculate_chunk_size(file.size)
-        print('sending file item', file)  # debug
+        print('sending file data', file)  # debug
         with open(file.path, 'rb') as f:
             seek = file.seeked
             f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
@@ -215,7 +217,7 @@ class PeerFilePool:
 
     async def receive_file_loop(self, count, recv_function):
         for _ in range(count):
-            if not self.to_stop:
+            if self.to_stop:
                 return
             if await self.recv_file(recv_function) is False:
                 return
@@ -226,7 +228,7 @@ class PeerFilePool:
     @staticmethod
     async def __get_int_from_sender(recv_function: Callable[[int], Awaitable[bytes]]):
         raw_int = await recv_function(4)
-        return struct.unpack('!I', raw_int)
+        return struct.unpack('!I', raw_int)[0]
 
     @staticmethod
     async def __send_int(integer, send_function: Callable[[bytes], Awaitable[bool]]):
@@ -361,7 +363,7 @@ class PeerFilePool:
     def __validatename(self, file_item: _FileItem) -> str:
         """
         Ensures a unique filename if a file with the same name already exists
-        in the `const.PATH_DOWNLOAD` directory.
+        in the `self.download_dir`
 
         Args:
             file_item (_FileItem): The original filename.
@@ -379,6 +381,7 @@ class PeerFilePool:
         while (self.download_path / new_file_name).exists():
             new_file_name = f"{base} ({counter}){ext}"
             counter += 1
+        file_item.name = new_file_name
 
         return new_file_name
 
@@ -399,8 +402,8 @@ class PeerFilePool:
         min_buffer_size = 64 * 1024  # 64 KB
         max_buffer_size = (2 ** 20) * 2  # 2 MB
 
-        min_file_size = 1024
-        max_file_size = (2 ** 30) * 2  # 2 GB
+        min_file_size = 2 ** 10
+        max_file_size = (2 ** 30) * 10  # 10 GB
 
         if file_size <= min_file_size:
             return min_buffer_size
