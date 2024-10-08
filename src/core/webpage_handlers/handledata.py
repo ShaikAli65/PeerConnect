@@ -1,3 +1,4 @@
+from pathlib import Path
 from sys import stderr
 
 from src.avails import DataWeaver, use
@@ -11,8 +12,12 @@ async def send_a_directory(command_data: DataWeaver):
 
 async def send_file_to_peer(command_data: DataWeaver):
     selected_files = await filemanager.open_file_selector()
-    peer_id = command_data.content['peer_id']
-    file_sender = filemanager.FileSender(selected_files)
+    if selected_files:
+        print(selected_files)
+        selected_files = [Path(x) for x in selected_files]
+        peer_id = command_data.content['peer_id']
+        file_sender = filemanager.FileSender(selected_files, peer_id)
+        await file_sender.send_files()
 
 
 async def send_text(command_data: DataWeaver):
