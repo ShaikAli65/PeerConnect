@@ -7,12 +7,8 @@ import subprocess
 import urllib.request
 import webbrowser
 
-
-from ..avails import (
-    const,
-    connect,
-    use,
-)
+import src.core.eventloop  # noqa
+from ..avails import connect, const, use
 from ..configurations.configure import set_constants
 
 
@@ -24,14 +20,15 @@ def initiate_bootup():
     except KeyError:
         write_default_configurations(const.PATH_CONFIG)
         config_map.read(const.PATH_CONFIG)
-
     set_constants(config_map)
     const.THIS_IP, const.IP_VERSION = get_ip()
     const.IP_VERSION = (socket.AF_INET6
                         if ipaddress.ip_address(const.THIS_IP).version == 6
                         else socket.AF_INET)
     # print(f"{const.THIS_IP=}")
-    # const.THIS_IP = '172.16.199.138'  # todo remove this ip in bootup.py
+    # to1do remove this ip in bootup.py
+    # const.THIS_IP = '172.16.199.138'
+    # const.THIS_IP = '192.168.217.188'
     validate_ports()
 
 
@@ -172,13 +169,14 @@ def write_default_configurations(path):
 
 
 def validate_ports() -> None:
-    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ,
-                  const.PORT_FILE, const.PORT_NETWORK]
+    ports_list = [const.PORT_THIS, const.PORT_PAGE,
+                  const.PORT_FILE, const.PORT_NETWORK,]  # const.PORT_REQ,]
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port):
             ports_list[i] = connect.get_free_port()
             use.echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
-    const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, const.PORT_FILE, const.PORT_NETWORK = ports_list
+    const.PORT_THIS, const.PORT_PAGE, const.PORT_FILE, const.PORT_NETWORK = ports_list
+    # const.PORT_REQ,
     return None
 
 
