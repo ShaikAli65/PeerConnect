@@ -94,7 +94,8 @@ async def handle_client(web_socket: websockets.WebSocketServerProtocol):
                 parsed_data = DataWeaver(serial_data=data)
                 if parsed_data.is_reply:
                     ReplyRegistry.reply_arrived(parsed_data)
-                _asyncio.create_task(handle_function(parsed_data))
+                f = use.wrap_with_tryexcept(handle_function, parsed_data)
+                _asyncio.create_task(f)
                 if safe_end.is_set():
                     return
         else:
@@ -112,7 +113,8 @@ async def start_websocket_server():
 
 
 async def initiate_pagehandle():
-    asyncio.create_task(WebSocketRegistry.start_data_sender())
+    f = use.wrap_with_tryexcept(WebSocketRegistry.start_data_sender)
+    asyncio.create_task(f)
     await start_websocket_server()
 
 
