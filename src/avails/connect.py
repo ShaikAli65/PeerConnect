@@ -281,8 +281,8 @@ async def create_connection_async(address, timeout=None) -> Socket:
     return sock
 
 
-BASIC_URI = 0x01
-REQ_URI = 0x02
+BASIC_URI = 'uri'
+REQ_URI = 'req_uri'
 
 
 def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
@@ -319,7 +319,7 @@ def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.01, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.1, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -339,7 +339,7 @@ async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.0
         try:
             return await create_connection_async(address, timeout)
         except (OSError, _socket.error) as exp:
-            useables.echo_print("got ", exp, "retry count", retry_count)
+            useables.echo_print("got ", type(exp), "retry count", retry_count)
             retry_count += 1
             if retry_count >= retries:
                 raise
