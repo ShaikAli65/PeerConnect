@@ -158,7 +158,7 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
                 this_closest = self.source_node.distance_to(keynode) < first
             if not neighbors or (new_node_close and this_closest):  # noqa
                 for i in peer_list:
-                    asyncio.ensure_future(self.call_store_peers_in_list(peer, list_key, [i, ]))
+                    asyncio.create_task(self.call_store_peers_in_list(peer, list_key, [i, ]))
 
     @override
     def welcome_if_new(self, peer):
@@ -201,8 +201,7 @@ class PeerServer(network.Server):
         results = await peer_list_getter.find()
         if results is None:
             return results
-
-        return [RemotePeer.load_from(data) for data in results]
+        return [RemotePeer.load_from(peer) for peer_list in results for peer in peer_list]
 
     def _get_closest_list_id(self, node_list_ids: list[bytes]):
         nearest_list_id = 0
@@ -217,11 +216,13 @@ class PeerServer(network.Server):
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
-            print('added this peer object')  # debug
+            print('added this peer object in', closest_list_id)  # debug
+
         else:
             print("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
-            self.add_this_peer_future = asyncio.ensure_future(self.add_this_peer_to_lists())
+            f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
+            self.add_this_peer_future = asyncio.create_task(f)
             print("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
@@ -238,7 +239,10 @@ class PeerServer(network.Server):
         relevant_peers = await spider.find()
 
         # log.info("setting '%s' on %s", dkey.hex(), list(map(str, relevant_peers)))
-        biggest = max([n.distance_to(list_key) for n in relevant_peers])
+        distances = [n.distance_to(list_key) for n in relevant_peers]
+        if not distances:
+            return False
+        biggest = max(distances)
         if self.node.distance_to(list_key) < biggest:
             self.storage.store_peers_in_list(list_key.id, peer_objs)
         results = [self.protocol.call_store_peers_in_list(n, list_key, peer_objs) for n in relevant_peers]
