@@ -1,5 +1,4 @@
 import asyncio
-import random
 import socket
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
@@ -30,11 +29,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
-        # if random.random() < 0.6:
-        #     print(f"probability check failed not replying to for network find {addr}")
-        #     # a simple probabililty check to decrease number of replies
-        #     # :todo: write consensus protocol for replying a network find request
-        #     return
+        # :todo: write consensus protocol for replying a network find request
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=REQUESTS.NETWORK_FIND_REPLY,
@@ -51,8 +46,9 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
     def handle_network_find_reply(req_data):
         """ Handle NETWORK_FIND_REPLY request """
         bootstrap_node_addr = tuple(req_data['connect_uri'])
-        asyncio.ensure_future(Dock.kademlia_network_server.bootstrap([bootstrap_node_addr]))
-        print("Bootstrap initiated to: %s" % bootstrap_node_addr)
+        f = use.wrap_with_tryexcept(Dock.kademlia_network_server.bootstrap, [bootstrap_node_addr])
+        asyncio.ensure_future(f)
+        print(f"Bootstrap initiated to: {bootstrap_node_addr}")
 
     @staticmethod
     def handle_gossip_message(req_data):
@@ -63,10 +59,12 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     @staticmethod
     def handle_gossip_session(req_data, addr):
-        asyncio.ensure_future(gossip_manager.new_gossip_request_arrived(req_data, addr))
+        f = use.wrap_with_tryexcept(gossip_manager.new_gossip_request_arrived, req_data, addr)
+        asyncio.ensure_future(f)
 
     def connection_made(self, transport):
         self.transport = transport
+        print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
 
 
 class REQUESTS:
@@ -84,8 +82,9 @@ class REQUESTS:
 async def initiate():
     loop = asyncio.get_running_loop()
     server = discover.get_new_kademlia_server()
-
     await server.listen(port=const.PORT_NETWORK)
+    print("started kademlia endpoint at ", const.PORT_NETWORK)
+
     node_addr = await search_network()
     if node_addr is not None:
         print('bootstrapping kademlia with', node_addr)  # debug
@@ -94,7 +93,8 @@ async def initiate():
 
     transport, proto = await loop.create_datagram_endpoint(
         RequestsEndPoint,
-        local_addr=('0.0.0.0' if const.IP_VERSION == socket.AF_INET else '::', const.PORT_REQ),
+        # local_addr=('0.0.0.0' if const.IP_VERSION == socket.AF_INET else '::', const.PORT_REQ),
+        local_addr=(const.THIS_IP, const.PORT_REQ),
         family=const.IP_VERSION,
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
@@ -103,15 +103,14 @@ async def initiate():
     Dock.protocol = proto
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = server
-    print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
-    await server.add_this_peer_to_lists()
+    f = use.wrap_with_tryexcept(server.add_this_peer_to_lists)
+    asyncio.create_task(f)
     join_gossip(server)
     return server, transport, proto
 
 
 async def search_network():
     ip, port = const.THIS_IP, const.PORT_REQ
-    print(ip, port)
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS.NETWORK_FIND, this_id)
     s = connect.UDPProtocol.create_async_server_sock(
