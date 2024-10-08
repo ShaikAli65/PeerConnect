@@ -1,17 +1,18 @@
+import traceback
 import functools
 import inspect
 import os
 import platform
 import socket
-import threading
-
-import select
 import subprocess
+import sys
+import threading
 from datetime import datetime
 from sys import _getframe  # noqa
 
+import select
 
-from .constants import MAX_RETIRES, LOCK_PRINT
+from .constants import LOCK_PRINT, MAX_RETIRES
 
 
 def func_str(func_name):
@@ -164,6 +165,27 @@ def awaitable(syncfunc):
         wrapper.__doc__ = syncfunc.__doc__ or asyncfunc.__doc__
         return wrapper
     return decorate
+
+
+COLORS = [
+    "\033[91m",  # Red
+    "\033[92m",  # Green
+    "\033[93m",  # Yellow
+    "\033[94m",  # Blue
+    "\033[95m",  # Magenta
+]
+
+COLOR_RESET = "\033[0m"
+
+
+async def wrap_with_tryexcept(func, *args, **kwargs):
+    try:
+        # print("wrapping with try except", func_str(func))
+        return await func(*args, **kwargs)
+    except Exception as e:
+        print(f"{COLORS[1]}got an exception for function{func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+        traceback.print_exc()
+        print(COLOR_RESET)
 
 
 def search_relevant_peers(peer_list, search_string) -> list:
