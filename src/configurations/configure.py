@@ -1,10 +1,10 @@
 import configparser
 import os
 import socket
+from pathlib import Path
 
-import src.avails.constants as const
 import src.avails.connect as connect
-from src.managers.profilemanager import ProfileManager
+import src.avails.constants as const
 
 
 def set_constants(config_map: configparser.ConfigParser) -> bool:
@@ -63,17 +63,17 @@ def print_constants():
 
 
 def set_paths():
-    const.PATH_CURRENT = os.path.join(os.getcwd())
-    const.PATH_PROFILES = os.path.join(const.PATH_CURRENT, 'profiles')
-    const.PATH_LOG = os.path.join(const.PATH_CURRENT, 'logs')
-    const.PATH_PAGE = os.path.join(const.PATH_CURRENT, 'src', 'webpage')
-    const.PATH_CONFIG = os.path.join(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE)
-    downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
+    const.PATH_CURRENT = Path(os.path.join(os.getcwd()))
+    const.PATH_PROFILES = Path(os.path.join(const.PATH_CURRENT, 'profiles'))
+    const.PATH_LOG = Path(os.path.join(const.PATH_CURRENT, 'logs'))
+    const.PATH_PAGE = Path(os.path.join(const.PATH_CURRENT, 'src', 'webpage'))
+    const.PATH_CONFIG = Path(os.path.join(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE))
+    downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Downloads'))
     # check if the directory exists
     if not os.path.exists(downloads_path):
-        downloads_path = os.path.join(os.path.expanduser('~'), 'Desktop')
+        downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Desktop'))
 
-    const.PATH_DOWNLOAD = os.path.join(downloads_path, 'PeerConnect')
+    const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, 'PeerConnect'))
     try:
         os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)
     except OSError as e:
