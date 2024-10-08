@@ -7,13 +7,11 @@ from ..avails.connect import Socket
 if sys.platform == 'win32':
 
     class CustomIocpProactor(_asyncio.IocpProactor):
-        ...
-
         def _get_accept_socket(self, family):  # noqa
             s = Socket(family)
+            s.setblocking(False)
             s.settimeout(0)
             s.set_loop(_asyncio.get_running_loop())
-            # print('asdfoasdbfasbgoebgeigersiogoerigarkgnelrkneoribgoi')
             return s
 
 
@@ -28,6 +26,6 @@ if sys.platform == 'win32':
         _loop_factory = CustomProactorEventLoop
 
 
-    print('setting up event loop',sys.platform)  # debug
+    print('\033[32m setting up event loop',sys.platform, '\033[0m')  # debug
     _asyncio.set_event_loop_policy(CustomWindowsProactorEventLoopPolicy())
     # _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
