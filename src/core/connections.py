@@ -47,7 +47,7 @@ class Acceptor:
         self.back_log = 4
         self.currently_in_connection = defaultdict(int)
         self.__loop = asyncio.get_running_loop()
-        self.all_tasks = []
+        self.all_tasks = set()
         self.max_timeout = 90
         use.echo_print("::Initiating Acceptor ", self.address)
         self._initialized = True
@@ -63,8 +63,11 @@ class Acceptor:
             while not self.stopping:
                 initial_conn, _ = await self.main_socket.aaccept()
                 use.echo_print(f"New connection from {_}", initial_conn)
-                task = asyncio.create_task(self.__accept_connection(initial_conn))
-                self.all_tasks.append(task)
+                f = use.wrap_with_tryexcept(self.__accept_connection, initial_conn)
+                task = asyncio.create_task(f)
+                task.add_done_callback(lambda t: self.all_tasks.discard(t))
+                self.all_tasks.add(task)
+                await asyncio.sleep(0)
 
     async def start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
@@ -101,9 +104,8 @@ class Acceptor:
             self.currently_in_connection[peer_id] += 1
             use.echo_print("verified peer", peer_id)  # debug
             return peer_id
-
         if hand_shake.match_header(HEADERS.CMD_FILE_CONN):
-            return filemanager.connection_arrived(connection, hand_shake)
+            return filemanager.file_recv_request_connection_arrived(connection, hand_shake)
 
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
             use.echo_print("got a gossip stream link connection request delegating to gossip manager", connection)  # debug
@@ -113,12 +115,10 @@ class Acceptor:
         sock = Dock.connected_peers.get_socket(peer_id)
         while self.currently_in_connection[peer_id]:
             try:
-                raw_data = await asyncio.wait_for(Wire.receive_async(sock), self.max_timeout)
+                raw_data = await Wire.receive_async(sock)
                 data = WireData.load_from(raw_data)
+                print("new data arrived", data)  # debug
                 self.__process_data(data)
-            except asyncio.TimeoutError:
-                print("timedout", peer_id)
-                continue
             except TypeError as tp:
                 print("got type error possible data illformed", tp)
 
@@ -127,10 +127,6 @@ class Acceptor:
         if data.match_header(HEADERS.CMD_TEXT):
             pagehandle.new_message_arrived(data)
         elif data.match_header(HEADERS.CMD_RECV_FILE):
-            filemanager.new_file_recv_request(data)
-        elif data.match_header(HEADERS.CMD_RECV_FILE_AGAIN):
-            filemanager.new_file_recv_request(data)
-        elif data.match_header(HEADERS.CMD_RECV_DIR):
             directorymanager.new_directory_transfer_request(data)
         elif data.match_header(HEADERS.CMD_CLOSING_HEADER):
             directorymanager.new_directory_transfer_request(data)
@@ -155,7 +151,7 @@ class Connector:
     # :todo: make this more advanced such that it can handle mulitple requests related to same socket
 
     @classmethod
-    async def connect_peer(cls, peer_obj: RemotePeer) -> connect.Socket:
+    async def get_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
         use.echo_print('a connection request made to :', peer_obj.uri)  # debug
         if sock := Dock.connected_peers.is_connected(peer_obj.id):
             pr_str = f"cache hit !{textwrap.fill(peer_obj.username, width=10)} and socket is connected"
@@ -178,14 +174,14 @@ class Connector:
 
     @classmethod
     async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
-        connection_socket = await connect.connect_to_peer(peer_obj)
+        connection_socket = await connect.connect_to_peer(peer_obj, timeout=1, retries=3)
         Dock.connected_peers.add_peer_sock(peer_obj.id, connection_socket)
         return connection_socket
 
     @classmethod
     async def _verifier(cls, connection_socket):
         verification_data = WireData(
-            header=const.CMD_VERIFY_HEADER,
+            header=HEADERS.CMD_VERIFY_HEADER,
             _id=get_this_remote_peer().id,
         )
         await Wire.send_async(connection_socket, bytes(verification_data))

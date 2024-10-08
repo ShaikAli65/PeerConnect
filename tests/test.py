@@ -6,9 +6,10 @@ from random import randint
 
 from kademlia import utils
 
-from src.avails import GossipMessage, RemotePeer, WireData, const
+import src.core.webpage_handlers.handledata
+from src.avails import DataWeaver, GossipMessage, RemotePeer, WireData, const
 from src.configurations import bootup, configure
-from src.core import get_this_remote_peer, peers, requests, set_current_remote_peer_object
+from src.core import Dock, connections, get_this_remote_peer, peers, requests, set_current_remote_peer_object, transfers
 from src.core import get_gossip
 from src.managers import profilemanager
 from src.managers.statemanager import State
@@ -52,6 +53,23 @@ async def test_gossip():
     get_gossip().gossip_message(message)
 
 
+async def test_file_transfer():
+    try:
+        p = next(iter(Dock.peer_list))
+        data = DataWeaver(
+            header=transfers.HEADERS.HANDLE_SEND_FILE,
+            content={
+                'peer_id': p.id,
+            }
+        )
+        try:
+            await src.core.webpage_handlers.handledata.send_file_to_peer(data)
+        except Exception as e:
+            print(e)
+    except StopIteration:
+        print("no peers available")
+
+
 async def test_list_of_peers():
     while True:
         await asyncio.get_event_loop().run_in_executor(ThreadPoolExecutor(),func=lambda: input("enter"))
@@ -65,10 +83,10 @@ def test_initial_states():
     s3 = State("adding shit", test)
     s4 = State("loading profiles", profilemanager.load_profiles_to_program)
     s5 = State("printing configurations", configure.print_constants)
-    s4 = State("intitating requests",    requests.initiate)
+    s6 = State("intitating requests",    requests.initiate)
     # s4 = State("connecting to servers",connectserver.initiate_connection)
-
     # s6 = State("checking for gossip", test_gossip)
-    s7 = State("checking for peer gathering", test_list_of_peers)
-    # s7 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s7 = State("checking for peer gathering", test_list_of_peers, is_blocking=True)
+    s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s9 = State("test file transfer", test_file_transfer, is_blocking=True)
     return tuple(locals().values())

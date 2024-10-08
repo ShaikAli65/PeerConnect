@@ -1,4 +1,5 @@
 from collections import defaultdict
+
 from typing import override
 
 from kademlia import crawling, storage
@@ -47,9 +48,12 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
     @classmethod
     async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
+        print("previous index", cls.previously_fetched_index)
         if cls.previously_fetched_index >= len(cls.node_list_ids) - 1:
             cls.previously_fetched_index = 0
+
         find_list_id = cls.node_list_ids[cls.previously_fetched_index]
+        print("looking into", find_list_id)
         list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
         cls.previously_fetched_index += 1
 
@@ -93,6 +97,7 @@ class SearchCrawler:
 
 def get_more_peers():
     peer_server = Dock.kademlia_network_server
+    print("getting more peers")  # debug
     return PeerListGetter.get_more_peers(peer_server)
 
 
@@ -120,6 +125,8 @@ class Storage(storage.ForgetfulStorage):
 
     def store_peers_in_list(self, list_key, list_of_peers):
         if list_key in self.node_lists_ids:
+            print("="*80)  # :todo fix this "list" bug
+            print(list_of_peers)
             self.peer_data_storage[list_key] |= set(list_of_peers)
             Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
         return True

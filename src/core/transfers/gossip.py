@@ -8,8 +8,19 @@ from dataclasses import dataclass
 from itertools import count
 from uuid import uuid4
 
-from src.avails import (GossipMessage, PalmTreeInformResponse, RemotePeer, RumorMessageItem, Wire, WireData, connect, const,
-                        wire)
+from src.avails import (
+    GossipMessage,
+    PalmTreeInformResponse,
+    RemotePeer,
+    RumorMessageItem,
+    Wire,
+    WireData,
+    connect,
+    const,
+    wire,
+    use,
+)
+
 from src.avails.connect import UDPProtocol, get_free_port
 from src.core import Dock, get_this_remote_peer
 from src.core.transfers import HEADERS
@@ -379,7 +390,8 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
         self.passive_links: dict[str, PalmTreeLink] = {}
 
     def start_session(self):
-        self.session_task = asyncio.ensure_future(self.session_init())
+        f = use.wrap_with_tryexcept(self.session_init)
+        self.session_task = asyncio.create_task(f)
 
     async def session_init(self):
         loop = asyncio.get_event_loop()
@@ -481,7 +493,8 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
         if peer_id not in self.active_links:
             return
         link = self.active_links[peer_id]
-        asyncio.create_task(self.activate_link(link))
+        f = use.wrap_with_tryexcept(self.activate_link, link)
+        asyncio.create_task(f)
 
     async def activate_link(self, link: PalmTreeLink):
         if link.is_online:
