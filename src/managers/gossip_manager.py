@@ -33,7 +33,7 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
         id=req_data['session_id'],
         key=req_data['session_key'],
         max_forwards=req_data['max_forwards'],
-        link_wait=PalmTreeProtocol.request_timeout,
+        link_wait_timeout=PalmTreeProtocol.request_timeout,
     )
     response = PalmTreeInformResponse(
         peer_id=get_this_remote_peer().id,
