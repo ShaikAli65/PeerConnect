@@ -1,18 +1,15 @@
 import asyncio
 import getpass
-import time
 from concurrent.futures.thread import ThreadPoolExecutor
-from random import randint
 
 from kademlia import utils
 
-import src.core.webpage_handlers.handledata
-from src.avails import DataWeaver, GossipMessage, RemotePeer, WireData, const
+from src.avails import RemotePeer, const
 from src.configurations import bootup, configure
-from src.core import Dock, connections, get_this_remote_peer, peers, requests, set_current_remote_peer_object, transfers
-from src.core import get_gossip
+from src.core import connections, peers, requests, set_current_remote_peer_object
 from src.managers import profilemanager
 from src.managers.statemanager import State
+from tests.file import test_file_transfer
 
 
 def test():
@@ -30,44 +27,6 @@ def test():
         )
     )
     # print(peers.get_this_remote_peer())
-
-
-def generate_gossip():
-    message = GossipMessage(message=WireData())
-    message.header = requests.REQUESTS.GOSSIP_MESSAGE
-    message.id = randint(1,100000)
-    message.message = input("enter message to gossip")
-    message.ttl = 3
-    message.created = time.time()
-    print("created a gossip message", message)
-    return message
-
-
-async def test_gossip():
-    server, transport, proto = await requests.initiate()
-    message = await asyncio.get_event_loop().run_in_executor(ThreadPoolExecutor(),
-                                                             func=generate_gossip)
-    for i in server.protocol.router.find_neighbors(get_this_remote_peer(),k=100):
-        print(i)
-    # await asyncio.sleep(2)
-    get_gossip().gossip_message(message)
-
-
-async def test_file_transfer():
-    try:
-        p = next(iter(Dock.peer_list))
-        data = DataWeaver(
-            header=transfers.HEADERS.HANDLE_SEND_FILE,
-            content={
-                'peer_id': p.id,
-            }
-        )
-        try:
-            await src.core.webpage_handlers.handledata.send_file_to_peer(data)
-        except Exception as e:
-            print(e)
-    except StopIteration:
-        print("no peers available")
 
 
 async def test_list_of_peers():
