@@ -36,7 +36,32 @@ def shorten_path(path, max_length):
 
 
 class _FileItem:
+    """
+    Overview:
+        The _FileItem class is designed to represent a file with its metadata, such as name, size, path, and whether it has been seeked.
+        It provides methods to manage file renaming, error handling, and serialization.
 
+    Key Attributes:
+        __slots__: Used for memory optimization, defining the attributes the class can have.
+        _name: The name of the file.
+        size: The size of the file in bytes.
+        path: The Path object representing the file's path.
+        seeked: A variable indicating how much of the file has been read or processed.
+        original_ext: Preserves the original file extension for potential renaming.
+
+    Key Methods:
+        __init__: Initializes the file object, fetching its size and name from the filesystem.
+        __str__ and __repr__: Provide human-readable representations of the object for debugging and logging.
+        add_error_ext: Adds an error extension to the file name to signify an error state.
+        remove_error_ext: Removes the error extension and restores the file to its original name, assuming the original extension was preserved.
+        load_from: Static method that reconstructs a _FileItem from serialized data.
+        __bytes__ and __iter__: Define how the object can be serialized and iterated over.
+        name property: Getter and setter for the file name, with the setter also updating the underlying file path on disk.
+
+    Error Handling:
+        The add_error_ext method renames the file to include an error extension, while remove_error_ext restores the original name. Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
+
+    """
     __slots__ = '_name', 'size', 'path', 'seeked', 'original_ext'
 
     def __init__(self, path, seeked):
@@ -146,29 +171,32 @@ class PeerFilePool:
             download_path=Path('.')
     ):
         self.__error_ext = error_ext
-        self.file_items: set[_FileItem] = set(file_items or [])
+        self.file_items: list[_FileItem] = list(file_items or [])
         self.to_stop = False
         self.id = _id
-        self.current_file: Iterator[_FileItem] | _FileItem = self.file_items.__iter__()
+
+        # list index pointing to file that is currently getting processed
+        # this keeps a reference to fileitem when receiving file
+        self.current_file: FileItem | int = 0
         self.file_count = len(self.file_items)
         self.download_path = download_path
 
     async def send_files(self, send_function: Callable[[bytes], Awaitable[bool]]):
         await self.__send_int(self.file_count, send_function)
-        self.current_file, iterator = itertools.tee(self.file_items)
-        # iterator 1 which gets forwarded after successful sending of current file
-        # iterator 2 to proceed with for loop
-        return await self.send_file_loop(iterator, send_function)
+        return await self.send_file_loop(self.current_file, send_function)
 
-    async def send_file_loop(self, current_iter, send_function):
-        for file in current_iter:
-            if (self.to_stop or await self.send_file(send_function, file=file)) is False:
+    async def send_file_loop(self, current_index, send_function):
+        for index in range(current_index, len(self.file_items)):
+            file_item = self.file_items[index]
+            self.current_file = index
+            if (self.to_stop or await self.send_file(send_function, file=file_item)) is False:
                 return False
-            next(self.current_file)
+            self.current_file = self.file_items[index + 1]
         return True
 
     async def send_file(self, send_function, file: _FileItem):
         print("sending file data", f"[PID:{os.getpid()}]")  # debug
+
         file_object = bytes(file)
         file_packet = struct.pack('!I', len(file_object)) + file_object
         await send_function(file_packet)  # possible : any sort of socket/connection errors
@@ -293,6 +321,7 @@ class PeerFilePool:
 
                     try:
                         f_write(data)  # Attempt to write data to file
+                        # :TODO deal with blocking nature of file i/o
                     except OSError as e:
                         if 'No space left on device' in str(e):
                             self._add_error_ext(file_item)
@@ -308,9 +337,8 @@ class PeerFilePool:
         return True
 
     async def send_files_again(self, receiver_sock):
-        self.current_file, present_iter = itertools.tee(self.current_file)  # cloning iterators
-        # -> ----------------------
-        start_file = next(present_iter)
+        # ----------------------
+        start_file = self.file_items[self.current_file]
         start_file.seeked = struct.unpack('!Q', await receiver_sock.recv(8))[0]
         progress = tqdm.tqdm(
             range(start_file.size),
@@ -322,8 +350,8 @@ class PeerFilePool:
         await self.send_actual_file(receiver_sock.asendall, start_file, progress)
         progress.close()
         # -> ---------------------- file continuation part
-
-        return await self.send_file_loop(present_iter, receiver_sock)
+        self.current_file += 1
+        return await self.send_file_loop(self.current_file, receiver_sock)
 
     async def receive_files_again(self, sender_sock):
         # -> ----------------------
@@ -418,29 +446,6 @@ class PeerFilePool:
 
 """
 1. FileItem Class (_FileItem)
-    Overview:
-        The _FileItem class is designed to represent a file with its metadata, such as name, size, path, and whether it has been seeked.
-        It provides methods to manage file renaming, error handling, and serialization.
-    
-    Key Attributes:
-        __slots__: Used for memory optimization, defining the attributes the class can have.
-        _name: The name of the file.
-        size: The size of the file in bytes.
-        path: The Path object representing the file's path.
-        seeked: A variable indicating how much of the file has been read or processed.
-        original_ext: Preserves the original file extension for potential renaming.
-    
-    Key Methods:
-        __init__: Initializes the file object, fetching its size and name from the filesystem.
-        __str__ and __repr__: Provide human-readable representations of the object for debugging and logging.
-        add_error_ext: Adds an error extension to the file name to signify an error state.
-        remove_error_ext: Removes the error extension and restores the file to its original name, assuming the original extension was preserved.
-        load_from: Static method that reconstructs a _FileItem from serialized data.
-        __bytes__ and __iter__: Define how the object can be serialized and iterated over.
-        name property: Getter and setter for the file name, with the setter also updating the underlying file path on disk.
-    
-    Error Handling:
-        The add_error_ext method renames the file to include an error extension, while remove_error_ext restores the original name. Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
 
 2. PeerFilePool Class
 
