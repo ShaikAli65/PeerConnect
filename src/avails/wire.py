@@ -1,7 +1,6 @@
 import dataclasses
 import json as _json
 import struct
-import threading as _threading
 from asyncio import DatagramTransport
 from collections import defaultdict
 from dataclasses import dataclass
@@ -290,7 +289,9 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     """ Unpack the datagram and handle exceptions """
     try:
         data = Wire.load_datagram(data_payload)
-        return WireData.load_from(data)
+        loaded = WireData.load_from(data)
+        if not loaded or not hasattr(loaded, 'header'):
+            return
     except umsgpack.UnpackException as ue:
         return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
@@ -340,3 +341,22 @@ class PalmTreeInformResponse:
     @staticmethod
     def load_from(data: bytes):
         return PalmTreeInformResponse(**umsgpack.loads(data))
+
+
+@dataclass(slots=True, frozen=True)
+class OTMSession:
+    """
+    Args:
+        `originater_id(str)`: the one who initiated this session
+        `session_id(int)` : self-explanatory
+        `key(str)` : session key used to encrypt data
+        `fanout`(int) : maximum number of resends this instance should perform for every packet received
+        `link_wait_timeout`(double) : timeout for any i/o operations
+        `adjacent_peers(list[str])` : all the peers to whom we should be in contact
+    """
+    originater_id: str
+    session_id: str
+    key: str
+    fanout: int
+    link_wait_timeout: int
+    adjacent_peers: list[str]
