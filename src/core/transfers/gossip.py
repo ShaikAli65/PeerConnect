@@ -13,12 +13,8 @@ from src.avails import (
     PalmTreeInformResponse,
     RemotePeer,
     RumorMessageItem,
-    Wire,
     WireData,
-    connect,
-    const,
-    wire,
-    use,
+    Wire, connect, const, use, unpack_datagram,
 )
 
 from src.avails.connect import UDPProtocol, get_free_port
@@ -164,7 +160,7 @@ class RumorMongerProtocol:
 class PalmTreeProtocol:
     request_timeout = 3
 
-    def __init__(self, center_peer: RemotePeer, max_forwards, session_id, session_key, peers: list[RemotePeer]):
+    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer]):
         """
         !! do not include center_peer in peers list passed in
         """
@@ -173,17 +169,11 @@ class PalmTreeProtocol:
         self.adjacency_list: dict[str: list[RemotePeer]] = defaultdict(list)
         self.dimensions = (2 ** math.ceil(math.log2(len(peers)))).bit_length() - 1
         self.confirmed_peers: dict[str, PalmTreeInformResponse] = {}
-        self.max_forwards = max_forwards
         self.create_hypercube()
-        self.session = PalmTreeSession(
-            center_peer.id,
-            self.adjacency_list[center_peer.id],
-            session_key,
-            session_id,
-            self.max_forwards,
-            self.request_timeout,
+        self.session = session
+        self.session.body.update(
+            {'adjancent_peers': self.adjacency_list[self.center_peer]}
         )
-
         addr = (get_this_remote_peer().ip, get_free_port())
         loop = asyncio.get_event_loop()
         passive_server_sock = UDPProtocol.create_async_server_sock(loop, addr, family=const.IP_VERSION)
@@ -201,34 +191,35 @@ class PalmTreeProtocol:
             for j in range(self.dimensions):
                 neighbor = i ^ (1 << j)
                 if neighbor < len(self.peer_list):
-                    peer = peer_id_to_peer_mapping[j]
+                    peer = peer_id_to_peer_mapping[i]
                     neigh = peer_id_to_peer_mapping[neighbor]
                     self.adjacency_list[peer.id].append(neigh.id)
 
-    async def start(self):
-        """Start the process of sending data to peers."""
-        await self.inform_peers()
-        self.update_states()
-        await self.trigger_spanning_formation()
+    #
+    # call order :
+    # inform peers
+    # self.mediator.start_session
+    # update states
+    # trigger_spanning_formation
+    #
 
-    async def inform_peers(self):
+    async def inform_peers(self, trigger_header: WireData):
+
+        # updating center peer's data
         self.confirmed_peers[self.center_peer.id] = PalmTreeInformResponse(
             get_this_remote_peer().id,
             self.mediator.passive_server_sock.getsockname(),
             self.mediator.active_endpoint_addr,
             self.session.key,
         )
-        trigger_request = bytes(
-            WireData(
-                header=HEADERS.GOSSIP_CREATE_SESSION,
-                _id=get_this_remote_peer().id,
-                session_id=self.session.id,
-                session_key=self.session.key,
-                max_forwards=self.max_forwards,
-                adjacent_peers=None,
-            )
-        )
-        req_tasks = [self.trigger_schedular_of_peer(trigger_request, peer) for peer in self.peer_list]
+
+        req_tasks = [
+            self._trigger_schedular_of_peer(
+                bytes(trigger_header),
+                peer
+            ) for peer in self.peer_list
+        ]
+
         for f in asyncio.as_completed(req_tasks):
             r = await f
             if r[0]:
@@ -241,7 +232,7 @@ class PalmTreeProtocol:
                 del self.adjacency_list[discard_peer]
         # send an audit event to page confirming peers
 
-    async def trigger_schedular_of_peer(self, trigger_request: bytes, peer: RemotePeer) -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
+    async def _trigger_schedular_of_peer(self, trigger_request: bytes, peer: RemotePeer) -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
         loop = asyncio.get_event_loop()
         connection = await UDPProtocol.create_connection_async(loop, peer.req_uri, self.request_timeout)
         with connection:
@@ -250,6 +241,8 @@ class PalmTreeProtocol:
                 data, addr = await asyncio.wait_for(Wire.recv_datagram_async(connection), self.request_timeout)
             except asyncio.TimeoutError:
                 return False, peer
+            finally:
+                connection.close()
             reply_data = PalmTreeInformResponse.load_from(data)
             return True, reply_data
 
@@ -266,7 +259,11 @@ class PalmTreeProtocol:
 
             states_data['addresses_mapping'] = [
                 (p_id, peer_response.passive_addr, peer_response.active_addr)
-                for p_id, peer_response in zip(peer_ids, peer_responses) if peer_response
+                for p_id, peer_response in zip(
+                    peer_ids,
+                    peer_responses
+                )
+                if peer_response
             ]
 
             Wire.send_datagram(s, response_data.passive_addr, bytes(states_data))
@@ -314,14 +311,14 @@ class PalmTreeSession:
         `session_key(str)` : session key used to encrypt data
         `session_id(int)` : self-explanatory
         `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
-        `link_wait`(double) : timeout for any i/o operations
+        `link_wait_timeout`(double) : timeout for any i/o operations
     """
     originater_id: str
     adjacent_peers: list[str]
     id: int
     key: str
     max_forwards: int
-    link_wait: int
+    link_wait_timeout: int
 
 
 class PalmTreeLink:
@@ -329,8 +326,10 @@ class PalmTreeLink:
     ACTIVE = 0x01
     ONLINE = 0x01
     OFFLINE = 0x00
+    # STALE = 0X02
 
     id_factory = count()
+    # :todo try adding timeout mechanisms
 
     def __init__(self, a, b, peer_id, connection: connect.Socket = None, link_type: int = PASSIVE):
         """
@@ -369,7 +368,10 @@ class PalmTreeLink:
 
     def clear(self):
         self.status = PalmTreeLink.OFFLINE
-        self.connection.close()
+        try:
+            self.connection.close()
+        except OSError:
+            pass  # Handle socket already closed
         self.connection = None
 
     def __eq__(self, other):
@@ -407,7 +409,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 family=const.IP_VERSION,
             )
         self.transport, self.session_protocol = await func
-        self.passive_server_sock = self.transport.get_extra_info('socket')
+        # self.passive_server_sock = self.transport.get_extra_info('socket')
 
     def connection_made(self, transport):
         self.transport = transport
@@ -418,7 +420,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
         #  self.passive_server_sock can be socket.socket or connect.Socket
         #  depends on whether this object creator is the actual sender or else
         #
-        unpacked_data = wire.unpack_datagram(data)
+        unpacked_data = unpack_datagram(data)
         if unpacked_data is None:
             return
         print(f"[{self.session}] got some data at passive endpoint", unpacked_data)
@@ -446,7 +448,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
         peer_id = data.id
         if peer_id in self.active_links:
             self.active_links[peer_id].connection = connection
-        # stream connections are assumed to be active connections for now
+        # stream connections are assumed to be active links for now
 
     def gossip_tree_check(self, tree_check_packet: WireData, addr):
         this_peer_id = get_this_remote_peer().id
@@ -454,7 +456,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             header=HEADERS.GOSSIP_DOWNGRADE_CONN,
             _id=this_peer_id,
         )
-        if len(self.active_links) > self.session.max_forwards:
+        if tree_check_packet.id in self.active_links or len(self.active_links) > self.session.max_forwards:
             self.transport.sendto(bytes(gossip_link_reject_message), addr)
             return
 
@@ -468,7 +470,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             self.transport.sendto(bytes(upgrade_conn_packet), addr)
 
         tree_check_packet.id = this_peer_id
-        sampled_peer_ids = random.sample(list(self.all_links), self.session.max_forwards)
+        sampled_peer_ids = random.sample(list(self.all_links), min(len(self.all_links), self.session.max_forwards))
         for peer_id in sampled_peer_ids:
             passive_link, active_link = self.all_links[peer_id]
             passive_link.send_passive_message(bytes(tree_check_packet))
@@ -499,7 +501,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
     async def activate_link(self, link: PalmTreeLink):
         if link.is_online:
             return
-        stream_sock = await connect.create_connection_async(link.right, self.session.link_wait)
+        stream_sock = await connect.create_connection_async(link.right, self.session.link_wait_timeout)
         await Wire.send_async(
             stream_sock,
             bytes(
@@ -510,3 +512,8 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 )
             )
         )
+
+    def stop_session(self):
+        if self.transport:
+            self.transport.close()
+        self.session_task.cancel()
