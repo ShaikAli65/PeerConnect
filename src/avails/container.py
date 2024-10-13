@@ -78,8 +78,8 @@ class FileDict:
         self.__current[peer_id].discard(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def add_to_scheduled(self, file_handle):
-        self.__scheduled[file_handle.id] = file_handle
+    def add_to_scheduled(self, key, file_handle):
+        self.__scheduled[key] = file_handle
 
     def add_to_continued(self, peer_id, file_pool):
         self.__current[peer_id].discard(file_pool)
