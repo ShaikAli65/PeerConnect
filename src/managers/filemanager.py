@@ -3,9 +3,10 @@ import enum
 from itertools import count
 from pathlib import Path
 
-from src.avails import FileDict, Wire, WireData, connect, const, dialogs, use
+from src.avails import FileDict, OTMInformResponse, OTMSession, Wire, WireData, connect, const, dialogs, use
 from src.core import Dock, get_this_remote_peer, transfers
-from ..core.transfers import HEADERS, PeerFilePool
+from ..avails.connect import get_free_port
+from ..core.transfers import HEADERS, OTMFilesRelay, PeerFilePool
 
 
 class FileRegistry:
@@ -17,18 +18,12 @@ class FileRegistry:
         return str(next(cls.file_counter))
 
     @classmethod
-    def get_scheduled_transfer(cls, request_packet):
-        return cls.all_files.get_scheduled(request_packet['file_id'])
+    def get_scheduled_transfer(cls, any_id):
+        return cls.all_files.get_scheduled(any_id)
 
     @classmethod
-    def schedule_transfer(cls, file_reciever_handle):
-        cls.all_files.add_to_scheduled(file_reciever_handle)
-
-
-async def open_file_selector():
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, dialogs.Dialog.open_file_dialog_window)
-    return result
+    def schedule_transfer(cls, key, file_reciever_handle):
+        cls.all_files.add_to_scheduled(key, file_reciever_handle)
 
 
 def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
@@ -38,6 +33,40 @@ def file_recv_request_connection_arrived(connection: connect.Socket, file_req: W
     asyncio.create_task(f)
     print("scheduling file transfer request", file_handle.id)
     file_handle.connection_arrived(connection)
+
+
+def new_otm_request_arrived(req_data: WireData, addr):
+    session = OTMSession(
+        originater_id=req_data.id,
+        session_id=req_data['session_id'],
+        key=req_data['key'],
+        fanout=req_data['fanout'],
+        link_wait_timeout=req_data['link_wait_timeout'],
+        adjacent_peers=req_data['adjacent_peers'],
+        file_count=req_data['file_count'],
+    )
+    passive_endpoint_address = (get_this_remote_peer().ip, get_free_port())
+    relay = OTMFilesRelay(
+        session,
+        passive_endpoint_address,
+        get_this_remote_peer().uri
+    )
+    relay.start_session()
+    FileRegistry.schedule_transfer(session.session_id, relay)
+
+    reply = OTMInformResponse(
+        peer_id=get_this_remote_peer().id,
+        passive_addr=passive_endpoint_address,
+        active_addr=get_this_remote_peer().uri,
+        session_key=session.key,
+    )
+    return reply
+
+
+def update_otm_stream_connection(connection, link_data: WireData):
+    session_id = link_data['session_id']
+    otm_relay = FileRegistry.get_scheduled_transfer(session_id)
+    otm_relay.add_stream_link(connection, link_data)
 
 
 class State(enum.Enum):
@@ -135,4 +164,9 @@ class FileReceiver:
 
     def connection_arrived(self, connection):
         self.connection_wait.set_result(connection)
-    
+
+
+async def open_file_selector():
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, dialogs.Dialog.open_file_dialog_window)
+    return result
