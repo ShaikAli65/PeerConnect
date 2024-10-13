@@ -36,8 +36,8 @@ def get_gossip():
 
 
 def join_gossip(kademlia_server):
-    from .transfers import RumorMongerProtocol
-    Dock.global_gossip = RumorMongerProtocol()
+    from .transfers import RumorMongerProtocol, GlobalGossipMessageList
+    Dock.global_gossip = RumorMongerProtocol(GlobalGossipMessageList)
     get_gossip().initiate()
 
 

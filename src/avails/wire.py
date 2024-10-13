@@ -336,7 +336,7 @@ class PalmTreeInformResponse:
     session_key: str
 
     def __bytes__(self):
-        return umsgpack.dumps(dataclasses.asdict(self))
+        return umsgpack.dumps(dataclasses.asdict(self))  # noqa
 
     @staticmethod
     def load_from(data: bytes):
@@ -352,7 +352,9 @@ class OTMSession:
         `key(str)` : session key used to encrypt data
         `fanout`(int) : maximum number of resends this instance should perform for every packet received
         `link_wait_timeout`(double) : timeout for any i/o operations
+        `file_count`(int) : number of files to be sent in this session
         `adjacent_peers(list[str])` : all the peers to whom we should be in contact
+
     """
     originater_id: str
     session_id: str
@@ -360,3 +362,9 @@ class OTMSession:
     fanout: int
     link_wait_timeout: int
     adjacent_peers: list[str]
+    file_count: int
+
+
+class OTMInformResponse(PalmTreeInformResponse):
+    __slots__ = ()
+    __doc__ = PalmTreeInformResponse.__doc__
