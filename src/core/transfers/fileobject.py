@@ -1,12 +1,12 @@
+import contextlib
 import enum
-import itertools
 import mmap
 import multiprocessing
 import os
 import struct
 import sys
 from pathlib import Path
-from typing import Awaitable, Callable, Iterator
+from typing import Awaitable, Callable
 
 import tqdm
 import umsgpack
@@ -182,19 +182,33 @@ class PeerFilePool:
         self.download_path = download_path
 
     async def send_files(self, send_function: Callable[[bytes], Awaitable[bool]]):
-        await self.__send_int(self.file_count, send_function)
+        # await self.__send_int(self.file_count, send_function)
         return await self.send_file_loop(self.current_file, send_function)
 
     async def send_file_loop(self, current_index, send_function):
+
         for index in range(current_index, len(self.file_items)):
+            # there is another file incoming
+            await send_function(struct.pack('?', True))
             file_item = self.file_items[index]
             self.current_file = index
+
             if (self.to_stop or await self.send_file(send_function, file=file_item)) is False:
+                if self.to_stop:
+                    with contextlib.suppress(OSError):
+                        # we do nothing here because we are finalizing anyhow
+                        await send_function(struct.pack('?', False))
+
                 return False
             self.current_file = self.file_items[index + 1]
+
+        # end of transfer
+        await send_function(struct.pack('?', False))
+
         return True
 
-    async def send_file(self, send_function, file: _FileItem):
+    @classmethod
+    async def send_file(cls, send_function, file: _FileItem):
         print("sending file data", f"[PID:{os.getpid()}]")  # debug
 
         file_object = bytes(file)
@@ -210,13 +224,14 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        result = await self.send_actual_file(send_function, file, send_progress)
+        result = await cls.send_actual_file(send_function, file, send_progress)
         send_progress.close()
         return result
 
-    async def send_actual_file(self, send_function, file, send_progress):
+    @classmethod
+    async def send_actual_file(cls, send_function, file, send_progress):
         send_progress.update(file.seeked)
-        chunk_size = self.calculate_chunk_size(file.size)
+        chunk_size = cls.calculate_chunk_size(file.size)
         print('sending file data', file)  # debug
         with open(file.path, 'rb') as f:
             seek = file.seeked
@@ -235,7 +250,7 @@ class PeerFilePool:
         return True
 
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
-        self.file_count = await self.__get_int_from_sender(recv_function)
+        # self.file_count = await self.__get_int_from_sender(recv_function)
         print("received file count", self.file_count)  # debug
         w = await self.receive_file_loop(self.file_count, recv_function)
         if w:
@@ -244,24 +259,18 @@ class PeerFilePool:
             return StatusCodes.PAUSED, False
 
     async def receive_file_loop(self, count, recv_function):
-        for _ in range(count):
+        while True:
+            what = struct.unpack('?', await recv_function(1))
+            if not what:
+                return True
+
             if self.to_stop:
-                return
+                return False
+
             if await self.recv_file(recv_function) is False:
-                return
+                return False
             print("completed receiving", self.current_file)  # debug
-            self.file_count -= 1
-        return True
-
-    @staticmethod
-    async def __get_int_from_sender(recv_function: Callable[[int], Awaitable[bytes]]):
-        raw_int = await recv_function(4)
-        return struct.unpack('!I', raw_int)[0]
-
-    @staticmethod
-    async def __send_int(integer, send_function: Callable[[bytes], Awaitable[bool]]):
-        packed_int = struct.pack('!I', integer)
-        return await send_function(packed_int)
+            self.file_count += 1
 
     async def recv_file(self, recv_function):
         file_item_size = await self.__get_int_from_sender(recv_function)
@@ -373,6 +382,19 @@ class PeerFilePool:
         # -> ---------------------- file continuation part
 
         return await self.receive_file_loop(self.file_count, sender_sock.asendall)
+
+    def attach_files(self, files: list[FileItem]):
+        self.file_items.extend(files)
+
+    @staticmethod
+    async def __get_int_from_sender(recv_function: Callable[[int], Awaitable[bytes]]):
+        raw_int = await recv_function(4)
+        return struct.unpack('!I', raw_int)[0]
+
+    @staticmethod
+    async def __send_int(integer, send_function: Callable[[bytes], Awaitable[bool]]):
+        packed_int = struct.pack('!I', integer)
+        return await send_function(packed_int)
 
     def _add_error_ext(self, file_item: _FileItem):
         """
