@@ -4,7 +4,7 @@ import socket
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer, join_gossip
 from . import discover, get_gossip, transfers
-from ..managers import gossip_manager
+from ..managers import filemanager, gossipmanager
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
@@ -26,6 +26,8 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             self.handle_gossip_message(req_data)
         elif req_data.match_header(transfers.HEADERS.GOSSIP_CREATE_SESSION):
             self.handle_gossip_session(req_data, addr)
+        elif req_data.match_header(transfers.HEADERS.OTM_FILE_TRANSFER):
+            self.handle_onetomanyfile_session(req_data, addr)
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
@@ -47,7 +49,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         """ Handle NETWORK_FIND_REPLY request """
         bootstrap_node_addr = tuple(req_data['connect_uri'])
         f = use.wrap_with_tryexcept(Dock.kademlia_network_server.bootstrap, [bootstrap_node_addr])
-        asyncio.ensure_future(f)
+        asyncio.create_task(f)
         print(f"Bootstrap initiated to: {bootstrap_node_addr}")
 
     @staticmethod
@@ -59,8 +61,12 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     @staticmethod
     def handle_gossip_session(req_data, addr):
-        f = use.wrap_with_tryexcept(gossip_manager.new_gossip_request_arrived, req_data, addr)
-        asyncio.ensure_future(f)
+        f = use.wrap_with_tryexcept(gossipmanager.new_gossip_request_arrived, req_data, addr)
+        asyncio.create_task(f)
+
+    def handle_onetomanyfile_session(self, req_data, addr):
+        reply = filemanager.new_otm_request_arrived(req_data, addr)
+        self.transport.sendto(reply, addr)
 
     def connection_made(self, transport):
         self.transport = transport
