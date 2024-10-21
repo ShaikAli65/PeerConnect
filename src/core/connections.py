@@ -10,7 +10,7 @@ from src.avails import (RemotePeer, SocketStore, Wire, WireData, connect, const,
 from . import Dock, get_this_remote_peer
 from .transfers import HEADERS
 from .webpage_handlers import pagehandle
-from ..managers import directorymanager, filemanager, gossip_manager
+from ..managers import directorymanager, filemanager, gossipmanager
 
 
 async def initiate_connections():
@@ -109,7 +109,11 @@ class Acceptor:
 
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
             use.echo_print("got a gossip stream link connection request delegating to gossip manager", connection)  # debug
-            return gossip_manager.update_gossip_stream_socket(connection, hand_shake)
+            return gossipmanager.update_gossip_stream_socket(connection, hand_shake)
+
+        if hand_shake.match_header(HEADERS.OTM_UPDATE_STREAM_LINK):
+            use.echo_print("got a gossip stream link connection request delegating to gossip manager", connection)  # debug
+            return filemanager.update_otm_stream_connection(connection, hand_shake)
 
     async def handle_peer(self, peer_id):
         sock = Dock.connected_peers.get_socket(peer_id)

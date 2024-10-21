@@ -1,10 +1,11 @@
 import dataclasses
+import enum
 import json as _json
 import struct
 from asyncio import DatagramTransport
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import NamedTuple, Optional, Union
 
 import umsgpack
 
@@ -117,7 +118,7 @@ class DataWeaver:
         returns json string representation of the data
         :return: string
         """
-        return _json.dumps(self.__data)
+        return str(self)
 
     def match_content(self, _content) -> bool:
         return self.__data['content'] == _content
@@ -170,11 +171,7 @@ class DataWeaver:
         return self.header[0] == '\xff'
 
     def __str__(self):
-        return "\n".join([f"{'-' * 50}",
-                          f"header  : {self.header}",
-                          f"content : {self.content}",
-                          f"id      : {self.id}",
-                          f"{'-' * 50}"])
+        return _json.dumps(self.__data)
 
     def __repr__(self):
         return f'DataWeaver({self.__data})'
@@ -226,6 +223,10 @@ class WireData:
 
     def __repr__(self):
         return str(self)
+
+
+class StatusMessage:
+    ...
 
 
 class GossipMessage:
@@ -336,15 +337,36 @@ class PalmTreeInformResponse:
     session_key: str
 
     def __bytes__(self):
-        return umsgpack.dumps(dataclasses.asdict(self))
+        return umsgpack.dumps(dataclasses.asdict(self))  # noqa
 
     @staticmethod
     def load_from(data: bytes):
         return PalmTreeInformResponse(**umsgpack.loads(data))
 
 
-@dataclass(slots=True, frozen=True)
-class OTMSession:
+@dataclass(slots=True)
+class PalmTreeSession:
+    """
+    Args:
+        `originater_id(str)`: the one who initiated this session
+        `adjacent_peers(list[str])` : all the peers to whom we should be in contact
+        `session_key(str)` : session key used to encrypt data
+        `session_id(int)` : self-explanatory
+        `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
+        `link_wait_timeout`(double) : timeout for any i/o operations
+    """
+    originater_id: str
+    adjacent_peers: list[str]
+    session_id: int
+    key: str
+    fanout: int
+    link_wait_timeout: int
+    adjacent_peers: list[str]
+    chunk_size: int
+
+
+@dataclass(slots=True)
+class OTMSession(PalmTreeSession):
     """
     Args:
         `originater_id(str)`: the one who initiated this session
@@ -352,11 +374,32 @@ class OTMSession:
         `key(str)` : session key used to encrypt data
         `fanout`(int) : maximum number of resends this instance should perform for every packet received
         `link_wait_timeout`(double) : timeout for any i/o operations
+        `file_count`(int) : number of files to be sent in this session
         `adjacent_peers(list[str])` : all the peers to whom we should be in contact
+        `chunk_size(int)` : size of chunk to read/write in the current session
     """
-    originater_id: str
-    session_id: str
-    key: str
-    fanout: int
-    link_wait_timeout: int
-    adjacent_peers: list[str]
+    file_count: int
+
+
+class OTMInformResponse(PalmTreeInformResponse):
+    __slots__ = ()
+    __doc__ = PalmTreeInformResponse.__doc__
+
+
+#
+# class OtmChunkType(enum.IntEnum):
+#     DATA = 0x1
+
+class OTMChunk(NamedTuple):
+    chunk_number: int
+    data: bytes
+
+    # type: int
+
+    def __bytes__(self):
+        return umsgpack.dumps(self)
+
+    @staticmethod
+    def load_from(data: bytes):
+        unpacked_data = umsgpack.loads(data)
+        return OTMChunk(*unpacked_data)

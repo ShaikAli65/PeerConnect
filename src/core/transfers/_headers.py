@@ -19,6 +19,8 @@ class HEADERS:
     GOSSIP_SESSION_STATE_UPDATE = 'gossip_update_state'
     GOSSIP_UPDATE_STREAM_LINK = 'add_stream_link'
 
+    OTM_FILE_TRANSFER = 'one to many file transfer request'
+    OTM_UPDATE_STREAM_LINK = 'add_stream_link'
     # :todo: Make all these into even/odd to differentiate between signal/data packets
 
     HANDLE_COMMAND = 'this is command '

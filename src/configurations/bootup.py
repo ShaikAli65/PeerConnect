@@ -29,7 +29,7 @@ def initiate_bootup():
     # to1do remove this ip in bootup.py
     # const.THIS_IP = '172.16.199.138'
     # const.THIS_IP = '192.168.217.188'
-    validate_ports()
+    validate_ports(const.THIS_IP)
 
 
 def get_ip() -> tuple[str, int]:
@@ -168,12 +168,12 @@ def write_default_configurations(path):
         profile_file.write(default_profile_file)
 
 
-def validate_ports() -> None:
+def validate_ports(ip) -> None:
     ports_list = [const.PORT_THIS, const.PORT_PAGE,
                   const.PORT_FILE, const.PORT_NETWORK,]  # const.PORT_REQ,]
     for i, port in enumerate(ports_list):
-        if not connect.is_port_empty(port):
-            ports_list[i] = connect.get_free_port()
+        if not connect.is_port_empty(port, ip):
+            ports_list[i] = connect.get_free_port(ip)
             use.echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
     const.PORT_THIS, const.PORT_PAGE, const.PORT_FILE, const.PORT_NETWORK = ports_list
     # const.PORT_REQ,

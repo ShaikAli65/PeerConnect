@@ -1,10 +1,9 @@
 import asyncio as _asyncio
-import random
 import socket as _socket
 from abc import ABC, abstractmethod
 from asyncio import AbstractEventLoop
 from functools import wraps
-from typing import IO, Self, Optional
+from typing import IO, Optional, Self
 
 from . import const, useables
 
@@ -363,23 +362,21 @@ def is_socket_connected(sock: Socket):
             return False
 
 
-def get_free_port() -> int:
+def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
-    random_port = random.randint(10000, 65535)
-    while not is_port_empty(random_port):
-        random_port = random.randint(10000, 65535)
-    return random_port
+    from ..core import get_this_remote_peer
+    ip = ip or get_this_remote_peer().ip
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.bind((ip, 0))  # Bind to port 0 to get a free port
+        return s.getsockname()[1]  # Return the chosen port
 
 
-def is_port_empty(port):
-    try:
-        addr = ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
-        with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
+def is_port_empty(port, addr=None):
+    addr = addr or ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        try:
+            # Try to bind the socket to the specified port
             s.bind(addr)
-            t = True
-        with _socket.socket(const.IP_VERSION, _socket.SOCK_DGRAM) as s:
-            s.bind(addr)
-            u = True
-        return t and u
-    except (OSError, _socket.error, _socket.gaierror):
-        return False
+            return True  # Port is empty
+        except OSError:
+            return False  # Port is not empty or some other error occurred

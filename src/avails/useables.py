@@ -9,6 +9,7 @@ import sys
 import threading
 from datetime import datetime
 from sys import _getframe  # noqa
+from uuid import uuid4
 
 import select
 
@@ -17,6 +18,10 @@ from .constants import LOCK_PRINT, MAX_RETIRES
 
 def func_str(func_name):
     return f"{func_name.__name__}()\\{os.path.relpath(func_name.__code__.co_filename)}"
+
+
+def get_unique_id(_type: type):
+    return _type(uuid4())
 
 
 def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0):

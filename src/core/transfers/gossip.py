@@ -1,37 +1,28 @@
 import asyncio
 import math
 import random
-import socket
 import time
 from collections import defaultdict
-from dataclasses import dataclass
 from itertools import count
-from uuid import uuid4
+from typing import Optional
 
-from src.avails import (
-    GossipMessage,
-    PalmTreeInformResponse,
-    RemotePeer,
-    RumorMessageItem,
-    WireData,
-    Wire, connect, const, use, unpack_datagram,
-)
-
+from src.avails import (GossipMessage, PalmTreeInformResponse, PalmTreeSession, RemotePeer, RumorMessageItem, Wire,
+                        WireData, connect,
+                        const, use, wire)
 from src.avails.connect import UDPProtocol, get_free_port
+from src.avails.useables import get_unique_id
 from src.core import Dock, get_this_remote_peer
 from src.core.transfers import HEADERS
 
 
 class RumorMessageList:
-    old_message_time_limit = 2
 
     def __init__(self, ttl):
         # tuple(timein, messageItem)
         self.message_list = {}
         self.ttl = ttl
-        loop = asyncio.get_event_loop()
         self.dropped = set()
-        self.message_remover = loop.call_later(self.ttl, self._disseminate)
+        self._disseminate()
 
     def _disseminate(self):
         current_time = self._get_current_clock()
@@ -44,11 +35,11 @@ class RumorMessageList:
                 self.message_list.pop(message_id)
                 self.dropped.add(message_id)
         loop = asyncio.get_event_loop()
-        self.message_remover = loop.call_later(self.ttl / 2, self._disseminate)
+        self.message_remover = loop.call_later(self.ttl / 2, self._disseminate)  # noqa
 
     @classmethod
     def _is_old_enough(cls, current_time, message_time_in):
-        return current_time - message_time_in > cls.old_message_time_limit
+        return current_time - message_time_in > const.NODE_POV_GOSSIP_TTL
 
     @staticmethod
     def _get_current_clock():
@@ -56,7 +47,7 @@ class RumorMessageList:
 
     @staticmethod
     def _get_list_of_peers():
-        return set(Dock.peer_list.keys())
+        return NotImplemented
 
     def push(self, message: GossipMessage):
         message_item = RumorMessageItem(
@@ -97,14 +88,20 @@ class RumorMessageList:
         return reservoir
 
 
+class GlobalGossipMessageList(RumorMessageList):
+    @staticmethod
+    def _get_list_of_peers():
+        return set(Dock.peer_list.keys())
+
+
 class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
     """
-    alpha = 4  # no.of nodes to forward a gossip at once
+    alpha = const.DEFAULT_GOSSIP_FANOUT  # no.of nodes to forward a gossip at once
 
-    def __init__(self):
-        self.messages = RumorMessageList(const.NODE_POV_GOSSIP_TTL)
+    def __init__(self, message_list_class: type(RumorMessageList)):
+        self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
         self.send_sock = None
         self.global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
 
@@ -116,8 +113,8 @@ class RumorMongerProtocol:
         if not self.should_gossip(data):
             return
         print("gossiping message to", end=" ")
-        if data.id in self.messages:
-            sampled_peers = self.messages.sample_peers(data.id, self.alpha)
+        if data.id in self.message_list:
+            sampled_peers = self.message_list.sample_peers(data.id, self.alpha)
             for peer_id in sampled_peers:
                 p = self.forward_payload(data, peer_id)
                 print(p, end=", ")
@@ -127,7 +124,7 @@ class RumorMongerProtocol:
         print("Gossip message received and processed: %s" % data)
 
     def should_gossip(self, message):
-        if message.id in self.messages.dropped:
+        if message.id in self.message_list.dropped:
             print("not gossiping due to message id found in dropped", message.id)
             return False
         elapsed_time = time.time() - message.created
@@ -143,8 +140,8 @@ class RumorMongerProtocol:
 
     def gossip_message(self, message: GossipMessage):
         print("gossiping new message", message, "to", end="")
-        self.messages.push(message)
-        sampled_peers = self.messages.sample_peers(message.id, self.alpha)
+        self.message_list.push(message)
+        sampled_peers = self.message_list.sample_peers(message.id, self.alpha)
         for peer_id in sampled_peers:
             p = self.forward_payload(message, peer_id)
             print(p, end=", ")
@@ -160,27 +157,25 @@ class RumorMongerProtocol:
 class PalmTreeProtocol:
     request_timeout = 3
 
-    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer]):
+    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer], mediator_class):
         """
         !! do not include center_peer in peers list passed in
         """
         self.peer_list = peers
         self.center_peer = center_peer
         self.adjacency_list: dict[str: list[RemotePeer]] = defaultdict(list)
-        self.dimensions = (2 ** math.ceil(math.log2(len(peers)))).bit_length() - 1
         self.confirmed_peers: dict[str, PalmTreeInformResponse] = {}
+        self.dimensions = (2 ** math.ceil(math.log2(len(peers)))).bit_length() - 1
         self.create_hypercube()
         self.session = session
-        self.session.body.update(
-            {'adjancent_peers': self.adjacency_list[self.center_peer]}
-        )
-        addr = (get_this_remote_peer().ip, get_free_port())
-        loop = asyncio.get_event_loop()
-        passive_server_sock = UDPProtocol.create_async_server_sock(loop, addr, family=const.IP_VERSION)
-        self.mediator = PalmTreeMediator(
+        self.session.adjacent_peers = self.adjacency_list[self.center_peer]
+        self.relay = mediator_class(
             self.session,
-            passive_server_sock,
-            get_this_remote_peer().uri
+            (
+                get_this_remote_peer().ip,
+                get_free_port()
+            ),
+            get_this_remote_peer().uri,
         )
 
     def create_hypercube(self):
@@ -208,8 +203,8 @@ class PalmTreeProtocol:
         # updating center peer's data
         self.confirmed_peers[self.center_peer.id] = PalmTreeInformResponse(
             get_this_remote_peer().id,
-            self.mediator.passive_server_sock.getsockname(),
-            self.mediator.active_endpoint_addr,
+            self.relay.passive_endpoint_addr,
+            self.relay.active_endpoint_addr,
             self.session.key,
         )
 
@@ -232,17 +227,23 @@ class PalmTreeProtocol:
                 del self.adjacency_list[discard_peer]
         # send an audit event to page confirming peers
 
-    async def _trigger_schedular_of_peer(self, trigger_request: bytes, peer: RemotePeer) -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
+    async def _trigger_schedular_of_peer(
+            self,
+            trigger_request: bytes,
+            peer: RemotePeer
+    ) \
+            -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
+
         loop = asyncio.get_event_loop()
         connection = await UDPProtocol.create_connection_async(loop, peer.req_uri, self.request_timeout)
         with connection:
             Wire.send_datagram(connection, peer.req_uri, trigger_request)
+
             try:
                 data, addr = await asyncio.wait_for(Wire.recv_datagram_async(connection), self.request_timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return False, peer
-            finally:
-                connection.close()
+
             reply_data = PalmTreeInformResponse.load_from(data)
             return True, reply_data
 
@@ -252,24 +253,25 @@ class PalmTreeProtocol:
             header=HEADERS.GOSSIP_SESSION_STATE_UPDATE,
             addresses_mapping=None,
         )
-        s = self.mediator.passive_server_sock
-        for peer_id, response_data in self.confirmed_peers.items():
-            peer_ids = self.adjacency_list[peer_id]
-            peer_responses = [self.confirmed_peers.get(p_id) for p_id in peer_ids]
+        s = connect.UDPProtocol.create_sync_sock(const.IP_VERSION)
+        with s:
+            for peer_id, response_data in self.confirmed_peers.items():
+                peer_ids = self.adjacency_list[peer_id]
+                peer_responses = [self.confirmed_peers.get(p_id) for p_id in peer_ids]
 
-            states_data['addresses_mapping'] = [
-                (p_id, peer_response.passive_addr, peer_response.active_addr)
-                for p_id, peer_response in zip(
-                    peer_ids,
-                    peer_responses
-                )
-                if peer_response
-            ]
+                states_data['addresses_mapping'] = [
+                    (p_id, peer_response.passive_addr, peer_response.active_addr)
+                    for p_id, peer_response in zip(
+                        peer_ids,
+                        peer_responses
+                    )
+                    if peer_response
+                ]
 
-            Wire.send_datagram(s, response_data.passive_addr, bytes(states_data))
+                Wire.send_datagram(s, response_data.passive_addr, bytes(states_data))
 
     def __update_internal_mediator_state(self):
-        self.mediator.gossip_update_state(
+        self.relay.gossip_update_state(
             WireData(
                 header=HEADERS.GOSSIP_SESSION_STATE_UPDATE,
                 addresses_mapping=(
@@ -288,37 +290,18 @@ class PalmTreeProtocol:
         )
 
     async def trigger_spanning_formation(self):
-        tree_check_message_id = uuid4().int
+        tree_check_message_id = get_unique_id(int)
         spanning_trigger_header = WireData(
-                header=HEADERS.GOSSIP_TREE_CHECK,
-                _id=get_this_remote_peer().id,
-                message_id=tree_check_message_id,
-                session_id=self.session.id,
-            )
+            header=HEADERS.GOSSIP_TREE_CHECK,
+            _id=get_this_remote_peer().id,
+            message_id=tree_check_message_id,
+            session_id=self.session.id,
+        )
         # initial_peers = self.adjacency_list[self.center_peer]
         # if not initial_peers:
         #     # :todo: handle the case where all the peers adjacent to center peer went offline
         #     pass
-        self.mediator.gossip_tree_check(spanning_trigger_header, self.mediator.passive_server_sock.getsockname())
-
-
-@dataclass(slots=True)
-class PalmTreeSession:
-    """
-    Args:
-        `originater_id(str)`: the one who initiated this session
-        `adjacent_peers(list[str])` : all the peers to whom we should be in contact
-        `session_key(str)` : session key used to encrypt data
-        `session_id(int)` : self-explanatory
-        `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
-        `link_wait_timeout`(double) : timeout for any i/o operations
-    """
-    originater_id: str
-    adjacent_peers: list[str]
-    id: int
-    key: str
-    max_forwards: int
-    link_wait_timeout: int
+        self.relay.gossip_tree_check(spanning_trigger_header, self.relay.passive_endpoint_addr)
 
 
 class PalmTreeLink:
@@ -326,12 +309,14 @@ class PalmTreeLink:
     ACTIVE = 0x01
     ONLINE = 0x01
     OFFLINE = 0x00
-    # STALE = 0X02
+    STALE = 0x02
+    LAGGING = 0x03
 
     id_factory = count()
+
     # :todo try adding timeout mechanisms
 
-    def __init__(self, a, b, peer_id, connection: connect.Socket = None, link_type: int = PASSIVE):
+    def __init__(self, a, b, peer_id, connection=None, link_type: int = PASSIVE):
         """
         Arguments:
             a = address of left end of this link
@@ -343,7 +328,8 @@ class PalmTreeLink:
         self.type = link_type
         self.left = a
         self.right = b
-        self.connection = connection
+        # assert hasattr(connection,'sendto') or hasattr(connection,'sendall')
+        self.connection: connect.Socket = connection
         self.peer_id = peer_id
         self.id = next(self.id_factory)
         self.status = self.OFFLINE
@@ -366,6 +352,10 @@ class PalmTreeLink:
     def is_online(self):
         return self.status == self.ONLINE
 
+    @property
+    def is_lagging(self):
+        return self.status == self.LAGGING
+
     def clear(self):
         self.status = PalmTreeLink.OFFLINE
         try:
@@ -381,13 +371,22 @@ class PalmTreeLink:
         return hash(self.id) ^ hash(self.right) ^ hash(self.left)
 
 
-class PalmTreeMediator(asyncio.DatagramProtocol):
-    def __init__(self, session, passive_server_sock=None, active_endpoint_addr=None):
+class PalmTreeRelay(asyncio.DatagramProtocol):
+    def __init__(self, session, passive_endpoint_addr: tuple[str, int] = None,
+                 active_endpoint_addr: tuple[str, int] = None):
+        self._read_link: Optional[PalmTreeLink] = None
         self.session: PalmTreeSession = session
         self.all_tasks = []
-        self.passive_server_sock: connect.Socket | socket.socket = passive_server_sock
-        self.active_endpoint_addr: tuple[str, int] = active_endpoint_addr
+
+        self.passive_endpoint_addr = passive_endpoint_addr
+
+        # keeping a reference for consistency purpose
+        self.active_endpoint_addr = active_endpoint_addr
+
+        # all links are created initially
         self.all_links: dict[str, tuple[PalmTreeLink, PalmTreeLink]] = {}
+
+        # references from all links are sorted out based on connectivity
         self.active_links: dict[str, PalmTreeLink] = {}
         self.passive_links: dict[str, PalmTreeLink] = {}
 
@@ -397,17 +396,11 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
 
     async def session_init(self):
         loop = asyncio.get_event_loop()
-        if self.passive_server_sock:
-            func = loop.create_datagram_endpoint(
-                lambda: self,
-                sock=self.passive_server_sock,
-            )
-        else:
-            func = loop.create_datagram_endpoint(
-                lambda: self,
-                (get_this_remote_peer().ip, get_free_port()),
-                family=const.IP_VERSION,
-            )
+        func = loop.create_datagram_endpoint(
+            lambda: self,
+            self.passive_endpoint_addr,
+            family=const.IP_VERSION,
+        )
         self.transport, self.session_protocol = await func
         # self.passive_server_sock = self.transport.get_extra_info('socket')
 
@@ -415,12 +408,12 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        #
-        #  WARNING: only use self.transport to perform any i/o operations
-        #  self.passive_server_sock can be socket.socket or connect.Socket
-        #  depends on whether this object creator is the actual sender or else
-        #
-        unpacked_data = unpack_datagram(data)
+        """
+        Provides a rpc-like behaviour
+        header in the data packet directly corresponds to function name,
+        and all supported functions take (data packet, address) of sender peer as arguments
+        """
+        unpacked_data = wire.unpack_datagram(data)
         if unpacked_data is None:
             return
         print(f"[{self.session}] got some data at passive endpoint", unpacked_data)
@@ -429,7 +422,7 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
 
     def gossip_update_state(self, state_data: WireData, addr=None):
         addresses = state_data['addresses_mapping']
-        this_passive_address = self.passive_server_sock.getsockname()
+        this_passive_address = self.passive_endpoint_addr
         this_active_address = self.active_endpoint_addr
         for peer_id, passive_addr, active_addr in addresses:
             active_link = PalmTreeLink(this_active_address, active_addr, peer_id, link_type=PalmTreeLink.ACTIVE)
@@ -437,30 +430,20 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 this_passive_address,
                 passive_addr,
                 peer_id,
-                self.passive_server_sock,
+                self.transport,
                 link_type=PalmTreeLink.PASSIVE
             )
             passive_link.status = PalmTreeLink.ONLINE
             self.all_links[peer_id] = (passive_link, active_link)
         self.session.max_forwards = min(len(self.all_links), self.session.max_forwards)
 
-    def add_stream_link(self, data: WireData, connection):
-        peer_id = data.id
-        if peer_id in self.active_links:
-            self.active_links[peer_id].connection = connection
-        # stream connections are assumed to be active links for now
-
     def gossip_tree_check(self, tree_check_packet: WireData, addr):
-        this_peer_id = get_this_remote_peer().id
-        gossip_link_reject_message = WireData(
-            header=HEADERS.GOSSIP_DOWNGRADE_CONN,
-            _id=this_peer_id,
-        )
-        if tree_check_packet.id in self.active_links or len(self.active_links) > self.session.max_forwards:
-            self.transport.sendto(bytes(gossip_link_reject_message), addr)
-            return
+        if self.may_be_make_rejection(tree_check_packet, addr):
+            return False
 
+        this_peer_id = get_this_remote_peer().id
         sender_id = tree_check_packet.id
+
         if sender_id in self.all_links:
             upgrade_conn_packet = WireData(
                 header=HEADERS.GOSSIP_UPGRADE_CONN,
@@ -468,9 +451,11 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
             )
             self.active_links[sender_id] = self.all_links[sender_id][PalmTreeLink.ACTIVE]
             self.transport.sendto(bytes(upgrade_conn_packet), addr)
+            self.sender_links = self.all_links[sender_id]
 
         tree_check_packet.id = this_peer_id
-        sampled_peer_ids = random.sample(list(self.all_links), min(len(self.all_links), self.session.max_forwards))
+        sampled_peer_ids = random.sample(list(self.all_links), min(len(self.all_links), self.session.fanout))
+
         for peer_id in sampled_peer_ids:
             passive_link, active_link = self.all_links[peer_id]
             passive_link.send_passive_message(bytes(tree_check_packet))
@@ -482,21 +467,39 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 for peer_id in set(self.all_links) - set(self.active_links)
             }
         )
+        return True
 
-    def gossip_downgrade_connection(self, data: WireData, addr:tuple[str, int]):
+    def may_be_make_rejection(self, tree_check_packet, addr):
+        if tree_check_packet.id in self.active_links or len(self.active_links) > self.session.fanout:
+            gossip_link_reject_message = WireData(
+                header=HEADERS.GOSSIP_DOWNGRADE_CONN,
+                _id=get_this_remote_peer().id,
+            )
+            self.transport.sendto(bytes(gossip_link_reject_message), addr)
+            return False
+        return True
+
+    def gossip_downgrade_connection(self, data: WireData, addr: tuple[str, int]):
         peer_id = data.id
         if peer_id in self.active_links:
             a_link = self.active_links.pop(peer_id)
             a_link.clear()
             self.passive_links[peer_id] = self.all_links[peer_id][PalmTreeLink.PASSIVE]
 
-    def gossip_upgrade_connection(self, data: WireData, addr:tuple[str, int]):
+    def gossip_upgrade_connection(self, data: WireData, addr: tuple[str, int]):
         peer_id = data.id
         if peer_id not in self.active_links:
             return
         link = self.active_links[peer_id]
         f = use.wrap_with_tryexcept(self.activate_link, link)
         asyncio.create_task(f)
+
+    def add_stream_link(self, connection, data: WireData):
+        assert self.session.session_id == data['session_id']
+        peer_id = data.id
+        if peer_id in self.active_links:
+            self.active_links[peer_id].connection = connection
+        # stream connections are assumed to be active links for now
 
     async def activate_link(self, link: PalmTreeLink):
         if link.is_online:
@@ -508,10 +511,13 @@ class PalmTreeMediator(asyncio.DatagramProtocol):
                 WireData(
                     header=HEADERS.GOSSIP_UPDATE_STREAM_LINK,
                     _id=get_this_remote_peer().id,
-                    session_id=self.session.id,
+                    session_id=self.session.session_id,
                 )
             )
         )
+
+    def _get_forward_links(self):
+        return set(self.active_links.values()) - {self._read_link}
 
     def stop_session(self):
         if self.transport:

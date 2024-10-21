@@ -1,9 +1,12 @@
+import asyncio
 import os
 
-from src.core import Dock
+from src.configurations import bootup, configure
+from src.core import Dock, connections, requests
 from src.core.webpage_handlers import pagehandle
-from src.managers.statemanager import StateManager
-from tests.test import *
+from src.managers import profilemanager
+from src.managers.statemanager import State, StateManager
+from src.avails import const
 
 
 def initial_states():
@@ -14,8 +17,8 @@ def initial_states():
     s5 = State("launching webpage", pagehandle.initiate_pagehandle, is_blocking=True)
     s6 = State("waiting for profile choice", Dock.PROFILE_WAIT.wait)
     s7 = State("initiating requests", requests.initiate, is_blocking=True)
-    # s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
-    return s1, s2, s3, s4, s5,  # s6, s7,
+    s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    return s1, s2, s3, s4, s5, s6, s7, s8
 
 
 async def initiate(states):
@@ -26,6 +29,5 @@ async def initiate(states):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    initial_states = test_initial_states
     const.debug = False
     asyncio.run(initiate(initial_states()), debug=True)

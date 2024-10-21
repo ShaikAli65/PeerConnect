@@ -3,6 +3,7 @@ import contextlib
 import socket
 from collections import OrderedDict, defaultdict
 from typing import Union
+from weakref import WeakSet
 
 from . import connect
 
@@ -57,6 +58,16 @@ class PeerDict(dict):
 
 
 class FileDict:
+    """
+    stores file handles/pools references
+    all the containers are two-dimensional
+    {
+        peer id: set{file_handles/pools}  # uses set 
+    }
+    completed : stores weak references to file handles/pools that are completed
+    current : stores strong references to file handles/pools that are running
+    continued : stores strong references file handles/pools that are paused or are meant to resumed
+    """
     __slots__ = '__continued', '__completed', '__current', '__scheduled'
     __annotations__ = {
         '__continued': dict,
@@ -68,7 +79,7 @@ class FileDict:
     def __init__(self):
         self.__continued = defaultdict(set)  # str: flip[PeerFilePool]
         self.__scheduled = {}
-        self.__completed = defaultdict(set)  # str: flip[PeerFilePool]
+        self.__completed = defaultdict(WeakSet)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
 
     def add_to_current(self, peer_id, file_pool):
@@ -78,8 +89,8 @@ class FileDict:
         self.__current[peer_id].discard(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def add_to_scheduled(self, file_handle):
-        self.__scheduled[file_handle.id] = file_handle
+    def add_to_scheduled(self, key, file_handle):
+        self.__scheduled[key] = file_handle
 
     def add_to_continued(self, peer_id, file_pool):
         self.__current[peer_id].discard(file_pool)
@@ -89,8 +100,10 @@ class FileDict:
         self.__continued[peer_id].remove(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def get_running_file(self, peer_id, file_id):
-        return next(file for file in self.__current[peer_id] if file.id == file_id)
+    def get_running_file(self, peer_id, file_id=None):
+        if file_id:
+            return next(file for file in self.__current[peer_id] if file.id == file_id)
+        return list(self.__current[peer_id])
 
     def get_completed_file(self, peer_id, file_id):
         return next(file for file in self.__completed[peer_id] if file.id == file_id)

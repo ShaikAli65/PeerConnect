@@ -1,12 +1,11 @@
+import contextlib
 import enum
-import itertools
 import mmap
 import multiprocessing
 import os
 import struct
-import sys
 from pathlib import Path
-from typing import Awaitable, Callable, Iterator
+from typing import Awaitable, Callable, Iterable
 
 import tqdm
 import umsgpack
@@ -35,7 +34,7 @@ def shorten_path(path, max_length):
     return f"{short_path[:max_length - 3]}..."
 
 
-class _FileItem:
+class FileItem:
     """
     Overview:
         The _FileItem class is designed to represent a file with its metadata, such as name, size, path, and whether it has been seeked.
@@ -106,7 +105,7 @@ class _FileItem:
     def add_error_ext(self, error_ext):
         """
         Adds error extension to file path and renames it
-        original extension if preserved for undoing this operation
+        original extension is preserved for undoing this operation
         Example:
             before:
                 file_path = "a/b/c/d.txt"
@@ -121,7 +120,8 @@ class _FileItem:
 
     def remove_error_ext(self):
         """
-        Removes the error extension from the file name, restoring it to its original name.
+        Removes the error extension from the file name,
+        restoring it to its original name.
 
         If the original extension is not available, raises a ValueError.
         """
@@ -142,14 +142,6 @@ class _FileItem:
         return (self.name, self.size, self.path)[item]
 
 
-if sys.version_info >= (3, 12):
-    from typing import TypeAlias
-
-    FileItem: TypeAlias = _FileItem
-else:
-    FileItem = _FileItem
-
-
 class StatusCodes(enum.Enum):
     PAUSED = 5
     ABORTING = 6
@@ -164,14 +156,14 @@ class PeerFilePool:
 
     def __init__(
             self,
-            file_items: list[_FileItem] = None,
+            file_items: list[FileItem] = None,
             *,
             _id,
             error_ext='.pc-unconfirmedownload',
             download_path=Path('.')
     ):
         self.__error_ext = error_ext
-        self.file_items: list[_FileItem] = list(file_items or [])
+        self.file_items: list[FileItem] = list(file_items or [])
         self.to_stop = False
         self.id = _id
 
@@ -182,19 +174,33 @@ class PeerFilePool:
         self.download_path = download_path
 
     async def send_files(self, send_function: Callable[[bytes], Awaitable[bool]]):
-        await self.__send_int(self.file_count, send_function)
+        # await self.__send_int(self.file_count, send_function)
         return await self.send_file_loop(self.current_file, send_function)
 
     async def send_file_loop(self, current_index, send_function):
+
         for index in range(current_index, len(self.file_items)):
+            # there is another file incoming
+            await send_function(struct.pack('?', True))
             file_item = self.file_items[index]
             self.current_file = index
+
             if (self.to_stop or await self.send_file(send_function, file=file_item)) is False:
+                if self.to_stop:
+                    with contextlib.suppress(OSError):
+                        # we do nothing here because we are finalizing anyhow
+                        await send_function(struct.pack('?', False))
+
                 return False
             self.current_file = self.file_items[index + 1]
+
+        # end of transfer
+        await send_function(struct.pack('?', False))
+
         return True
 
-    async def send_file(self, send_function, file: _FileItem):
+    @classmethod
+    async def send_file(cls, send_function, file: FileItem):
         print("sending file data", f"[PID:{os.getpid()}]")  # debug
 
         file_object = bytes(file)
@@ -210,13 +216,14 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        result = await self.send_actual_file(send_function, file, send_progress)
+        result = await cls.send_actual_file(send_function, file, send_progress)
         send_progress.close()
         return result
 
-    async def send_actual_file(self, send_function, file, send_progress):
+    @classmethod
+    async def send_actual_file(cls, send_function, file, send_progress):
         send_progress.update(file.seeked)
-        chunk_size = self.calculate_chunk_size(file.size)
+        chunk_size = cls.calculate_chunk_size(file.size)
         print('sending file data', file)  # debug
         with open(file.path, 'rb') as f:
             seek = file.seeked
@@ -225,6 +232,7 @@ class PeerFilePool:
                 chunk = f_mapped[offset: offset + chunk_size]
                 try:
                     await send_function(chunk)  # possible: connection reset err
+                    # :todo: add timeout mechanisms
                 except ConnectionResetError:
                     print("got a connection reset error in file transfer")
                     file.seeked = seek  # can be ignored mostly for now
@@ -235,7 +243,7 @@ class PeerFilePool:
         return True
 
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
-        self.file_count = await self.__get_int_from_sender(recv_function)
+        # self.file_count = await self.__get_int_from_sender(recv_function)
         print("received file count", self.file_count)  # debug
         w = await self.receive_file_loop(self.file_count, recv_function)
         if w:
@@ -244,32 +252,26 @@ class PeerFilePool:
             return StatusCodes.PAUSED, False
 
     async def receive_file_loop(self, count, recv_function):
-        for _ in range(count):
+        while True:
+            what = struct.unpack('?', await recv_function(1))
+            if not what:
+                return True
+
             if self.to_stop:
-                return
+                return False
+
             if await self.recv_file(recv_function) is False:
-                return
+                return False
             print("completed receiving", self.current_file)  # debug
-            self.file_count -= 1
-        return True
-
-    @staticmethod
-    async def __get_int_from_sender(recv_function: Callable[[int], Awaitable[bytes]]):
-        raw_int = await recv_function(4)
-        return struct.unpack('!I', raw_int)[0]
-
-    @staticmethod
-    async def __send_int(integer, send_function: Callable[[bytes], Awaitable[bool]]):
-        packed_int = struct.pack('!I', integer)
-        return await send_function(packed_int)
+            self.file_count += 1
 
     async def recv_file(self, recv_function):
         file_item_size = await self.__get_int_from_sender(recv_function)
         raw_file_item = await recv_function(file_item_size)
-        file_item = _FileItem.load_from(raw_file_item, self.download_path)
+        file_item = FileItem.load_from(raw_file_item, self.download_path)
         if not file_item:
             return False
-        self.__validatename(file_item)
+        self.validatename(file_item)
         progress = tqdm.tqdm(
             range(file_item.size),
             f"::receiving {file_item.name[:17] + '...' if len(file_item.name) > 20 else file_item.name} ",
@@ -282,13 +284,13 @@ class PeerFilePool:
         progress.close()
         return what
 
-    async def recv_actual_file(self, recv_function, file_item: _FileItem, progress):
+    async def recv_actual_file(self, recv_function, file_item: FileItem, progress):
         """
         Receive a file over a network connection and write it to disk.
 
         Args:
             recv_function (Asynchronous Callable): A function to receive data.
-            file_item (_FileItem): An object containing file metadata.
+            file_item (FileItem): An object containing file metadata.
             progress (ProgressTracker): An object to track progress of file writing.
 
         Returns:
@@ -374,27 +376,44 @@ class PeerFilePool:
 
         return await self.receive_file_loop(self.file_count, sender_sock.asendall)
 
-    def _add_error_ext(self, file_item: _FileItem):
+    def attach_files(self, files: Iterable[FileItem]):
+        self.file_items.extend(files)
+
+    @staticmethod
+    async def __get_int_from_sender(recv_function: Callable[[int], Awaitable[bytes]]):
+        raw_int = await recv_function(4)
+        return struct.unpack('!I', raw_int)[0]
+
+    @staticmethod
+    async def __send_int(integer, send_function: Callable[[bytes], Awaitable[bool]]):
+        packed_int = struct.pack('!I', integer)
+        return await send_function(packed_int)
+
+    def _add_error_ext(self, file_item: FileItem):
         """
             Handles file error by renaming the file with an error extension.
         """
-        file_item.add_error_ext(self.__error_ext)
-        return self.__validatename(file_item)
+        try:
+            file_item.add_error_ext(self.__error_ext)
+        except FileExistsError:
+            return self.validatename(file_item)
 
-    def _remove_error_ext(self, file_item: _FileItem):
+    def _remove_error_ext(self, file_item: FileItem):
         """
             Removes file error ext by renaming the file with its actual file extension .
         """
-        file_item.remove_error_ext()
-        return self.__validatename(file_item)
+        try:
+            file_item.remove_error_ext()
+        except FileExistsError:
+            return self.validatename(file_item)
 
-    def __validatename(self, file_item: _FileItem) -> str:
+    def validatename(self, file_item: FileItem) -> str:
         """
         Ensures a unique filename if a file with the same name already exists
         in the `self.download_dir`
 
         Args:
-            file_item (_FileItem): The original filename.
+            file_item (FileItem): The original filename.
 
         Returns:
             str: The validated filename, ensuring uniqueness.
