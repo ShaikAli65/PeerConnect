@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 import websockets
 
-from src.avails import DataWeaver, WireData, const, use
+from src.avails import DataWeaver, StatusMessage, WireData, const, use
 
 PAGE_HANDLE_WAIT = _asyncio.Event()
 safe_end = threading.Event()
@@ -33,6 +33,9 @@ class WebSocketRegistry:
 
     @classmethod
     def send_data(cls, data, type_of_data):
+        """
+        does not actually send data, adds to a message queue
+        """
         cls.message_queue.put((data, type_of_data))
 
     @classmethod
@@ -41,7 +44,7 @@ class WebSocketRegistry:
             data_packet, data_type = await cls.message_queue.get()
             if safe_end.is_set():
                 return
-            await cls.get_websocket(data_type).send(data_packet)
+            await cls.get_websocket(data_type).send(str(data_packet))  # make sure that data is a string
 
     @classmethod
     def clear(cls):
@@ -82,10 +85,10 @@ def get_verified_type(data: DataWeaver, web_socket):
 
 
 async def handle_client(web_socket: websockets.WebSocketServerProtocol):
-    wire_data = await web_socket.recv()
-    verification = DataWeaver(serial_data=wire_data)
-    handle_function = get_verified_type(verification, web_socket)
     try:
+        wire_data = await web_socket.recv()
+        verification = DataWeaver(serial_data=wire_data)
+        handle_function = get_verified_type(verification, web_socket)
         print("waiting for data", use.func_str(handle_function))
         if handle_function:
             async for data in web_socket:
@@ -127,11 +130,17 @@ def end():
 
 async def dispatch_data(data: DataWeaver, expect_reply=False):
     if check_closing():
-        return
+        return False
     print(f"::Sending data to page: {data}")
     if expect_reply:
         await ReplyRegistry.register_reply(data)
     WebSocketRegistry.send_data(data, data.type)
+    return True
+
+
+def send_status_data(data: StatusMessage):
+    print(f"::Status update to page: {data}")
+    WebSocketRegistry.send_data(data, SIGNAL)
 
 
 def new_message_arrived(message_data: WireData):
