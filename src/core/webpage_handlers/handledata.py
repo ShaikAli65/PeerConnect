@@ -1,9 +1,12 @@
 from pathlib import Path
 from sys import stderr
 
-from src.avails import DataWeaver, use
+from src.avails import DataWeaver, Wire, WireData, use
+from src.core import Dock, get_this_remote_peer, peers
+from src.core.connections import Connector
 from src.core.transfers import HEADERS
 from src.managers import filemanager
+from src.managers.filemanager import send_files_to_peer
 
 
 async def send_a_directory(command_data: DataWeaver):
@@ -13,19 +16,41 @@ async def send_a_directory(command_data: DataWeaver):
 async def send_file_to_peer(command_data: DataWeaver):
     selected_files = await filemanager.open_file_selector()
     if selected_files:
-        print(selected_files)
+        # print(selected_files)
         selected_files = [Path(x) for x in selected_files]
         peer_id = command_data.content['peer_id']
-        file_sender = filemanager.FileSender(selected_files, peer_id)
-        await file_sender.send_files()
+
+        await send_files_to_peer(peer_id, selected_files)
 
 
 async def send_text(command_data: DataWeaver):
-    ...
+    peer_id = command_data.content['peer_id']
+    peer_obj = Dock.peer_list.get_peer(peer_id)
+    if peer_obj is None:
+        peer_obj = await peers.get_remote_peer(peer_id)
+        if peer_obj is None:
+            return  # send data to page that peer cannot be reached
+    connection = await Connector.get_connection(peer_obj)
+    data = WireData(
+        header=HEADERS.CMD_TEXT,
+        _id=get_this_remote_peer().id,
+        message=command_data.content,
+    )
+    # :todo: wrap around with try except, signal page status update
+    await Wire.send_async(connection,bytes(data))
 
 
 async def send_file_to_multiple_peers(command_data: DataWeaver):
-    ...
+    peer_ids = command_data['peer_list']
+    peer_objects = [await peers.get_remote_peer(peer_id) for peer_id in peer_ids]
+    selected_files = await filemanager.open_file_selector()
+    if not selected_files:
+        return
+    selected_files = [Path(x) for x in selected_files]
+    file_sender = filemanager.start_new_otm_file_transfer(selected_files, peer_objects)
+    async for update in file_sender.start():
+        print(update)
+        # :todo: feed updates to frontend
 
 
 async def send_dir_to_multiple_peers(command_data: DataWeaver):
