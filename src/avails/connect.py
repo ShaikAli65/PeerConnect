@@ -1,13 +1,11 @@
 import asyncio as _asyncio
-import random
 import socket as _socket
 from abc import ABC, abstractmethod
 from asyncio import AbstractEventLoop
 from functools import wraps
-from typing import IO, Self, Optional
+from typing import IO, Optional, Self
 
 from . import const, useables
-from ..core import get_this_remote_peer
 
 
 class Socket(_socket.socket):
@@ -366,6 +364,7 @@ def is_socket_connected(sock: Socket):
 
 def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
+    from ..core import get_this_remote_peer
     ip = ip or get_this_remote_peer().ip
     with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
         s.bind((ip, 0))  # Bind to port 0 to get a free port
@@ -377,7 +376,7 @@ def is_port_empty(port, addr=None):
     with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
         try:
             # Try to bind the socket to the specified port
-            s.bind((addr, port))
+            s.bind(addr)
             return True  # Port is empty
         except OSError:
             return False  # Port is not empty or some other error occurred

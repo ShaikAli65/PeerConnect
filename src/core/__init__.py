@@ -1,13 +1,18 @@
 import asyncio as _asyncio
 from typing import Optional
 
-import kademlia.network
 
 from src.avails import (
     PeerDict as _PeerDict,
     RemotePeer as _RemotePeer,
     SocketCache as _SocketCache
 )
+
+
+import kademlia.network
+type server = kademlia.network.Server
+# from src.core.discover import PeerServer
+# type server = PeerServer
 
 
 class Dock:
@@ -20,9 +25,6 @@ class Dock:
     global_gossip = None
     _this_object: Optional[_RemotePeer] = None
 
-    # import src.core.discover
-    # type server = src.core.discover.PeerServer
-    type server = kademlia.network.Server
     kademlia_network_server: Optional[server] = None
     requests_endpoint: Optional[_asyncio.DatagramTransport] = None
 

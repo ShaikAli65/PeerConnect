@@ -2,7 +2,7 @@ import asyncio
 
 from src.avails import PalmTreeInformResponse, Wire, WireData, connect, const
 from src.core import get_this_remote_peer
-from src.core.transfers import GlobalGossipMessageList, PalmTreeRelay, PalmTreeProtocol, PalmTreeSession
+from src.core.transfers import PalmTreeProtocol, PalmTreeRelay, PalmTreeSession
 
 
 class GossipSessionRegistry:
@@ -30,10 +30,11 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
     session = PalmTreeSession(
         originater_id=req_data.id,
         adjacent_peers=req_data['adjacent_peers'],
-        id=req_data['session_id'],
+        session_id=req_data['session_id'],
         key=req_data['session_key'],
-        max_forwards=req_data['max_forwards'],
+        fanout=req_data['max_forwards'],
         link_wait_timeout=PalmTreeProtocol.request_timeout,
+        chunk_size=1024,
     )
     response = PalmTreeInformResponse(
         peer_id=get_this_remote_peer().id,
@@ -72,7 +73,7 @@ def get_active_endpoint_socket1():
     return stream_endpoint, stream_endpoint_addr
 
 
-def schedule_gossip_session(session: PalmTreeSession, passive_sock, active_endpoint_addr):
+def schedule_gossip_session(session, passive_sock, active_endpoint_addr):
     session_mediator = PalmTreeRelay(session, passive_sock, active_endpoint_addr)
     session_mediator.start_session()
     GossipSessionRegistry.add_session(mediator=session_mediator)

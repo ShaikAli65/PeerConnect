@@ -133,4 +133,9 @@ class Storage(storage.ForgetfulStorage):
 
 
 async def get_remote_peer(peer_id):
+    """
+    This function call is expensive as it performs a
+    distributed search across the network
+    try using Dock.peer_list instead
+    """
     return await Dock.kademlia_network_server.get_remote_peer(peer_id)
