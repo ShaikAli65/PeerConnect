@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from random import randint
 
 from src.avails import GossipMessage, WireData
-from src.core import get_gossip, get_this_remote_peer, requests
+from src.core import Dock, get_gossip, get_this_remote_peer, requests
 from src.core.transfers import PalmTreeProtocol
 
 
@@ -20,12 +20,13 @@ def generate_gossip():
 
 
 async def test_gossip():
-    server, transport, proto = await requests.initiate()
-    message = await asyncio.get_event_loop().run_in_executor(ThreadPoolExecutor(),
-                                                             func=generate_gossip)
-    for i in server.protocol.router.find_neighbors(get_this_remote_peer(),k=100):
-        print(i)
-    get_gossip().gossip_message(message)
+    # for i in Dock.kademlia_network_server.protocol.router.find_neighbors(get_this_remote_peer(),k=100):
+    #     print(i)
+
+    for _ in range(10):
+        message = await asyncio.get_event_loop().run_in_executor(ThreadPoolExecutor(),
+                                                                 func=generate_gossip)
+        get_gossip().gossip_message(message)
 
 
 async def test_plam_tree():
