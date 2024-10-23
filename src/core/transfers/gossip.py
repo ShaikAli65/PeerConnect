@@ -26,7 +26,7 @@ class RumorMessageList:
 
     def _disseminate(self):
         current_time = self._get_current_clock()
-        current_message_ids = self.message_list.keys()
+        current_message_ids = list(self.message_list.keys())
         # :warning: make sure to create a copy of keys before iteration
         # if there is any possiblity of context change
         for message_id in current_message_ids:
@@ -98,28 +98,25 @@ class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
     """
-    alpha = const.DEFAULT_GOSSIP_FANOUT  # no.of nodes to forward a gossip at once
+    alpha = 3
 
-    def __init__(self, message_list_class: type(RumorMessageList)):
+    def __init__(self, datagram_transport, message_list_class: type(RumorMessageList)):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
-        self.send_sock = None
+        self.send_sock = datagram_transport
         self.global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
-
-    def initiate(self):
-        self.send_sock = UDPProtocol.create_sync_sock(const.IP_VERSION)
+        self._is_initiated = True
 
     def message_arrived(self, data: GossipMessage):
         print("got a message to gossip", data)
         if not self.should_gossip(data):
             return
-        print("gossiping message to", end=" ")
+        print("gossiping message to")
         if data.id in self.message_list:
             sampled_peers = self.message_list.sample_peers(data.id, self.alpha)
             for peer_id in sampled_peers:
                 p = self.forward_payload(data, peer_id)
-                print(p, end=", ")
+                print(p)
             return
-        print('')
         self.gossip_message(data)
         print("Gossip message received and processed: %s" % data)
 
@@ -139,19 +136,21 @@ class RumorMongerProtocol:
         return w
 
     def gossip_message(self, message: GossipMessage):
-        print("gossiping new message", message, "to", end="")
+        print("gossiping new message", message, "to")
         self.message_list.push(message)
         sampled_peers = self.message_list.sample_peers(message.id, self.alpha)
         for peer_id in sampled_peers:
             p = self.forward_payload(message, peer_id)
-            print(p, end=", ")
-        print("")
+            print(p.req_uri)
 
     def forward_payload(self, message, peer_id):
         peer_obj = Dock.peer_list.get_peer(peer_id)
         if peer_obj is not None:
-            return Wire.send_datagram(self.send_sock, peer_obj.req_uri, bytes(message))
-        return peer_obj
+            Wire.send_datagram(self.send_sock, peer_obj.req_uri, bytes(message))
+            return peer_obj
+
+    def __repr__(self):
+        return str(f"<RumorMongerProtocol initiated={self._is_initiated}>")
 
 
 class PalmTreeProtocol:
@@ -168,7 +167,7 @@ class PalmTreeProtocol:
         self.dimensions = (2 ** math.ceil(math.log2(len(peers)))).bit_length() - 1
         self.create_hypercube()
         self.session = session
-        self.session.adjacent_peers = self.adjacency_list[self.center_peer]
+        self.session.adjacent_peers = self.adjacency_list[self.center_peer.id]
         self.relay = mediator_class(
             self.session,
             (
@@ -180,12 +179,13 @@ class PalmTreeProtocol:
 
     def create_hypercube(self):
         """Create the hypercube topology of peers"""
-        peer_id_to_peer_mapping = {i: peer for i, peer in enumerate(self.peer_list + [self.center_peer])}
+        center_peer_included = self.peer_list + [self.center_peer]
+        peer_id_to_peer_mapping = {i: peer for i, peer in enumerate(center_peer_included)}
         # imagine writing :: zip(range(len(self.peer_list)), self.peer_list)
-        for i in range(len(self.peer_list)):
+        for i in range(len(center_peer_included)):
             for j in range(self.dimensions):
                 neighbor = i ^ (1 << j)
-                if neighbor < len(self.peer_list):
+                if neighbor < len(center_peer_included):
                     peer = peer_id_to_peer_mapping[i]
                     neigh = peer_id_to_peer_mapping[neighbor]
                     self.adjacency_list[peer.id].append(neigh.id)
@@ -221,10 +221,10 @@ class PalmTreeProtocol:
                 reply_data = r[1]
                 self.confirmed_peers[reply_data.peer_id] = reply_data
             else:
-                discard_peer = r[1].id
-                for peer_id in self.adjacency_list[discard_peer]:
-                    self.adjacency_list[peer_id].remove(discard_peer)
-                del self.adjacency_list[discard_peer]
+                discard_peer_id = r[1].id
+                for peer_id in self.adjacency_list[discard_peer_id]:
+                    self.adjacency_list[peer_id].remove(discard_peer_id)
+                del self.adjacency_list[discard_peer_id]
         # send an audit event to page confirming peers
 
     async def _trigger_schedular_of_peer(
@@ -290,12 +290,12 @@ class PalmTreeProtocol:
         )
 
     async def trigger_spanning_formation(self):
-        tree_check_message_id = get_unique_id(int)
+        tree_check_message_id = get_unique_id(str)
         spanning_trigger_header = WireData(
             header=HEADERS.GOSSIP_TREE_CHECK,
             _id=get_this_remote_peer().id,
             message_id=tree_check_message_id,
-            session_id=self.session.id,
+            session_id=self.session.session_id,
         )
         # initial_peers = self.adjacency_list[self.center_peer]
         # if not initial_peers:
@@ -337,7 +337,7 @@ class PalmTreeLink:
     async def send_active_message(self, message: bytes):
         await Wire.send_async(sock=self.connection, data=message)
 
-    async def send_passive_message(self, message: bytes):
+    def send_passive_message(self, message: bytes):
         Wire.send_datagram(self.connection, self.right, message)
 
     @property
@@ -369,6 +369,9 @@ class PalmTreeLink:
 
     def __hash__(self):
         return hash(self.id) ^ hash(self.right) ^ hash(self.left)
+
+    def __repr__(self):
+        return f"<PalmTreeLink(id={self.id}, lagging={self.is_lagging}, status={self.status}, left={self.left}, right={self.right})>"
 
 
 class PalmTreeRelay(asyncio.DatagramProtocol):
@@ -416,7 +419,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         unpacked_data = wire.unpack_datagram(data)
         if unpacked_data is None:
             return
-        print(f"[{self.session}] got some data at passive endpoint", unpacked_data)
+        print(f"{self.session} got some data at passive endpoint", unpacked_data)
         if unpacked_data.header in self.__dict__.keys():
             getattr(self, unpacked_data.header)(unpacked_data, addr)
 
@@ -435,7 +438,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             )
             passive_link.status = PalmTreeLink.ONLINE
             self.all_links[peer_id] = (passive_link, active_link)
-        self.session.max_forwards = min(len(self.all_links), self.session.max_forwards)
+        self.session.fanout = min(len(self.all_links), self.session.fanout)
 
     def gossip_tree_check(self, tree_check_packet: WireData, addr):
         if self.may_be_make_rejection(tree_check_packet, addr):
@@ -476,8 +479,8 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
                 _id=get_this_remote_peer().id,
             )
             self.transport.sendto(bytes(gossip_link_reject_message), addr)
-            return False
-        return True
+            return True
+        return False
 
     def gossip_downgrade_connection(self, data: WireData, addr: tuple[str, int]):
         peer_id = data.id

@@ -56,7 +56,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
     def handle_gossip_message(req_data):
         """ Handle GOSSIP_MESSAGE request """
         gossip_protocol = get_gossip()
-        gossip_message = wire.GossipMessage.wrap_gossip(req_data)
+        gossip_message = wire.GossipMessage(req_data)
         gossip_protocol.message_arrived(gossip_message)
 
     @staticmethod
@@ -66,7 +66,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def handle_onetomanyfile_session(self, req_data, addr):
         reply = filemanager.new_otm_request_arrived(req_data, addr)
-        self.transport.sendto(reply, addr)
+        Wire.send_datagram(self.transport, addr, reply)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -88,7 +88,7 @@ class REQUESTS:
 async def initiate():
     loop = asyncio.get_running_loop()
     server = discover.get_new_kademlia_server()
-    await server.listen(port=const.PORT_NETWORK)
+    await server.listen(port=const.PORT_NETWORK, interface=const.THIS_IP)
     print("started kademlia endpoint at ", const.PORT_NETWORK)
 
     node_addr = await search_network()
@@ -106,12 +106,14 @@ async def initiate():
         allow_broadcast=True,
     )
 
+    # print("asdasdasd", transport.sendto(b'124',('127.0.0.1', 12002)))
+    join_gossip(transport)
+
     Dock.protocol = proto
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = server
     f = use.wrap_with_tryexcept(server.add_this_peer_to_lists)
     asyncio.create_task(f)
-    join_gossip(server)
     return server, transport, proto
 
 

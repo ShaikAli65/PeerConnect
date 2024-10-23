@@ -134,6 +134,7 @@ async def send_files_to_peer(peer_id, selected_files):
     if file_sender_handle := _check_running(peer_id):
         # if any transfer is running just attach FileItems to that transfer
         file_sender_handle.file_pool.attach_files((FileItem(path, 0) for path in selected_files))
+        return
 
     # create a new file sending session
     file_sender = FileSender(selected_files, peer_id)
@@ -144,7 +145,8 @@ async def send_files_to_peer(peer_id, selected_files):
 
 def _check_running(peer_id) -> FileSender:
     file_handles = FileRegistry.all_files.get_running_file(peer_id)
-    return file_handles[0]
+    if file_handles:
+        return file_handles[0]
 
 
 def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
@@ -159,9 +161,9 @@ async def file_receiver(file_req: WireData, connection):
     Just a wrapper function which does bookeeping for FileReciever object
     """
     file_handle = FileReceiver(file_req)
+    file_handle.connection_arrived(connection)
     FileRegistry.all_files.add_to_current(file_req.id, file_handle)
     await file_handle.recv_file()
-    file_handle.connection_arrived(connection)
     FileRegistry.all_files.add_to_completed(file_req.id, file_handle)
 
 
@@ -179,6 +181,7 @@ def new_otm_request_arrived(req_data: WireData, addr):
         link_wait_timeout=req_data['link_wait_timeout'],
         adjacent_peers=req_data['adjacent_peers'],
         file_count=req_data['file_count'],
+        chunk_size=req_data['chunk_size'],
     )
     passive_endpoint_address = (get_this_remote_peer().ip, get_free_port())
     relay = OTMFilesRelay(
@@ -195,7 +198,8 @@ def new_otm_request_arrived(req_data: WireData, addr):
         active_addr=get_this_remote_peer().uri,
         session_key=session.key,
     )
-    return reply
+    use.echo_print(use.COLORS[3], "replying otm req with", reply)
+    return bytes(reply)
 
 
 def update_otm_stream_connection(connection, link_data: WireData):

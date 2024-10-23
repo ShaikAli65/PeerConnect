@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from typing import Iterable
 from typing import Optional
 
+from src.avails import useables
 from src.avails.useables import echo_print
 
 
@@ -17,7 +18,7 @@ class State:
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
-            return asyncio.create_task(_func())
+            return asyncio.create_task(useables.wrap_with_tryexcept(_func))
 
         @functools.wraps(func)
         def wrap_in_thread(_func):
