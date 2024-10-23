@@ -83,7 +83,7 @@ class FileItem:
     @name.setter
     def name(self, value):
         self._name = value
-        self.path = self.path.with_name(self.name)
+        self.path = self.path.with_name(self._name)
 
     @staticmethod
     def load_from(data: bytes, file_parent_path):
@@ -188,13 +188,13 @@ class PeerFilePool:
             if (self.to_stop or await self.send_file(send_function, file=file_item)) is False:
                 if self.to_stop:
                     with contextlib.suppress(OSError):
-                        # we do nothing here because we are finalizing anyhow
                         await send_function(struct.pack('?', False))
+                        # we do nothing here because we are finalizing anyhow
 
                 return False
-            self.current_file = self.file_items[index + 1]
+            # self.current_file = self.file_items[index + 1]
 
-        # end of transfer
+        # end of transfer, signalling that there are no more files
         await send_function(struct.pack('?', False))
 
         return True
@@ -206,7 +206,6 @@ class PeerFilePool:
         file_object = bytes(file)
         file_packet = struct.pack('!I', len(file_object)) + file_object
         await send_function(file_packet)  # possible : any sort of socket/connection errors
-        print("file item sent", file)
 
         send_progress = tqdm.tqdm(
             range(file.size),
@@ -217,6 +216,7 @@ class PeerFilePool:
             unit_divisor=1024
         )
         result = await cls.send_actual_file(send_function, file, send_progress)
+        print("file sent", file)
         send_progress.close()
         return result
 
@@ -244,7 +244,6 @@ class PeerFilePool:
 
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
         # self.file_count = await self.__get_int_from_sender(recv_function)
-        print("received file count", self.file_count)  # debug
         w = await self.receive_file_loop(self.file_count, recv_function)
         if w:
             return StatusCodes.COMPLETED, self
@@ -253,9 +252,10 @@ class PeerFilePool:
 
     async def receive_file_loop(self, count, recv_function):
         while True:
-            what = struct.unpack('?', await recv_function(1))
+            what = struct.unpack('?', await recv_function(1))[0]
             if not what:
-                return True
+                print("received end of transfer signal, finalizing file recv loop")  # debug
+                return True 
 
             if self.to_stop:
                 return False
