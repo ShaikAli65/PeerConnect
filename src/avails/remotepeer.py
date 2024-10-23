@@ -96,7 +96,7 @@ class RemotePeer:
         return umsgpack.dumps(list_of_attributes)
 
     def __repr__(self):
-        return f'RemotePeer({self.username}, {self.ip}, {self._conn_port}, {self._req_port}, {self._network_port}, {self.status})'
+        return f'RemotePeer(name={self.username}, ip={self.ip}, conn={self._conn_port}, req={self._req_port}, net={self._network_port}, st={self.status})'
 
     def __bool__(self):
         return bool(self.username or self.id or self.req_uri or self.uri)
