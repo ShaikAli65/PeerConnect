@@ -30,17 +30,19 @@ class OTMFilesSender:
 
     def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], timeout):
         self.peer_list = peers
-        self.session = self.make_session()
         self.file_items = [FileItem(file_path, 0) for file_path in file_list]
         self.timeout = timeout
+
+        self.session = self.make_session()
         self.palm_tree = PalmTreeProtocol(
             get_this_remote_peer(),
             self.session,
             peers,
             OTMFilesRelay,
         )
+
         self.relay: OTMFilesRelay = self.palm_tree.relay
-        self.files_metadata_bytes = self._make_file_metadata(file_list)
+        self.files_metadata_bytes = self._make_file_metadata(self.file_items)
 
     def make_session(self):
         return OTMSession(
@@ -63,7 +65,7 @@ class OTMFilesSender:
         # trigger_spanning_formation
         #
         inform_req = self.create_inform_packet()
-        yield self.palm_tree.inform_peers(inform_req)
+        yield await self.palm_tree.inform_peers(inform_req)
         await self.palm_tree.relay.session_init()
         yield self.palm_tree.update_states()
         yield await self.palm_tree.trigger_spanning_formation()
@@ -86,11 +88,12 @@ class OTMFilesSender:
             link_wait_timeout=self.session.link_wait_timeout,
             adjacent_peers=self.session.adjacent_peers,
             file_count=self.session.file_count,
+            chunk_size=const.MAX_DATAGRAM_RECV_SIZE,
         )
 
     @staticmethod
     def _make_file_metadata(file_list):
-        return umsgpack.dumps(file_list)
+        return umsgpack.dumps([bytes(x) for x in file_list])
 
 
 class OTMFilesReceiver(asyncio.BufferedProtocol):
@@ -152,7 +155,7 @@ class OTMFilesRelay(PalmTreeRelay):
         self.file_receiver = OTMFilesReceiver(session, self)
         # self.recv_buffer = bytearray(const.MAX_OTM_BUFFERING)
         # self.recv_buffer_view = memoryview(self.recv_buffer)
-        self.recv_buffer_queue = collections.deque(const.MAX_OTM_BUFFERING)
+        self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
         self.chunk_counter = 0
 
     async def start(self):
@@ -168,7 +171,8 @@ class OTMFilesRelay(PalmTreeRelay):
             # this means:
             # link is accepted
             # this is the link we are reading from, for data
-            self._read_link = self.active_links[tree_check_packet.id]
+            self._read_link = self.active_links.get(tree_check_packet.id)
+            # the only expected case this being None is when this peer is the actual sender
 
     async def set_up(self):
         ...
@@ -224,11 +228,12 @@ class OTMFilesRelay(PalmTreeRelay):
 
     async def send_file_metadata(self, data):
         # this is the first step of a file transfer
-        await self._read_link.connection.arecv(self.session.chunk_size)
+        # await self._read_link.connection.arecv(self.session.chunk_size)
         await self._forward_chunk(b'\x01' + data)
 
     async def _recv_file_metadata(self):
-        files_metadata = await self._read_link.connection.arecv(self.session.chunk_size)
+        files_metadata = await self._read_link.connection.arecv(self.session.chunk_size + 1)
+        status, files_metadata = files_metadata[:1], files_metadata[1:]
         f = wrap_with_tryexcept(self.send_file_metadata, files_metadata)
         asyncio.create_task(f)
         return files_metadata
