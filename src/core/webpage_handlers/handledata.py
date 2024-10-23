@@ -41,8 +41,8 @@ async def send_text(command_data: DataWeaver):
 
 
 async def send_file_to_multiple_peers(command_data: DataWeaver):
-    peer_ids = command_data['peer_list']
-    peer_objects = [await peers.get_remote_peer(peer_id) for peer_id in peer_ids]
+    peer_ids = command_data.content['peer_list']
+    peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = await filemanager.open_file_selector()
     if not selected_files:
         return
