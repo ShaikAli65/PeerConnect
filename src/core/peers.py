@@ -5,6 +5,7 @@ from typing import override
 from kademlia import crawling, storage
 
 from src.avails import RemotePeer, use
+from src.avails.useables import echo_print
 from src.core import Dock
 
 node_list_ids = [
@@ -43,6 +44,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     async def _handle_found_values(self, values):
         peer = self.nearest_without_value.popleft()
         if peer:
+            echo_print(use.COLORS[0], "found values", values)
             await self.protocol.call_store_peers_in_list(peer, self.node.id, values)
         return values
 
@@ -60,7 +62,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         if list_of_peers:
             cls.initial_list.extend(list_of_peers)
 
-            return list_of_peers
+            return list(set(list_of_peers))
 
         return []
 
@@ -126,8 +128,19 @@ class Storage(storage.ForgetfulStorage):
     def store_peers_in_list(self, list_key, list_of_peers):
         if list_key in self.node_lists_ids:
             print("="*80)  # :todo fix this "list" bug
-            print(list_of_peers)
-            self.peer_data_storage[list_key] |= set(list_of_peers)
+            print("::storing peers in lists")
+            print("\n".join(str(x) for x in list_of_peers))
+            print("="*80)
+
+            # temporary fix
+            filtered_peers = set()
+            for peer in list_of_peers:
+                if isinstance(peer, list):
+                    filtered_peers.add(peer[0])
+                else:
+                    filtered_peers.add(peer)
+
+            self.peer_data_storage[list_key] |= filtered_peers
             Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
         return True
 
