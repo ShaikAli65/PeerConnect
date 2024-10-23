@@ -261,8 +261,9 @@ def create_connection_sync(address, addr_family=None, sock_type=None, timeout=No
     try:
         if addr_family is None:
             addr_family = const.IP_VERSION
-
-        addr_info = _socket.getaddrinfo(*address, family=addr_family, type=sock_type or const.PROTOCOL)
+        if sock_type is None:
+            sock_type = _socket.SOCK_STREAM
+        addr_info = _socket.getaddrinfo(*address, family=addr_family, type=sock_type)
     except TypeError as tpe:
         useables.echo_print("something wrong with the given address ", tpe)
         raise
