@@ -37,10 +37,10 @@ def get_gossip():
     return Dock.global_gossip
 
 
-def join_gossip(kademlia_server):
+def join_gossip(data_transport):
     from .transfers import RumorMongerProtocol, GlobalGossipMessageList
-    Dock.global_gossip = RumorMongerProtocol(GlobalGossipMessageList)
-    get_gossip().initiate()
+    Dock.global_gossip = RumorMongerProtocol(data_transport, GlobalGossipMessageList)
+    print("joined gossip network", get_gossip())
 
 
 def set_current_remote_peer_object(remote_peer):
