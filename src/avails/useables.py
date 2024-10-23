@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 import functools
 import inspect
@@ -7,6 +8,7 @@ import socket
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from sys import _getframe  # noqa
 from uuid import uuid4
@@ -57,8 +59,12 @@ def echo_print(*args, **kwargs):
     Args:
         *args: The arguments to print.
     """
-    with LOCK_PRINT:
-        return print(*args, **kwargs)
+    # with LOCK_PRINT:
+    return print(*args, COLOR_RESET, **kwargs)
+
+
+async def async_input(helper_str=""):
+    return await asyncio.get_event_loop().run_in_executor(None, input, helper_str)
 
 
 def open_file(content):
@@ -77,7 +83,7 @@ def open_file(content):
 
 
 def wait_for_sock_read(sock, actuator, timeout):
-    reads,_,_ = select.select([sock, actuator], [], [], timeout)
+    reads, _, _ = select.select([sock, actuator], [], [], timeout)
 
     if actuator.to_stop:
         return (actuator,)
@@ -86,15 +92,15 @@ def wait_for_sock_read(sock, actuator, timeout):
 
 
 def wait_for_sock_write(sock, actuator, timeout):
-    _, writes, _ = select.select([actuator,], [sock,], [], timeout)
+    _, writes, _ = select.select([actuator, ], [sock, ], [], timeout)
 
     if actuator.to_stop:
-        return [actuator,]
+        return [actuator, ]
 
     return writes
 
 
-def send_data_with_retries(sock:socket.socket, data:bytes, chunk_size, retries):
+def send_data_with_retries(sock: socket.socket, data: bytes, chunk_size, retries):
     b = sock.getblocking()
     mm_data = memoryview(data)
     stop = False
@@ -109,6 +115,7 @@ def send_data_with_retries(sock:socket.socket, data:bytes, chunk_size, retries):
 
 _CO_NESTED = inspect.CO_NESTED
 _CO_FROM_COROUTINE = inspect.CO_COROUTINE | inspect.CO_ITERABLE_COROUTINE | inspect.CO_ASYNC_GENERATOR
+
 
 def from_coroutine(level=2, _cache={}):  # noqa
     f_code = _getframe(level).f_code
@@ -157,6 +164,7 @@ def awaitable(syncfunc):
             ...
 
     """
+
     def decorate(asyncfunc):
         @functools.wraps(asyncfunc)
         def wrapper(*args, **kwargs):
@@ -164,11 +172,13 @@ def awaitable(syncfunc):
                 return asyncfunc(*args, **kwargs)
             else:
                 return syncfunc(*args, **kwargs)
+
         wrapper._syncfunc = syncfunc
         wrapper._asyncfunc = asyncfunc
         wrapper._awaitable = True
         wrapper.__doc__ = syncfunc.__doc__ or asyncfunc.__doc__
         return wrapper
+
     return decorate
 
 
@@ -188,7 +198,7 @@ async def wrap_with_tryexcept(func, *args, **kwargs):
         # print("wrapping with try except", func_str(func))
         return await func(*args, **kwargs)
     except Exception as e:
-        print(f"{COLORS[1]}got an exception for function{func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+        print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
         traceback.print_exc()
         print(COLOR_RESET)
 
