@@ -30,11 +30,11 @@ class Wire:
 
     @staticmethod
     def send_datagram(sock: _Socket | DatagramTransport, address, data: bytes):
-        data_size = struct.pack('!I', len(data))
         if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
             raise ValueError(f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
                              f"got a packet of size {len(data)} + 4bytes size")
 
+        data_size = struct.pack('!I', len(data))
         return sock.sendto(data_size + data, address)
 
     @staticmethod
@@ -182,18 +182,16 @@ class WireData:
 
     __slots__ = 'id', '_header', 'version', 'body', 'ancillary_data',
 
-    def __init__(self, header=None, _id=None, *args, version=_version, **kwargs):
-        self.id = _id
+    def __init__(self, header=None, _id=None, version=_version, **kwargs):
         self._header = header
+        self.id = _id
         self.version = version
         self.body = kwargs
-        self.ancillary_data = args
 
     def __bytes__(self):
         list_of_attributes = [
             self._header,
             self.id,
-            self.ancillary_data,
             self.version,
             self.body,
         ]
@@ -202,8 +200,8 @@ class WireData:
     @classmethod
     def load_from(cls, data: bytes):
         list_of_attributes = umsgpack.loads(data)
-        header, _id, *args, version, body = list_of_attributes
-        return cls(header, _id, *args, version=version, **body)
+        header, _id, version, body = list_of_attributes
+        return cls(header, _id, version=version, **body)
 
     def match_header(self, data):
         return self._header == data
@@ -219,7 +217,7 @@ class WireData:
         return self._header
 
     def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body}, ancillary={self.ancillary_data})>"
+        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
 
     def __repr__(self):
         return str(self)
@@ -232,12 +230,8 @@ class StatusMessage:
 class GossipMessage:
     __slots__ = 'actual_data'
 
-    def __init__(self, message: WireData = WireData()):
-        self.actual_data: WireData = message
-
-    @staticmethod
-    def wrap_gossip(data: WireData):
-        return GossipMessage(data)
+    def __init__(self, message: WireData = None):
+        self.actual_data = message or WireData()
 
     @property
     def message(self):
@@ -291,12 +285,15 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     try:
         data = Wire.load_datagram(data_payload)
         loaded = WireData.load_from(data)
-        if not loaded or not hasattr(loaded, 'header'):
-            return
+        return loaded
     except umsgpack.UnpackException as ue:
         return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
         return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+    except struct.error as se:
+        return print("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
+    except Exception as e:
+        return print("unexpected exception",e)
 
 
 @dataclass(slots=True)
@@ -337,11 +334,12 @@ class PalmTreeInformResponse:
     session_key: str
 
     def __bytes__(self):
-        return umsgpack.dumps(dataclasses.asdict(self))  # noqa
+        return umsgpack.dumps(dataclasses.astuple(self))  # noqa
 
     @staticmethod
     def load_from(data: bytes):
-        return PalmTreeInformResponse(**umsgpack.loads(data))
+        peer_id, passive_addr, active_addr, session_key = umsgpack.loads(data)
+        return PalmTreeInformResponse(peer_id, tuple(passive_addr), tuple(active_addr), session_key)
 
 
 @dataclass(slots=True)
