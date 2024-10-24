@@ -17,10 +17,10 @@ class HEADERS:
     GOSSIP_DOWNGRADE_CONN = 'gossip_downgrade_connection'
     GOSSIP_UPGRADE_CONN = 'gossip_upgrade_connection'
     GOSSIP_SESSION_STATE_UPDATE = 'gossip_update_state'
-    GOSSIP_UPDATE_STREAM_LINK = 'add_stream_link'
+    GOSSIP_UPDATE_STREAM_LINK = 'gossip_add_stream_link'
 
     OTM_FILE_TRANSFER = 'one to many file transfer request'
-    OTM_UPDATE_STREAM_LINK = 'add_stream_link'
+    OTM_UPDATE_STREAM_LINK = 'otm_add_stream_link'
     # :todo: Make all these into even/odd to differentiate between signal/data packets
 
     HANDLE_COMMAND = 'this is command '

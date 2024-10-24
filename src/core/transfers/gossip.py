@@ -22,7 +22,7 @@ class RumorMessageList:
         self.message_list = {}
         self.ttl = ttl
         self.dropped = set()
-        self._disseminate()
+        # self._disseminate()
 
     def _disseminate(self):
         current_time = self._get_current_clock()
@@ -155,8 +155,9 @@ class RumorMongerProtocol:
 
 class PalmTreeProtocol:
     request_timeout = 3
+    mediator_class = None
 
-    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer], mediator_class):
+    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer]):
         """
         !! do not include center_peer in peers list passed in
         """
@@ -168,7 +169,11 @@ class PalmTreeProtocol:
         self.create_hypercube()
         self.session = session
         self.session.adjacent_peers = self.adjacency_list[self.center_peer.id]
-        self.relay = mediator_class(
+
+        if self.mediator_class is None:
+            self.mediator_class = PalmTreeRelay
+
+        self.relay = self.mediator_class(
             self.session,
             (
                 get_this_remote_peer().ip,
@@ -247,8 +252,8 @@ class PalmTreeProtocol:
             reply_data = PalmTreeInformResponse.load_from(data)
             return True, reply_data
 
-    def update_states(self):
-        self.__update_internal_mediator_state()
+    async def update_states(self):
+        await self.__update_internal_mediator_state()
         states_data = WireData(
             header=HEADERS.GOSSIP_SESSION_STATE_UPDATE,
             addresses_mapping=None,
@@ -270,8 +275,8 @@ class PalmTreeProtocol:
 
                 Wire.send_datagram(s, response_data.passive_addr, bytes(states_data))
 
-    def __update_internal_mediator_state(self):
-        self.relay.gossip_update_state(
+    async def __update_internal_mediator_state(self):
+        await self.relay.gossip_update_state(
             WireData(
                 header=HEADERS.GOSSIP_SESSION_STATE_UPDATE,
                 addresses_mapping=(
@@ -301,7 +306,7 @@ class PalmTreeProtocol:
         # if not initial_peers:
         #     # :todo: handle the case where all the peers adjacent to center peer went offline
         #     pass
-        self.relay.gossip_tree_check(spanning_trigger_header, self.relay.passive_endpoint_addr)
+        await self.relay.gossip_tree_check(spanning_trigger_header, self.relay.passive_endpoint_addr)
 
 
 class PalmTreeLink:
@@ -389,6 +394,10 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         # all links are created initially
         self.all_links: dict[str, tuple[PalmTreeLink, PalmTreeLink]] = {}
 
+        self._is_connection_to_atleast_one_link_made = asyncio.get_event_loop().create_future()
+
+        self._is_sender_link_active = asyncio.get_event_loop().create_future()
+
         # references from all links are sorted out based on connectivity
         self.active_links: dict[str, PalmTreeLink] = {}
         self.passive_links: dict[str, PalmTreeLink] = {}
@@ -419,11 +428,12 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         unpacked_data = wire.unpack_datagram(data)
         if unpacked_data is None:
             return
-        print(f"{self.session} got some data at passive endpoint", unpacked_data)
+        # print(f"{self.session} got some data at passive endpoint", unpacked_data)
         if unpacked_data.header in self.__dict__.keys():
-            getattr(self, unpacked_data.header)(unpacked_data, addr)
+            f = use.wrap_with_tryexcept(getattr(self, unpacked_data.header), unpacked_data, addr)
+            asyncio.create_task(f)
 
-    def gossip_update_state(self, state_data: WireData, addr=None):
+    async def gossip_update_state(self, state_data: WireData, addr=None):
         addresses = state_data['addresses_mapping']
         this_passive_address = self.passive_endpoint_addr
         this_active_address = self.active_endpoint_addr
@@ -439,9 +449,12 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             passive_link.status = PalmTreeLink.ONLINE
             self.all_links[peer_id] = (passive_link, active_link)
         self.session.fanout = min(len(self.all_links), self.session.fanout)
-
-    def gossip_tree_check(self, tree_check_packet: WireData, addr):
+        self.print_state("updated gossip state")
+        
+    async def gossip_tree_check(self, tree_check_packet: WireData, addr):
+        self.print_state(f"checking gossip tree {tree_check_packet.id}")
         if self.may_be_make_rejection(tree_check_packet, addr):
+            self.print_state(f"rejected gossip tree link {tree_check_packet.id}")
             return False
 
         this_peer_id = get_this_remote_peer().id
@@ -454,7 +467,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             )
             self.active_links[sender_id] = self.all_links[sender_id][PalmTreeLink.ACTIVE]
             self.transport.sendto(bytes(upgrade_conn_packet), addr)
-            self.sender_links = self.all_links[sender_id]
+            self._sender_id = sender_id
 
         tree_check_packet.id = this_peer_id
         sampled_peer_ids = random.sample(list(self.all_links), min(len(self.all_links), self.session.fanout))
@@ -462,7 +475,12 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         for peer_id in sampled_peer_ids:
             passive_link, active_link = self.all_links[peer_id]
             passive_link.send_passive_message(bytes(tree_check_packet))
-            self.active_links[peer_id] = self.all_links[peer_id][PalmTreeLink.ACTIVE]
+            self.active_links[peer_id] = active_link
+            # asyncio.get_event_loop()
+            asyncio.get_event_loop().set_task_factory(asyncio.eager_task_factory)
+            f = use.wrap_with_tryexcept(self.activate_link, active_link)
+            task = asyncio.create_task(f)
+            task.add_done_callback(self.add_done_result_for_atleast_one_link)
 
         self.passive_links.update(
             {
@@ -470,7 +488,13 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
                 for peer_id in set(self.all_links) - set(self.active_links)
             }
         )
+        self.print_state(f"gossip tree check completed {tree_check_packet.id}")
         return True
+
+    def add_done_result_for_atleast_one_link(self, task):
+        if self._is_connection_to_atleast_one_link_made.done():
+            return
+        self._is_connection_to_atleast_one_link_made.set_result(task.result())
 
     def may_be_make_rejection(self, tree_check_packet, addr):
         if tree_check_packet.id in self.active_links or len(self.active_links) > self.session.fanout:
@@ -482,14 +506,17 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             return True
         return False
 
-    def gossip_downgrade_connection(self, data: WireData, addr: tuple[str, int]):
+    async def gossip_downgrade_connection(self, data: WireData, addr: tuple[str, int]):
+        self.print_state(f"downgrading connection {addr}")
         peer_id = data.id
         if peer_id in self.active_links:
             a_link = self.active_links.pop(peer_id)
             a_link.clear()
             self.passive_links[peer_id] = self.all_links[peer_id][PalmTreeLink.PASSIVE]
+            self.passive_links[peer_id].status = PalmTreeLink.OFFLINE
 
-    def gossip_upgrade_connection(self, data: WireData, addr: tuple[str, int]):
+    async def gossip_upgrade_connection(self, data: WireData, addr: tuple[str, int]):
+        self.print_state(f"upgrading connection {addr}")
         peer_id = data.id
         if peer_id not in self.active_links:
             return
@@ -497,27 +524,33 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         f = use.wrap_with_tryexcept(self.activate_link, link)
         asyncio.create_task(f)
 
-    def add_stream_link(self, connection, data: WireData):
+    # this function is invoked when connection came from other side
+    async def gossip_add_stream_link(self, connection, data: WireData):
+
+        self.print_state(f"adding stream link {connection.getpeername()}")
+
         assert self.session.session_id == data['session_id']
         peer_id = data.id
         if peer_id in self.active_links:
-            self.active_links[peer_id].connection = connection
+            active_link = self.active_links[peer_id]
+            active_link.connection = connection
+            active_link.status = PalmTreeLink.ONLINE
+            if peer_id == self._sender_id and not self._is_sender_link_active.done():
+                self._is_sender_link_active.set_result(active_link)
         # stream connections are assumed to be active links for now
 
+    # this function is used when we are making connections
     async def activate_link(self, link: PalmTreeLink):
         if link.is_online:
             return
         stream_sock = await connect.create_connection_async(link.right, self.session.link_wait_timeout)
         await Wire.send_async(
             stream_sock,
-            bytes(
-                WireData(
-                    header=HEADERS.GOSSIP_UPDATE_STREAM_LINK,
-                    _id=get_this_remote_peer().id,
-                    session_id=self.session.session_id,
-                )
-            )
+            self._get_update_stream_link_packet(),
         )
+        link.connection = stream_sock
+        link.status = PalmTreeLink.ONLINE
+        return link
 
     def _get_forward_links(self):
         return set(self.active_links.values()) - {self._read_link}
@@ -526,3 +559,17 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         if self.transport:
             self.transport.close()
         self.session_task.cancel()
+
+    def print_state(self, string):
+        return print(f"{use.COLORS[4]}[{self.session.session_id}] {string}{use.COLOR_RESET}")
+
+    def _get_update_stream_link_packet(self):
+        """
+        PROTOCOLS using this class should overload this function
+        """
+        h = WireData(
+            header=HEADERS.GOSSIP_UPDATE_STREAM_LINK,
+            _id=get_this_remote_peer().id,
+            session_id=self.session.session_id,
+        )
+        return bytes(h)

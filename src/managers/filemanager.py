@@ -191,18 +191,19 @@ def new_otm_request_arrived(req_data: WireData, addr):
     )
     relay.start_session()
     FileRegistry.schedule_transfer(session.session_id, relay)
-
+    use.echo_print(use.COLORS[3], "adding otm session to registry", session.session_id)
     reply = OTMInformResponse(
         peer_id=get_this_remote_peer().id,
         passive_addr=passive_endpoint_address,
         active_addr=get_this_remote_peer().uri,
         session_key=session.key,
     )
-    use.echo_print(use.COLORS[3], "replying otm req with", reply)
+    use.echo_print(use.COLORS[3], "replying otm req with", reply.passive_addr, reply.active_addr)
     return bytes(reply)
 
 
-def update_otm_stream_connection(connection, link_data: WireData):
+async def update_otm_stream_connection(connection, link_data: WireData):
+    use.echo_print(use.COLORS[3], "updating otm connection", connection.getpeername())
     session_id = link_data['session_id']
     otm_relay = FileRegistry.get_scheduled_transfer(session_id)
-    otm_relay.add_stream_link(connection, link_data)
+    await otm_relay.otm_add_stream_link(connection, link_data)

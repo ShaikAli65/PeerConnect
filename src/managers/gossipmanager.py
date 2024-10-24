@@ -79,7 +79,7 @@ def schedule_gossip_session(session, passive_sock, active_endpoint_addr):
     GossipSessionRegistry.add_session(mediator=session_mediator)
 
 
-def update_gossip_stream_socket(connection, link_data):
+async def update_gossip_stream_socket(connection, link_data):
     session_id = link_data['session_id']
     mediator = GossipSessionRegistry.get_session(session_id)
-    mediator.add_stream_link(connection, link_data)
+    await mediator.gossip_add_stream_link(connection, link_data)

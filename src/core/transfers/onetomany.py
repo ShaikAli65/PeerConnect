@@ -26,6 +26,125 @@ from ...avails.useables import get_unique_id, wrap_with_tryexcept
 """
 
 
+class OTMFilesRelay(PalmTreeRelay):
+    # :todo: try using temporary spooled files
+    def __init__(self, session, passive_endpoint_addr: tuple[str, int] = None,
+                 active_endpoint_addr: tuple[str, int] = None):
+        super().__init__(session, passive_endpoint_addr, active_endpoint_addr)
+        self._read_link = None
+        self.file_receiver = OTMFilesReceiver(session, self)
+        # self.recv_buffer = bytearray(const.MAX_OTM_BUFFERING)
+        # self.recv_buffer_view = memoryview(self.recv_buffer)
+        self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
+        self.chunk_counter = 0
+
+    async def start(self):
+        await self.set_up()
+        metadata_packet = await self._recv_file_metadata()
+        self.file_receiver.update_metadata(metadata_packet)
+        await self.start_reader()
+
+    @override
+    async def gossip_tree_check(self, tree_check_packet: WireData, addr):
+        what = await super().gossip_tree_check(tree_check_packet, addr)
+        if what is True:
+            # this means:
+            # link is accepted
+            # this is the link we are reading from, for data
+            #
+            self._read_link = await self._is_sender_link_active
+            # the only expected case this being None is when this peer is the actual sender
+
+    @override
+    def _get_update_stream_link_packet(self):
+        h = WireData(
+            header=HEADERS.OTM_UPDATE_STREAM_LINK,
+            _id=get_this_remote_peer().id,
+            session_id=self.session.session_id,
+        )
+        return bytes(h)
+
+    async def set_up(self):
+        ...
+
+    async def start_reader(self):
+        read_conn = self._read_link.connection
+        while True:
+            try:
+                whole_chunk = await read_conn.arecv(self.session.chunk_size + 1)
+                if not whole_chunk:
+                    self._end_of_transfer()
+                chunk_detail, chunk = whole_chunk[:1], whole_chunk[1:]
+                self._update_buffer(chunk)
+                self._may_be_update_receiver()
+
+                await self._forward_chunk(whole_chunk)
+            except OSError as e:
+                print("got an os error", e)
+                what = await self._read_link_broken()
+                if not what:
+                    self._end_of_transfer()
+                    return
+                else:
+                    self._read_link = what
+                    read_conn = what.connection
+
+    async def _read_link_broken(self) -> Optional[PalmTreeLink]:
+        # :todo: write the logic that handles missing chunks in the time period of link broken and attached
+
+        ...
+
+    def _update_buffer(self, chunk):
+        # self.recv_buffer_view[self.chunk_counter: self.chunk_counter + self.session.chunk_size] = chunk
+        self.recv_buffer_queue.append(chunk)
+        self.chunk_counter += 1
+
+    def _may_be_update_receiver(self):
+        if self.chunk_counter % const.MAX_OTM_BUFFERING == 0:
+            # we filled queue, time to empty it
+            self.file_receiver.data_received(self.recv_buffer_queue)
+            self.recv_buffer_queue.clear()
+
+    def _end_of_transfer(self):
+
+        ...
+
+    async def _forward_chunk(self, chunk: bytes):
+        timeout = self.session.link_wait_timeout
+
+        is_forwarded_to_atleast_once = False
+        for link in self._get_forward_links():
+            try:
+                if link.is_online:
+                    await asyncio.wait_for(link.connection.asendall(chunk), timeout)
+                    is_forwarded_to_atleast_once = True
+            except TimeoutError:
+                link.status = PalmTreeLink.LAGGING  # mark this link as lagging
+
+        if is_forwarded_to_atleast_once is False:
+            await asyncio.sleep(0)  # add further edge case logic
+            await self._forward_chunk(chunk)
+
+    async def send_file_metadata(self, data):
+        # this is the first step of a file transfer
+        # await self._read_link.connection.arecv(self.session.chunk_size)
+        await self._forward_chunk(b'\x01' + data)
+
+    async def _recv_file_metadata(self):
+        files_metadata = await self._read_link.connection.arecv(self.session.chunk_size + 1)
+        status, files_metadata = files_metadata[:1], files_metadata[1:]
+        f = wrap_with_tryexcept(self.send_file_metadata, files_metadata)
+        asyncio.create_task(f)
+        return files_metadata
+
+    async def otm_add_stream_link(self, connection, hand_shake):
+        await super().gossip_add_stream_link(connection, hand_shake)
+
+
+class OTMPalmTreeProtocol(PalmTreeProtocol):
+    mediator_class = OTMFilesRelay
+
+
 class OTMFilesSender:
 
     def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], timeout):
@@ -34,11 +153,10 @@ class OTMFilesSender:
         self.timeout = timeout
 
         self.session = self.make_session()
-        self.palm_tree = PalmTreeProtocol(
+        self.palm_tree = OTMPalmTreeProtocol(
             get_this_remote_peer(),
             self.session,
             peers,
-            OTMFilesRelay,
         )
 
         self.relay: OTMFilesRelay = self.palm_tree.relay
@@ -67,7 +185,11 @@ class OTMFilesSender:
         inform_req = self.create_inform_packet()
         yield await self.palm_tree.inform_peers(inform_req)
         await self.palm_tree.relay.session_init()
-        yield self.palm_tree.update_states()
+        yield await self.palm_tree.update_states()
+
+        # setting this future as we are the actual senders
+        self.palm_tree.relay._is_sender_link_active.set_result(None)
+
         yield await self.palm_tree.trigger_spanning_formation()
         yield await self.relay.send_file_metadata(self.files_metadata_bytes)
         for file_item in self.file_items:
@@ -144,96 +266,3 @@ class OTMFilesReceiver(asyncio.BufferedProtocol):
 
     def _update_file_item(self):
         self.current_file_item += 1
-
-
-class OTMFilesRelay(PalmTreeRelay):
-    # :todo: try using temporary spooled files
-    def __init__(self, session, passive_endpoint_addr: tuple[str, int] = None,
-                 active_endpoint_addr: tuple[str, int] = None):
-        super().__init__(session, passive_endpoint_addr, active_endpoint_addr)
-        self._read_link = None
-        self.file_receiver = OTMFilesReceiver(session, self)
-        # self.recv_buffer = bytearray(const.MAX_OTM_BUFFERING)
-        # self.recv_buffer_view = memoryview(self.recv_buffer)
-        self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
-        self.chunk_counter = 0
-
-    async def start(self):
-        await self.set_up()
-        metadata_packet = await self._recv_file_metadata()
-        self.file_receiver.update_metadata(metadata_packet)
-        await self.start_reader()
-
-    @override
-    def gossip_tree_check(self, tree_check_packet: WireData, addr):
-        what = super().gossip_tree_check(tree_check_packet, addr)
-        if what is True:
-            # this means:
-            # link is accepted
-            # this is the link we are reading from, for data
-            self._read_link = self.active_links.get(tree_check_packet.id)
-            # the only expected case this being None is when this peer is the actual sender
-
-    async def set_up(self):
-        ...
-
-    async def start_reader(self):
-        read_conn = self._read_link.connection
-        while True:
-            try:
-                whole_chunk = await read_conn.arecv(self.session.chunk_size + 1)
-                if not whole_chunk:
-                    self._end_of_transfer()
-                chunk_detail, chunk = whole_chunk[:1], whole_chunk[1:]
-                self._update_buffer(chunk)
-                self._may_be_update_receiver()
-                await self._forward_chunk(whole_chunk)
-            except OSError as e:
-                print("got an os error", e)
-                what = await self._read_link_broken()
-                if not what:
-                    self._end_of_transfer()
-                    return
-                else:
-                    self._read_link = what
-                    read_conn = what.connection
-
-    async def _read_link_broken(self) -> Optional[PalmTreeLink]:
-        # :todo: write the logic that handles missing chunks in the time period of link broken and attached
-
-        ...
-
-    def _update_buffer(self, chunk):
-        # self.recv_buffer_view[self.chunk_counter: self.chunk_counter + self.session.chunk_size] = chunk
-        self.recv_buffer_queue.append(chunk)
-        self.chunk_counter += 1
-
-    def _may_be_update_receiver(self):
-        if self.chunk_counter % const.MAX_OTM_BUFFERING == 0:
-            # we filled queue, time to empty it
-            self.file_receiver.data_received(self.recv_buffer_queue)
-            self.recv_buffer_queue.clear()
-
-    def _end_of_transfer(self):
-
-        ...
-
-    async def _forward_chunk(self, chunk: bytes):
-        timeout = self.session.link_wait_timeout
-        for link in self._get_forward_links():
-            try:
-                await asyncio.wait_for(link.connection.asendall(chunk), timeout)
-            except TimeoutError:
-                link.status = PalmTreeLink.LAGGING  # mark this link as lagging
-
-    async def send_file_metadata(self, data):
-        # this is the first step of a file transfer
-        # await self._read_link.connection.arecv(self.session.chunk_size)
-        await self._forward_chunk(b'\x01' + data)
-
-    async def _recv_file_metadata(self):
-        files_metadata = await self._read_link.connection.arecv(self.session.chunk_size + 1)
-        status, files_metadata = files_metadata[:1], files_metadata[1:]
-        f = wrap_with_tryexcept(self.send_file_metadata, files_metadata)
-        asyncio.create_task(f)
-        return files_metadata
