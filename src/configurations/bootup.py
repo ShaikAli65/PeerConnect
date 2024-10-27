@@ -26,9 +26,6 @@ def initiate_bootup():
                         if ipaddress.ip_address(const.THIS_IP).version == 6
                         else socket.AF_INET)
     # print(f"{const.THIS_IP=}")
-    # to1do remove this ip in bootup.py
-    # const.THIS_IP = '172.16.199.138'
-    # const.THIS_IP = '192.168.217.188'
     validate_ports(const.THIS_IP)
 
 
