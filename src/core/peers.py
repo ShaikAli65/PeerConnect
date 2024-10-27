@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from typing import override
+from typing import Optional, override
 
 from kademlia import crawling, storage
 
@@ -127,11 +127,7 @@ class Storage(storage.ForgetfulStorage):
 
     def store_peers_in_list(self, list_key, list_of_peers):
         if list_key in self.node_lists_ids:
-            print("="*80)  # :todo fix this "list" bug
-            print("::storing peers in lists")
-            print("\n".join(str(x) for x in list_of_peers))
-            print("="*80)
-
+            # :todo fix this "list" bug
             # temporary fix
             filtered_peers = set()
             for peer in list_of_peers:
@@ -145,10 +141,25 @@ class Storage(storage.ForgetfulStorage):
         return True
 
 
-async def get_remote_peer(peer_id):
+async def get_remote_peer(peer_id) -> Optional[RemotePeer]:
     """
+    Just a wrapper function around :method:`kademlia_network_server.get_remote_peer`
     This function call is expensive as it performs a
     distributed search across the network
     try using Dock.peer_list instead
     """
     return await Dock.kademlia_network_server.get_remote_peer(peer_id)
+
+
+async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
+    """
+    Just a helper function, tries to check for peer_id in cached Dock.peer_list
+    if there is a chance that cached remote peer object is expired then use :func: `peers.get_remote_peer`
+    if not found the performs a distributed search in the network
+    """
+    try:
+        peer_obj = Dock.peer_list[peer_id]
+    except KeyError:
+        peer_obj = await get_remote_peer(peer_id)
+
+    return peer_obj
