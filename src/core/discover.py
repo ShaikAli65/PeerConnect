@@ -222,7 +222,7 @@ class PeerServer(network.Server):
             print("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
-            self.add_this_peer_future = asyncio.create_task(f)
+            self.add_this_peer_future = asyncio.create_task(f())
             print("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
@@ -249,6 +249,11 @@ class PeerServer(network.Server):
         return any(await asyncio.gather(*results))
 
     async def get_remote_peer(self, peer_id):
+        """
+        Every call to this function no only gathers remote_peer object corresponding to peer_id
+        but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
+        crawling process which helps in keeping cache upto date to some extent
+        """
         node = RemotePeer(peer_id=peer_id)
         nodes = self.protocol.router.find_neighbors(node)
 
