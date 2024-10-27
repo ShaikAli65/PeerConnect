@@ -1,5 +1,4 @@
 import dataclasses
-import enum
 import json as _json
 import struct
 from asyncio import DatagramTransport
@@ -10,7 +9,7 @@ from typing import NamedTuple, Optional, Union
 import umsgpack
 
 from . import Actuator, const as _const
-from .connect import Socket as _Socket
+from .connect import Socket as _Socket, is_socket_connected
 from .useables import wait_for_sock_read
 
 controller = Actuator()
@@ -20,8 +19,7 @@ class Wire:
     @staticmethod
     async def send_async(sock: _Socket, data: bytes):
         data_size = struct.pack('!I', len(data))
-        await sock.asendall(data_size)
-        return await sock.asendall(data)
+        return await sock.asendall(data_size + data)
 
     @staticmethod
     def send(sock: _Socket, data: bytes):
@@ -39,9 +37,15 @@ class Wire:
 
     @staticmethod
     async def receive_async(sock: _Socket):
-        data_size = struct.unpack('!I', await sock.arecv(4))[0]
-        data = await sock.arecv(data_size)
-        return data
+        try:
+            data_size = struct.unpack('!I', await sock.arecv(4))[0]
+            data = await sock.arecv(data_size)
+            return data
+        except struct.error:
+            if is_socket_connected(sock):
+                raise
+            else:
+                raise OSError("connection broken")
 
     @staticmethod
     def receive(sock: _Socket, timeout=None, controller=controller):
@@ -180,7 +184,7 @@ class DataWeaver:
 class WireData:
     _version = _const.VERSIONS['WIRE']
 
-    __slots__ = 'id', '_header', 'version', 'body', 'ancillary_data',
+    __slots__ = 'id', '_header', 'version', 'body',  # 'ancillary_data',
 
     def __init__(self, header=None, _id=None, version=_version, **kwargs):
         self._header = header
