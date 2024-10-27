@@ -20,7 +20,8 @@ class Dialog:
         dialog.setWindowFlags(_Qt.WindowStaysOnTopHint | dialog.windowFlags())
         files = dialog.getOpenFileNames(directory=cls.recent_dir,
                                         caption="Select files to send")[0]
-        cls.recent_dir = os.path.dirname(files[0])
+        if files:
+            cls.recent_dir = os.path.dirname(files[0])
         return files
 
     @classmethod
