@@ -25,11 +25,11 @@ async def send_file_to_peer(command_data: DataWeaver):
 
 async def send_text(command_data: DataWeaver):
     peer_id = command_data.content['peer_id']
-    peer_obj = Dock.peer_list.get_peer(peer_id)
+    peer_obj = await peers.get_remote_peer_at_every_cost(peer_id)
+
     if peer_obj is None:
-        peer_obj = await peers.get_remote_peer(peer_id)
-        if peer_obj is None:
-            return  # send data to page that peer cannot be reached
+        return  # send data to page that peer is not reachable
+
     connection = await Connector.get_connection(peer_obj)
     data = WireData(
         header=HEADERS.CMD_TEXT,
