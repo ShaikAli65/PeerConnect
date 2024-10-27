@@ -57,14 +57,13 @@ class Acceptor:
 
     async def initiate(self):
         self.main_socket = await self.start_socket()
-        use.echo_print("::Listening for connections", self.main_socket)
-        # initial_backoff = use.get_timeouts()
+        use.echo_print("::Listening for connections")
         with self.main_socket:
             while not self.stopping:
                 initial_conn, _ = await self.main_socket.aaccept()
                 use.echo_print(f"New connection from {_}")
                 f = use.wrap_with_tryexcept(self.__accept_connection, initial_conn)
-                task = asyncio.create_task(f)
+                task = asyncio.create_task(f())
                 task.add_done_callback(lambda t: self.all_tasks.discard(t))
                 self.all_tasks.add(task)
                 await asyncio.sleep(0)
@@ -108,16 +107,16 @@ class Acceptor:
             return filemanager.file_recv_request_connection_arrived(connection, hand_shake)
 
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
-            use.echo_print("got a gossip stream link connection request delegating to gossip manager", connection)  # debug
+            use.echo_print("got a gossip stream link connection request delegating to gossip manager")  # debug
             f = use.wrap_with_tryexcept(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
-            asyncio.create_task(f)
+            asyncio.create_task(f())
             return None
             # return gossipmanager.update_gossip_stream_socket(connection, hand_shake)
 
         if hand_shake.match_header(HEADERS.OTM_UPDATE_STREAM_LINK):
-            use.echo_print("got a otm stream link connection request delegating to file manager", connection)  # debug
+            use.echo_print("got a otm stream link connection request delegating to file manager")  # debug
             f = use.wrap_with_tryexcept(filemanager.update_otm_stream_connection, connection, hand_shake)
-            asyncio.create_task(f)
+            asyncio.create_task(f())
             return None
 
     async def handle_peer(self, peer_id):

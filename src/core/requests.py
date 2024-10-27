@@ -49,7 +49,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         """ Handle NETWORK_FIND_REPLY request """
         bootstrap_node_addr = tuple(req_data['connect_uri'])
         f = use.wrap_with_tryexcept(Dock.kademlia_network_server.bootstrap, [bootstrap_node_addr])
-        asyncio.create_task(f)
+        asyncio.create_task(f())
         print(f"Bootstrap initiated to: {bootstrap_node_addr}")
 
     @staticmethod
@@ -62,7 +62,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
     @staticmethod
     def handle_gossip_session(req_data, addr):
         f = use.wrap_with_tryexcept(gossipmanager.new_gossip_request_arrived, req_data, addr)
-        asyncio.create_task(f)
+        asyncio.create_task(f())
 
     def handle_onetomanyfile_session(self, req_data, addr):
         reply = filemanager.new_otm_request_arrived(req_data, addr)
@@ -113,7 +113,7 @@ async def initiate():
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = server
     f = use.wrap_with_tryexcept(server.add_this_peer_to_lists)
-    asyncio.create_task(f)
+    asyncio.create_task(f())
     return server, transport, proto
 
 

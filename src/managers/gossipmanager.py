@@ -1,6 +1,6 @@
 import asyncio
 
-from src.avails import PalmTreeInformResponse, Wire, WireData, connect, const
+from src.avails import PalmTreeInformResponse, Wire, WireData, connect, const, use
 from src.core import get_this_remote_peer
 from src.core.transfers import PalmTreeProtocol, PalmTreeRelay, PalmTreeSession
 
@@ -75,7 +75,8 @@ def get_active_endpoint_socket1():
 
 def schedule_gossip_session(session, passive_sock, active_endpoint_addr):
     session_mediator = PalmTreeRelay(session, passive_sock, active_endpoint_addr)
-    session_mediator.start_session()
+    f = use.wrap_with_tryexcept(session_mediator.session_init)
+    session_mediator.session_task = asyncio.create_task(f())
     GossipSessionRegistry.add_session(mediator=session_mediator)
 
 

@@ -1,5 +1,4 @@
 import asyncio
-import traceback
 import functools
 import inspect
 import os
@@ -8,14 +7,14 @@ import socket
 import subprocess
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
+import traceback
 from datetime import datetime
 from sys import _getframe  # noqa
 from uuid import uuid4
 
 import select
 
-from .constants import LOCK_PRINT, MAX_RETIRES
+from .constants import MAX_RETIRES
 
 
 def func_str(func_name):
@@ -52,6 +51,21 @@ def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0
         current *= factor
 
 
+async def async_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0):
+    """
+    same as :func: `get_timeouts` but delays itself in yielding
+    possible use case:
+    Example:
+    >>> async for _ in async_timeouts(initial=1, factor=2, max_retries=4, max_value=5):
+    >>>     # any working code that needs to be executed with delays
+    """
+    current = initial
+    for _ in range(max_retries):
+        await asyncio.sleep(min(current, max_value))
+        yield
+        current *= factor
+
+
 @functools.wraps(print)
 def echo_print(*args, **kwargs):
     """Prints the given arguments to the console.
@@ -63,8 +77,8 @@ def echo_print(*args, **kwargs):
     return print(*args, COLOR_RESET, **kwargs)
 
 
-async def async_input(helper_str=""):
-    return await asyncio.get_event_loop().run_in_executor(None, input, helper_str)
+def async_input(helper_str=""):
+    return asyncio.get_event_loop().run_in_executor(None, input, helper_str)
 
 
 def open_file(content):
@@ -193,14 +207,21 @@ COLORS = [
 COLOR_RESET = "\033[0m"
 
 
-async def wrap_with_tryexcept(func, *args, **kwargs):
-    try:
-        # print("wrapping with try except", func_str(func))
-        return await func(*args, **kwargs)
-    except Exception as e:
-        print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
-        traceback.print_exc()
-        print(COLOR_RESET)
+def wrap_with_tryexcept(func, *args, **kwargs):
+
+    @functools.wraps(func)
+    async def wrapped_with_tryexcept():
+        try:
+            nonlocal args, kwargs
+            # print("wrapping with try except", func_str(func))
+            return await func(*args, **kwargs)
+        except Exception as e:
+            global COLORS
+            print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+            traceback.print_exc()
+            print(COLOR_RESET)
+
+    return wrapped_with_tryexcept
 
 
 def search_relevant_peers(peer_list, search_string) -> list:
