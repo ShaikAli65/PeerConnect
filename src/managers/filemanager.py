@@ -152,7 +152,7 @@ def _check_running(peer_id) -> FileSender:
 def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
     print("new file connection arrived", file_req['file_id'])
     f = use.wrap_with_tryexcept(file_receiver, file_req, connection)
-    asyncio.create_task(f)
+    asyncio.create_task(f())
     print("scheduling file transfer request", file_req)
 
 
@@ -169,6 +169,7 @@ async def file_receiver(file_req: WireData, connection):
 
 def start_new_otm_file_transfer(files: list[Path], peers: list[RemotePeer]):
     file_sender = onetomany.OTMFilesSender(file_list=files, peers=peers, timeout=3)  # check regarding timeouts
+    FileRegistry.schedule_transfer(file_sender.session.session_id, file_sender.relay)
     return file_sender
 
 
@@ -189,7 +190,8 @@ def new_otm_request_arrived(req_data: WireData, addr):
         passive_endpoint_address,
         get_this_remote_peer().uri
     )
-    relay.start_session()
+    f = use.wrap_with_tryexcept(relay.start_readside)
+    asyncio.create_task(f())
     FileRegistry.schedule_transfer(session.session_id, relay)
     use.echo_print(use.COLORS[3], "adding otm session to registry", session.session_id)
     reply = OTMInformResponse(
@@ -203,7 +205,15 @@ def new_otm_request_arrived(req_data: WireData, addr):
 
 
 async def update_otm_stream_connection(connection, link_data: WireData):
+    """
+    This is the final function call related to an otm session, all other rpc's from now are made
+    internally from otm session relay
+    """
     use.echo_print(use.COLORS[3], "updating otm connection", connection.getpeername())
     session_id = link_data['session_id']
     otm_relay = FileRegistry.get_scheduled_transfer(session_id)
-    await otm_relay.otm_add_stream_link(connection, link_data)
+    if otm_relay:
+        await otm_relay.otm_add_stream_link(connection, link_data)
+    else:
+        use.echo_print(use.COLORS[3], "otm session not found with id", session_id)
+        use.echo_print(use.COLORS[3], "ignoring request from", connection.getpeername())
