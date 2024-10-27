@@ -5,11 +5,11 @@ from typing import Optional
 
 import umsgpack
 
-from src.avails import OTMSession, RemotePeer, WireData, const
+from src.avails import OTMSession, RemotePeer, WireData, const, use
 from . import FileItem, HEADERS, PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, PeerFilePool
 from .. import get_this_remote_peer
 from ..discover import override
-from ...avails.useables import get_unique_id, wrap_with_tryexcept
+from ...avails.useables import get_unique_id
 
 """
     All the classes here are closely coupled with 
@@ -38,11 +38,14 @@ class OTMFilesRelay(PalmTreeRelay):
         self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
         self.chunk_counter = 0
 
-    async def start(self):
+    async def start_readside(self):
+        """
+        Starts reading and forwarding part of the protocol if called
+        this function is not called when this relay is the one who is sending the files to others
+        """
         await self.set_up()
-        metadata_packet = await self._recv_file_metadata()
-        self.file_receiver.update_metadata(metadata_packet)
-        await self.start_reader()
+        await self._recv_file_metadata()
+        await self._start_reader()
 
     @override
     async def gossip_tree_check(self, tree_check_packet: WireData, addr):
@@ -52,7 +55,7 @@ class OTMFilesRelay(PalmTreeRelay):
             # link is accepted
             # this is the link we are reading from, for data
             #
-            self._read_link = await self._is_sender_link_active
+            self._read_link = await self._is_parent_link_active
             # the only expected case this being None is when this peer is the actual sender
 
     @override
@@ -61,13 +64,14 @@ class OTMFilesRelay(PalmTreeRelay):
             header=HEADERS.OTM_UPDATE_STREAM_LINK,
             _id=get_this_remote_peer().id,
             session_id=self.session.session_id,
+            peer_addr=self.passive_endpoint_addr,
         )
         return bytes(h)
 
-    async def set_up(self):
-        ...
+    def set_up(self):
+        return super().session_init()
 
-    async def start_reader(self):
+    async def _start_reader(self):
         read_conn = self._read_link.connection
         while True:
             try:
@@ -113,6 +117,8 @@ class OTMFilesRelay(PalmTreeRelay):
         timeout = self.session.link_wait_timeout
 
         is_forwarded_to_atleast_once = False
+        # await self._is_connection_to_atleast_one_link_made
+        # this future has the first link that made a connection ignoring the result for now
         for link in self._get_forward_links():
             try:
                 if link.is_online:
@@ -123,6 +129,7 @@ class OTMFilesRelay(PalmTreeRelay):
 
         if is_forwarded_to_atleast_once is False:
             await asyncio.sleep(0)  # add further edge case logic
+            # temporarily yielding back to wait for incoming/outgoing connections
             await self._forward_chunk(chunk)
 
     async def send_file_metadata(self, data):
@@ -131,11 +138,14 @@ class OTMFilesRelay(PalmTreeRelay):
         await self._forward_chunk(b'\x01' + data)
 
     async def _recv_file_metadata(self):
+        self._read_link = await self._is_parent_link_active
+        # this future is set when a sender makes a connection
+
         files_metadata = await self._read_link.connection.arecv(self.session.chunk_size + 1)
         status, files_metadata = files_metadata[:1], files_metadata[1:]
-        f = wrap_with_tryexcept(self.send_file_metadata, files_metadata)
-        asyncio.create_task(f)
-        return files_metadata
+
+        self.file_receiver.update_metadata(files_metadata)
+        await self.send_file_metadata(files_metadata)
 
     async def otm_add_stream_link(self, connection, hand_shake):
         await super().gossip_add_stream_link(connection, hand_shake)
@@ -160,7 +170,6 @@ class OTMFilesSender:
         )
 
         self.relay: OTMFilesRelay = self.palm_tree.relay
-        self.files_metadata_bytes = self._make_file_metadata(self.file_items)
 
     def make_session(self):
         return OTMSession(
@@ -188,12 +197,20 @@ class OTMFilesSender:
         yield await self.palm_tree.update_states()
 
         # setting this future as we are the actual senders
-        self.palm_tree.relay._is_sender_link_active.set_result(None)
-
+        self.palm_tree.relay._is_parent_link_active.set_result(None)
         yield await self.palm_tree.trigger_spanning_formation()
-        yield await self.relay.send_file_metadata(self.files_metadata_bytes)
-        for file_item in self.file_items:
-            yield await self.send_file(file_item)
+
+        # await use.async_input("enter")
+        print_signal = WireData(
+            header='gossip_print_every_onces_states',
+            _id=get_this_remote_peer().id,
+        )
+
+        await self.relay.gossip_print_every_onces_states(print_signal, tuple())
+
+        # yield await self.relay.send_file_metadata(self._make_file_metadata(self.file_items))
+        # for file_item in self.file_items:
+        #     yield await self.send_file(file_item)
 
     async def send_file(self, file_item):
         ...
