@@ -84,7 +84,7 @@ class OTMFilesRelay(PalmTreeRelay):
 
                 await self._forward_chunk(whole_chunk)
             except OSError as e:
-                print("got an os error", e)
+                self.print_state(f"got an os error at {use.func_str(OTMFilesRelay._start_reader)}", e)
                 what = await self._read_link_broken()
                 if not what:
                     self._end_of_transfer()
@@ -128,7 +128,7 @@ class OTMFilesRelay(PalmTreeRelay):
                 link.status = PalmTreeLink.LAGGING  # mark this link as lagging
 
         if is_forwarded_to_atleast_once is False:
-            await asyncio.sleep(0)  # add further edge case logic
+            await asyncio.sleep(timeout)  # add further edge case logic
             # temporarily yielding back to wait for incoming/outgoing connections
             await self._forward_chunk(chunk)
 
@@ -141,7 +141,7 @@ class OTMFilesRelay(PalmTreeRelay):
         self._read_link = await self._is_parent_link_active
         # this future is set when a sender makes a connection
 
-        files_metadata = await self._read_link.connection.arecv(self.session.chunk_size + 1)
+        files_metadata: bytes = await self._read_link.connection.arecv(self.session.chunk_size + 1)
         status, files_metadata = files_metadata[:1], files_metadata[1:]
 
         self.file_receiver.update_metadata(files_metadata)
@@ -205,12 +205,12 @@ class OTMFilesSender:
             header='gossip_print_every_onces_states',
             _id=get_this_remote_peer().id,
         )
-
+        await asyncio.sleep(1)  # debug
         await self.relay.gossip_print_every_onces_states(print_signal, tuple())
 
-        # yield await self.relay.send_file_metadata(self._make_file_metadata(self.file_items))
-        # for file_item in self.file_items:
-        #     yield await self.send_file(file_item)
+        yield await self.relay.send_file_metadata(self._make_file_metadata(self.file_items))
+        for file_item in self.file_items:
+            yield await self.send_file(file_item)
 
     async def send_file(self, file_item):
         ...
@@ -243,9 +243,11 @@ class OTMFilesReceiver(asyncio.BufferedProtocol):
         self.relay = relay
         self.current_file_item = 0  # index pointing to file item that is currently under receiving
         self.chunk_count = 0
+        self._left_out_chunk = bytearray()
 
     def update_metadata(self, metadata_packet):
         self.file_items = self._load_file_metadata(metadata_packet)
+        print("recieved file items", self.file_items)
         # page handle.send_status_data(StatusMessage())
 
     @staticmethod
@@ -260,23 +262,30 @@ class OTMFilesReceiver(asyncio.BufferedProtocol):
 
     def data_received(self, buffer_queue):
         current_item = self._get_current_item()
-        left_out_chunk = bytearray()
-        with open(current_item.path, 'a+b') as f:
+        file = None
+        try:
+            file = open(current_item.path, 'a+b')
             for chunk in buffer_queue:
-                total_chunk_view = memoryview(left_out_chunk + chunk)
+                # total_chunk_view = memoryview(self._left_out_chunk + chunk)
+                total_chunk_view = memoryview(chunk)
                 while total_chunk_view:
-                    to_write_size = min(len(total_chunk_view), current_item.size - f.tell())
+                    to_write_size = min(len(total_chunk_view), current_item.size - file.tell())
                     if to_write_size > 0:
-                        f.write(total_chunk_view[:to_write_size])
+                        file.write(total_chunk_view[:to_write_size])
                         total_chunk_view = total_chunk_view[to_write_size:]
                     else:
                         # Move to the next file item if current one is fully written
                         self._update_file_item()
                         current_item = self._get_current_item()
-                        f.close()
-                        f = open(current_item.path, 'a+b')
+                        # self._left_out_chunk = total_chunk_view
+
+                        file.close()
+                        file = open(current_item.path, 'a+b')
 
                 self.chunk_count += 1  # Only count after full write
+        finally:
+            if file:
+                file.close()
 
     def _get_current_item(self) -> FileItem:
         return self.file_items[self.current_file_item]
