@@ -80,7 +80,7 @@ class Wire:
         return Wire.load_datagram(data), addr
 
     @staticmethod
-    def load_datagram(data_payload):
+    def load_datagram(data_payload) -> bytes:
         data_size = struct.unpack('!I', data_payload[:4])[0]
         return data_payload[4: data_size + 4]
 
