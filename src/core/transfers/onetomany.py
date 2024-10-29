@@ -214,9 +214,19 @@ class OTMFilesSender:
         await self.relay.gossip_print_every_onces_states(print_signal, tuple())
 
         yield await self.relay.send_file_metadata(self._make_file_metadata())
+
         for file_item in self.file_items:
             yield await self.send_file(file_item)
-
+        """
+        References:
+        https://lucumr.pocoo.org/2020/1/1/async-pressure/
+        https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7
+        https://trio.readthedocs.io/en/latest/reference-core.html#trio.CapacityLimiter
+        https://en.wikipedia.org/wiki/Leaky_bucket
+        https://en.wikipedia.org/wiki/Token_bucket        
+        https://en.wikipedia.org/wiki/Generic_cell_rate_algorithm
+        
+        """
     async def send_file(self, file_item):
         chunk_size = self.session.chunk_size
         with open(file_item.path, 'rb') as f:

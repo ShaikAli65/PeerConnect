@@ -102,7 +102,7 @@ class RumorMongerProtocol:
     """
     alpha = 3
 
-    def __init__(self, datagram_transport, message_list_class: type(RumorMessageList)):
+    def __init__(self, datagram_transport, message_list_class: type[RumorMessageList]):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
         self.send_sock = datagram_transport
         self.global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
