@@ -10,6 +10,8 @@ from typing import Awaitable, Callable, Iterable
 import tqdm
 import umsgpack
 
+from src.avails import const
+
 
 def stringify_size(size):
     sizes = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -121,7 +123,7 @@ class FileItem:
     def remove_error_ext(self):
         """
         Removes the error extension from the file name,
-        restoring it to its original name.
+        restoring it to its original name, renames the file path.
 
         If the original extension is not available, raises a ValueError.
         """
@@ -159,7 +161,7 @@ class PeerFilePool:
             file_items: list[FileItem] = None,
             *,
             _id,
-            error_ext='.pc-unconfirmedownload',
+            error_ext=const.FILE_ERROR_EXT,
             download_path=Path('.')
     ):
         self.__error_ext = error_ext
@@ -221,9 +223,9 @@ class PeerFilePool:
         return result
 
     @classmethod
-    async def send_actual_file(cls, send_function, file, send_progress):
+    async def send_actual_file(cls, send_function, file, send_progress, chunk_len=None):
         send_progress.update(file.seeked)
-        chunk_size = cls.calculate_chunk_size(file.size)
+        chunk_size = chunk_len or cls.calculate_chunk_size(file.size)
         print('sending file data', file)  # debug
         with open(file.path, 'rb') as f:
             seek = file.seeked
