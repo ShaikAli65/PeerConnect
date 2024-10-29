@@ -3,6 +3,7 @@ import enum
 import math
 import random
 import time
+from asyncio import Future
 from collections import defaultdict
 from itertools import count
 from typing import Optional
@@ -166,6 +167,7 @@ class PalmTreeProtocol:
         # self.mediator.start_session
         # update states
         # trigger_spanning_formation
+        # gather_tree
         !! do not include center_peer in peers list passed in
         """
         self.peer_list = peers
@@ -175,6 +177,7 @@ class PalmTreeProtocol:
         self.create_hypercube()
         self.session = session
         self.session.adjacent_peers = self.adjacency_list[self.center_peer.id]
+        self.gathered_tree = None
 
         if self.mediator_class is None:
             self.mediator_class = PalmTreeRelay
@@ -182,10 +185,10 @@ class PalmTreeProtocol:
         self.relay = self.mediator_class(
             self.session,
             (
-                get_this_remote_peer().ip,
+                self.center_peer.ip,
                 get_free_port()
             ),
-            get_this_remote_peer().uri,
+            center_peer.uri,
         )
 
     def create_hypercube(self):
@@ -208,7 +211,7 @@ class PalmTreeProtocol:
 
         # updating center peer's data
         self.confirmed_peers[self.center_peer.id] = PalmTreeInformResponse(
-            get_this_remote_peer().id,
+            self.center_peer.id,
             self.relay.passive_endpoint_addr,
             self.relay.active_endpoint_addr,
             self.session.key,
@@ -233,8 +236,7 @@ class PalmTreeProtocol:
                 del self.adjacency_list[discard_peer_id]
         # send an audit event to page confirming peers
 
-    async def _trigger_schedular_of_peer(self, trigger_request, peer) -> tuple[
-        bool, RemotePeer | PalmTreeInformResponse]:
+    async def _trigger_schedular_of_peer(self, trigger_request, peer) -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
         loop = asyncio.get_event_loop()
         connection = await UDPProtocol.create_connection_async(loop, peer.req_uri, self.session.link_wait_timeout)
         with connection:
@@ -293,7 +295,7 @@ class PalmTreeProtocol:
         tree_check_message_id = get_unique_id(str)
         spanning_trigger_header = WireData(
             header=HEADERS.GOSSIP_TREE_CHECK,
-            _id=get_this_remote_peer().id,
+            _id=self.center_peer.id,
             message_id=tree_check_message_id,
             session_id=self.session.session_id,
         )
@@ -302,6 +304,26 @@ class PalmTreeProtocol:
         #     # :todo: handle the case where all the peers adjacent to center peer went offline
         #     pass
         self.relay.forward_tree_check_packet(self.center_peer.id, spanning_trigger_header)
+
+    async def gather_tree(self):
+        replies = []
+        with UDPProtocol.create_sync_sock(const.IP_VERSION) as s:
+            tree_gather_packet = WireData(
+                header=HEADERS.GOSSIP_TREE_GATHER,
+                _id=self.center_peer.id,
+                level=0,
+                parent=None,
+                reply_addr=s.getsockname(),
+            )
+            await self.relay.gossip_tree_gather(tree_gather_packet, s.getsockname())
+            counter = 0
+            while counter >= len(self.confirmed_peers):
+                data, addr = await Wire.recv_datagram_async(s)
+                unpacked_response = wire.unpack_datagram(data)
+                if unpacked_response:
+                    replies.append(unpacked_response)
+        replies.sort(key=lambda x:x['level'])
+        self.gathered_tree = replies
 
 
 class PalmTreeLink:
@@ -421,6 +443,11 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
     The relay establishes active/passive links, coordinates tree checks, upgrades
     connections, and maintains state across peers.
 
+    Protocol rules:
+    * trivial thing that a node in tree must have a single parent
+    * we initiate the connections that we are going to forward
+    * logically the connections come to us are the one we are reading from
+
     Attributes:
         session (PalmTreeSession): A session managing the relay state and settings.
         passive_endpoint_addr (tuple): Address for passive endpoint connections.
@@ -437,6 +464,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         gossip_downgrade_connection(): Downgrades an active link to passive.
         gossip_upgrade_connection(): Upgrades a passive link to active.
         gossip_add_stream_link(): Adds a stream connection for an incoming peer.
+        gossip_gossip_tree_gather(): sends a reply to initiator peer according to protocol
         stop_session(): Cleans up and closes the session.
         print_state(): Prints relay state for debugging purposes.
     """
@@ -457,7 +485,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         self.all_links: dict[str, tuple[PalmTreeLink, PalmTreeLink]] = {}
         self._tree_check_window_index = 0
 
-        self._is_parent_link_active = asyncio.get_event_loop().create_future()
+        self._is_parent_link_active: Future[PalmTreeLink] = asyncio.get_event_loop().create_future()
         self._is_parent_link_active.add_done_callback(lambda _: self.print_state("initial link activated"))
 
         # this is to keep a reference to actual sender just a helper for classes inheriting this class
@@ -477,6 +505,10 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         Initializes the relay by creating a datagram endpoint based on the
         passive endpoint address. Transitions the relay state to SESSION_INIT.
         """
+        if self.state >= RelayState.SESSION_INIT:
+            self.print_state("session already initialized")
+            return
+
         loop = asyncio.get_event_loop()
         func = loop.create_datagram_endpoint(
             lambda: self,
@@ -487,6 +519,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             await func
         except PermissionError:
             self.print_state('got permission error while creating datagram endpoint')
+            raise  # to be rechecked
         self.print_state("initialized datagram endpoint successfully")
         self.state = RelayState.SESSION_INIT
 
@@ -728,7 +761,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         stream_sock = await connect.create_connection_async(link.right, self.session.link_wait_timeout)
         await Wire.send_async(
             stream_sock,
-            self._get_update_stream_link_packet(),
+            self._make_update_stream_link_packet(),
         )
         try:
             data = await Wire.receive_async(stream_sock)
@@ -740,7 +773,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         link.direction = PalmTreeLink.OUTGOING
         return True
 
-    def _get_update_stream_link_packet(self):
+    def _make_update_stream_link_packet(self):
         """
         Returns a packet for updating a stream link.
         PROTOCOLS using this class may overload this function
@@ -755,6 +788,13 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             peer_addr=self.passive_endpoint_addr,
         )
         return bytes(h)
+
+    async def gossip_tree_gather(self, data: WireData, addr: tuple[str, int]):
+        data['level'] += 1
+        data['parent'] = (await self._is_parent_link_active).peer_id
+        Wire.send_datagram(self.transport, data['reply_addr'], bytes(data))
+        for child_link in self._get_forward_links():
+            child_link.send_passive_message(bytes(data))
 
     async def gossip_downgrade_connection(self, data: WireData, addr: tuple[str, int]):
         """
@@ -843,15 +883,18 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
 
         # stream connections are assumed to be active links for now
 
+    async def _parent_link_broken(self):
+        ...
+
     def _get_forward_links(self):
         """
         Returns a set of outgoing active links excluding the main read link.
 
         Returns:
-            set: Set of active links for forwarding data.
+            set[PalmTreeLink]: Set of active outgoing links for forwarding data.
         """
         _l = set(self.active_links.values()) - {self._read_link}
-        return set(x for x in _l if x.is_outgoing)
+        return set(x for x in _l if x.is_online and x.is_outgoing)
 
     def stop_session(self):
         """
@@ -872,7 +915,9 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             *string: Variable arguments to include in log.
             **kwargs: Additional print options.
         """
-        return print(f"[:]{use.COLORS[4]}[{self.session.session_id}][:] {" ".join(str(x) for x in string)}{use.COLOR_RESET}", **kwargs)
+        return print(
+            f"[:]{use.COLORS[4]}[{self.session.session_id}][:] {" ".join(str(x) for x in string)}{use.COLOR_RESET}",
+            **kwargs)
 
     async def gossip_print_every_onces_states(self, data, addr):
         """
@@ -886,10 +931,9 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         #     return
 
         self._print_full_state()
-        for link in self.active_links.values():
-            if link.is_online and link.is_outgoing:
-                passive_link_of_active_peer = self.all_links[link.peer_id][0]
-                passive_link_of_active_peer.send_passive_message(bytes(data))
+        for link in self._get_forward_links():
+            passive_link_of_active_peer = self.all_links[link.peer_id][0]
+            passive_link_of_active_peer.send_passive_message(bytes(data))
 
     def _print_full_state(self):
         """
