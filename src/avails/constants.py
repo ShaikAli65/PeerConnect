@@ -33,7 +33,7 @@ PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
 
 IP_VERSION = socket.AF_INET
-
+FILE_ERROR_EXT = '.pc-unconfirmedownload'
 debug = False
 
 if debug:
