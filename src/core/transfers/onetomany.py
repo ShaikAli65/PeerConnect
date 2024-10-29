@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import mmap
 from pathlib import Path
 from typing import Optional
 
@@ -59,7 +60,7 @@ class OTMFilesRelay(PalmTreeRelay):
             # the only expected case this being None is when this peer is the actual sender
 
     @override
-    def _get_update_stream_link_packet(self):
+    def _make_update_stream_link_packet(self):
         h = WireData(
             header=HEADERS.OTM_UPDATE_STREAM_LINK,
             _id=get_this_remote_peer().id,
@@ -95,8 +96,9 @@ class OTMFilesRelay(PalmTreeRelay):
 
     async def _read_link_broken(self) -> Optional[PalmTreeLink]:
         # :todo: write the logic that handles missing chunks in the time period of link broken and attached
+        await super()._parent_link_broken()
 
-        ...
+        return None
 
     def _update_buffer(self, chunk):
         # self.recv_buffer_view[self.chunk_counter: self.chunk_counter + self.session.chunk_size] = chunk
@@ -121,14 +123,14 @@ class OTMFilesRelay(PalmTreeRelay):
         # this future has the first link that made a connection ignoring the result for now
         for link in self._get_forward_links():
             try:
-                if link.is_online:
-                    await asyncio.wait_for(link.connection.asendall(chunk), timeout)
-                    is_forwarded_to_atleast_once = True
+                await asyncio.wait_for(link.connection.asendall(chunk), timeout)
+                is_forwarded_to_atleast_once = True
             except TimeoutError:
                 link.status = PalmTreeLink.LAGGING  # mark this link as lagging
 
         if is_forwarded_to_atleast_once is False:
             await asyncio.sleep(timeout)  # add further edge case logic
+            # :todo: heavy recursion bug need to be reviewed
             # temporarily yielding back to wait for incoming/outgoing connections
             await self._forward_chunk(chunk)
 
@@ -146,6 +148,9 @@ class OTMFilesRelay(PalmTreeRelay):
 
         self.file_receiver.update_metadata(files_metadata)
         await self.send_file_metadata(files_metadata)
+
+    async def send_data(self, chunk):
+        await self._forward_chunk(chunk)
 
     async def otm_add_stream_link(self, connection, hand_shake):
         await super().gossip_add_stream_link(connection, hand_shake)
@@ -208,12 +213,18 @@ class OTMFilesSender:
         await asyncio.sleep(1)  # debug
         await self.relay.gossip_print_every_onces_states(print_signal, tuple())
 
-        yield await self.relay.send_file_metadata(self._make_file_metadata(self.file_items))
+        yield await self.relay.send_file_metadata(self._make_file_metadata())
         for file_item in self.file_items:
             yield await self.send_file(file_item)
 
     async def send_file(self, file_item):
-        ...
+        chunk_size = self.session.chunk_size
+        with open(file_item.path, 'rb') as f:
+            seek = file_item.seeked
+            f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            for offset in range(seek, file_item.size, chunk_size):
+                chunk = f_mapped[offset: offset + chunk_size]
+                await self.relay.send_data(chunk)
 
     def create_inform_packet(self):
         return WireData(
@@ -230,9 +241,8 @@ class OTMFilesSender:
             chunk_size=const.MAX_DATAGRAM_RECV_SIZE,
         )
 
-    @staticmethod
-    def _make_file_metadata(file_list):
-        return umsgpack.dumps([bytes(x) for x in file_list])
+    def _make_file_metadata(self):
+        return umsgpack.dumps([bytes(x) for x in self.file_items])
 
 
 class OTMFilesReceiver(asyncio.BufferedProtocol):
