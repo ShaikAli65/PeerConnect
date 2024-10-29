@@ -13,15 +13,18 @@ class HEADERS:
     CMD_FILE_CONN = b'connection for file transfer'
 
     GOSSIP_CREATE_SESSION = b'gossip_session_activate'
-    GOSSIP_TREE_CHECK = 'gossip_tree_check'
-    GOSSIP_TREE_REJECT = 'gossip_tree_reject'
     GOSSIP_DOWNGRADE_CONN = 'gossip_downgrade_connection'
     GOSSIP_UPGRADE_CONN = 'gossip_upgrade_connection'
     GOSSIP_SESSION_STATE_UPDATE = 'gossip_update_state'
     GOSSIP_UPDATE_STREAM_LINK = 'gossip_add_stream_link'
     GOSSIP_LINK_OK = b'OK'
+    GOSSIP_TREE_CHECK = 'gossip_tree_check'
+    GOSSIP_TREE_REJECT = 'gossip_tree_reject'
+    GOSSIP_TREE_GATHER = 'gossip_tree_gather'
+
     OTM_FILE_TRANSFER = 'one to many file transfer request'
     OTM_UPDATE_STREAM_LINK = 'otm_add_stream_link'
+
     # :todo: Make all these into even/odd to differentiate between signal/data packets
 
     HANDLE_COMMAND = 'this is command '
