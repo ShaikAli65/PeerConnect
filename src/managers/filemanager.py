@@ -22,7 +22,7 @@ def fileSender(file_data: DataWeaver, receiver_sock):
     if file_list == ['']:
         file_list = Dialog.open_file_dialog_window()
     if not file_list:
-        return
+        return  
     receiver_obj = peer_list.get_peer(receiver_id)
 
     def _sock_thread(_id, _file: FiLe, conn):

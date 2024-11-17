@@ -12,4 +12,4 @@ if not exist "%FLAG_FILE%" (
 )
 cd ..
 python main.py
-exit
+@REM exit

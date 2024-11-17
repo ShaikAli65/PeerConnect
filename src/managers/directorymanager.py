@@ -13,7 +13,7 @@ from src.core import *
 from src.avails import useables as use
 from src.avails.textobject import DataWeaver
 from src.avails.dialogs import Dialog
-from src.managers.thread_manager import thread_handler
+from src.managers.thread_manager import thread_handler, DIRECTORIES
 
 zipping_processes: set[Process] = set()  # a set to store references of ongoing processes used in case of force stopping
 
@@ -51,7 +51,7 @@ def directorySender(_data: DataWeaver, recv_sock):
         files = make_file_items([zip_path,])
         _id = receiver_obj.get_file_count()
         controller = ThreadActuator(threading.current_thread())
-        thread_handler.register_control(controller)
+        thread_handler.register_control(controller, DIRECTORIES)
         receiver_sock = do_handshake(recv_sock, controller,
                                      {'file_name':os.path.basename(file_path), 'file_id':_id},
                                      receiver_obj)
@@ -67,10 +67,12 @@ def directorySender(_data: DataWeaver, recv_sock):
 
 def directoryReceiver(refer: DataWeaver):
     controller = ThreadActuator(threading.current_thread())
-    thread_handler.register_control(controller)
+    thread_handler.register_control(controller, DIRECTORIES)
     with connect.create_connection(tuple(refer.content['bind_ip'])) as soc:
-        files = PeerFilePool(_id=refer.content['file_id'], control_flag=thread_handler)
+        files = PeerFilePool(_id=refer.content['file_id'], control_flag=controller)
         files.recv_files(soc)
+    print("unzipping...")
+    print(list(files))
     for file in files:
         process_unzipping(Path(file.path))
 

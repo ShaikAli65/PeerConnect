@@ -197,6 +197,7 @@ class PeerFilePool:
         FILE_SIZE = struct.unpack('!Q', sender_sock.recv(8))[0]
         file_item.size = FILE_SIZE
         print('INTIAL FILE ITEM ', file_item)  # debug
+        self.file_items.add(file_item)
         self.calculate_chunk_size(FILE_SIZE)
         progress = tqdm.tqdm(
             range(FILE_SIZE),
@@ -263,6 +264,7 @@ class PeerFilePool:
         progress = tqdm.tqdm(range(start_file.size), f"::receiving {start_file.name[:20]} ... ", unit="B",
                              unit_scale=True, unit_divisor=1024)
         self.__recv_actual_file(sender_sock, start_file, progress)
+        self._remove_error_ext(start_file)
         progress.close()
         # -> ---------------------- file continuation part
 
@@ -309,7 +311,16 @@ class PeerFilePool:
             new_file_name = f"{base}({counter}){ext}"
             counter += 1
         return new_file_name
-
+    
+    def _remove_error_ext(self, file_item: _FileItem):
+        """
+            Removes file error ext by renaming the file with its actual file extension .
+        """
+        pathed = Path(file_item.path)
+        new_name = self.__validatename__(pathed.stem)
+        pathed.rename(os.path.join(const.PATH_DOWNLOAD, new_name))
+        file_item.path = str(pathed)
+    
     def __repr__(self):
         """
             Returns the file details

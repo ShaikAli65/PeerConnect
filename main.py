@@ -1,7 +1,7 @@
 """Main entry point for the application."""
 import tracemalloc
 import signal
-
+import functools
 from src.avails.remotepeer import RemotePeer
 from src.core import *
 import src.configurations.configure_app
