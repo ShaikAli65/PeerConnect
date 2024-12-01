@@ -365,8 +365,10 @@ def is_socket_connected(sock: Socket):
 
 def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
-    from ..core import get_this_remote_peer
-    ip = ip or get_this_remote_peer().ip
+    if ip is None:
+        from ..core import get_this_remote_peer
+        ip = ip or get_this_remote_peer().ip
+
     with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
         s.bind((ip, 0))  # Bind to port 0 to get a free port
         return s.getsockname()[1]  # Return the chosen port
