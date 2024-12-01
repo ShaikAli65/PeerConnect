@@ -36,7 +36,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     node_list_ids = node_list_ids
 
     async def find(self):
-        return await self._find(self.protocol.  call_find_peer_list)
+        return await self._find(self.protocol.call_find_peer_list)
 
     @override
     async def _handle_found_values(self, values):
@@ -93,21 +93,6 @@ class SearchCrawler:
                 yield _peers
 
 
-def get_more_peers():
-    peer_server = Dock.kademlia_network_server
-    return PeerListGetter.get_more_peers(peer_server)
-
-
-def search_for_nodes_with_name(search_string):
-    """
-    searches for nodes relevant to given :param:search_string
-    Returns:
-         a generator of peers that matches with the search_string
-    """
-    peer_server = Dock.kademlia_network_server
-    return SearchCrawler.search_for_nodes(peer_server, search_string)
-
-
 class Storage(storage.ForgetfulStorage):
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)
@@ -125,6 +110,25 @@ class Storage(storage.ForgetfulStorage):
             self.peer_data_storage[list_key] |= set(list_of_peers)
             Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
         return True
+
+
+class GossipSearch:
+    ...
+
+
+def get_more_peers():
+    peer_server = Dock.kademlia_network_server
+    return PeerListGetter.get_more_peers(peer_server)
+
+
+def search_for_nodes_with_name(search_string):
+    """
+    searches for nodes relevant to given :param: `search_string`
+    Returns:
+         a generator of peers that matches with the search_string
+    """
+    peer_server = Dock.kademlia_network_server
+    return SearchCrawler.search_for_nodes(peer_server, search_string)
 
 
 async def get_remote_peer(peer_id):

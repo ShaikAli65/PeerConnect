@@ -1,5 +1,6 @@
 import os
-import asyncio
+
+from src.avails.constants import debug
 from src.core import Dock
 from src.core.webpage_handlers import pagehandle
 from src.managers.statemanager import StateManager
@@ -27,5 +28,4 @@ async def initiate(states):
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     initial_states = test_initial_states
-    const.debug = False
-    asyncio.run(initiate(initial_states()), debug=True)
+    asyncio.run(initiate(initial_states()), debug=debug)

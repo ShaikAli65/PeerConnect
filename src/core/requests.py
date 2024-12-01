@@ -98,7 +98,7 @@ async def initiate():
     Dock.kademlia_network_server = server
     print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
     await server.add_this_peer_to_lists()
-    await join_gossip(server)
+    join_gossip(server)
     return server, transport, proto
 
 
