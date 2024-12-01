@@ -141,6 +141,10 @@ class Storage(storage.ForgetfulStorage):
         return True
 
 
+class GossipSearch:
+    ...
+
+
 async def get_remote_peer(peer_id) -> Optional[RemotePeer]:
     """
     Just a wrapper function around :method:`kademlia_network_server.get_remote_peer`

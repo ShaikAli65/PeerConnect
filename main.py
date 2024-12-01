@@ -29,5 +29,5 @@ async def initiate(states):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    const.debug = False
-    asyncio.run(initiate(initial_states()), debug=True)
+    initial_states = test_initial_states
+    asyncio.run(initiate(initial_states()), debug=debug)

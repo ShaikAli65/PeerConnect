@@ -2,7 +2,7 @@ import socket
 from sys import platform
 from os import path
 from threading import Lock
-
+from typing import Optional, TYPE_CHECKING
 
 CLEAR_LOGS = 1
 USERNAME = 'admin'
@@ -36,11 +36,12 @@ IP_VERSION = socket.AF_INET
 FILE_ERROR_EXT = '.pc-unconfirmedownload'
 debug = False
 
-if debug:
+PROTOCOL = None
+
+if TYPE_CHECKING:
     from src.avails.connect import TCPProtocol
-    PROTOCOL = TCPProtocol
-else:
-    PROTOCOL = None
+    PROTOCOL: Optional[TCPProtocol]
+
 LOCK_PRINT = Lock()
 
 MAX_LOAD = 5
