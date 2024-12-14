@@ -8,6 +8,7 @@ from typing import Optional, Union
 import websockets
 
 from src.avails import DataWeaver, StatusMessage, WireData, const, use
+from src.avails.useables import wrap_with_tryexcept
 
 PAGE_HANDLE_WAIT = _asyncio.Event()
 safe_end = threading.Event()
@@ -22,6 +23,7 @@ class WebSocketRegistry:
     connections: list[Optional[websockets.WebSocketServerProtocol]] = [None, None]
     message_queue = asyncio.Queue()
     connections_completed = _asyncio.Event()
+    _start_data_sender_task_reference = None
 
     @classmethod
     def get_websocket(cls, type_id: Union[DATA, SIGNAL]):
@@ -48,11 +50,24 @@ class WebSocketRegistry:
 
     @classmethod
     def clear(cls):
-        cls.message_queue.put(None)
+        cls.message_queue.put((None, None))
         for i in cls.connections:
             if i is not None:
                 i.close()
         del cls.connections
+
+    @classmethod
+    async def __aenter__(cls):
+        f = wrap_with_tryexcept(cls.start_data_sender)
+        cls._start_data_sender_task_reference = asyncio.create_task(f())
+        return cls
+
+    @classmethod
+    async def __aexit__(cls, exc_type, exc_val, exc_tb):
+        safe_end.set()
+        cls.clear()
+        cls._start_data_sender_task_reference.cancel()
+        return True
 
 
 class ReplyRegistry:
@@ -118,22 +133,30 @@ async def start_websocket_server():
 async def initiate_pagehandle():
     f = use.wrap_with_tryexcept(WebSocketRegistry.start_data_sender)
     asyncio.create_task(f())
-    await start_websocket_server()
+    async with WebSocketRegistry():
+        await start_websocket_server()
 
 
 def end():
     global PAGE_HANDLE_WAIT
     PAGE_HANDLE_WAIT.set()
-    safe_end.set()
-    WebSocketRegistry.clear()
 
 
-async def dispatch_data(data: DataWeaver, expect_reply=False):
+def dispatch_data(data, expect_reply=False):
+    """
+    Send data to frontend
+    Not actually sends data but queues the :param: data for sending
+    Args:
+        data (DataWeaver) : data to send
+        expect_reply (bool) : if this argument is true then a `asyncio.Future` is returned which can be awaited directly
+    Returns:
+        bool | asyncio.Future
+    """
     if check_closing():
         return False
     print(f"::Sending data to page: {data}")
     if expect_reply:
-        await ReplyRegistry.register_reply(data)
+        return ReplyRegistry.register_reply(data)
     WebSocketRegistry.send_data(data, data.type)
     return True
 
