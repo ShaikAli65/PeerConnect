@@ -8,8 +8,10 @@ import urllib.request
 import webbrowser
 
 import src.core.eventloop  # noqa
-from ..avails import connect, const, use
+from ..avails import RemotePeer, connect, const, use
 from ..configurations.configure import set_constants
+from ..core import set_current_remote_peer_object
+from ..managers import get_current_profile
 
 
 def initiate_bootup():
@@ -119,7 +121,7 @@ def get_v6_from_api64():
             data_dict = json.loads(data)
             config_ip = data_dict.get('ip', config_ip)
     except (urllib.request.HTTPError, json.JSONDecodeError) as e:
-        # error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
+        # error_log(f"Error getting local ip: {e} from get_local_ip() at line inspect.currentframe().f_lineno in core/constants.py")
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
     return config_ip
@@ -177,6 +179,25 @@ def validate_ports(ip) -> None:
     return None
 
 
+def configure_this_remote_peer():
+    rp = make_this_remote_peer()
+    set_current_remote_peer_object(rp)
+
+
+def make_this_remote_peer():
+    profile = get_current_profile()
+    rp = RemotePeer(
+        peer_id=profile.id.to_bytes((profile.id.bit_length() + 7) // 8, 'big'),
+        username=profile.username,
+        ip=const.THIS_IP,
+        conn_port=const.PORT_THIS,
+        req_port=const.PORT_REQ,
+        net_port=const.PORT_NETWORK,
+        status=1,
+    )
+    return rp
+
+
 @use.NotInUse
 def retrace_browser_path():
     if const.WINDOWS:
@@ -219,5 +240,4 @@ def launch_web_page():
             subprocess.Popen(['xdg-open', page_url])
 
     except FileNotFoundError:
-        from src.avails.useables import echo_print
-        echo_print("::webpage not found, look's like the package you downloaded is corrupted")
+        use.echo_print("::webpage not found, look's like the what you downloaded is corrupted")
