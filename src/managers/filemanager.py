@@ -3,7 +3,8 @@ import enum
 from itertools import count
 from pathlib import Path
 
-from src.avails import FileDict, OTMInformResponse, OTMSession, RemotePeer, Wire, WireData, connect, const, dialogs, use
+from src.avails import FileDict, OTMInformResponse, OTMSession, RemotePeer, Wire, WireData, connect, const, \
+    get_dialog_handler, use
 from src.core import Dock, get_this_remote_peer, transfers
 from ..avails.connect import get_free_port
 from ..core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, onetomany
@@ -22,8 +23,8 @@ class FileRegistry:
         return cls.all_files.get_scheduled(any_id)
 
     @classmethod
-    def schedule_transfer(cls, key, file_reciever_handle):
-        cls.all_files.add_to_scheduled(key, file_reciever_handle)
+    def schedule_transfer(cls, key, file_receiver_handle):
+        cls.all_files.add_to_scheduled(key, file_receiver_handle)
 
 
 class State(enum.Enum):
@@ -58,7 +59,7 @@ class FileSender:
     async def send_files(self):
         use.echo_print('changing state to connection')  # debug
         self.state = State.CONNECTING
-        use.echo_print('sent file header')  # debug
+        use.echo_print('sent file ')  # debug
         # await asyncio.sleep(0)  # temporarily yielding back
         connection = await connect.connect_to_peer(
             self.peer_obj,
@@ -125,12 +126,12 @@ class FileReceiver:
 
 async def open_file_selector():
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, dialogs.Dialog.open_file_dialog_window)
+    result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)
     return result
 
 
 async def send_files_to_peer(peer_id, selected_files):
-    # :todo make send_files_to_peer  a generator yielding status to page
+    # :todo make send_files_to_peer a generator yielding status to page
     if file_sender_handle := _check_running(peer_id):
         # if any transfer is running just attach FileItems to that transfer
         file_sender_handle.file_pool.attach_files((FileItem(path, 0) for path in selected_files))
@@ -149,16 +150,15 @@ def _check_running(peer_id) -> FileSender:
         return file_handles[0]
 
 
-def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
+async def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
     print("new file connection arrived", file_req['file_id'])
-    f = use.wrap_with_tryexcept(file_receiver, file_req, connection)
-    asyncio.create_task(f())
     print("scheduling file transfer request", file_req)
+    await file_receiver(file_req,connection)
 
 
 async def file_receiver(file_req: WireData, connection):
     """
-    Just a wrapper function which does bookeeping for FileReciever object
+    Just a wrapper function which does bookkeeping for FileReceiver object
     """
     file_handle = FileReceiver(file_req)
     file_handle.connection_arrived(connection)
@@ -175,7 +175,7 @@ def start_new_otm_file_transfer(files: list[Path], peers: list[RemotePeer]):
 
 def new_otm_request_arrived(req_data: WireData, addr):
     session = OTMSession(
-        originater_id=req_data.id,
+        originate_id=req_data.id,
         session_id=req_data['session_id'],
         key=req_data['key'],
         fanout=req_data['fanout'],
@@ -206,8 +206,8 @@ def new_otm_request_arrived(req_data: WireData, addr):
 
 async def update_otm_stream_connection(connection, link_data: WireData):
     """
-    This is the final function call related to an otm session, all other rpc's from now are made
-    internally from otm session relay
+    This is the final function call related to an otm session, all other rpc' s from now are made
+    internally from/to otm session relay
     """
     use.echo_print(use.COLORS[3], "updating otm connection", connection.getpeername())
     session_id = link_data['session_id']
