@@ -1,6 +1,3 @@
-from itertools import count
-from typing import Tuple
-
 import umsgpack
 
 from . import const
@@ -16,14 +13,14 @@ class RemotePeer:
 
     __annotations__ = {
         'username': str,
-        'uri': Tuple[str, int],
+        'uri': tuple[str, int],
         'status': int,
         'callbacks': int,
-        'req_uri': Tuple[str, int],
+        'req_uri': tuple[str, int],
         'id': str,
     }
 
-    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip','_network_port', 'long_id'
+    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', '_network_port', 'long_id', '_byte_cache'
 
     def __init__(self,
                  peer_id=b'\x00',
@@ -41,6 +38,7 @@ class RemotePeer:
         self._network_port = net_port
         self.id = peer_id
         self.long_id = int(peer_id.hex(), 16)
+        self._byte_cache = None, None
 
     def same_home_as(self, node):
         return self.ip == node.ip and self.req_uri == node.req_uri and self.uri == node.uri
@@ -82,21 +80,38 @@ class RemotePeer:
         list_of_attrs = umsgpack.loads(data)
         return cls(*list_of_attrs)
 
-    def is_relavent(self, match_string):
+    def is_relevant(self, match_string):
         """
-        Used to qualify this remote peer object as a valid
-        entity for a search string
+        Used to qualify this remote peer object as a valid entity for a search string
         """
-        if match_string in self.username:
-            return True
+        return match_string in self.username
 
     def __bytes__(self):
         list_of_attributes = list(self)
-        # print("bytifying", list_of_attributes, "*"*50)  # debug
         return umsgpack.dumps(list_of_attributes)
 
+    @property
+    def serialized(self):
+        hashed = hash(tuple(self))
+
+        if hashed == self._byte_cache[0]:
+            r = self._byte_cache[1]
+        else:
+            r = bytes(self)
+            self._byte_cache = hashed, r
+
+        return r
+
     def __repr__(self):
-        return f'RemotePeer(name={self.username}, ip={self.ip}, conn={self._conn_port}, req={self._req_port}, net={self._network_port}, st={self.status})'
+        return (
+            f'RemotePeer('
+            f'name={self.username},'
+            f' ip={self.ip},'
+            f' conn={self._conn_port},'
+            f' req={self._req_port},'
+            f' net={self._network_port},'
+            f' st={self.status})'
+        )
 
     def __bool__(self):
         return bool(self.username or self.id or self.req_uri or self.uri)
