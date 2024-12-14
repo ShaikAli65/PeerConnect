@@ -184,7 +184,7 @@ class DataWeaver:
 class WireData:
     _version = _const.VERSIONS['WIRE']
 
-    __slots__ = 'id', '_header', 'version', 'body',  # 'ancillary_data',
+    __slots__ = 'id', '_header', 'version', 'body',
 
     def __init__(self, header=None, _id=None, version=_version, **kwargs):
         self._header = header
@@ -219,6 +219,10 @@ class WireData:
     @property
     def header(self):
         return self._header
+
+    @property
+    def dict(self): # for introspection or validation
+        return {'header':self._header, 'id':self.id,'version':self.version, **self.body}
 
     def __str__(self):
         return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
@@ -277,6 +281,19 @@ class GossipMessage:
     def id(self, value):
         self.actual_data.id = value
 
+    def fields_check(self):
+        wire_data = self.actual_data
+        match wire_data.dict:
+            case {
+                'id':_,
+                'header':_,
+                'created':_,
+                'ttl':_,
+            }:
+                return True
+            case _:
+                return False
+
     def __bytes__(self):
         return bytes(self.actual_data)
 
@@ -285,7 +302,11 @@ class GossipMessage:
 
 
 def unpack_datagram(data_payload) -> Optional[WireData]:
-    """ Unpack the datagram and handle exceptions """
+    """
+        Utility function to unpack data from :func: datagram_received callback from asyncio's DatagramProtocol
+        Unpack the raw data received using peer-connect's wire protocol
+        into WireData and handle exceptions
+    """
     try:
         data = Wire.load_datagram(data_payload)
         loaded = WireData.load_from(data)
@@ -350,14 +371,14 @@ class PalmTreeInformResponse:
 class PalmTreeSession:
     """
     Args:
-        `originater_id(str)`: the one who initiated this session
+        `originated_id(str)`: the one who initiated this session
         `adjacent_peers(list[str])` : all the peers to whom we should be in contact
         `session_key(str)` : session key used to encrypt data
         `session_id(int)` : self-explanatory
         `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
         `link_wait_timeout`(double) : timeout for any i/o operations
     """
-    originater_id: str
+    originate_id: str
     adjacent_peers: list[str]
     session_id: int
     key: str
@@ -371,7 +392,7 @@ class PalmTreeSession:
 class OTMSession(PalmTreeSession):
     """
     Args:
-        `originater_id(str)`: the one who initiated this session
+        `originated_id(str)`: the one who initiated this session
         `session_id(int)` : self-explanatory
         `key(str)` : session key used to encrypt data
         `fanout`(int) : maximum number of resends this instance should perform for every packet received
@@ -387,10 +408,6 @@ class OTMInformResponse(PalmTreeInformResponse):
     __slots__ = ()
     __doc__ = PalmTreeInformResponse.__doc__
 
-
-#
-# class OtmChunkType(enum.IntEnum):
-#     DATA = 0x1
 
 class OTMChunk(NamedTuple):
     chunk_number: int
