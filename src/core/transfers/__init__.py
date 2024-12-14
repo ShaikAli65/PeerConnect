@@ -1,4 +1,4 @@
-from ._headers import HEADERS
+from ._headers import *
 from .fileobject import *
 from .gossip import *
 from .onetomany import *
