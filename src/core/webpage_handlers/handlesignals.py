@@ -27,7 +27,7 @@ async def search_for_user(data: DataWeaver):
         header=HEADERS.HANDLE_SEARCH_RESPONSE,
         content=[{'name': peer.username, 'id': peer.id} for peer in peer_list],
     )
-    await dispatch_data(response_data)
+    dispatch_data(response_data)
 
 
 async def send_list(data: DataWeaver):
@@ -38,7 +38,7 @@ async def send_list(data: DataWeaver):
         header=HEADERS.HANDLE_SEARCH_RESPONSE,
         content=[{'name': peer.username, 'id': peer.id} for peer in peer_list],
     )
-    await dispatch_data(response_data)
+    dispatch_data(response_data)
 
 
 async def connect_peer(handle_data: DataWeaver):
