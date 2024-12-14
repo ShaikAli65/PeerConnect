@@ -1,12 +1,100 @@
-from collections import defaultdict
+"""
 
+## How do we perform
+
+1. A distributed search
+2. Gather list of peers to display
+
+in a p2p network, working with kademila's routing protocol?
+
+### 1.1 If user can enter the peer id,
+    then we can go through the network in O(log n),
+    and get that peer details
+    cons - But it's the worst UX
+
+### 1.2 User enters a search string related to what ever he knows about other peer
+    - we use that string to relate to peer's info and get that (from where?)
+
+### 1.3 refer `2.3`
+
+### 1.4 perform a gossip-based search
+    - send a search request packet to the network
+    - maintain a state for that request in the memory
+    - if a peer relates to that string, it replies to that search request by sending a datagram containing it's peer object
+    - gather all the replies and cache them in `Storage`
+
+    pros :
+    - fast and efficient
+    - can we scaled and pretty decentralized
+    - cool
+
+    cons :
+    - no control over the search query (like cancelling that query) once it is passed into network
+    - whole network will eventually respond to that search query
+    - we have to ignore those packets
+
+
+### 2.1 We need to display list of peers who are active in the network
+    *.1 Need to iterate over the network over kademlia's routing protocol,
+        for that we have to get the first id node in the network,
+        append all the nodes found to a priority queue marking them visited if already queried,
+        (sounds dfs or bfs), cache all that locally for a while
+
+        cons - we have so much redundant peer objects passing here and there
+
+    *.2 Full brute force
+        we have some details of our logically nearest peers,
+        so we brute force that list and get whatever they have
+        again query the list of peers sent by them in loop
+
+        cons - we have so much redundant peer objects passing here and there
+
+### 2.2 Preferred solution
+    - we selected 20 buckets spaced evenly in the { 0 - 2 ^ 160 } node id space
+    - give the bucket authority to nearest peer (closer to that bucket id)
+    - each peer's adds themselves to that bucket when they join the network
+        - peer's even ping the bucket and re-enter themselves within a time window
+
+    - if a peer owns the bucket, another peer joins the network with more closest id to the bucket
+      then a redistribution of bucket to that nearest peer will happen and all the authority over that bucket is
+      transferred
+    - problem, what if someone is querying that bucket in the meanwhile?
+    (we can say that this is consistent hashing)
+
+    - we can now show list of peer's available in the network by,
+    step 1 : iterating over the `list of bucket id's`,
+    step 2 : communicating  to the peer that is responsible for that bucket
+    step 3 : perform a get list of peers RPC
+    step 4 : show the list of peers to user
+
+    - now we have peer gathering feature with paging
+
+### 2.3
+
+referring 1.3 :
+    we can iterate over `list of bucket id's`,
+    communicate to the peers that own bucket,
+    ask them to search for relevant peers that match the given search string,
+    return the list of peer's matched
+
+    never do's:
+        - cache the owner peer for a respective bucket as they can change pretty fast,
+          always use kademlia's search protocol to get latest peer data
+        - permanently cache peer's data received
+
+"""
+import asyncio
+import time
+from collections import defaultdict
+from collections.abc import AsyncIterator
 from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import RemotePeer, use
-from src.avails.useables import echo_print
-from src.core import Dock
+from src.avails import GossipMessage, RemotePeer, use
+from src.avails.useables import echo_print, get_unique_id
+from src.core import Dock, get_gossip, get_this_remote_peer
+from src.core.transfers import REQUESTS_HEADERS
 
 node_list_ids = [
     b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
@@ -97,22 +185,6 @@ class SearchCrawler:
                 yield _peers
 
 
-def get_more_peers():
-    peer_server = Dock.kademlia_network_server
-    print("getting more peers")  # debug
-    return PeerListGetter.get_more_peers(peer_server)
-
-
-def search_for_nodes_with_name(search_string):
-    """
-    searches for nodes relevant to given :param:search_string
-    Returns:
-         a generator of peers that matches with the search_string
-    """
-    peer_server = Dock.kademlia_network_server
-    return SearchCrawler.search_for_nodes(peer_server, search_string)
-
-
 class Storage(storage.ForgetfulStorage):
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)
@@ -137,12 +209,108 @@ class Storage(storage.ForgetfulStorage):
                     filtered_peers.add(peer)
 
             self.peer_data_storage[list_key] |= filtered_peers
-            Dock.peer_list.extend(map(RemotePeer.load_from, list_of_peers))
+            Dock.peer_list.extend(RemotePeer.load_from(x) for x in list_of_peers)
         return True
 
 
 class GossipSearch:
-    ...
+    class search_iterator(AsyncIterator):
+        timeout = 3
+
+        def __init__(self, message_id):
+            self.message_id = message_id
+            self.reply_queue: asyncio.Queue[RemotePeer] = asyncio.Queue()
+
+        def add_peer(self, p):
+            self.reply_queue.put_nowait(p)
+
+        def __aiter__(self):
+            self._start_time = asyncio.get_event_loop().time()
+            return self
+
+        async def __anext__(self):
+            current_time = asyncio.get_event_loop().time()
+            if current_time - self._start_time > self.timeout:
+                raise StopAsyncIteration
+
+            try:
+                search_response = await asyncio.wait_for(self.reply_queue.get(),
+                                                         timeout=self.timeout - (current_time - self._start_time))
+                return search_response
+            except asyncio.TimeoutError:
+                raise StopAsyncIteration
+
+    _message_state_dict: dict[str, search_iterator] = {}
+    _search_cache = {}
+
+    @classmethod
+    def search_for(cls, find_str, gossip_handler):
+        m = cls._prepare_search_message(find_str)
+        gossip_handler.gossip_message(m)
+        cls._message_state_dict[m.id] = f = cls.search_iterator(m.id)
+        return f
+
+    @classmethod
+    def request_arrived(cls, req_data: GossipMessage, addr):
+        search_string = req_data.message
+        me = get_this_remote_peer()
+        if me.is_relevant(search_string):
+            return cls._prepare_reply(req_data.id)
+
+    @staticmethod
+    def _prepare_reply(reply_id):
+        gm = GossipMessage()
+        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REPLY
+        gm.id = reply_id
+        gm.message = get_this_remote_peer().serialized
+        gm.created = time.time()
+        return bytes(gm)
+
+    @staticmethod
+    def _prepare_search_message(find_str):
+        gm = GossipMessage()
+        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REQ
+        gm.message = find_str
+        gm.id = get_unique_id()
+        gm.created = time.time()
+        return gm
+
+    @classmethod
+    def reply_arrived(cls, reply_data: GossipMessage, addr):
+        Dock.global_gossip.message_arrived(reply_data)
+        try:
+            result_iter = cls._message_state_dict[reply_data.id]
+            if m := reply_data.message:
+                m = RemotePeer.load_from(m)
+            result_iter.add_peer(m)
+        except KeyError:
+            echo_print("invalid gossip search response id")
+
+
+def get_search_handler():
+    return GossipSearch
+
+
+def get_more_peers():
+    peer_server = Dock.kademlia_network_server
+    print("getting more peers")  # debug
+    return PeerListGetter.get_more_peers(peer_server)
+
+
+async def gossip_search(search_string) -> AsyncIterator[RemotePeer]:
+    searcher = get_search_handler()
+    async for peer in searcher.search_for(search_string, get_gossip()):
+        yield peer
+
+
+def search_for_nodes_with_name(search_string):
+    """
+    searches for nodes relevant to given :param:search_string
+    Returns:
+         a generator of peers that matches with the search_string
+    """
+    peer_server = Dock.kademlia_network_server
+    return SearchCrawler.search_for_nodes(peer_server, search_string)
 
 
 async def get_remote_peer(peer_id) -> Optional[RemotePeer]:
