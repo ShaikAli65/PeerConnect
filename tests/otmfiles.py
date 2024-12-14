@@ -1,7 +1,15 @@
-from src.avails import DataWeaver
-from src.core import Dock
+import asyncio
+import os
+import sys
+sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
+
 from src.core.transfers import HEADERS
+from src.managers.statemanager import State
+from test import initiate, test_initial_states
+from src.avails import DataWeaver
 from src.core.webpage_handlers import handledata
+from src.avails import const
+from src.core import Dock
 
 
 async def test_one_to_many_file_transfer():
@@ -60,3 +68,12 @@ async def test_one_to_many_file_transfer():
 
     except StopIteration:
         print("no peers available")
+
+
+if __name__ == "__main__":
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    const.debug = False
+    i_states = test_initial_states()
+    s11 = State("test otm file transfer", test_one_to_many_file_transfer, is_blocking=True)
+
+    asyncio.run(initiate(i_states + (s11,)), debug=True)
