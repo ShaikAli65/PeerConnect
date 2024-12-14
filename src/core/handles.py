@@ -168,7 +168,7 @@ class DirectoryTaskHandle(TaskHandle):
 
     def recv_file(self, file_path):
         size = self.socket.recv(8)
-        file_item = FileItem(size, file_path, 0)
+        file_item = FileItem(file_path, 0)
 
         ...
 
