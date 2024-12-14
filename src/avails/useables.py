@@ -8,7 +8,6 @@ import subprocess
 import sys
 import threading
 import traceback
-from datetime import datetime
 from sys import _getframe  # noqa
 from uuid import uuid4
 
@@ -21,7 +20,9 @@ def func_str(func_name):
     return f"{func_name.__name__}()\\{os.path.relpath(func_name.__code__.co_filename)}"
 
 
-def get_unique_id(_type: type):
+def get_unique_id(_type: type = str):
+    if _type == bytes:
+        return uuid4().bytes
     return _type(uuid4())
 
 
@@ -66,7 +67,6 @@ async def async_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_v
         current *= factor
 
 
-@functools.wraps(print)
 def echo_print(*args, **kwargs):
     """Prints the given arguments to the console.
 
@@ -208,7 +208,17 @@ COLOR_RESET = "\033[0m"
 
 
 def wrap_with_tryexcept(func, *args, **kwargs):
+    """
+    Designed to use like:
 
+    >>> f = wrap_with_tryexcept(func, *args, **kwargs)
+    >>> asyncio.create_task(f())  # sort of `functools.partial` aesthetics
+
+    Args:
+        func : any async function
+        args, kwargs : to forward
+
+    """
     @functools.wraps(func)
     async def wrapped_with_tryexcept():
         try:
@@ -222,6 +232,17 @@ def wrap_with_tryexcept(func, *args, **kwargs):
             print(COLOR_RESET)
 
     return wrapped_with_tryexcept
+
+
+def spawn_task(func, *args, bookeep=None, done_callback=None, **kwargs):
+    f = wrap_with_tryexcept(func, *args, **kwargs)
+    t = asyncio.create_task(f())
+    if done_callback:
+        t.add_done_callback(done_callback)
+    if bookeep:
+        bookeep(t)
+    else:
+        return t
 
 
 def search_relevant_peers(peer_list, search_string) -> list:
@@ -278,10 +299,3 @@ class NotInUse:
         - **kwargs: Keyword arguments for the function.
         """
         raise ValueError(f"Your are not supposed to call this function :{self.function.__name__}")
-
-
-def uniquify(string_in):
-    # import uuid
-    # random_str = str(uuid.uuid4())
-    random_str = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    return f"{string_in}{random_str}"

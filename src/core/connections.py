@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import socket
 import textwrap
 import threading
@@ -51,9 +52,14 @@ class Acceptor:
         self.max_timeout = 90
         use.echo_print("::Initiating Acceptor ", self.address)
         self._initialized = True
+        self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add, done_callback=lambda t: self.all_tasks.remove(t))
 
     def set_loop(self, loop):
         self.__loop = loop
+
+    async def _guard_resource(self, func, resource, *args, **kwargs):
+        with resource:
+            await func
 
     async def initiate(self):
         self.main_socket = await self.start_socket()
@@ -62,11 +68,12 @@ class Acceptor:
             while not self.stopping:
                 initial_conn, _ = await self.main_socket.aaccept()
                 use.echo_print(f"New connection from {_}")
-                f = use.wrap_with_tryexcept(self.__accept_connection, initial_conn)
-                task = asyncio.create_task(f())
-                task.add_done_callback(lambda t: self.all_tasks.discard(t))
-                self.all_tasks.add(task)
+                self._spawn_task(self.__accept_connection, initial_conn)
                 await asyncio.sleep(0)
+                # f = use.wrap_with_tryexcept(self.__accept_connection, initial_conn)
+                # task = asyncio.create_task(f())
+                # task.add_done_callback(lambda t: self.all_tasks.discard(t))
+                # self.all_tasks.add(task)
 
     async def start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
@@ -93,30 +100,39 @@ class Acceptor:
 
     async def verify(self, connection):
         """
+
+        Verfies the tcp connection based on a predefined algorithm
+        acts as a multiplexer endpoint delegating the connection socket
+        to respective communication managers
+
         :param connection: connection from peer
         :returns peer_id: if verification is successful else None (implying socket to be removed)
         """
         data = await Wire.receive_async(connection)
         hand_shake = WireData.load_from(data)
+
         if hand_shake.match_header(HEADERS.CMD_VERIFY_HEADER):
             peer_id = hand_shake.id
             self.currently_in_connection[peer_id] += 1
             use.echo_print("verified peer", peer_id)  # debug
             return peer_id
+
         if hand_shake.match_header(HEADERS.CMD_FILE_CONN):
-            return filemanager.file_recv_request_connection_arrived(connection, hand_shake)
+            self._spawn_task(filemanager.file_recv_request_connection_arrived(connection, hand_shake))
 
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
             use.echo_print("got a gossip stream link connection request delegating to gossip manager")  # debug
-            f = use.wrap_with_tryexcept(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
-            asyncio.create_task(f())
+            # f = use.wrap_with_tryexcept(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
+            # asyncio.create_task(f())
+            self._spawn_task(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
             return None
-            # return gossipmanager.update_gossip_stream_socket(connection, hand_shake)
 
         if hand_shake.match_header(HEADERS.OTM_UPDATE_STREAM_LINK):
             use.echo_print("got a otm stream link connection request delegating to file manager")  # debug
-            f = use.wrap_with_tryexcept(filemanager.update_otm_stream_connection, connection, hand_shake)
-            asyncio.create_task(f())
+            # f = use.wrap_with_tryexcept(filemanager.update_otm_stream_connection, connection, hand_shake)
+            # asyncio.create_task(f())
+            self._spawn_task(filemanager.update_otm_stream_connection, connection, hand_shake)
+
             return None
 
     async def handle_peer(self, peer_id):
@@ -156,6 +172,7 @@ class Acceptor:
 
 class Connector:
     _current_connected = connect.Socket()
+
     # :todo: make this more advanced such that it can handle mulitple requests related to same socket
 
     @classmethod
