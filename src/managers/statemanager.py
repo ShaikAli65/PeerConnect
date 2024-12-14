@@ -38,7 +38,10 @@ class State:
             if hasattr(func, __name__):
                 self.func.__name__ = func.__name__
             else:
-                self.func.__name__ = inspect.currentframe().f_code.co_name
+                if fr := inspect.currentframe():
+                    self.func.__name__ = fr.f_code.co_name
+                else:
+                    self.func.__name__ = "not defined"
         # self.func_name = func.__name__
         self.actuator = controller
         self.event = event_to_wait

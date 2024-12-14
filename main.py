@@ -1,12 +1,12 @@
 import asyncio
 import os
 
+from src.avails import const
 from src.configurations import bootup, configure
 from src.core import Dock, connections, requests
 from src.core.webpage_handlers import pagehandle
 from src.managers import profilemanager
 from src.managers.statemanager import State, StateManager
-from src.avails import const
 
 
 def initial_states():
@@ -16,9 +16,10 @@ def initial_states():
     s4 = State("printing configurations", configure.print_constants)
     s5 = State("launching webpage", pagehandle.initiate_pagehandle, is_blocking=True)
     s6 = State("waiting for profile choice", Dock.PROFILE_WAIT.wait)
+    s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s7 = State("initiating requests", requests.initiate, is_blocking=True)
     s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
-    return s1, s2, s3, s4, s5, s6, s7, s8
+    return tuple(locals().values())
 
 
 async def initiate(states):
@@ -29,5 +30,7 @@ async def initiate(states):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    initial_states = test_initial_states
-    asyncio.run(initiate(initial_states()), debug=debug)
+    print(os.path.abspath(__file__))
+
+    asyncio.run(initiate(initial_states()), debug=const.debug)
+

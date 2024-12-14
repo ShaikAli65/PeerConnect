@@ -1,8 +1,6 @@
 import asyncio as _asyncio
 import socket as _socket
 from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop
-from functools import wraps
 from typing import IO, Optional, Self
 
 from . import const, useables
@@ -51,23 +49,18 @@ class Socket(_socket.socket):
             custom_socket.setblocking(True)
         return custom_socket, addr
 
-    @wraps(AbstractEventLoop.sock_accept)
     async def aaccept(self):
         return await self.__loop.sock_accept(self)
 
-    @wraps(AbstractEventLoop.sock_recv)
     def arecv(self, bufsize):
         return self.__loop.sock_recv(self, bufsize)
 
-    @wraps(AbstractEventLoop.sock_connect)
     async def aconnect(self, __address) -> Self:
         return await self.__loop.sock_connect(self, __address)
 
-    @wraps(AbstractEventLoop.sock_sendall)
     async def asendall(self, data):
         return await self.__loop.sock_sendall(self, data)
 
-    @wraps(AbstractEventLoop.sock_sendfile)
     async def asendfile(self, file: IO[bytes],
                         offset: int = 0,
                         count: int | None = None,
@@ -75,19 +68,15 @@ class Socket(_socket.socket):
                         fallback: bool | None = None):
         return await self.__loop.sock_sendfile(self, file, offset, count, fallback=fallback)
 
-    @wraps(AbstractEventLoop.sock_sendto)
     async def asendto(self, data, address):
         return await self.__loop.sock_sendto(self, data, address)
 
-    @wraps(AbstractEventLoop.sock_recv_into)
     async def arecv_into(self, buffer):
         return await self.__loop.sock_recv_into(self, buffer)
 
-    @wraps(AbstractEventLoop.sock_recvfrom_into)
     async def arecvfrom_into(self, buffsize):
         return await self.__loop.sock_recvfrom(self, buffsize)
 
-    @wraps(AbstractEventLoop.sock_recvfrom)
     async def arecvfrom(self, buffsize):
         return await self.__loop.sock_recvfrom(self, buffsize)
 
@@ -285,7 +274,7 @@ BASIC_URI = 'uri'
 REQ_URI = 'req_uri'
 
 
-def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
+def connect_to_peer(_peer_obj=None, to_which: str = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -369,14 +358,14 @@ def get_free_port(ip=None) -> int:
         from ..core import get_this_remote_peer
         ip = ip or get_this_remote_peer().ip
 
-    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+    with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
         s.bind((ip, 0))  # Bind to port 0 to get a free port
         return s.getsockname()[1]  # Return the chosen port
 
 
 def is_port_empty(port, addr=None):
     addr = addr or ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
-    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+    with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
         try:
             # Try to bind the socket to the specified port
             s.bind(addr)

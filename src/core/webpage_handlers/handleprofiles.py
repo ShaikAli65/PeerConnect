@@ -14,23 +14,13 @@ async def align_profiles(signal_data: DataWeaver):
     await configure_further_profile_data(further_data)
 
 
-async def send_profiles():
+def send_profiles():
     userdata = DataWeaver(
         header="this is a profiles list",
         content=all_profiles()
     )
     use.echo_print('::profiles sent')
-    return await dispatch_data(userdata, expect_reply=True)
-
-
-async def set_selected_profile(page_data: DataWeaver):
-    selected_profile = page_data
-    for profile in ProfileManager.PROFILE_LIST:
-        if profile == selected_profile.content:
-            selected_profile = profile
-            break
-    set_current_profile(selected_profile)
-    use.echo_print('::profile selected and updated', selected_profile)
+    return dispatch_data(userdata, expect_reply=True)
 
 
 async def configure_further_profile_data(profiles_data):
@@ -41,6 +31,7 @@ async def configure_further_profile_data(profiles_data):
         file_name : {
             'USER' : {
                 'name' : *,
+                'id' : *,
             },
             'SERVER' : {
                 'ip' : *,
@@ -68,3 +59,13 @@ async def configure_further_profile_data(profiles_data):
 
         for header, content in profile_settings.items():
             profile_object.edit_profile(header, content)
+
+
+async def set_selected_profile(page_data: DataWeaver):
+    selected_profile = page_data
+    for profile in ProfileManager.PROFILE_LIST:
+        if profile == selected_profile.content:
+            selected_profile = profile
+            break
+    set_current_profile(selected_profile)
+    use.echo_print('::profile selected and updated', selected_profile)

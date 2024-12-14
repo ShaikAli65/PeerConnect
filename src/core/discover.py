@@ -1,21 +1,13 @@
 import asyncio
 import logging
-import sys
-
-from kademlia.crawling import NodeSpiderCrawl
-
-# Python version check
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    # Define a no-op decorator for Python versions < 3.11
-    def override(method):
-        return method
+from typing import override
 
 import kademlia.node
 import kademlia.protocol
 from kademlia import crawling, network, routing
-from src.avails import RemotePeer, use, const
+from kademlia.crawling import NodeSpiderCrawl
+
+from src.avails import RemotePeer, const, use
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
 
@@ -33,7 +25,7 @@ class RPCFindResponse(crawling.RPCFindResponse):
         return [RemotePeer(*nodeple) for nodeple in nodelist]
 
 
-# monkey-patching to custom RPCFindResponce
+# monkey-patching to custom RPCFindResponse
 crawling.RPCFindResponse = RPCFindResponse
 kademlia.node.Node = RemotePeer
 
@@ -43,19 +35,16 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(self, ksize, source_node)
         self.storage = storage
-        self.source_node = source_node
-        self.source_node_serialized = bytes(source_node)
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
-        # print("checking in", s, self.router.is_new_node(s))  # debug
         self.welcome_if_new(s)
         return s
 
     @override
     def rpc_ping(self, sender, sender_peer):
         self._check_in(sender_peer)
-        return self.source_node_serialized
+        return self.source_node.serialized
 
     @override
     def rpc_store(self, sender, sender_peer, key, value):
@@ -105,57 +94,57 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
     @override
     async def call_find_node(self, node_to_ask, node_to_find):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_node(node_to_ask.network_uri, self.source_node_serialized,
+        result = await self.find_node(node_to_ask.network_uri, self.source_node.serialized,
                                       node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_find_value(self, node_to_ask, node_to_find):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_value(node_to_ask.network_uri, self.source_node_serialized,
+        result = await self.find_value(node_to_ask.network_uri, self.source_node.serialized,
                                        node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_ping(self, node_to_ask):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.ping(node_to_ask.network_uri, self.source_node_serialized)
+        result = await self.ping(node_to_ask.network_uri, self.source_node.serialized)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_store(self, node_to_ask, key, value):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.store(node_to_ask.network_uri, self.source_node_serialized, key, value)
+        result = await self.store(node_to_ask.network_uri, self.source_node.serialized, key, value)
         return self.handle_call_response(result, node_to_ask)
 
     async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
         if not isinstance(list_key, bytes):
             list_key = list_key.id
         address = peer_to_ask.network_uri
-        result = await self.store_peers_in_list(address, self.source_node_serialized, list_key, peer_list)
+        result = await self.store_peers_in_list(address, self.source_node.serialized, list_key, peer_list)
         return self.handle_call_response(result, peer_to_ask)
 
     async def call_find_peer_list(self, peer_to_ask, node_to_find):
         address = peer_to_ask.network_uri
-        result = await self.find_list_of_peers(address, self.source_node_serialized, node_to_find.id)
+        result = await self.find_list_of_peers(address, self.source_node.serialized, node_to_find.id)
         return self.handle_call_response(result, peer_to_ask)
 
     async def call_search_peers(self, peer_to_ask: RemotePeer, search_string):
-        # add0ress = peer_to_ask.network_uri
-        result = await self.search_peers(peer_to_ask.network_uri, self.source_node_serialized, search_string)
+        # address = peer_to_ask.network_uri
+        result = await self.search_peers(peer_to_ask.network_uri, self.source_node.serialized, search_string)
         self.handle_call_response(result, peer_to_ask)
         return list(map(RemotePeer.load_from, result[1]))
 
     def _send_peer_lists(self, peer):
         for list_key, peer_list in self.storage.all_peers_in_lists():
             peer_list = list(peer_list)
-            keynode = RemotePeer(list_key)
-            neighbors = self.router.find_neighbors(keynode)
+            key_node = RemotePeer(list_key)
+            neighbors = self.router.find_neighbors(key_node)
             if neighbors:
-                last = neighbors[-1].distance_to(keynode)
-                new_node_close = peer.distance_to(keynode) < last
-                first = neighbors[0].distance_to(keynode)
-                this_closest = self.source_node.distance_to(keynode) < first
+                last = neighbors[-1].distance_to(key_node)
+                new_node_close = peer.distance_to(key_node) < last
+                first = neighbors[0].distance_to(key_node)
+                this_closest = self.source_node.distance_to(key_node) < first
             if not neighbors or (new_node_close and this_closest):  # noqa
                 for i in peer_list:
                     asyncio.create_task(self.call_store_peers_in_list(peer, list_key, [i, ]))
@@ -250,7 +239,7 @@ class PeerServer(network.Server):
 
     async def get_remote_peer(self, peer_id):
         """
-        Every call to this function no only gathers remote_peer object corresponding to peer_id
+        Every call to this function not only gathers remote_peer object corresponding to peer_id
         but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent
         """
