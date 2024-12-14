@@ -28,7 +28,7 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
     stream_endpoint_addr = get_active_endpoint_address()
     datagram_endpoint, datagram_endpoint_addr = get_passive_endpoint(addr, loop)
     session = PalmTreeSession(
-        originater_id=req_data.id,
+        originate_id=req_data.id,
         adjacent_peers=req_data['adjacent_peers'],
         session_id=req_data['session_id'],
         key=req_data['session_key'],
