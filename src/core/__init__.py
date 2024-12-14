@@ -18,15 +18,21 @@ class Dock:
     global_gossip = None
     _this_object: Optional[_RemotePeer] = None
     kademlia_network_server = None
+
     if TYPE_CHECKING:
-        from src.core.discover import PeerServer
+        from .transfers import RumorMongerProtocol
+        from .discover import PeerServer
+        from src.managers.statemanager import StateManager
+
+        global_gossip: RumorMongerProtocol
         kademlia_network_server: PeerServer
+        state_handle: StateManager
 
     requests_endpoint: Optional[_asyncio.DatagramTransport] = None
 
 
 def get_this_remote_peer():
-    return Dock._this_object  # noqa
+    return Dock._this_object
 
 
 def get_gossip():
@@ -41,3 +47,4 @@ def join_gossip(data_transport):
 
 def set_current_remote_peer_object(remote_peer):
     Dock._this_object = remote_peer
+

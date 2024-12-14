@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import socket
 from collections import OrderedDict, defaultdict
-from typing import Union
+from typing import TYPE_CHECKING, Union, ValuesView
 from weakref import WeakSet
 
 from . import connect
@@ -26,13 +26,16 @@ class PeerDict(dict):
         # self.__lock = threading.Lock()
         self.__lock = asyncio.Lock()
 
-    # from src.avails import RemotePeer
-    RemotePeer = 1
+    if TYPE_CHECKING:
+        from src.avails import RemotePeer
+        RemotePeer = RemotePeer
+    else:
+        RemotePeer = None
 
     def get_peer(self, peer_id) -> RemotePeer:
         return self.get(peer_id, None)
 
-    def add_peer(self, peer_obj):  # RemotePeer):
+    def add_peer(self, peer_obj):
         # with self.__lock:
         self[peer_obj.id] = peer_obj
 
@@ -43,7 +46,7 @@ class PeerDict(dict):
     def remove_peer(self, peer_id):
         return self.pop(peer_id, None)
 
-    def peers(self):  # -> ValuesView[RemotePeer]:
+    def peers(self) -> ValuesView[RemotePeer]:
         return self.values()
 
     def clear(self):
