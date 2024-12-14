@@ -1,7 +1,8 @@
 import configparser
+import datetime
 import os
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 # from logs import error_log
 
@@ -19,7 +20,7 @@ class ProfileManager:
 
     def __init__(self, profiles_file, *, profile_data=None):
         self.profile_file_path = Path(const.PATH_PROFILES, profiles_file)
-        if profile_data is not None:
+        if profile_data:
             self.profile_data = profile_data
         else:
             self.profile_data = self.get_profile_data()
@@ -32,15 +33,19 @@ class ProfileManager:
         """
 
         profile_data = self.__load_profile_data()
+        self.match_pattern(profile_data)
+
+    def match_pattern(self, profile_data):
         match profile_data:
             case {
                 'SERVER': {
                     'ip': _,
-                    'port': _
+                    'port': _,
                 },
                 'USER': {
-                    'name': _
-                }
+                    'name': _,
+                    'id':_,
+                },
             }:
                 return profile_data
             case _:
@@ -65,7 +70,7 @@ class ProfileManager:
         prev_username = self.username
         self.profile_data.setdefault(config_header, {}).update(new_settings)
         if not prev_username == self.username:
-            new_profile_path = Path(const.PATH_PROFILES, use.uniquify(self.username) + '.ini')
+            new_profile_path = Path(const.PATH_PROFILES, self.__uniquify(self.username) + '.ini')
             os.rename(self.profile_file_path, new_profile_path)
             self.__remove_from_main_config(self.profile_file_path.name)
             self.__write_to_main_config(new_profile_path.name)
@@ -92,7 +97,7 @@ class ProfileManager:
         :param settings:
         :return:
         """
-        profile_path = Path(const.PATH_PROFILES, use.uniquify(profile_name) + '.ini')
+        profile_path = Path(const.PATH_PROFILES, cls.__uniquify(profile_name) + '.ini')
         config = configparser.ConfigParser()
         for section, setting in settings.items():
             config[section] = setting
@@ -133,6 +138,10 @@ class ProfileManager:
         return self.profile_data['USER']['name']
 
     @property
+    def id(self) -> int:
+        return self.profile_data['USER']['id']
+
+    @property
     def file_name(self):
         return self.profile_file_path.name
 
@@ -142,12 +151,16 @@ class ProfileManager:
 
     @property
     def server_port(self):
-        # print("adfar")  # debug
         return int(self.profile_data['SERVER']['port'])
+
+    @staticmethod
+    def __uniquify(username):
+        num = datetime.datetime.now().toordinal()
+        return f"{username}{num}"
 
     def __eq__(self, other):
         if isinstance(other, dict):
-            return (self.username == other['USER']['name']
+            return (self.id == other['id'] and self.username == other['USER']['name']
                     and self.server_ip == other['SERVER']['ip'])
         else:
             return self is other
@@ -161,11 +174,11 @@ class ProfileManager:
                 f")>")
 
 
-def all_profiles() -> dict:
+def all_profiles():
     """
-    give all profiles available as key{username} :mapped to: their settings given by their ProfileManager object
-    make sure that you definitely call :def load_profiles_to_program():,
-    :return profiles:
+    give all profiles available as key{username} mapped to their settings given by their ProfileManager object
+    make sure that you definitely call :func:`load_profiles_to_program()` in prior,
+    :return dict[str, ProfileManager]:
     """
     return {profile.file_name: profile.profile_data for profile in ProfileManager.PROFILE_LIST}
 
@@ -195,7 +208,7 @@ def get_profile_from_profile_file_name(profile_file_name) -> Union[ProfileManage
     return next((profile for profile in ProfileManager.PROFILE_LIST if profile.file_name == profile_file_name), None)
 
 
-_current_profile = None
+_current_profile: Optional[ProfileManager] = None
 
 
 def set_current_profile(profile):
@@ -203,6 +216,6 @@ def set_current_profile(profile):
     _current_profile = profile
 
 
-def get_current_profile():
+def get_current_profile() -> ProfileManager:
     global _current_profile
     return _current_profile
