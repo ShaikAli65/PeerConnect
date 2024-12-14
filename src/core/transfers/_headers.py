@@ -46,3 +46,17 @@ class HEADERS:
     HANDLE_SEND_TEXT = '\x00send_text'
     HANDLE_SEND_FILE_TO_MULTIPLE_PEERS = '\x00send_file_to_multiple_peers'
     HANDLE_SEND_DIR_TO_MULTIPLE_PEERS = '\x00send_dir_to_multiple_peers'
+
+
+class REQUESTS_HEADERS:
+    __slots__ = ()
+    REDIRECT = b'redirect        '
+    LIST_SYNC = b'sync list       '
+    ACTIVE_PING = b'Y face like that'
+    REQ_FOR_LIST = b'list of users  '
+    I_AM_ACTIVE = b'com notify user'
+    NETWORK_FIND = b'network find    '
+    NETWORK_FIND_REPLY = b'networkfindreply'
+    GOSSIP_SEARCH_REPLY = b'gossip_search_reply'
+    GOSSIP_SEARCH_REQ = b'gossip_search_req'
+    GOSSIP_MESSAGE = b'gossip message'

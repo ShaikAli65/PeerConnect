@@ -2,12 +2,18 @@ import asyncio
 import socket
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
-from src.core import Dock, get_this_remote_peer, join_gossip
+from src.core import Dock, get_this_remote_peer, join_gossip, peers
+from .transfers import REQUESTS_HEADERS, HEADERS
 from . import discover, get_gossip, transfers
 from ..managers import filemanager, gossipmanager
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
+    __slots__ = 'transport',
+
+    def connection_made(self, transport):
+        self.transport = transport
+        print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
 
     def datagram_received(self, data_payload, addr):
         req_data = unpack_datagram(data_payload)
@@ -16,25 +22,31 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         print("Received: %s from %s" % (req_data, addr))
         self.handle_request(req_data, addr)
 
-    def handle_request(self, req_data, addr):
+    def handle_request(self, req_data: WireData, addr):
         """ Handle different request types based on the header """
-        if req_data.match_header(REQUESTS.NETWORK_FIND):
+        if req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND):
             self.handle_network_find(addr)
-        elif req_data.match_header(REQUESTS.NETWORK_FIND_REPLY):
+        elif req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
             self.handle_network_find_reply(req_data)
-        elif req_data.match_header(REQUESTS.GOSSIP_MESSAGE):
-            self.handle_gossip_message(req_data)
-        elif req_data.match_header(transfers.HEADERS.GOSSIP_CREATE_SESSION):
-            self.handle_gossip_session(req_data, addr)
-        elif req_data.match_header(transfers.HEADERS.OTM_FILE_TRANSFER):
+
+        elif req_data.match_header(HEADERS.OTM_FILE_TRANSFER):
             self.handle_onetomanyfile_session(req_data, addr)
+
+        elif req_data.match_header(REQUESTS_HEADERS.GOSSIP_MESSAGE):
+            self.handle_gossip_message(req_data)
+        elif req_data.match_header(REQUESTS_HEADERS.GOSSIP_SEARCH_REQ):
+            self.handle_gossip_search_req(req_data, addr)
+        elif req_data.match_header(REQUESTS_HEADERS.GOSSIP_SEARCH_REPLY):
+            self.handle_gossip_search_reply(req_data, addr)
+        elif req_data.match_header(HEADERS.GOSSIP_CREATE_SESSION):
+            self.handle_gossip_session(req_data, addr)
 
     def handle_network_find(self, addr):
         """ Handle NETWORK_FIND request """
         # :todo: write consensus protocol for replying a network find request
         this_rp = get_this_remote_peer()
         data_payload = WireData(
-            header=REQUESTS.NETWORK_FIND_REPLY,
+            header=REQUESTS_HEADERS.NETWORK_FIND_REPLY,
             _id=this_rp.id,
             connect_uri=this_rp.network_uri
         )
@@ -52,6 +64,10 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         asyncio.create_task(f())
         print(f"Bootstrap initiated to: {bootstrap_node_addr}")
 
+    def handle_onetomanyfile_session(self, req_data, addr):
+        reply = filemanager.new_otm_request_arrived(req_data, addr)
+        Wire.send_datagram(self.transport, addr, reply)
+
     @staticmethod
     def handle_gossip_message(req_data):
         """ Handle GOSSIP_MESSAGE request """
@@ -64,25 +80,17 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         f = use.wrap_with_tryexcept(gossipmanager.new_gossip_request_arrived, req_data, addr)
         asyncio.create_task(f())
 
-    def handle_onetomanyfile_session(self, req_data, addr):
-        reply = filemanager.new_otm_request_arrived(req_data, addr)
+    @staticmethod
+    def handle_gossip_search_reply(reply_data, addr):
+        handler = peers.get_search_handler()
+        gossip_reply = wire.GossipMessage(reply_data)
+        handler.reply_arrived(gossip_reply, addr)
+
+    def handle_gossip_search_req(self, req_data, addr):
+        handler = peers.get_search_handler()
+        gossip_reply = wire.GossipMessage(req_data)
+        reply = handler.request_arrived(gossip_reply, addr)
         Wire.send_datagram(self.transport, addr, reply)
-
-    def connection_made(self, transport):
-        self.transport = transport
-        print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
-
-
-class REQUESTS:
-    __slots__ = ()
-    REDIRECT = b'redirect        '
-    LIST_SYNC = b'sync list       '
-    ACTIVE_PING = b'Y face like that'
-    REQ_FOR_LIST = b'list of users  '
-    I_AM_ACTIVE = b'com notify user'
-    NETWORK_FIND = b'network find    '
-    NETWORK_FIND_REPLY = b'networkfindreply'
-    GOSSIP_MESSAGE = b'gossip message'
 
 
 async def initiate():
@@ -94,7 +102,7 @@ async def initiate():
     node_addr = await search_network()
     if node_addr is not None:
         print('bootstrapping kademlia with', node_addr)  # debug
-        if await server.bootstrap([node_addr,]):
+        if await server.bootstrap([node_addr, ]):
             Dock.server_in_network = True
 
     transport, proto = await loop.create_datagram_endpoint(
@@ -105,8 +113,6 @@ async def initiate():
         proto=socket.IPPROTO_UDP,
         allow_broadcast=True,
     )
-
-    # print("asdasdasd", transport.sendto(b'124',('127.0.0.1', 12002)))
     join_gossip(transport)
 
     Dock.protocol = proto
@@ -120,7 +126,7 @@ async def initiate():
 async def search_network():
     ip, port = const.THIS_IP, const.PORT_REQ
     this_id = get_this_remote_peer().id
-    ping_data = WireData(REQUESTS.NETWORK_FIND, this_id)
+    ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
     s = connect.UDPProtocol.create_async_server_sock(
         asyncio.get_running_loop(),
         (ip, port),
@@ -157,7 +163,7 @@ async def wait_for_replies(sock, timeout=3):
         if addr == sock.getsockname():
             print('ignoring echo')  # debug
             continue
-        if data.match_header(REQUESTS.NETWORK_FIND_REPLY):
+        if data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
             print("reply detected")  # debug
             print("got some data", data)  # debug
             return tuple(data['connect_uri'])
