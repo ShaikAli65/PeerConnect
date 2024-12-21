@@ -8,9 +8,9 @@ from typing import NamedTuple, Optional, Union
 
 import umsgpack
 
-from . import Actuator, const as _const
-from .connect import Socket as _Socket, is_socket_connected
-from .useables import wait_for_sock_read
+from src.avails import Actuator, const as _const
+from src.avails.connect import Socket as _Socket, is_socket_connected
+from src.avails.useables import wait_for_sock_read
 
 controller = Actuator()
 

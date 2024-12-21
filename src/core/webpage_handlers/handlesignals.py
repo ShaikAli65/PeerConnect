@@ -3,9 +3,9 @@ from sys import stderr
 from src.avails import DataWeaver, use
 from src.core import Dock, peers
 from src.core.webpage_handlers.handleprofiles import align_profiles, set_selected_profile
+from src.core.webpage_handlers.pagehandle import dispatch_data
 from src.managers.statemanager import State
-from .pagehandle import dispatch_data
-from ..transfers import HEADERS
+from src.core.transfers import HEADERS
 
 
 def restart():

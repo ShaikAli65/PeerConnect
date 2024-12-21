@@ -20,8 +20,8 @@ class Dock:
     kademlia_network_server = None
 
     if TYPE_CHECKING:
-        from .transfers import RumorMongerProtocol
-        from .discover import PeerServer
+        from src.core.transfers import RumorMongerProtocol
+        from src.core.discover import PeerServer
         from src.managers.statemanager import StateManager
 
         global_gossip: RumorMongerProtocol
@@ -40,7 +40,7 @@ def get_gossip():
 
 
 def join_gossip(data_transport):
-    from .transfers import RumorMongerProtocol, GlobalGossipMessageList
+    from src.core.transfers import RumorMongerProtocol, GlobalGossipMessageList
     Dock.global_gossip = RumorMongerProtocol(data_transport, GlobalGossipMessageList)
     print("joined gossip network", get_gossip())
 

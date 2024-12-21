@@ -6,8 +6,9 @@ from pathlib import Path
 from src.avails import FileDict, OTMInformResponse, OTMSession, RemotePeer, Wire, WireData, connect, const, \
     get_dialog_handler, use
 from src.core import Dock, get_this_remote_peer, transfers
-from ..avails.connect import get_free_port
-from ..core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, onetomany
+
+from src.avails.connect import get_free_port
+from src.core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, onetomany
 
 
 class FileRegistry:

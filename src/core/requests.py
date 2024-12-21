@@ -3,13 +3,17 @@ import socket
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer, join_gossip, peers
-from .transfers import REQUESTS_HEADERS, HEADERS
-from . import discover, get_gossip, transfers
-from ..managers import filemanager, gossipmanager
+from src.core.transfers import REQUESTS_HEADERS, HEADERS
+from src.core import discover, get_gossip, transfers
+from src.managers import filemanager, gossipmanager
+
+
+# communicating sequential processes CSP
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
     __slots__ = 'transport',
+    requests_registry = {}
 
     def connection_made(self, transport):
         self.transport = transport
@@ -104,6 +108,9 @@ async def initiate():
         print('bootstrapping kademlia with', node_addr)  # debug
         if await server.bootstrap([node_addr, ]):
             Dock.server_in_network = True
+    else:
+        # :todo: try multicast
+        pass
 
     transport, proto = await loop.create_datagram_endpoint(
         RequestsEndPoint,

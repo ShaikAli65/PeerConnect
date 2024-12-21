@@ -1,4 +1,4 @@
-from . import statemanager
+from src.managers import statemanager
 
-from .profilemanager import *
-from .processmanager import *
+from src.managers.profilemanager import *
+from src.managers.processmanager import *

@@ -13,7 +13,7 @@ from src.avails import (
     const,
     Wire,
 )
-from .transfers import PeerFilePool, FileItem
+from src.core.transfers import PeerFilePool, FileItem
 
 
 class TaskHandle:

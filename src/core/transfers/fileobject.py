@@ -5,7 +5,7 @@ import multiprocessing
 import os
 import struct
 from pathlib import Path
-from typing import Awaitable, Callable, Iterable
+from typing import Awaitable, Callable, Iterable, NamedTuple
 
 import tqdm
 import umsgpack

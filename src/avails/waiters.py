@@ -3,7 +3,7 @@ import socket
 
 from io import BufferedReader, BufferedWriter
 from typing import BinaryIO
-from . import const
+from src.avails import const
 
 
 def _waker_flag_windows():

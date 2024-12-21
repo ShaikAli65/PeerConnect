@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import select
 
-from .constants import MAX_RETIRES
+from src.avails import const
 
 
 def func_str(func_name):
@@ -26,7 +26,7 @@ def get_unique_id(_type: type = str):
     return _type(uuid4())
 
 
-def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0):
+def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     Generate exponential backoff timeout values.
 
@@ -52,7 +52,7 @@ def get_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0
         current *= factor
 
 
-async def async_timeouts(initial=0.001, factor=2, max_retries=MAX_RETIRES, max_value=5.0):
+async def async_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     same as :func: `get_timeouts` but delays itself in yielding
     possible use case:

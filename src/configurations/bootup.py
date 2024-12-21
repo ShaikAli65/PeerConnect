@@ -8,10 +8,10 @@ import urllib.request
 import webbrowser
 
 import src.core.eventloop  # noqa
-from ..avails import RemotePeer, connect, const, use
-from ..configurations.configure import set_constants
-from ..core import set_current_remote_peer_object
-from ..managers import get_current_profile
+from src.avails import RemotePeer, connect, const, use
+from src.configurations.configure import set_constants
+from src.core import set_current_remote_peer_object
+from src.managers import get_current_profile
 
 
 def initiate_bootup():
@@ -45,7 +45,8 @@ def get_ip() -> tuple[str, int]:
     if const.IP_VERSION == socket.AF_INET:
         return (get_v4() or '127.0.0.1'), socket.AF_INET
 
-    ip_addr, version = str, int
+    sentinel = object()
+    ip_addr, version = sentinel, sentinel
     if const.IP_VERSION == socket.AF_INET6:
         if socket.has_ipv6:
             if ip := get_v6():
@@ -57,6 +58,8 @@ def get_ip() -> tuple[str, int]:
                     ip_addr, version = '::1', socket.AF_INET
         else:
             ip_addr, version = (get_v4() or '127.0.0.1'), socket.AF_INET
+
+    assert not (ip_addr == sentinel or version == sentinel), "IP addresses not found"
     return ip_addr, version
 
 

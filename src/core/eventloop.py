@@ -1,7 +1,7 @@
 import asyncio as _asyncio
 import sys
 
-from ..avails.connect import Socket
+from src.avails.connect import Socket
 
 # Set the custom event loop policy
 if sys.platform == 'win32':

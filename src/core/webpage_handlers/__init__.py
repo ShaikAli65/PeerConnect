@@ -1,4 +1,4 @@
-from . import pagehandle, storage
+from src.core.webpage_handlers import pagehandle, storage
 
 __all__ = [
     'storage',

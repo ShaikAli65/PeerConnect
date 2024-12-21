@@ -3,7 +3,7 @@ import socket as _socket
 from abc import ABC, abstractmethod
 from typing import IO, Optional, Self
 
-from . import const, useables
+from src.avails import const, useables
 
 
 class Socket(_socket.socket):
@@ -355,7 +355,7 @@ def is_socket_connected(sock: Socket):
 def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
     if ip is None:
-        from ..core import get_this_remote_peer
+        from src.core import get_this_remote_peer
         ip = ip or get_this_remote_peer().ip
 
     with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:

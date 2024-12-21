@@ -1,6 +1,6 @@
 import umsgpack
 
-from . import const
+from src.avails import const
 
 
 class RemotePeer:

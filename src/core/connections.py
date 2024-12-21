@@ -8,10 +8,10 @@ from types import ModuleType
 from typing import Optional
 
 from src.avails import (RemotePeer, SocketStore, Wire, WireData, connect, const, use)
-from . import Dock, get_this_remote_peer
-from .transfers import HEADERS
-from .webpage_handlers import pagehandle
-from ..managers import directorymanager, filemanager, gossipmanager
+from src.core import Dock, get_this_remote_peer
+from src.core.transfers import HEADERS
+from src.core.webpage_handlers import pagehandle
+from src.managers import directorymanager, filemanager, gossipmanager
 
 
 async def initiate_connections():
@@ -137,6 +137,9 @@ class Acceptor:
 
     async def handle_peer(self, peer_id):
         sock = Dock.connected_peers.get_socket(peer_id)
+        # if sock is None:
+        # :todo: write code here
+
         while self.currently_in_connection[peer_id]:
             try:
                 raw_data = await Wire.receive_async(sock)

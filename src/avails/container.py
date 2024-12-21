@@ -5,7 +5,7 @@ from collections import OrderedDict, defaultdict
 from typing import TYPE_CHECKING, Union, ValuesView
 from weakref import WeakSet
 
-from . import connect
+from src.avails import connect
 
 """
 This module contains simple storages used across the peer connect
@@ -183,18 +183,18 @@ class SocketCache:
     def __init__(self, max_limit=4):
         self.socket_cache: dict[str: connect.Socket] = OrderedDict()
         self.max_limit = max_limit
-        # self.__thread_lock = threading.Lock()
 
     def add_peer_sock(self, peer_id: str, peer_socket):
-        # with self.__thread_lock:
         if len(self.socket_cache) >= self.max_limit:
             self.socket_cache.popitem(last=False)
         self.socket_cache[peer_id] = peer_socket
         return peer_socket
 
     def get_socket(self, peer_id) -> Union[connect.Socket, None]:
-        # with self.__thread_lock:
-        return self.socket_cache.get(peer_id, None)
+        sock = self.socket_cache.pop(peer_id, None)
+        if sock:
+            self.socket_cache[peer_id] = sock
+        return sock
 
     def is_connected(self, peer_id) -> Union[connect.Socket, bool]:
         try:
