@@ -3,6 +3,7 @@ import random
 import time
 
 from src.avails import GossipMessage, RumorMessageItem, Wire, const
+from src.core import Dock
 
 
 class RumorMessageList:
@@ -75,12 +76,6 @@ class RumorMessageList:
         return reservoir
 
 
-class GlobalGossipMessageList(RumorMessageList):
-    @staticmethod
-    def _get_list_of_peers():
-        return set(Dock.peer_list.keys())
-
-
 class RumorPolicy:
 
     global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
@@ -108,22 +103,12 @@ class RumorPolicy:
         return w
 
 
-class GossipEvents:
-    # :todo: complete restructuring of all the gossip classes in OOPS ways, multiplex at requests.RequestsEndPoint
-    registered_applications = {}
-
-    def message_received(self, message: GossipMessage): ...
-
-    def register(self, trigger_header, handler): ...
-
-
 class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
     """
 
     alpha = 3
-    registered_applications = {}
     policy_class = RumorPolicy
 
     def __init__(self, datagram_transport, message_list_class: type[RumorMessageList]):
@@ -171,15 +156,6 @@ class RumorMongerProtocol:
         for peer_id in sampled_peers:
             p = self.__forward_payload(message, peer_id)
             print(p.req_uri)
-
-    @classmethod
-    def register_event(cls, trigger, handler):
-        cls.registered_applications[trigger] = handler
-
-    @classmethod
-    def deregister_event(cls, trigger):
-        if trigger in cls.registered_applications:
-            del cls.registered_applications[trigger]
 
     def __del__(self):
         self.send_sock.close()
