@@ -17,7 +17,9 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
+        print(
+            "started requests endpoint at", transport.get_extra_info("socket")
+        )  # debug
 
     def datagram_received(self, data_payload, addr):
         req_data = unpack_datagram(data_payload)
@@ -27,7 +29,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.handle_request(req_data, addr)
 
     def handle_request(self, req_data: WireData, addr):
-        """ Handle different request types based on the header """
+        """Handle different request types based on the header"""
         if req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND):
             self.handle_network_find(addr)
         elif req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
@@ -105,12 +107,13 @@ async def initiate():
 
     node_addr = await search_network()
     if node_addr is not None:
-        print('bootstrapping kademlia with', node_addr)  # debug
-        if await server.bootstrap([node_addr, ]):
+        print("bootstrapping kademlia with", node_addr)  # debug
+        if await server.bootstrap(
+            [
+                node_addr,
+            ]
+        ):
             Dock.server_in_network = True
-    else:
-        # :todo: try multicast
-        pass
 
     transport, proto = await loop.create_datagram_endpoint(
         RequestsEndPoint,
