@@ -1,3 +1,8 @@
+"""
+This code is designed to handle process spawning mechanisms
+but it is no longer in use
+"""
+
 import asyncio
 import itertools
 import logging
@@ -16,7 +21,7 @@ from src.avails import (
 from src.core.handles import DirectoryTaskHandle, FileTaskHandle, TaskHandleProxy
 
 
-class HandleRepr:  # :todo try this using named tuple
+class HandleRepr:
     __slots__ = 'handle_code', 'args', 'kwargs'
 
     def __init__(self, handle_code, *args, **kwargs):
