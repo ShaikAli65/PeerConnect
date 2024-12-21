@@ -3,17 +3,20 @@ import socket
 
 from src.avails import Wire, WireData, connect, const, unpack_datagram, use, wire
 from src.core import Dock, get_this_remote_peer, join_gossip, peers
-from .transfers import REQUESTS_HEADERS, HEADERS
-from . import discover, get_gossip, transfers
+
 from ..managers import filemanager, gossipmanager
+from . import discover, get_gossip, transfers
+from .transfers import HEADERS, REQUESTS_HEADERS
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
-    __slots__ = 'transport',
+    __slots__ = ("transport",)
 
     def connection_made(self, transport):
         self.transport = transport
-        print('started requests endpoint at', transport.get_extra_info('socket'))  # debug
+        print(
+            "started requests endpoint at", transport.get_extra_info("socket")
+        )  # debug
 
     def datagram_received(self, data_payload, addr):
         req_data = unpack_datagram(data_payload)
@@ -23,7 +26,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.handle_request(req_data, addr)
 
     def handle_request(self, req_data: WireData, addr):
-        """ Handle different request types based on the header """
+        """Handle different request types based on the header"""
         if req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND):
             self.handle_network_find(addr)
         elif req_data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
@@ -42,13 +45,13 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             self.handle_gossip_session(req_data, addr)
 
     def handle_network_find(self, addr):
-        """ Handle NETWORK_FIND request """
+        """Handle NETWORK_FIND request"""
         # :todo: write consensus protocol for replying a network find request
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=REQUESTS_HEADERS.NETWORK_FIND_REPLY,
             _id=this_rp.id,
-            connect_uri=this_rp.network_uri
+            connect_uri=this_rp.network_uri,
         )
         if self.transport:
             Wire.send_datagram(self.transport, addr, bytes(data_payload))
@@ -58,9 +61,11 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     @staticmethod
     def handle_network_find_reply(req_data):
-        """ Handle NETWORK_FIND_REPLY request """
-        bootstrap_node_addr = tuple(req_data['connect_uri'])
-        f = use.wrap_with_tryexcept(Dock.kademlia_network_server.bootstrap, [bootstrap_node_addr])
+        """Handle NETWORK_FIND_REPLY request"""
+        bootstrap_node_addr = tuple(req_data["connect_uri"])
+        f = use.wrap_with_tryexcept(
+            Dock.kademlia_network_server.bootstrap, [bootstrap_node_addr]
+        )
         asyncio.create_task(f())
         print(f"Bootstrap initiated to: {bootstrap_node_addr}")
 
@@ -70,14 +75,16 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     @staticmethod
     def handle_gossip_message(req_data):
-        """ Handle GOSSIP_MESSAGE request """
+        """Handle GOSSIP_MESSAGE request"""
         gossip_protocol = get_gossip()
         gossip_message = wire.GossipMessage(req_data)
         gossip_protocol.message_arrived(gossip_message)
 
     @staticmethod
     def handle_gossip_session(req_data, addr):
-        f = use.wrap_with_tryexcept(gossipmanager.new_gossip_request_arrived, req_data, addr)
+        f = use.wrap_with_tryexcept(
+            gossipmanager.new_gossip_request_arrived, req_data, addr
+        )
         asyncio.create_task(f())
 
     @staticmethod
@@ -101,8 +108,12 @@ async def initiate():
 
     node_addr = await search_network()
     if node_addr is not None:
-        print('bootstrapping kademlia with', node_addr)  # debug
-        if await server.bootstrap([node_addr, ]):
+        print("bootstrapping kademlia with", node_addr)  # debug
+        if await server.bootstrap(
+            [
+                node_addr,
+            ]
+        ):
             Dock.server_in_network = True
 
     transport, proto = await loop.create_datagram_endpoint(
@@ -128,20 +139,18 @@ async def search_network():
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
     s = connect.UDPProtocol.create_async_server_sock(
-        asyncio.get_running_loop(),
-        (ip, port),
-        family=const.IP_VERSION
+        asyncio.get_running_loop(), (ip, port), family=const.IP_VERSION
     )
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     with s:
         await ping_network(s, port, ping_data, times=2)  # debug
-        print('sent broadcast to network at port', ip, port)  # debug
+        print("sent broadcast to network at port", ip, port)  # debug
         return await wait_for_replies(s)
 
 
 async def ping_network(sock, port, req_payload, *, times=4):
     for delay in use.get_timeouts(max_retries=times):
-        Wire.send_datagram(sock, ('<broadcast>', port), bytes(req_payload))
+        Wire.send_datagram(sock, ("<broadcast>", port), bytes(req_payload))
         print("sent broadcast")  # debug
         await asyncio.sleep(delay)
 
@@ -150,9 +159,11 @@ async def wait_for_replies(sock, timeout=3):
     print("waiting for replies at", sock)
     while True:
         try:
-            raw_data, addr = await asyncio.wait_for(Wire.recv_datagram_async(sock), timeout)
+            raw_data, addr = await asyncio.wait_for(
+                Wire.recv_datagram_async(sock), timeout
+            )
         except asyncio.TimeoutError:
-            print(f'timeout reached at {use.func_str(wait_for_replies)}')
+            print(f"timeout reached at {use.func_str(wait_for_replies)}")
             return None
         try:
             data = WireData.load_from(raw_data)
@@ -161,12 +172,12 @@ async def wait_for_replies(sock, timeout=3):
             print(f"got error at {use.func_str(wait_for_replies)}", tp)
             return
         if addr == sock.getsockname():
-            print('ignoring echo')  # debug
+            print("ignoring echo")  # debug
             continue
         if data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
             print("reply detected")  # debug
             print("got some data", data)  # debug
-            return tuple(data['connect_uri'])
+            return tuple(data["connect_uri"])
 
 
 async def end_requests():
