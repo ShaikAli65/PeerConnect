@@ -1,4 +1,3 @@
-"""nothing works here properly, :todo: To be reviewed"""
 import os
 import platform
 import subprocess
