@@ -5,21 +5,15 @@ import subprocess
 from abc import ABC, abstractmethod
 
 try:
-    from PyQt5.QtCore import Qt as _Qt
-    from PyQt5.QtWidgets import QApplication as _QApplication, QFileDialog as _QFileDialog
-except ImportError:
-    _Qt, _QApplication, _QFileDialog = [False] * 3
-
-try:
     import tkinter as tk
 except ImportError:
     tk = False
 else:
     try:
-        tk.Tk()
+        tk.Tk().withdraw()
         from tkinter import filedialog
     except tk.TclError:
-        tinker = False
+        tk = False
 
 import src.avails.constants as const
 
@@ -32,36 +26,6 @@ class IDialogs(ABC):
     @classmethod
     @abstractmethod
     def open_directory_dialog_window(cls) -> str: ...
-
-
-class PyQtDialogs(IDialogs):
-    recent_dir = const.PATH_DOWNLOAD
-    __slots__ = ()
-
-    @classmethod
-    def open_file_dialog_window(cls):
-        """
-        Opens the system-like file picker dialog.
-        """
-        _ = _QApplication([])
-        dialog = _QFileDialog()
-        dialog.setOption(_QFileDialog.DontUseNativeDialog, True)
-        dialog.setWindowFlags(_Qt.WindowStaysOnTopHint | dialog.windowFlags())
-        files = dialog.getOpenFileNames(directory=cls.recent_dir,
-                                        caption="Select files to send")[0]
-        if files:
-            cls.recent_dir = os.path.dirname(files[0])
-        return files
-
-    @classmethod
-    def open_directory_dialog_window(cls):
-        _ = _QApplication([])
-        dialog = _QFileDialog()
-        dialog.setOption(_QFileDialog.DontUseNativeDialog, True)
-        dialog.setWindowFlags(_Qt.WindowStaysOnTopHint | dialog.windowFlags())
-        directory = dialog.getExistingDirectory(directory=cls.recent_dir, caption="Select directory to send")
-        cls.recent_dir = directory
-        return directory
 
 
 class TkDialogs(IDialogs):
@@ -106,7 +70,7 @@ class FileExplorerDialog(IDialogs):
                 "powershell", "-Command",
                 "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') > $null;"
                 "$fileBrowser = New-Object System.Windows.Forms.OpenFileDialog;"
-                "$fileBrowser.InitialDirectory = '{}';".format(cls.recent_dir) +
+                f"$fileBrowser.InitialDirectory = '{cls.recent_dir}';" +
                 "$fileBrowser.Multiselect = $true;"
                 "$fileBrowser.Filter = 'All files (*.*)|*.*';"
                 "if ($fileBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {"
@@ -165,8 +129,6 @@ class FileExplorerDialog(IDialogs):
 
 
 def get_dialog_handler() -> IDialogs:
-    if _Qt:
-        return PyQtDialogs()
-    elif tk:
+    if tk:
         return TkDialogs()
     return FileExplorerDialog()
