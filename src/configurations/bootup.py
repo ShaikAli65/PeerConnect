@@ -6,10 +6,11 @@ import socket
 import subprocess
 import urllib.request
 import webbrowser
+from ipaddress import IPv4Address, IPv6Address
 
 import src.core.eventloop  # noqa
-from src.avails import RemotePeer, connect, const, use
-from src.configurations.configure import set_constants
+from src.avails import RemotePeer, const, use
+from src.configurations.configure import set_constants, validate_ports
 from src.core import set_current_remote_peer_object
 from src.managers import get_current_profile
 
@@ -23,15 +24,16 @@ def initiate_bootup():
         write_default_configurations(const.PATH_CONFIG)
         config_map.read(const.PATH_CONFIG)
     set_constants(config_map)
-    const.THIS_IP, const.IP_VERSION = get_ip()
-    const.IP_VERSION = (socket.AF_INET6
-                        if ipaddress.ip_address(const.THIS_IP).version == 6
-                        else socket.AF_INET)
+
+    const.THIS_IP = get_ip(const.IP_VERSION)
+    # if we cannot work with ip-v6, program will fall back to ip-v4
+    const.IP_VERSION = socket.AF_INET6 if const.THIS_IP.version == 6 else socket.AF_INET
+
     # print(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 
 
-def get_ip() -> tuple[str, int]:
+def get_ip(ip_version) -> IPv4Address | IPv6Address:
     """
     Retrieves the local IP address of the machine.
     If unsuccessful, falls back to using gethostbyname().
@@ -42,25 +44,21 @@ def get_ip() -> tuple[str, int]:
     Raises:
         socket.error: If a socket error occurs during connection.
     """
-    if const.IP_VERSION == socket.AF_INET:
-        return (get_v4() or '127.0.0.1'), socket.AF_INET
+    if ip_version == socket.AF_INET:
+        return get_v4() or ipaddress.IPv4Address('127.0.0.1')
 
-    sentinel = object()
-    ip_addr, version = sentinel, sentinel
-    if const.IP_VERSION == socket.AF_INET6:
-        if socket.has_ipv6:
-            if ip := get_v6():
-                ip_addr, version = ip, socket.AF_INET6
-            else:
-                if ip := get_v4():
-                    ip_addr, version = ip, socket.AF_INET
-                else:
-                    ip_addr, version = '::1', socket.AF_INET
-        else:
-            ip_addr, version = (get_v4() or '127.0.0.1'), socket.AF_INET
+    if not socket.has_ipv6:
+        return get_ip(socket.AF_INET)
 
-    assert not (ip_addr == sentinel or version == sentinel), "IP addresses not found"
-    return ip_addr, version
+    primary_ip = get_v6()
+    if not primary_ip.is_loopback:
+        return primary_ip
+
+    # if got a loopback addr then we try to get v4 address
+    secondary_ip = get_v4()
+
+    # if got a loopback addr again then we return ip v6 loopback address
+    return primary_ip if secondary_ip.is_loopback else secondary_ip
 
 
 def get_v4():
@@ -72,10 +70,10 @@ def get_v4():
             # error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
 
             config_ip = socket.gethostbyname(socket.gethostname())
-            if const.DARWIN or const.LINUX:
+            if const.IS_DARWIN or const.IS_LINUX:
                 config_ip = subprocess.getoutput("hostname -I")
 
-    return config_ip
+    return ipaddress.IPv4Address(config_ip)
 
 
 """
@@ -87,16 +85,17 @@ def get_v4():
 
 
 def get_v6():
-    if const.WINDOWS:
-        back_up = "::1"
+    if const.IS_WINDOWS:
+        back_up = IPv6Address("::1")
         for sock_tuple in socket.getaddrinfo("", None, socket.AF_INET6):
             ip, _, _, _ = sock_tuple[4]
-            if ipaddress.ip_address(ip).is_link_local:
+            ipaddr = IPv6Address(ip)
+            if ipaddr.is_link_local:
                 back_up = ip
-            elif not ipaddress.ip_address(ip).is_link_local:
+            elif not ipaddr.is_link_local:
                 return ip
         return back_up
-    elif const.DARWIN or const.LINUX:
+    elif const.IS_DARWIN or const.IS_LINUX:
         return get_v6_from_shell() or get_v6_from_api64()
 
 
@@ -147,7 +146,6 @@ def write_default_configurations(path):
         'ip_version = 4\n'
         'protocol = tcp\n'
         'req_port = 35623\n'
-        'file_port = 35621\n'
         'page_serve_port = 40000\n'
         '\n'
         '[USER_PROFILES]\n'
@@ -170,18 +168,6 @@ def write_default_configurations(path):
         profile_file.write(default_profile_file)
 
 
-def validate_ports(ip) -> None:
-    ports_list = [const.PORT_THIS, const.PORT_PAGE,
-                  const.PORT_FILE, const.PORT_NETWORK,]  # const.PORT_REQ,]
-    for i, port in enumerate(ports_list):
-        if not connect.is_port_empty(port, ip):
-            ports_list[i] = connect.get_free_port(ip)
-            use.echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
-    const.PORT_THIS, const.PORT_PAGE, const.PORT_FILE, const.PORT_NETWORK = ports_list
-    # const.PORT_REQ,
-    return None
-
-
 def configure_this_remote_peer():
     rp = make_this_remote_peer()
     set_current_remote_peer_object(rp)
@@ -192,10 +178,10 @@ def make_this_remote_peer():
     rp = RemotePeer(
         peer_id=profile.id.to_bytes((profile.id.bit_length() + 7) // 8, 'big'),
         username=profile.username,
-        ip=const.THIS_IP,
+        ip=str(const.THIS_IP),
         conn_port=const.PORT_THIS,
-        req_port=const.PORT_REQ,
-        net_port=const.PORT_NETWORK,
+        req_port=const.PORT_NETWORK,
+        net_port=const.PORT_DHT,
         status=1,
     )
     return rp
@@ -203,7 +189,7 @@ def make_this_remote_peer():
 
 @use.NotInUse
 def retrace_browser_path():
-    if const.WINDOWS:
+    if const.IS_WINDOWS:
         import winreg
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                              r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice")
@@ -216,13 +202,13 @@ def retrace_browser_path():
 
         return path.strip().split('"')[1]
 
-    if const.DARWIN:
+    if const.IS_DARWIN:
         return subprocess.check_output(["osascript",
                                         "-e",
                                         'tell application "System Events" to get POSIX path of (file of process "Safari" as alias)'
                                         ]).decode().strip()
 
-    if const.LINUX:
+    if const.IS_LINUX:
         command_output = subprocess.check_output(["xdg-settings", "get", "default-web-browser"]).decode().strip()
 
         if command_output.startswith('userapp-'):
@@ -236,10 +222,10 @@ def launch_web_page():
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
-        if const.WINDOWS:
+        if const.IS_WINDOWS:
             os.system(f"start {page_url}")
 
-        elif const.LINUX or const.DARWIN:
+        elif const.IS_LINUX or const.IS_DARWIN:
             subprocess.Popen(['xdg-open', page_url])
 
     except FileNotFoundError:
