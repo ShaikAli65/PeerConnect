@@ -82,7 +82,7 @@ class FileExplorerDialog(IDialogs):
                 cls.recent_dir = os.path.dirname(files[0])
             return files
 
-        elif const.DARWIN:  # macOS
+        elif const.IS_DARWIN:  # macOS
             command = ['osascript', '-e',
                        f'tell application "System Events" to choose file with multiple selections allowed']
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
@@ -102,7 +102,7 @@ class FileExplorerDialog(IDialogs):
         """
         Uses a subprocess to invoke the system directory picker. Platform-specific.
         """
-        if const.WINDOWS:
+        if const.IS_WINDOWS:
             command = ["powershell", "-Command",
                        f'[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms");'
                        f'$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog;'
@@ -111,7 +111,7 @@ class FileExplorerDialog(IDialogs):
                        f'$folderBrowser.SelectedPath']
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
             directory = result.stdout.strip() if result.returncode == 0 else ""
-        elif const.DARWIN:  # macOS
+        elif const.IS_DARWIN:  # macOS
             command = ['osascript', '-e',
                        f'tell application "System Events" to choose folder']
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)

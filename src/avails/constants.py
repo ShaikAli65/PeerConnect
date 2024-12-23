@@ -1,6 +1,6 @@
 import socket
-from sys import platform
 from os import path
+from sys import platform
 from threading import Lock
 from typing import Optional, TYPE_CHECKING
 
@@ -9,20 +9,28 @@ USERNAME = 'admin'
 SERVER_IP = '127.0.0.1'
 THIS_IP = '127.0.0.1'
 
-WINDOWS = platform == "win32"
-DARWIN = platform == "darwin"
-LINUX = platform == "linux"
+MULTICAST_IP_v4 = "224.0.11.11"
+MULTICAST_IP_v6 = "ff02::1"
+BROADCAST_IP = "<broadcast>"
+_BIND_IP_V4 = '0.0.0.0'
+_BIND_IP_V6 = '::'
+BIND_IP = _BIND_IP_V4
+
+
+IS_WINDOWS = platform == "win32"
+IS_DARWIN = platform == "darwin"
+IS_LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 FORMAT = 'utf-8'
 
-PORT_THIS = 12000
-PORT_SERVER = 12001
-PORT_REQ = 12002
-PORT_NETWORK = 12003
+
+PORT_THIS = 3485
+PORT_REQ = 3486
+PORT_NETWORK = PORT_REQ
+PORT_SERVER = 3487
 PORT_PAGE = 12260
-PORT_FILE = 45210
 PORT_PAGE_SERVE = 40000
 
 PATH_CURRENT = '../..'
@@ -33,6 +41,9 @@ PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
 
 IP_VERSION = socket.AF_INET
+USING_IP_V4 = True
+USING_IP_V6 = False
+
 FILE_ERROR_EXT = '.pc-unconfirmedownload'
 debug = False
 
@@ -64,3 +75,5 @@ VERSIONS = {
     'DO': 1.0,
     'WIRE':1.0,
 }
+DISCOVER_RETRIES = 3
+DISCOVER_TIMEOUT = 3

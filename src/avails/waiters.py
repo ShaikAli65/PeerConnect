@@ -47,7 +47,7 @@ def _waker_flag_linux():
 
 
 # setting these dynamically at importing stage to reduce condition checking inside functions
-if const.WINDOWS:
+if const.IS_WINDOWS:
     _waker_flag = _waker_flag_windows
 else:
     _waker_flag = _waker_flag_linux
