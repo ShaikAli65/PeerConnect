@@ -1,5 +1,5 @@
 import asyncio
-import socket
+import functools
 
 from src.avails import Wire, WireData, const, unpack_datagram, use, wire
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
@@ -10,26 +10,22 @@ from src.core.transfers import HEADERS, REQUESTS_HEADERS
 from src.managers import filemanager, gossipmanager
 
 
+def _create_listen_socket(bind_address, multicast_addr):
+    loop = asyncio.get_running_loop()
+    sock = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
+    if const.USING_IP_V4:
+        ipv4_multicast_socket_helper(sock, multicast_addr)
+    else:
+        ipv6_multicast_socket_helper(sock, multicast_addr)
+    return sock
+
+
 async def initiate():
     loop = asyncio.get_running_loop()
 
-    def create_requests_end_point():
-        nonlocal server
-        req_end_point = RequestsEndPoint(server)
-        return req_end_point
-
-    def create_listen_socket(bind_address, multicast_addr):
-        sock = UDPProtocol.create_async_server_sock(
-            loop, bind_address, family=const.IP_VERSION
-        )
-        if const.USING_IP_V4:
-            ipv4_multicast_socket_helper(sock,multicast_addr)
-        else:
-            ipv6_multicast_socket_helper(sock,multicast_addr)
-        return sock
-
     bind_address = (const.BIND_IP, const.PORT_REQ)
-
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
     peer_addresses = await search_network(broad_cast_address, multicast_address)
@@ -38,8 +34,8 @@ async def initiate():
     print("search request responses", peer_addresses)
 
     transport, proto = await loop.create_datagram_endpoint(
-        create_requests_end_point,
-        sock=create_listen_socket(bind_address, multicast_address)
+        functools.partial(RequestsEndPoint, server),
+        sock=_create_listen_socket(bind_address, multicast_address)
     )
     if any(peer_addresses):
         valid_addresses = filter(lambda x: x, peer_addresses)
