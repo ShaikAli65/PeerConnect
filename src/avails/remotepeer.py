@@ -20,7 +20,7 @@ class RemotePeer:
         'id': str,
     }
 
-    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', '_network_port', 'long_id', '_byte_cache'
+    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', 'long_id', '_byte_cache'
 
     def __init__(self,
                  peer_id=b'\x00',
@@ -35,7 +35,7 @@ class RemotePeer:
         self._conn_port = conn_port
         self.status = status
         self._req_port = req_port
-        self._network_port = net_port
+        # self._network_port = net_port
         self.id = peer_id
         self.long_id = int(peer_id.hex(), 16)
         self._byte_cache = None, None
@@ -59,7 +59,6 @@ class RemotePeer:
             self.ip,
             self._conn_port,
             self._req_port,
-            self._network_port,
             self.status,
         ])
 
@@ -70,10 +69,6 @@ class RemotePeer:
     @property
     def req_uri(self):
         return self.ip, self._req_port
-
-    @property
-    def network_uri(self):
-        return self.ip, self._network_port
 
     @classmethod
     def load_from(cls, data: bytes):
@@ -109,7 +104,6 @@ class RemotePeer:
             f' ip={self.ip},'
             f' conn={self._conn_port},'
             f' req={self._req_port},'
-            f' net={self._network_port},'
             f' st={self.status})'
         )
 
