@@ -4,11 +4,8 @@ All the stuff related to kademlia goes here
 import asyncio
 import logging
 from typing import override
-
 import kademlia.node
-import kademlia.protocol
-import kademlia.protocol
-from kademlia import crawling, network, routing
+from kademlia import crawling, network, routing, protocol
 from kademlia.crawling import NodeSpiderCrawl
 
 from src.avails import RemotePeer, use, const
@@ -30,7 +27,7 @@ class RPCFindResponse(crawling.RPCFindResponse):
         return [RemotePeer(*nodeple) for nodeple in nodelist]
 
 
-class RequestProtocol(kademlia.protocol.KademliaProtocol):
+class RequestProtocol(protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(self, ksize, source_node)
@@ -94,44 +91,44 @@ class RequestProtocol(kademlia.protocol.KademliaProtocol):
     @override
     async def call_find_node(self, node_to_ask, node_to_find):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_node(node_to_ask.network_uri, self.source_node.serialized,
+        result = await self.find_node(node_to_ask.req_uri, self.source_node.serialized,
                                       node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_find_value(self, node_to_ask, node_to_find):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_value(node_to_ask.network_uri, self.source_node.serialized,
+        result = await self.find_value(node_to_ask.req_uri, self.source_node.serialized,
                                        node_to_find.id)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_ping(self, node_to_ask):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.ping(node_to_ask.network_uri, self.source_node.serialized)
+        result = await self.ping(node_to_ask.req_uri, self.source_node.serialized)
         return self.handle_call_response(result, node_to_ask)
 
     @override
     async def call_store(self, node_to_ask, key, value):
         # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.store(node_to_ask.network_uri, self.source_node.serialized, key, value)
+        result = await self.store(node_to_ask.req_uri, self.source_node.serialized, key, value)
         return self.handle_call_response(result, node_to_ask)
 
     async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
         if not isinstance(list_key, bytes):
             list_key = list_key.id
-        address = peer_to_ask.network_uri
+        address = peer_to_ask.req_uri
         result = await self.store_peers_in_list(address, self.source_node.serialized, list_key, peer_list)
         return self.handle_call_response(result, peer_to_ask)
 
     async def call_find_peer_list(self, peer_to_ask, node_to_find):
-        address = peer_to_ask.network_uri
+        address = peer_to_ask.req_uri
         result = await self.find_list_of_peers(address, self.source_node.serialized, node_to_find.id)
         return self.handle_call_response(result, peer_to_ask)
 
     async def call_search_peers(self, peer_to_ask: RemotePeer, search_string):
         # address = peer_to_ask.network_uri
-        result = await self.search_peers(peer_to_ask.network_uri, self.source_node.serialized, search_string)
+        result = await self.search_peers(peer_to_ask.req_uri, self.source_node.serialized, search_string)
         self.handle_call_response(result, peer_to_ask)
         return list(map(RemotePeer.load_from, result[1]))
 
@@ -170,6 +167,8 @@ class AnotherRoutingTable(routing.RoutingTable):
 
 
 class PeerServer(network.Server):
+    protocol_class = RequestProtocol
+
     def __init__(self, ksize=20, alpha=3, node=None, storage=None):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
@@ -178,6 +177,11 @@ class PeerServer(network.Server):
     async def bootstrap_node(self, addr):
         result = await self.protocol.ping(addr, bytes(self.node))
         return RemotePeer.load_from(result[1]) if result[0] else None
+
+    def bind_transport(self, transport):
+        self.transport = transport
+        self.protocol = self._create_protocol()
+        self.refresh_table()
 
     async def get_list_of_nodes(self, list_key):
         node = RemotePeer(list_key)
@@ -254,10 +258,8 @@ class PeerServer(network.Server):
                 return peer
 
 
-def get_new_kademlia_server():
-    _storage = Storage()
-    s = PeerServer(storage=_storage)
-    s.protocol_class = RequestProtocol
+def get_new_kademlia_server() -> PeerServer:
+    s = PeerServer(storage=Storage())
     s.node = get_this_remote_peer()
     return s
 
