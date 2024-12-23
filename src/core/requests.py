@@ -2,6 +2,7 @@ import asyncio
 import socket
 
 from src.avails import Wire, WireData, const, unpack_datagram, use, wire
+from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.core import Dock, _kademlia, get_gossip, get_this_remote_peer, peers
 from src.core.discover import search_network
 from src.core.gossip import join_gossip
@@ -11,28 +12,41 @@ from src.managers import filemanager, gossipmanager
 
 async def initiate():
     loop = asyncio.get_running_loop()
-    server = _kademlia.get_new_kademlia_server()
-    await server.listen(port=const.PORT_NETWORK, interface=const.THIS_IP)
-    print("started kademlia endpoint at ", const.PORT_NETWORK)
 
-    node_addr = await search_network()
-    if node_addr is not None:
-        print("bootstrapping kademlia with", node_addr)  # debug
-        if await server.bootstrap(
-                [
-                    node_addr,
-                ]
-        ):
-            Dock.server_in_network = True
+    def create_requests_end_point():
+        nonlocal server
+        req_end_point = RequestsEndPoint(server)
+        return req_end_point
+
+    def create_listen_socket(bind_address, multicast_addr):
+        sock = UDPProtocol.create_async_server_sock(
+            loop, bind_address, family=const.IP_VERSION
+        )
+        if const.USING_IP_V4:
+            ipv4_multicast_socket_helper(sock,multicast_addr)
+        else:
+            ipv6_multicast_socket_helper(sock,multicast_addr)
+        return sock
+
+    bind_address = (const.BIND_IP, const.PORT_REQ)
+
+    multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
+    broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
+    peer_addresses = await search_network(broad_cast_address, multicast_address)
+
+    server = _kademlia.get_new_kademlia_server()
+    print("search request responses", peer_addresses)
 
     transport, proto = await loop.create_datagram_endpoint(
-        RequestsEndPoint,
-        # local_addr=('0.0.0.0' if const.IP_VERSION == socket.AF_INET else '::', const.PORT_REQ),
-        local_addr=(const.THIS_IP, const.PORT_REQ),
-        family=const.IP_VERSION,
-        proto=socket.IPPROTO_UDP,
-        allow_broadcast=True,
+        create_requests_end_point,
+        sock=create_listen_socket(bind_address, multicast_address)
     )
+    if any(peer_addresses):
+        valid_addresses = filter(lambda x: x, peer_addresses)
+        print("bootstrapping kademlia with", valid_addresses)  # debug
+        if await server.bootstrap(valid_addresses):
+            Dock.server_in_network = True
+
     join_gossip(transport)
 
     Dock.protocol = proto
@@ -40,27 +54,43 @@ async def initiate():
     Dock.kademlia_network_server = server
     f = use.wrap_with_tryexcept(server.add_this_peer_to_lists)
     asyncio.create_task(f())
-    return server, transport, proto
 
 
 class RequestsRegistry:
+    requests_registry = {}
+
     ...
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
-    __slots__ = 'transport',
-    requests_registry = {}
+    """
+    This class handles all the requests/messages come to the application's
+    requests endpoint
+    this is closely coupled with kademila's Protocol class which also operates on `asyncio.DatagramProtocol`
+    both operate on same endpoint, this class separates messages related to kademila and calls
+    respective callbacks that are supposed to be called
+    """
+    __slots__ = 'transport', 'kademlia_server'
+
+    def __init__(self, kademlia_server):
+        self.kademlia_server = kademlia_server
 
     def connection_made(self, transport):
         self.transport = transport
         print(
             "started requests endpoint at", transport.get_extra_info("socket")
         )  # debug
+        # also signaling kademlia
+        self.kademlia_server.bind_transport(transport)
+        self.kademlia_server.protocol.connection_made(transport)
 
     def datagram_received(self, data_payload, addr):
         req_data = unpack_datagram(data_payload)
         if not req_data:
+            # if it's not in `WireData` format, best thought is to delegate that to kademlia's protocol
+            self.kademlia_server.protocol.datagram_received(data_payload, addr)
             return  # Failed to unpack
+
         print("Received: %s from %s" % (req_data, addr))
         self.handle_request(req_data, addr)
 
@@ -90,7 +120,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         data_payload = WireData(
             header=REQUESTS_HEADERS.NETWORK_FIND_REPLY,
             _id=this_rp.id,
-            connect_uri=this_rp.network_uri
+            connect_uri=this_rp.req_uri
         )
         if self.transport:
             Wire.send_datagram(self.transport, addr, bytes(data_payload))
