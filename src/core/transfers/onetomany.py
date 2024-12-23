@@ -22,7 +22,8 @@ from typing import Generator, Optional, override
 import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, const, use
-from src.core.transfers import FileItem, HEADERS, PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, PeerFilePool, TreeLink
+from src.core.transfers.palm_tree import HEADERS, PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
+from src.core.transfers.fileobject import PeerFilePool, FileItem
 from src.core import get_this_remote_peer
 
 

@@ -21,7 +21,7 @@ class Dock:
 
     if TYPE_CHECKING:
         from src.core.transfers import RumorMongerProtocol
-        from src.core.discover import PeerServer
+        from src.core._kademlia import PeerServer
         from src.managers.statemanager import StateManager
 
         global_gossip: RumorMongerProtocol
@@ -37,12 +37,6 @@ def get_this_remote_peer():
 
 def get_gossip():
     return Dock.global_gossip
-
-
-def join_gossip(data_transport):
-    from src.core.transfers import RumorMongerProtocol, GlobalGossipMessageList
-    Dock.global_gossip = RumorMongerProtocol(data_transport, GlobalGossipMessageList)
-    print("joined gossip network", get_gossip())
 
 
 def set_current_remote_peer_object(remote_peer):
