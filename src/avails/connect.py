@@ -1,5 +1,7 @@
 import asyncio as _asyncio
+import socket
 import socket as _socket
+import struct
 from abc import ABC, abstractmethod
 from typing import IO, Optional, Self
 
@@ -354,9 +356,7 @@ def is_socket_connected(sock: Socket):
 
 def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
-    if ip is None:
-        from src.core import get_this_remote_peer
-        ip = ip or get_this_remote_peer().ip
+    ip = ip or str(const.THIS_IP)
 
     with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
         s.bind((ip, 0))  # Bind to port 0 to get a free port
@@ -364,11 +364,26 @@ def get_free_port(ip=None) -> int:
 
 
 def is_port_empty(port, addr=None):
-    addr = addr or ('::' if const.IP_VERSION == _socket.AF_INET6 else '0.0.0.0'), port
-    with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
+    addr_info = _socket.getaddrinfo(str(addr), port, type=_socket.SOCK_STREAM)[0]
+    family, sock_type, proto, _, sock_addr = addr_info
+    with _socket.socket(family, sock_type, proto) as s:
         try:
             # Try to bind the socket to the specified port
-            s.bind(addr)
+            s.bind(sock_addr)
             return True  # Port is empty
         except OSError:
             return False  # Port is not empty or some other error occurred
+
+
+def ipv4_multicast_socket_helper(sock, multicast_addr):
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
+    group = socket.inet_aton(f"{multicast_addr[0]}")
+    mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+
+def ipv6_multicast_socket_helper(sock, multicast_addr):
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 2)  # :todo: review this magic number
+    group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
+    mreq = group + struct.pack('@I', 0)
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
