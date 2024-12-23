@@ -50,7 +50,7 @@ class WebSocketRegistry:
 
     @classmethod
     def clear(cls):
-        cls.message_queue.put((None, None))
+        cls.message_queue.put_nowait((None, None))
         for i in cls.connections:
             if i is not None:
                 i.close()
@@ -128,13 +128,16 @@ async def start_websocket_server():
     use.echo_print(f"websocket server started at ws://{const.THIS_IP}:{const.PORT_PAGE}")
     async with start_server:
         await PAGE_HANDLE_WAIT.wait()
+    use.echo_print("ending websocket server")
 
 
 async def initiate_pagehandle():
     f = use.wrap_with_tryexcept(WebSocketRegistry.start_data_sender)
     asyncio.create_task(f())
+
     async with WebSocketRegistry():
         await start_websocket_server()
+    print("3al;pksdfnoidsabnfgibgiuferqbguerbguiobedguertbnu")
 
 
 def end():
