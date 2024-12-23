@@ -25,11 +25,16 @@ def initiate_bootup():
         config_map.read(const.PATH_CONFIG)
     set_constants(config_map)
 
-    const.THIS_IP = get_ip(const.IP_VERSION)
-    # if we cannot work with ip-v6, program will fall back to ip-v4
-    const.IP_VERSION = socket.AF_INET6 if const.THIS_IP.version == 6 else socket.AF_INET
+    ip_addr = get_ip(const.IP_VERSION)
 
-    # print(f"{const.THIS_IP=}")
+    if ip_addr.version == 6:
+        const.USING_IP_V4 = False
+        const.USING_IP_V6 = True
+        # if we cannot work with ip-v6, program will fall back to ip-v4
+        const.IP_VERSION = socket.AF_INET6
+        
+    const.THIS_IP = str(ip_addr)
+    print(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 
 
@@ -178,10 +183,9 @@ def make_this_remote_peer():
     rp = RemotePeer(
         peer_id=profile.id.to_bytes((profile.id.bit_length() + 7) // 8, 'big'),
         username=profile.username,
-        ip=str(const.THIS_IP),
+        ip=const.THIS_IP,
         conn_port=const.PORT_THIS,
-        req_port=const.PORT_NETWORK,
-        net_port=const.PORT_DHT,
+        req_port=const.PORT_REQ,
         status=1,
     )
     return rp
