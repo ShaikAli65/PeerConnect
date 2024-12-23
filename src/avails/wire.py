@@ -1,3 +1,13 @@
+"""Every Wire Format of Peerconnect
+
+This module contains all the classes related to how data appears in wire transfer on top of ip protocols.
+
+All classes provide serializing and de-serializing methods to make them ready to transfer over wire.
+
+One special class of wire protocol :class: `RemotePeer` is available in :file: `remotepeer.py`
+
+"""
+
 import dataclasses
 import json as _json
 import struct
@@ -88,6 +98,77 @@ class Wire:
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
         data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_RECV_SIZE)
         return Wire.load_datagram(data), addr
+
+
+class WireData:
+    _version = _const.VERSIONS['WIRE']
+
+    __slots__ = 'id', '_header', 'version', 'body',
+
+    def __init__(self, header=None, _id=None, version=_version, **kwargs):
+        self._header = header
+        self.id = _id
+        self.version = version
+        self.body = kwargs
+
+    def __bytes__(self):
+        list_of_attributes = [
+            self._header,
+            self.id,
+            self.version,
+            self.body,
+        ]
+        return umsgpack.dumps(list_of_attributes)
+
+    @classmethod
+    def load_from(cls, data: bytes):
+        list_of_attributes = umsgpack.loads(data)
+        header, _id, version, body = list_of_attributes
+        return cls(header, _id, version=version, **body)
+
+    def match_header(self, data):
+        return self._header == data
+
+    def __getitem__(self, item):
+        return self.body[item]
+
+    def __setitem__(self, key, value):
+        self.body[key] = value
+
+    @property
+    def header(self):
+        return self._header
+
+    @property
+    def dict(self): # for introspection or validation
+        return {'header':self._header, 'id':self.id,'version':self.version, **self.body}
+
+    def __str__(self):
+        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+
+    def __repr__(self):
+        return str(self)
+
+
+def unpack_datagram(data_payload) -> Optional[WireData]:
+    """
+        Utility function to unpack data from :func: `datagram_received` callback from asyncio's DatagramProtocol
+        or any other datagram transferred using wire protocol
+        Unpack the raw data received using peer-connect's wire protocol
+        into WireData and handle exceptions
+    """
+    try:
+        data = Wire.load_datagram(data_payload)
+        loaded = WireData.load_from(data)
+        return loaded
+    except umsgpack.UnpackException as ue:
+        return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
+    except TypeError as tp:
+        return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+    except struct.error as se:
+        return print("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
+    except Exception as e:
+        return print("unexpected exception",e)
 
 
 class DataWeaver:
@@ -181,56 +262,6 @@ class DataWeaver:
         return f'DataWeaver({self.__data})'
 
 
-class WireData:
-    _version = _const.VERSIONS['WIRE']
-
-    __slots__ = 'id', '_header', 'version', 'body',
-
-    def __init__(self, header=None, _id=None, version=_version, **kwargs):
-        self._header = header
-        self.id = _id
-        self.version = version
-        self.body = kwargs
-
-    def __bytes__(self):
-        list_of_attributes = [
-            self._header,
-            self.id,
-            self.version,
-            self.body,
-        ]
-        return umsgpack.dumps(list_of_attributes)
-
-    @classmethod
-    def load_from(cls, data: bytes):
-        list_of_attributes = umsgpack.loads(data)
-        header, _id, version, body = list_of_attributes
-        return cls(header, _id, version=version, **body)
-
-    def match_header(self, data):
-        return self._header == data
-
-    def __getitem__(self, item):
-        return self.body[item]
-
-    def __setitem__(self, key, value):
-        self.body[key] = value
-
-    @property
-    def header(self):
-        return self._header
-
-    @property
-    def dict(self): # for introspection or validation
-        return {'header':self._header, 'id':self.id,'version':self.version, **self.body}
-
-    def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
-
-    def __repr__(self):
-        return str(self)
-
-
 class StatusMessage:
     ...
 
@@ -299,26 +330,6 @@ class GossipMessage:
 
     def __repr__(self):
         return f"<GossipMessage(id={self.id}, created={self.created}, ttl={self.ttl}, message={self.message[:11]},)>"
-
-
-def unpack_datagram(data_payload) -> Optional[WireData]:
-    """
-        Utility function to unpack data from :func: datagram_received callback from asyncio's DatagramProtocol
-        Unpack the raw data received using peer-connect's wire protocol
-        into WireData and handle exceptions
-    """
-    try:
-        data = Wire.load_datagram(data_payload)
-        loaded = WireData.load_from(data)
-        return loaded
-    except umsgpack.UnpackException as ue:
-        return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
-    except TypeError as tp:
-        return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
-    except struct.error as se:
-        return print("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
-    except Exception as e:
-        return print("unexpected exception",e)
 
 
 @dataclass(slots=True)

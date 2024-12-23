@@ -2,8 +2,11 @@ import asyncio
 import getpass
 import os
 import sys
+from ipaddress import IPv4Address
 
 from kademlia import utils
+
+import src.core.discover
 
 sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
 
@@ -20,21 +23,19 @@ async def fake_search_network():
 
 
 def test():
-    requests.search_network = fake_search_network
-    if len(sys.argv) >= 3:
-        const.THIS_IP = '127.0.0.' + sys.argv[2]
-    else:
-        const.THIS_IP = '127.0.0.1'
+    # src.core.discover.search_network = fake_search_network
+    # if len(sys.argv) >= 3:
+    #     const.THIS_IP = '127.0.0.' + sys.argv[2]
+    # else:
+    #     const.THIS_IP = '127.0.0.1'
     const.SERVER_IP = const.THIS_IP
-    const.PORT_SERVER = 45000
     set_current_remote_peer_object(
         RemotePeer(
-            peer_id=utils.digest(const.THIS_IP + str(const.PORT_THIS)),
+            peer_id=utils.digest(f"{const.THIS_IP}{const.PORT_THIS}"),
             username=f"test-{getpass.getuser()}",
             ip=const.THIS_IP,
             conn_port=const.PORT_THIS,
             req_port=const.PORT_REQ,
-            net_port=const.PORT_NETWORK,
             status=1,
         )
     )
