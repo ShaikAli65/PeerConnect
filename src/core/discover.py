@@ -1,96 +1,96 @@
 import asyncio
 import socket
-import struct
+from typing import Literal
 
-from src.avails import Wire, WireData, connect, const, use
+from src.avails import Wire, WireData, const, use
+from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
+from src.avails.constants import DISCOVER_RETRIES
 from src.core import get_this_remote_peer
 from src.core.transfers import REQUESTS_HEADERS
 
-DISCOVER_RETRIES = 3
-DISCOVER_TIMEOUT = 3
 
-
-async def broadcast_search(broadcast_addr, req_payload):
-    loop = asyncio.get_event_loop()
-    with connect.UDPProtocol.create_async_server_sock(
-            loop,
-            broadcast_addr
-    ) as broadcast_sock:
-        broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        task = asyncio.create_task(wait_for_replies(broadcast_sock, DISCOVER_TIMEOUT))
-        return await _waiter_loop(("<broadcast>", broadcast_addr[1]),broadcast_sock,req_payload, task)
-
-
-async def multicast_search(multicast_addr, req_payload):
-    loop = asyncio.get_event_loop()
-    with connect.UDPProtocol.create_async_server_sock(
-            loop,
-            multicast_addr
-    ) as multicast_sock:
-        multicast_sock.setsockopt(socket.IPPROTO_IP,
-                                  socket.IP_MULTICAST_TTL, 2)
-
-        # TODO: This should only be used if we do not have inproc method!
-        multicast_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
-        group = socket.inet_aton("{0}".format(multicast_addr))
-        mreq = struct.pack('4sl', group, socket.INADDR_ANY)
-        multicast_sock.setsockopt(socket.SOL_IP,
-                                  socket.IP_ADD_MEMBERSHIP, mreq)
-
-        task = asyncio.create_task(wait_for_replies(multicast_sock, DISCOVER_TIMEOUT))
-
-        return await _waiter_loop(multicast_addr, multicast_sock, req_payload, task)
-
-
-def _waiter_loop(addr, sock, req_payload, task):
-    async for _ in use.async_timeouts(max_retries=DISCOVER_RETRIES):
-        Wire.send_datagram(sock, addr, bytes(req_payload))
-        if task.done():
-            break
-    return task
-
-
-async def search_network():
-    ip, port = const.THIS_IP, const.PORT_REQ
+async def search_network(broad_cast_addr, multicast_addr):
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
-    s = connect.UDPProtocol.create_async_server_sock(
-        asyncio.get_running_loop(),
-        (ip, port),
-        family=const.IP_VERSION
+    const.BIND_IP = const.THIS_IP
+    loop = asyncio.get_event_loop()
+    bind_address = (const.BIND_IP, const.PORT_NETWORK)
+
+    with UDPProtocol.create_async_server_sock(
+            loop,
+            bind_address,
+            family=const.IP_VERSION
+    ) as common_sock:
+        common_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        replies = []
+        if const.USING_IP_V4:
+            broad_cast_responses = await broadcast_search(common_sock, broad_cast_addr, ping_data)
+            replies.append(broad_cast_responses)
+
+        multicast_responses = await multicast_search(common_sock, multicast_addr, ping_data)
+        replies.append(multicast_responses)
+        return replies
+
+
+async def broadcast_search(broadcast_sock, broadcast_addr: tuple[Literal['<broadcast>'] | str, int], req_payload):
+    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    f = _request_response_loop(
+        broadcast_sock,
+        broadcast_addr,
+        req_payload,
+        DISCOVER_RETRIES
     )
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    with s:
-        await ping_network(s, port, ping_data, times=2)  # debug
-        print('sent broadcast to network at port', ip, port)  # debug
-        return await wait_for_replies(s)
+    answer = await f
+    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 0)
+    return answer
 
 
-async def ping_network(sock, port, req_payload, *, times=4):
-    for delay in use.get_timeouts(max_retries=times):
-        Wire.send_datagram(sock, ('<broadcast>', port), bytes(req_payload))
-        print("sent broadcast")  # debug
-        await asyncio.sleep(delay)
+async def _request_response_loop(sock, send_addr, req_payload, retry_count):
+    reply_fut = asyncio.get_event_loop().create_future()
 
+    async def _reply_waiter():
+        while True:
+            print(sock)
+            raw_data, addr = await Wire.recv_datagram_async(sock)
+            reply = WireData.load_from(raw_data)
+            print("got", reply, addr, sock.getsockname())
+            if addr == sock.getsockname():
+                print('ignoring echo')  # debug
+                continue
+            if reply.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
+                print("reply detected", reply)  # debug
+                result = tuple(reply['connect_uri'])
+                reply_fut.set_result(result)  # we got address to bootstrap with
+                return result
 
-async def wait_for_replies(sock, timeout=3):
-    print("waiting for replies at", sock)
-    while True:
+    task = asyncio.create_task(_reply_waiter())
+
+    for timeout in use.get_timeouts(max_retries=retry_count):
+        Wire.send_datagram(sock, send_addr, bytes(req_payload))
+        print(f"sent{send_addr}" + ("=" * 80))
         try:
-            raw_data, addr = await asyncio.wait_for(Wire.recv_datagram_async(sock), timeout)
-        except asyncio.TimeoutError:
-            print(f'timeout reached at {use.func_str(wait_for_replies)}')
-            return None
-        try:
-            data = WireData.load_from(raw_data)
-            print("some data came ", data)  # debug
-        except TypeError as tp:
-            print(f"got error at {use.func_str(wait_for_replies)}", tp)
-            return
-        if addr == sock.getsockname():
-            print('ignoring echo')  # debug
-            continue
-        if data.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
-            print("reply detected")  # debug
-            print("got some data", data)  # debug
-            return tuple(data['connect_uri'])
+            resp = await asyncio.wait_for(asyncio.shield(reply_fut), timeout)
+            # resp = await asyncio.wait_for(reply_fut, timeout)
+            # resp = await asyncio.wait_for(_reply_waiter(), timeout)
+            print("got" + ("=" * 80), resp)
+            task.cancel()
+            return resp
+        except TimeoutError:
+            print("timeout")
+
+    task.cancel()
+
+
+async def multicast_search(multicast_sock, multicast_addr, req_payload):
+    if const.USING_IP_V4:
+        ipv4_multicast_socket_helper(multicast_sock, multicast_addr)
+    else:
+        ipv6_multicast_socket_helper(multicast_sock, multicast_addr)
+
+    answer = await _request_response_loop(
+        multicast_sock,
+        multicast_addr,
+        req_payload,
+        DISCOVER_RETRIES
+    )
+    return answer
