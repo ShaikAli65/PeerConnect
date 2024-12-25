@@ -4,21 +4,23 @@ from typing import Literal
 
 from src.avails import Wire, WireData, const, use
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
-from src.avails.constants import DISCOVER_RETRIES
 from src.core import get_this_remote_peer
 from src.core.transfers import REQUESTS_HEADERS
 
 
-async def search_network(broad_cast_addr, multicast_addr):
+async def search_network(bind_addr, broad_cast_addr, multicast_addr):
+    """
+
+    """
+
     this_id = get_this_remote_peer().id
     ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
     const.BIND_IP = const.THIS_IP
     loop = asyncio.get_event_loop()
-    bind_address = (const.BIND_IP, const.PORT_NETWORK)
 
     with UDPProtocol.create_async_server_sock(
             loop,
-            bind_address,
+            bind_addr,
             family=const.IP_VERSION
     ) as common_sock:
         common_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -38,7 +40,7 @@ async def broadcast_search(broadcast_sock, broadcast_addr: tuple[Literal['<broad
         broadcast_sock,
         broadcast_addr,
         req_payload,
-        DISCOVER_RETRIES
+        const.DISCOVER_RETRIES
     )
     answer = await f
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 0)
@@ -49,15 +51,20 @@ async def _request_response_loop(sock, send_addr, req_payload, retry_count):
     reply_fut = asyncio.get_event_loop().create_future()
 
     async def _reply_waiter():
+
+        def is_a_valid_response(_reply, _addr):
+            if _addr == sock.getsockname():
+                print('ignoring echo')  # debug
+                return False
+            if _reply.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
+                return True
+
+        print("listening for discover replies on", sock.getsockname())
         while True:
-            print(sock)
             raw_data, addr = await Wire.recv_datagram_async(sock)
             reply = WireData.load_from(raw_data)
-            print("got", reply, addr, sock.getsockname())
-            if addr == sock.getsockname():
-                print('ignoring echo')  # debug
-                continue
-            if reply.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
+            print("got", reply, addr)
+            if is_a_valid_response(reply, addr):
                 print("reply detected", reply)  # debug
                 result = tuple(reply['connect_uri'])
                 reply_fut.set_result(result)  # we got address to bootstrap with
@@ -70,9 +77,7 @@ async def _request_response_loop(sock, send_addr, req_payload, retry_count):
         print(f"sent{send_addr}" + ("=" * 80))
         try:
             resp = await asyncio.wait_for(asyncio.shield(reply_fut), timeout)
-            # resp = await asyncio.wait_for(reply_fut, timeout)
-            # resp = await asyncio.wait_for(_reply_waiter(), timeout)
-            print("got" + ("=" * 80), resp)
+            print("got" + '=>', resp)
             task.cancel()
             return resp
         except TimeoutError:
@@ -91,6 +96,6 @@ async def multicast_search(multicast_sock, multicast_addr, req_payload):
         multicast_sock,
         multicast_addr,
         req_payload,
-        DISCOVER_RETRIES
+        const.DISCOVER_RETRIES
     )
     return answer
