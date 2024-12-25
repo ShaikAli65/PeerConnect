@@ -60,3 +60,4 @@ class REQUESTS_HEADERS:
     GOSSIP_SEARCH_REPLY = b'gossip_search_reply'
     GOSSIP_SEARCH_REQ = b'gossip_search_req'
     GOSSIP_MESSAGE = b'gossip message'
+    KADEMLIA = b'KAD'
