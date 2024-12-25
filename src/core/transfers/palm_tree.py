@@ -6,10 +6,6 @@ from collections import defaultdict
 from typing import Optional
 
 from src.avails import (
-    PalmTreeInformResponse,
-    PalmTreeSession,
-    RemotePeer,
-    Wire,
     WireData,
     connect,
     const,
@@ -22,7 +18,7 @@ from src.avails.useables import get_unique_id
 from src.avails.wire import PalmTreeInformResponse, PalmTreeSession, Wire
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.transfers import HEADERS
-from src.core.transfers.tree_link import TreeLink
+from src.core.transfers.tree import TreeLink
 
 
 class PalmTreeLink(TreeLink):

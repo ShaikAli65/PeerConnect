@@ -7,11 +7,12 @@ from collections import defaultdict
 from types import ModuleType
 from typing import Optional
 
+import src.core.gossip
 from src.avails import (RemotePeer, SocketStore, Wire, WireData, connect, const, use)
 from src.core import Dock, get_this_remote_peer
 from src.core.transfers import HEADERS
 from src.core.webpage_handlers import pagehandle
-from src.managers import directorymanager, filemanager, gossipmanager
+from src.managers import directorymanager, filemanager
 
 
 async def initiate_connections():
@@ -43,7 +44,7 @@ class Acceptor:
         if self._initialized is True:
             return
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
-        self.stopping = False
+        self.stopping = Dock.finalizing.is_set
         self.main_socket: Optional[connect.Socket] = None
         self.back_log = 4
         self.currently_in_connection = defaultdict(int)
@@ -65,15 +66,11 @@ class Acceptor:
         self.main_socket = await self.start_socket()
         use.echo_print("::Listening for connections")
         with self.main_socket:
-            while not self.stopping:
+            while not self.stopping():
                 initial_conn, _ = await self.main_socket.aaccept()
                 use.echo_print(f"New connection from {_}")
                 self._spawn_task(self.__accept_connection, initial_conn)
                 await asyncio.sleep(0)
-                # f = use.wrap_with_tryexcept(self.__accept_connection, initial_conn)
-                # task = asyncio.create_task(f())
-                # task.add_done_callback(lambda t: self.all_tasks.discard(t))
-                # self.all_tasks.add(task)
 
     async def start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
@@ -124,7 +121,7 @@ class Acceptor:
             use.echo_print("got a gossip stream link connection request delegating to gossip manager")  # debug
             # f = use.wrap_with_tryexcept(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
             # asyncio.create_task(f())
-            self._spawn_task(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
+            self._spawn_task(src.core.gossip.update_gossip_stream_socket, connection, hand_shake)
             return None
 
         if hand_shake.match_header(HEADERS.OTM_UPDATE_STREAM_LINK):
