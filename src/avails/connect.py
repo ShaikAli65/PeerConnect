@@ -375,15 +375,35 @@ def is_port_empty(port, addr=None):
             return False  # Port is not empty or some other error occurred
 
 
-def ipv4_multicast_socket_helper(sock, multicast_addr):
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
+def ipv4_multicast_socket_helper(
+        sock,
+        multicast_addr,
+        *,
+        loop_back=1,
+        reuse_addr=1,
+        add_membership=True
+):
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, loop_back)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
     group = socket.inet_aton(f"{multicast_addr[0]}")
-    mreq = struct.pack('4sl', group, socket.INADDR_ANY)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+    if add_membership:
+        mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
 
-def ipv6_multicast_socket_helper(sock, multicast_addr):
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 2)  # :todo: review this magic number
+def ipv6_multicast_socket_helper(
+        sock, multicast_addr,
+        *,
+        loop_back=1,
+        reuse_addr=1,
+        add_membership=True,
+        hops=2  # :todo: review this magic number
+):
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_LOOP, loop_back)
+    # this function makes socket to go with default interface
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, hops)
     group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
-    mreq = group + struct.pack('@I', 0)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+    if add_membership:
+        mreq = group + struct.pack('@I', 0)  # default interface
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
