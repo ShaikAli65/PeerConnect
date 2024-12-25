@@ -2,11 +2,11 @@ import asyncio
 import random
 import time
 
-from src.avails import GossipMessage, RumorMessageItem, Wire, const
+from src.avails import GossipMessage, RumorMessageItem, Wire, const, RumorMessageList
 from src.core import Dock
 
 
-class RumorMessageList:
+class SimpleRumorMessageList(RumorMessageList):
 
     def __init__(self, ttl):
         # tuple(timein, messageItem)
@@ -77,7 +77,6 @@ class RumorMessageList:
 
 
 class RumorPolicy:
-
     global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
     min_chance = 0.6
 
@@ -111,7 +110,7 @@ class RumorMongerProtocol:
     alpha = 3
     policy_class = RumorPolicy
 
-    def __init__(self, datagram_transport, message_list_class: type[RumorMessageList]):
+    def __init__(self, datagram_transport, message_list_class: type[SimpleRumorMessageList]):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
         self.send_sock = datagram_transport
         self.policy = self.policy_class(self)
@@ -123,6 +122,7 @@ class RumorMongerProtocol:
         if not data.fields_check():
             print(f"fields missing, ignoring message: {data.actual_data}")
             return
+
         if not self.policy.should_rumor(data):
             return
 
