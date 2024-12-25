@@ -1,17 +1,16 @@
-import asyncio
 import asyncio as _asyncio
 import importlib
 import itertools
-import threading
 from typing import Optional, Union
 
 import websockets
 
 from src.avails import DataWeaver, StatusMessage, WireData, const, use
 from src.avails.useables import wrap_with_tryexcept
+from src.core import Dock
 
-PAGE_HANDLE_WAIT = _asyncio.Event()
-safe_end = threading.Event()
+safe_end = Dock.finalizing
+PROFILE_WAIT = _asyncio.Event()
 
 DATA = 0x00
 SIGNAL = 0x01
@@ -21,7 +20,7 @@ class WebSocketRegistry:
     SOCK_TYPE_DATA = DATA
     SOCK_TYPE_SIGNAL = SIGNAL
     connections: list[Optional[websockets.WebSocketServerProtocol]] = [None, None]
-    message_queue = asyncio.Queue()
+    message_queue = _asyncio.Queue()
     connections_completed = _asyncio.Event()
     _start_data_sender_task_reference = None
 
@@ -59,12 +58,11 @@ class WebSocketRegistry:
     @classmethod
     async def __aenter__(cls):
         f = wrap_with_tryexcept(cls.start_data_sender)
-        cls._start_data_sender_task_reference = asyncio.create_task(f())
+        cls._start_data_sender_task_reference = _asyncio.create_task(f())
         return cls
 
     @classmethod
     async def __aexit__(cls, exc_type, exc_val, exc_tb):
-        safe_end.set()
         cls.clear()
         cls._start_data_sender_task_reference.cancel()
         return True
@@ -77,7 +75,7 @@ class ReplyRegistry:
     @classmethod
     def register_reply(cls, data: DataWeaver):
         data.id = next(cls.id_factory)
-        fut = asyncio.get_event_loop().create_future()
+        fut = _asyncio.get_event_loop().create_future()
         cls.messages_to_futures_mapping[data.id] = fut
         return fut
 
@@ -127,22 +125,18 @@ async def start_websocket_server():
     start_server = await websockets.serve(handle_client, const.THIS_IP, const.PORT_PAGE)
     use.echo_print(f"websocket server started at ws://{const.THIS_IP}:{const.PORT_PAGE}")
     async with start_server:
-        await PAGE_HANDLE_WAIT.wait()
+        await Dock.finalizing.wait()
+        
     use.echo_print("ending websocket server")
 
 
 async def initiate_pagehandle():
     f = use.wrap_with_tryexcept(WebSocketRegistry.start_data_sender)
-    asyncio.create_task(f())
+    _asyncio.create_task(f())
 
     async with WebSocketRegistry():
         await start_websocket_server()
     print("3al;pksdfnoidsabnfgibgiuferqbguerbguiobedguertbnu")
-
-
-def end():
-    global PAGE_HANDLE_WAIT
-    PAGE_HANDLE_WAIT.set()
 
 
 def dispatch_data(data, expect_reply=False):

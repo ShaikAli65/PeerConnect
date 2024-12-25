@@ -10,7 +10,6 @@ from src.avails import (
 
 class Dock:
     connected_peers = _SocketCache()
-    PROFILE_WAIT = _asyncio.Event()
     peer_list = _PeerDict()
     server_in_network = False
     state_handle = None
@@ -18,7 +17,7 @@ class Dock:
     global_gossip = None
     _this_object: Optional[_RemotePeer] = None
     kademlia_network_server = None
-
+    finalizing = _asyncio.Event()
     if TYPE_CHECKING:
         from src.core.transfers import RumorMongerProtocol
         from src.core._kademlia import PeerServer
