@@ -140,8 +140,8 @@ class WireData:
         return self._header
 
     @property
-    def dict(self): # for introspection or validation
-        return {'header':self._header, 'id':self.id,'version':self.version, **self.body}
+    def dict(self):  # for introspection or validation
+        return {'header': self._header, 'id': self.id, 'version': self.version, **self.body}
 
     def __str__(self):
         return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
@@ -151,11 +151,14 @@ class WireData:
 
 
 def unpack_datagram(data_payload) -> Optional[WireData]:
-    """
-        Utility function to unpack data from :func: `datagram_received` callback from asyncio's DatagramProtocol
+    """Utility function to unpack raw datagram
+
+        from `datagram_received` callback from asyncio's DatagramProtocol
         or any other datagram transferred using wire protocol
         Unpack the raw data received using peer-connect's wire protocol
         into WireData and handle exceptions
+    Args:
+        data_payload(bytes) : byte string to unpack
     """
     try:
         data = Wire.load_datagram(data_payload)
@@ -168,7 +171,7 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     except struct.error as se:
         return print("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
     except Exception as e:
-        return print("unexpected exception",e)
+        return print("unexpected exception", e)
 
 
 class DataWeaver:
@@ -316,10 +319,10 @@ class GossipMessage:
         wire_data = self.actual_data
         match wire_data.dict:
             case {
-                'id':_,
-                'header':_,
-                'created':_,
-                'ttl':_,
+                'id': _,
+                'header': _,
+                'created': _,
+                'ttl': _,
             }:
                 return True
             case _:
@@ -359,10 +362,11 @@ class RumorMessageItem:
 @dataclass(slots=True, frozen=True)
 class PalmTreeInformResponse:
     """
-    peer_id(str) : id of peer who created this response
-    passive_addr(tuple[str, int]) : datagram endpoint address at where peer is reachable
-    active_addr(tuple[str, int]) : stream endpoint address
-    session_key(str) : echoing back the session_key received
+    Args:
+        peer_id(str) : id of peer who created this response
+        passive_addr(tuple[str, int]) : datagram endpoint address at where peer is reachable
+        active_addr(tuple[str, int]) : stream endpoint address
+        session_key(str) : echoing back the session_key received
     """
     peer_id: str
     passive_addr: tuple[str, int]
@@ -380,14 +384,16 @@ class PalmTreeInformResponse:
 
 @dataclass(slots=True)
 class PalmTreeSession:
-    """
+    """A dataclass that represents the structure of PalmTreeSession
+
     Args:
-        `originated_id(str)`: the one who initiated this session
-        `adjacent_peers(list[str])` : all the peers to whom we should be in contact
-        `session_key(str)` : session key used to encrypt data
-        `session_id(int)` : self-explanatory
-        `max_forwards`(int) : maximum number of resends this instance should perform for every packet received
-        `link_wait_timeout`(double) : timeout for any i/o operations
+        originate_id (str) : the one who initiated this session
+        adjacent_peers (list[str]) : all the peers to whom we should be in contact
+        key (str) : session key used to encrypt data
+        session_id (int) : self-explanatory
+        fanout (int) : maximum number of resends this instance should perform for every packet received
+        link_wait_timeout (double) : timeout for any i/o operations
+
     """
     originate_id: str
     adjacent_peers: list[str]
@@ -403,14 +409,14 @@ class PalmTreeSession:
 class OTMSession(PalmTreeSession):
     """
     Args:
-        `originated_id(str)`: the one who initiated this session
-        `session_id(int)` : self-explanatory
-        `key(str)` : session key used to encrypt data
-        `fanout`(int) : maximum number of resends this instance should perform for every packet received
-        `link_wait_timeout`(double) : timeout for any i/o operations
-        `file_count`(int) : number of files to be sent in this session
-        `adjacent_peers(list[str])` : all the peers to whom we should be in contact
-        `chunk_size(int)` : size of chunk to read/write in the current session
+        originate_id(str) : the one who initiated this session
+        session_id(int) : self-explanatory
+        key(str) : session key used to encrypt data
+        fanout(int) : maximum number of resends this instance should perform for every packet received
+        link_wait_timeout (double) : timeout for any i/o operations
+        file_count(int) : number of files to be sent in this session
+        adjacent_peers(list[str]) : all the peers to whom we should be in contact
+        chunk_size(int) : size of chunk to read/write in the current session
     """
     file_count: int
 
