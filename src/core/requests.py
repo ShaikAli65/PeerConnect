@@ -1,25 +1,15 @@
 import asyncio
 import functools
+import operator
+from typing import NamedTuple
 
-from src.avails import Wire, WireData, const, unpack_datagram, use, wire
+import src.core.gossip
+from src.avails import RequestHandler, Wire, WireData, const, unpack_datagram, use, wire
+from src.avails.abcs import Dispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
-from src.core import Dock, _kademlia, get_gossip, get_this_remote_peer, peers
-from src.core.discover import search_network
-from src.core.gossip import join_gossip
+from src.core import Dock, _kademlia, discover, get_gossip, get_this_remote_peer, gossip, peers
 from src.core.transfers import HEADERS, REQUESTS_HEADERS
-from src.managers import filemanager, gossipmanager
-
-
-def _create_listen_socket(bind_address, multicast_addr):
-    loop = asyncio.get_running_loop()
-    sock = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
-    )
-    if const.USING_IP_V4:
-        ipv4_multicast_socket_helper(sock, multicast_addr)
-    else:
-        ipv6_multicast_socket_helper(sock, multicast_addr)
-    return sock
+from src.managers import filemanager
 
 
 async def initiate():
@@ -28,67 +18,98 @@ async def initiate():
     bind_address = (const.BIND_IP, const.PORT_REQ)
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
-    peer_addresses = await search_network(broad_cast_address, multicast_address)
-
-    server = _kademlia.get_new_kademlia_server()
+    peer_addresses = await discover.search_network(
+        bind_address,
+        broad_cast_address,
+        multicast_address
+    )
     print("search request responses", peer_addresses)
 
+    kad_server = _kademlia.get_new_kademlia_server()
+    kad_server.start()
+
+    req_dispatcher = RequestsDispatcher()
+    # req_dispatcher.register_handler(REQUESTS_HEADERS.KADEMLIA)
+
     transport, proto = await loop.create_datagram_endpoint(
-        functools.partial(RequestsEndPoint, server),
+        functools.partial(RequestsEndPoint, req_dispatcher),
         sock=_create_listen_socket(bind_address, multicast_address)
     )
+
+    kad_server.protocol.connection_made(transport)
+
     if any(peer_addresses):
-        valid_addresses = filter(lambda x: x, peer_addresses)
+        valid_addresses = filter(operator.truth, peer_addresses)  # [x for x in peer_addresses if x]
         print("bootstrapping kademlia with", valid_addresses)  # debug
-        if await server.bootstrap(valid_addresses):
+        if await kad_server.bootstrap(valid_addresses):
             Dock.server_in_network = True
 
-    join_gossip(transport)
-
+    gossip.join_gossip(transport)
     Dock.protocol = proto
     Dock.requests_endpoint = transport
-    Dock.kademlia_network_server = server
-    f = use.wrap_with_tryexcept(server.add_this_peer_to_lists)
-    asyncio.create_task(f())
+    Dock.kademlia_network_server = kad_server
+    # f = use.wrap_with_tryexcept(kad_server.add_this_peer_to_lists)
+    # asyncio.create_task(f())
 
 
-class RequestsRegistry:
-    requests_registry = {}
+def _create_listen_socket(bind_address, multicast_addr):
+    loop = asyncio.get_running_loop()
+    sock = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
 
-    ...
+    if const.USING_IP_V4:
+        ipv4_multicast_socket_helper(sock, multicast_addr)
+        print("registered request socket for multicast v4")
+    else:
+        ipv6_multicast_socket_helper(sock, multicast_addr)
+        print("registered request socket for multicast v6")
+    return sock
+
+
+class RequestEvent(NamedTuple):
+    request: WireData
+    from_addr: tuple[str, int]
+
+
+class RequestsDispatcher(Dispatcher):
+    def __init__(self):
+        self.handlers = {}
+
+    def register_handler(self, header, handler: RequestHandler):
+        self.handlers[header] = handler
+
+    def dispatch(self, req_event):
+        handler = self.handlers.get(req_event.header)
+        handler(req_event)
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
-    """
-    This class handles all the requests/messages come to the application's
-    requests endpoint
-    this is closely coupled with kademila's Protocol class which also operates on `asyncio.DatagramProtocol`
-    both operate on same endpoint, this class separates messages related to kademila and calls
-    respective callbacks that are supposed to be called
-    """
-    __slots__ = 'transport', 'kademlia_server'
 
-    def __init__(self, kademlia_server):
-        self.kademlia_server = kademlia_server
+    def __init__(self, kademlia_server, dispatcher):
+        """A Requests Endpoint
+
+            Handles all the requests/messages come to the application's requests endpoint
+            separates messages related to kademila and calls respective callbacks that are supposed to be called
+
+            Args:
+                dispatcher(Dispatcher) : dispatcher object that gets `called` when a datagram arrives
+        """
+
+        self.dispatcher = dispatcher
 
     def connection_made(self, transport):
         self.transport = transport
         print(
             "started requests endpoint at", transport.get_extra_info("socket")
         )  # debug
-        # also signaling kademlia
-        self.kademlia_server.bind_transport(transport)
-        self.kademlia_server.protocol.connection_made(transport)
 
     def datagram_received(self, data_payload, addr):
         req_data = unpack_datagram(data_payload)
-        if not req_data:
-            # if it's not in `WireData` format, best thought is to delegate that to kademlia's protocol
-            self.kademlia_server.protocol.datagram_received(data_payload, addr)
-            return  # Failed to unpack
-
         print("Received: %s from %s" % (req_data, addr))
-        self.handle_request(req_data, addr)
+        self.dispatcher(data_payload, addr)
+
+        # self.handle_request(req_data, addr)
 
     def handle_request(self, req_data: WireData, addr):
         """Handle different request types based on the header"""
@@ -145,7 +166,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     @staticmethod
     def handle_gossip_session(req_data, addr):
-        f = use.wrap_with_tryexcept(gossipmanager.new_gossip_request_arrived, req_data, addr)
+        f = use.wrap_with_tryexcept(src.core.gossip.new_gossip_request_arrived, req_data, addr)
         asyncio.create_task(f())
 
     @staticmethod
