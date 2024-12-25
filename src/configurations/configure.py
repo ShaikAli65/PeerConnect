@@ -21,8 +21,6 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
     const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
     const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
-    const.PORT_NETWORK = config_map.getint('NERD_OPTIONS', 'network_port')
-
     const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
     const.PAGE_SERVE_PORT = config_map.getint('NERD_OPTIONS', 'page_serve_port')
 

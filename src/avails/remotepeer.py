@@ -28,14 +28,12 @@ class RemotePeer:
                  ip=None,
                  conn_port=8088,
                  req_port=8089,
-                 net_port=8090,
                  status=0):
         self.username = username
         self.ip = str(ip)
         self._conn_port = conn_port
-        self.status = status
         self._req_port = req_port
-        # self._network_port = net_port
+        self.status = status
         self.id = peer_id
         self.long_id = int(peer_id.hex(), 16)
         self._byte_cache = None, None
