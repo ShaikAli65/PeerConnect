@@ -87,14 +87,15 @@ import asyncio
 import time
 from collections import defaultdict
 from collections.abc import AsyncIterator
-from typing import Optional, override
+from typing import NamedTuple, Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import GossipMessage, RemotePeer, use
+from src.avails import BaseHandler, GossipMessage, RemotePeer, use
+from src.avails.bases import GossipEvent
 from src.avails.useables import echo_print, get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers import GOSSIP, REQUESTS_HEADERS
 
 node_list_ids = [
     b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
@@ -157,18 +158,17 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
 class SearchCrawler:
     node_list_ids = node_list_ids
-    list_id_mapper_handle = None
 
     @classmethod
-    async def get_relevant_peers_for_list_id(cls, node_server, list_id):
+    async def get_relevant_peers_for_list_id(cls, kad_server, list_id):
         peer = RemotePeer(list_id)
-        nearest = node_server.protocol.router.find_neighbors(peer)
+        nearest = kad_server.protocol.router.find_neighbors(peer)
         crawler = crawling.NodeSpiderCrawl(
-            node_server.protocol,
+            kad_server.protocol,
             peer,
             nearest,
-            node_server.ksize,
-            node_server.alpha
+            kad_server.ksize,
+            kad_server.alpha
         )
         responsible_nodes = await crawler.find()
         return responsible_nodes
@@ -186,6 +186,7 @@ class SearchCrawler:
 
 
 class Storage(storage.ForgetfulStorage):
+    # :todo: introduce diff based reads
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)
 
@@ -199,7 +200,6 @@ class Storage(storage.ForgetfulStorage):
 
     def store_peers_in_list(self, list_key, list_of_peers):
         if list_key in self.node_lists_ids:
-            # :todo fix this "list" bug
             # temporary fix
             filtered_peers = set()
             for peer in list_of_peers:
@@ -209,7 +209,7 @@ class Storage(storage.ForgetfulStorage):
                     filtered_peers.add(peer)
 
             self.peer_data_storage[list_key] |= filtered_peers
-            Dock.peer_list.extend(RemotePeer.load_from(x) for x in list_of_peers)
+            # Dock.peer_list.extend(RemotePeer.load_from(x) for x in list_of_peers)
         return True
 
 
@@ -260,7 +260,7 @@ class GossipSearch:
     @staticmethod
     def _prepare_reply(reply_id):
         gm = GossipMessage()
-        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REPLY
+        gm.header = GOSSIP.SEARCH_REPLY
         gm.id = reply_id
         gm.message = get_this_remote_peer().serialized
         gm.created = time.time()
@@ -269,7 +269,7 @@ class GossipSearch:
     @staticmethod
     def _prepare_search_message(find_str):
         gm = GossipMessage()
-        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REQ
+        gm.header = GOSSIP.SEARCH_REQ
         gm.message = find_str
         gm.id = get_unique_id()
         gm.created = time.time()
@@ -277,7 +277,7 @@ class GossipSearch:
 
     @classmethod
     def reply_arrived(cls, reply_data: GossipMessage, addr):
-        Dock.global_gossip.message_arrived(reply_data)
+        Dock.global_gossip.message_arrived(reply_data, addr)
         try:
             result_iter = cls._message_state_dict[reply_data.id]
             if m := reply_data.message:
@@ -289,6 +289,24 @@ class GossipSearch:
 
 def get_search_handler():
     return GossipSearch
+
+
+class GossipSearchReqHandler(BaseHandler):
+    def __init__(self, searcher, transport):
+        self.searcher = searcher
+        self.transport = transport
+
+    async def handle(self, event: GossipEvent):
+        reply = self.searcher.request_arrived(*event)
+        return self.transport.sendto(reply, event.from_addr)
+
+
+class GossipSearchReplyHandler(BaseHandler):
+    def __init__(self, searcher):
+        self.searcher = searcher
+
+    async def handle(self, event: GossipEvent):
+        return self.searcher.reply_arrived(*event)
 
 
 def get_more_peers():
@@ -330,7 +348,7 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
     if not found the performs a distributed search in the network
     """
     try:
-        peer_obj = Dock.peer_list[peer_id]
+        peer_obj = Dock.peer_list.get_peer(peer_id)
     except KeyError:
         peer_obj = await get_remote_peer(peer_id)
 
