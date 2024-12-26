@@ -1,4 +1,3 @@
-
 class HEADERS:
     REQ_FOR_LIST = b'list of users  '
     REDIRECT = b'redirect        '
@@ -60,4 +59,15 @@ class REQUESTS_HEADERS:
     GOSSIP_SEARCH_REPLY = b'gossip_search_reply'
     GOSSIP_SEARCH_REQ = b'gossip_search_req'
     GOSSIP_MESSAGE = b'gossip message'
-    KADEMLIA = b'KAD'
+
+    KADEMLIA = b'\x00'
+    DISCOVERY = b'\x01'
+    GOSSIP = b'\x02'
+
+
+class GOSSIP:
+    __slots__ = ()
+    MESSAGE = b'\x00'
+    SEARCH_REQ = b'\x01'
+    SEARCH_REPLY = b'\x02'
+    CREATE_SESSION = b'\x03'
