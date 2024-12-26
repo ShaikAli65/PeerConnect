@@ -2,38 +2,61 @@ import asyncio
 import socket
 from typing import Literal
 
-from src.avails import Wire, WireData, const, use
-from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
+from src.avails import QueueMixIn, Wire, WireData, const, use
+from src.avails.bases import BaseDispatcher, RequestEvent
+from src.avails.connect import ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.core import get_this_remote_peer
 from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers.transports import DiscoveryTransport
 
 
-async def search_network(bind_addr, broad_cast_addr, multicast_addr):
-    """
+class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
+    def __init__(self, transport, stopping_flag):
+        self.registry = {
+            REQUESTS_HEADERS.NETWORK_FIND: self.find_request,
+        }
+        super().__init__(transport=DiscoveryTransport(transport), stop_flag=stopping_flag)
 
-    """
+    async def submit(self, event: RequestEvent):
+        wire_data = WireData.load_from(event.request)  # we need to extract data as request dispatcher
+        handle = self.registry[wire_data.header]
+        await handle(wire_data)
 
-    this_id = get_this_remote_peer().id
-    ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
-    const.BIND_IP = const.THIS_IP
-    loop = asyncio.get_event_loop()
-
-    with UDPProtocol.create_async_server_sock(
-            loop,
-            bind_addr,
-            family=const.IP_VERSION
-    ) as common_sock:
-        common_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        replies = []
-        if const.USING_IP_V4:
-            broad_cast_responses = await broadcast_search(common_sock, broad_cast_addr, ping_data)
-            replies.append(broad_cast_responses)
-
-        multicast_responses = await multicast_search(common_sock, multicast_addr, ping_data)
-        replies.append(multicast_responses)
-        return replies
+    async def find_request(self, req_packet: WireData):
+        print("replying to ", req_packet.body)
+        this_rp = get_this_remote_peer()
+        data_payload = WireData(
+            header=REQUESTS_HEADERS.NETWORK_FIND_REPLY,
+            _id=this_rp.id,
+            connect_uri=this_rp.req_uri
+        )
+        return self.transport.sendto(bytes(data_payload), tuple(req_packet['reply_addr']))
 
 
+async def search_network(transport, broad_cast_addr, multicast_addr):
+    this_rp = get_this_remote_peer()
+    ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_rp.id, reply_addr=this_rp.req_uri)
+
+    if const.USING_IP_V4:
+        async for _ in use.async_timeouts(const.DISCOVER_RETRIES):
+            transport.sendto(bytes(ping_data), broad_cast_addr)
+
+    async for _ in use.async_timeouts(const.DISCOVER_RETRIES):
+        transport.sendto(bytes(ping_data), multicast_addr)
+
+
+def _add_broadcast(sock):
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+
+def _add_multicast(multicast_sock, addr):
+    if const.USING_IP_V4:
+        ipv4_multicast_socket_helper(multicast_sock, addr)
+    else:
+        ipv6_multicast_socket_helper(multicast_sock, addr)
+
+
+@use.NotInUse
 async def broadcast_search(broadcast_sock, broadcast_addr: tuple[Literal['<broadcast>'] | str, int], req_payload):
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     f = _request_response_loop(
@@ -47,6 +70,7 @@ async def broadcast_search(broadcast_sock, broadcast_addr: tuple[Literal['<broad
     return answer
 
 
+@use.NotInUse
 async def _request_response_loop(sock, send_addr, req_payload, retry_count):
     reply_fut = asyncio.get_event_loop().create_future()
 
@@ -78,7 +102,6 @@ async def _request_response_loop(sock, send_addr, req_payload, retry_count):
         try:
             resp = await asyncio.wait_for(asyncio.shield(reply_fut), timeout)
             print("got" + '=>', resp)
-            task.cancel()
             return resp
         except TimeoutError:
             print("timeout")
@@ -86,6 +109,7 @@ async def _request_response_loop(sock, send_addr, req_payload, retry_count):
     task.cancel()
 
 
+@use.NotInUse
 async def multicast_search(multicast_sock, multicast_addr, req_payload):
     if const.USING_IP_V4:
         ipv4_multicast_socket_helper(multicast_sock, multicast_addr)
