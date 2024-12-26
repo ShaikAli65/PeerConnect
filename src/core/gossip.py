@@ -1,8 +1,31 @@
 import asyncio
 
-from src.avails import GossipMessage, PalmTreeInformResponse, PalmTreeSession, Wire, WireData, connect, use, const
+from src.avails import (
+    use,
+    Wire,
+    const,
+    connect,
+    WireData,
+    QueueMixIn,
+    GossipEvent,
+    BaseHandler,
+    GossipMessage,
+    BaseDispatcher,
+    PalmTreeSession,
+    PalmTreeInformResponse,
+)
+
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import PalmTreeProtocol, PalmTreeRelay, SimpleRumorMessageList, RumorMongerProtocol
+from src.core.peers import GossipSearchReplyHandler, GossipSearchReqHandler, get_search_handler
+from src.core.transfers import (
+    GOSSIP,
+    PalmTreeRelay,
+    GossipTransport,
+    REQUESTS_HEADERS,
+    PalmTreeProtocol,
+    RumorMongerProtocol,
+    SimpleRumorMessageList,
+)
 
 
 class GlobalGossipRumorMessageList(SimpleRumorMessageList):  # inspired from java
@@ -16,18 +39,50 @@ class GlobalRumorMonger(RumorMongerProtocol):
         super().__init__(transport, GlobalGossipRumorMessageList)
 
 
-class GossipEvents:
+class GlobalGossipMessageHandler(BaseHandler):
+    def __init__(self, global_gossiper):
+        self.global_gossiper = global_gossiper
+
+    async def handle(self, event: GossipEvent):
+        return self.global_gossiper.message_arrived(*event)
+
+
+class GossipDispatcher(QueueMixIn, BaseDispatcher):
     # :todo: complete restructuring of all the gossip classes in OOPS ways, multiplex at requests.RequestsEndPoint
-    registered_applications = {}
-
-    def message_received(self, message: GossipMessage): ...
-
-    def register(self, trigger_header, handler): ...
+    """
 
 
-def join_gossip(data_transport):
-    Dock.global_gossip = GlobalRumorMonger(data_transport)
+        elif req_data.match_header(HEADERS.GOSSIP_CREATE_SESSION):
+            self.handle_gossip_session(req_data, addr)
+            GOSSIP.CREATE_SESSION: None,
+    """
+    __slots__ = 'registry',
+
+    def __init__(self, transport: GossipTransport, stop_flag):
+        super().__init__(transport=transport, stop_flag=stop_flag)
+        self.transport = transport
+        self.registry = {}
+
+    async def submit(self, event):
+        gossip_message = GossipMessage(event.request)
+        handler = self.registry[gossip_message.header]
+        some_data = await handler(gossip_message, event.from_addr)
+        if some_data and isinstance(some_data, bytes):
+            self.transport.sendto(some_data)
+
+
+def initiate_gossip(data_transport, req_dispatcher):
+    gossip_transport = GossipTransport(data_transport)
+    Dock.global_gossip = GlobalRumorMonger(gossip_transport)
+    g_dispatcher = GossipDispatcher(gossip_transport, Dock.finalizing.is_set)
+    gossip_searcher = get_search_handler()
+    reply_handler = GossipSearchReplyHandler(gossip_searcher)
+    req_handler = GossipSearchReqHandler(gossip_searcher, gossip_transport)
+    g_dispatcher.register_handler(GOSSIP.SEARCH_REPLY, reply_handler)
+    g_dispatcher.register_handler(GOSSIP.SEARCH_REQ, req_handler)
+    req_dispatcher.register_handler(REQUESTS_HEADERS.GOSSIP, g_dispatcher)
     print("joined gossip network", get_gossip())
+    return g_dispatcher
 
 
 class GossipSessionRegistry:
