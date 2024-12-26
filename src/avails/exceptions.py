@@ -1,0 +1,4 @@
+
+class DispatcherFinalizing(Exception):
+    pass
+
