@@ -609,7 +609,8 @@ class PalmTreeProtocol:
         # update states
         # trigger_spanning_formation
         # gather_tree
-        !! do not include center_peer in peers list passed in
+        Note:
+            Do not include center_peer in peers list passed in
         """
         self.peer_list = peers
         self.center_peer = center_peer

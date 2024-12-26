@@ -4,6 +4,7 @@ import time
 
 from src.avails import GossipMessage, RumorMessageItem, Wire, const, RumorMessageList
 from src.core import Dock
+from src.core.transfers.transports import GossipTransport
 
 
 class SimpleRumorMessageList(RumorMessageList):
@@ -110,14 +111,14 @@ class RumorMongerProtocol:
     alpha = 3
     policy_class = RumorPolicy
 
-    def __init__(self, datagram_transport, message_list_class: type[SimpleRumorMessageList]):
+    def __init__(self, datagram_transport: GossipTransport, message_list_class: type[SimpleRumorMessageList]):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
-        self.send_sock = datagram_transport
+        self.transport = datagram_transport
         self.policy = self.policy_class(self)
         self._is_initiated = True
 
-    def message_arrived(self, data: GossipMessage):
-        print("got a message to gossip", data)
+    def message_arrived(self, data: GossipMessage, from_addr):
+        print("got a message to gossip", data, from_addr)
 
         if not data.fields_check():
             print(f"fields missing, ignoring message: {data.actual_data}")
@@ -138,7 +139,7 @@ class RumorMongerProtocol:
     def __forward_payload(self, message, peer_id):
         peer_obj = Dock.peer_list.get_peer(peer_id)
         if peer_obj is not None:
-            Wire.send_datagram(self.send_sock, peer_obj.req_uri, bytes(message))
+            self.transport.sendto(bytes(message), peer_obj.req_uri)
             return peer_obj
 
     def gossip_message(self, message):
@@ -158,7 +159,7 @@ class RumorMongerProtocol:
             print(p.req_uri)
 
     def __del__(self):
-        self.send_sock.close()
+        self.transport.close()
 
     def __repr__(self):
         return str(f"<RumorMongerProtocol initiated={self._is_initiated}>")

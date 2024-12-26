@@ -23,9 +23,9 @@ def initial_states():
 
 
 async def initiate(states):
-    Dock.state_handle = StateManager()
-    await Dock.state_handle.put_states(states)
-    await Dock.state_handle.process_states()
+    Dock.state_manager_handle = StateManager()
+    await Dock.state_manager_handle.put_states(states)
+    await Dock.state_manager_handle.process_states()
 
 
 if __name__ == '__main__':

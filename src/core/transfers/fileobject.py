@@ -42,7 +42,7 @@ class FileItem:
         The _FileItem class is designed to represent a file with its metadata, such as name, size, path, and whether it has been seeked.
         It provides methods to manage file renaming, error handling, and serialization.
 
-    Key Attributes:
+    Attributes:
         __slots__: Used for memory optimization, defining the attributes the class can have.
         _name: The name of the file.
         size: The size of the file in bytes.
@@ -50,7 +50,7 @@ class FileItem:
         seeked: A variable indicating how much of the file has been read or processed.
         original_ext: Preserves the original file extension for potential renaming.
 
-    Key Methods:
+    Methods:
         __init__: Initializes the file object, fetching its size and name from the filesystem.
         __str__ and __repr__: Provide human-readable representations of the object for debugging and logging.
         add_error_ext: Adds an error extension to the file name to signify an error state.

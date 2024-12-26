@@ -11,7 +11,7 @@ One special class of wire protocol :class: `RemotePeer` is available in :file: `
 import dataclasses
 import json as _json
 import struct
-from asyncio import DatagramTransport
+from asyncio import BaseTransport
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import NamedTuple, Optional, Union
@@ -37,7 +37,7 @@ class Wire:
         return sock.sendall(data_size + data)
 
     @staticmethod
-    def send_datagram(sock: _Socket | DatagramTransport, address, data: bytes):
+    def send_datagram(sock: _Socket | BaseTransport, address, data: bytes):
         if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
             raise ValueError(f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
                              f"got a packet of size {len(data)} + 4bytes size")
