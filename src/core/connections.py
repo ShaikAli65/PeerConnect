@@ -8,7 +8,7 @@ from types import ModuleType
 from typing import Optional
 
 import src.core.gossip
-from src.avails import (RemotePeer, SocketStore, Wire, WireData, connect, const, use)
+from src.avails import (BaseDispatcher, QueueMixIn, RemotePeer, SocketStore, Wire, WireData, connect, const, use)
 from src.core import Dock, get_this_remote_peer
 from src.core.transfers import HEADERS
 from src.core.webpage_handlers import pagehandle
@@ -18,6 +18,10 @@ from src.managers import directorymanager, filemanager
 async def initiate_connections():
     acceptor = Acceptor()
     await acceptor.initiate()
+
+
+class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
+    ...
 
 
 class Acceptor:
@@ -53,7 +57,8 @@ class Acceptor:
         self.max_timeout = 90
         use.echo_print("::Initiating Acceptor ", self.address)
         self._initialized = True
-        self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add, done_callback=lambda t: self.all_tasks.remove(t))
+        self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add,
+                                             done_callback=lambda t: self.all_tasks.remove(t))
 
     def set_loop(self, loop):
         self.__loop = loop

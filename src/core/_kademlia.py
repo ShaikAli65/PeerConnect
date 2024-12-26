@@ -8,11 +8,14 @@ from typing import override
 import kademlia.node
 from kademlia import crawling, network, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
+from rpcudp.protocol import RPCProtocol
 
-from src.avails import RemotePeer, const, use, RequestsTransport
+from src.avails import RemotePeer, RequestHandler, const, use
+from src.avails.bases import BaseDispatcher, RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
 from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers.transports import KademliaTransport
 
 log = logging.getLogger(__name__)
 
@@ -28,16 +31,8 @@ class RPCFindResponse(crawling.RPCFindResponse):
         return [RemotePeer(*nodeple) for nodeple in nodelist]
 
 
-class KademliaTransport(RequestsTransport):
-    trigger = REQUESTS_HEADERS.KADEMLIA
-
-
-class KadTransportMixIn:
-    def connection_made(self, transport):
-        self.transport = KademliaTransport(transport)
-
-
-class RPCCaller:
+class RPCCaller(RPCProtocol):
+    __slots__ = ()
 
     async def call_find_node(self, node_to_ask, node_to_find):
         # address = (node_to_ask.ip, node_to_ask.port)
@@ -80,7 +75,8 @@ class RPCCaller:
         return list(map(RemotePeer.load_from, result[1]))
 
 
-class RPCReciever:
+class RPCReceiver(RPCProtocol):
+    __slots__ = ()
 
     def rpc_ping(self, sender, sender_peer):
         self._check_in(sender_peer)
@@ -129,7 +125,7 @@ class RPCReciever:
         return list(map(bytes, relevant_peers))
 
 
-class RequestProtocol(KadTransportMixIn, RPCCaller, RPCReciever, protocol.KademliaProtocol):
+class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
     def __init__(self, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(self, ksize, source_node)
@@ -175,7 +171,7 @@ class AnotherRoutingTable(routing.RoutingTable):
 
 
 class PeerServer(network.Server):
-    protocol_class = RequestProtocol
+    protocol_class = KadProtocol
 
     def __init__(self, ksize=20, alpha=3, node=None, storage=None):
         super().__init__(ksize, alpha, node, storage)
@@ -265,13 +261,46 @@ class PeerServer(network.Server):
                 return peer
 
 
-def get_new_kademlia_server() -> PeerServer:
+def _get_new_kademlia_server() -> PeerServer:
     s = PeerServer(storage=Storage())
     s.node = get_this_remote_peer()
+    s.start()
     return s
+
+
+def _register_into_dispatcher(server, dispatcher: BaseDispatcher):
+    handler = KademliaHandler(server)
+    event_header = REQUESTS_HEADERS.KADEMLIA
+    dispatcher.register_handler(event_header, handler)
+
+
+def prepare_kad_server(req_transport, dispatcher):
+    kad_server = _get_new_kademlia_server()
+    _register_into_dispatcher(kad_server, dispatcher)
+    kad_server.transport = KademliaTransport(req_transport)
+    return kad_server
+
+
+class KademliaHandler(RequestHandler):
+    def __init__(self, kad_server):
+        self.kad_server = kad_server
+
+    async def handle(self, event: RequestEvent):
+        self.kad_server.protocol.datagram_received(event.request['data'], event.from_addr)
+
+
+class KadDiscoveryReplyHandler(RequestHandler):
+    def __init__(self, kad_server):
+        self.kad_server = kad_server
+
+    async def handle(self, event: RequestEvent):
+        connect_address = tuple(event.request['connect_uri'])
+        return await self.kad_server.bootstrap([connect_address])
 
 
 # monkey-patching to custom RPCFindResponse
 crawling.RPCFindResponse = RPCFindResponse
-network.Server.protocol_class = RequestProtocol
+network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer
+if __name__ == '__main__':
+    print(KadProtocol.mro())
