@@ -20,6 +20,7 @@ import umsgpack
 
 from src.avails import Actuator, const as _const
 from src.avails.connect import Socket as _Socket, is_socket_connected
+from src.avails.exceptions import InvalidPacket
 from src.avails.useables import wait_for_sock_read
 
 controller = Actuator()
@@ -159,19 +160,19 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
         into WireData and handle exceptions
     Args:
         data_payload(bytes) : byte string to unpack
+    Raises:
+        InvalidPacket if unpacking failed
     """
     try:
         data = Wire.load_datagram(data_payload)
         loaded = WireData.load_from(data)
         return loaded
     except umsgpack.UnpackException as ue:
-        return print("Ill-formed data: %s. Error: %s" % (data_payload, ue))
+        raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
-        return print("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
     except struct.error as se:
-        return print("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
-    except Exception as e:
-        return print("unexpected exception", e)
+        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
 
 
 class DataWeaver:
@@ -190,8 +191,10 @@ class DataWeaver:
             header: Union[str, int] = None,
             content: Union[str, dict, list, tuple] = None,
             _id: Union[int, str, tuple] = None,
+            _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
             serial_data: str | bytes = None,
     ):
+
         if serial_data:
             self.__data: dict = _json.loads(serial_data)
         else:
@@ -199,12 +202,12 @@ class DataWeaver:
             self.__data['header'] = header
             self.__data['content'] = content
             self.__data['id'] = _id
+            self.__data['type'] = _type
 
     def dump(self) -> str:
         """
-        Modifies data in json string format and,
-        returns json string representation of the data
-        :return: string
+            Modifies data in json string format and,
+            returns json string representation of the data
         """
         return str(self)
 
@@ -213,12 +216,6 @@ class DataWeaver:
 
     def match_header(self, _header) -> bool:
         return self.__data['header'] == _header
-
-    def __set_values(self, data_value: dict):
-        self.__data = data_value
-        self.header = self.__data['header']
-        self.content = self.__data['content']
-        self.id = self.__data['id']
 
     def __getitem__(self, key):
         return self.__data[key]
@@ -252,11 +249,15 @@ class DataWeaver:
 
     @property
     def type(self):
-        return int.from_bytes(self.header[:1].encode())
+        return int(self.header[0])
+
+    @type.setter
+    def type(self, data):
+        self.__data['type'] = data
 
     @property
     def is_reply(self):
-        return self.header[0] == '\xff'
+        return self.__data['type'] == _const.REPLY
 
     def __str__(self):
         return _json.dumps(self.__data)
