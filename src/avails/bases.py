@@ -10,26 +10,27 @@ from src.avails.exceptions import DispatcherFinalizing
 
 
 class QueueMixIn:
-    """Provides a CSP way to submit event to the Dispatcher classes
+    """Provides a CSP(`Communicating Sequential Processes`) way to submit event to the Dispatcher classes
 
     Adds an extra function ``listen_for_events`` that needs to get started as a task to start listening
     for events.
     Overides __call__ method of ``dispatcher`` object and submits that event to queue,
-    this allows to call ``:func BaseDispatcher.submit:`` directly if needed
-    if used this class should come early in mro
+    this allows to call ``:func BaseDispatcher.submit:`` directly if needed.
+
+    If used this class should come early in mro
 
     If an event is submitted then a call to function ``submit`` is made and it is spawned as an ``asyncio.Task``
     using an internal ``asyncio.TaskGroup``, submit function should return without any exception
 
-    Requires an extra parameter ``:param stop_flag:`` to it's contructor to check for stopping
-    Internal queue does not have any limits
+    Internal queue does not have any limits,
+
     if ``:param start_listening:`` is true then stop method takes care of cancelling it
 
     A stop method is provided, which
-    * cancels internal queue to end the processing
-    * stops the **queue** immediately discarding buffered events
-    * cancels taskgroup(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
-    * if ``:func listener_task:`` is then it is also cancelled
+        * cancels internal queue to end the processing
+        * stops the **queue**, immediately discarding buffered events
+        * cancels taskgroup(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
+        * if ``:func listener_task:`` is then it is also cancelled
 
 
     Attributes:
@@ -46,7 +47,7 @@ class QueueMixIn:
                 a task or not, default is true
         """
         super().__init__(*args, **kwargs)
-        self.queue = asyncio.Queue()
+        self._queue = asyncio.Queue()
         self.task_group = asyncio.TaskGroup()
         self.running = False
         self.listener_task = None
@@ -54,28 +55,29 @@ class QueueMixIn:
             self.listener_task = asyncio.create_task(self.listen_for_events())
 
     def __call__(self, *args, **kwargs):
-        return self.queue.put((args, kwargs))
+        return self._queue.put_nowait((args, kwargs))
 
     async def listen_for_events(self):
         stop_flag = self.stop_flag
-        que = self.queue
+        que = self._queue
         self.running = True
-        with self.task_group:
+        async with self.task_group:
             while True:
                 try:
                     args, kwargs = await que.get()
-                    if stop_flag():
-                        break
-                    self.task_group.create_task(self.submit(*args, **kwargs))
                 except asyncio.QueueShutDown:
                     break
+
+                if stop_flag():
+                    break
+                self.task_group.create_task(self.submit(*args, **kwargs))
 
     async def stop(self):
         async def bomb():
             raise DispatcherFinalizing('stop method is called for dispatcher')
 
         self.task_group.create_task(bomb())
-        self.queue.shutdown(immediate=True)
+        self._queue.shutdown(immediate=True)
         self.running = False
         if self.listener_task:
             self.listener_task.cancel()
@@ -85,7 +87,7 @@ class QueueMixIn:
 
 class RequestEvent(NamedTuple):
     root_code: bytes
-    request: WireData | bytes
+    request: WireData
     from_addr: tuple[str, int]
 
 
@@ -103,6 +105,8 @@ class AbstractHandler(ABC):
 
 class BaseHandler(AbstractHandler):
     """:todo: try making all handlers into functions with closers containing attributes passed to constructors"""
+    __slots__ = ()
+
     def __call__(self, *args, **kwargs):
         return self.handle(*args, **kwargs)
 
@@ -111,6 +115,8 @@ class BaseHandler(AbstractHandler):
 
 
 class RequestHandler(BaseHandler):
+    __slots__ = ()
+
     async def handle(self, event: RequestEvent):
         pass
 
