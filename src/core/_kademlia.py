@@ -10,7 +10,7 @@ from kademlia import crawling, network, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
 from rpcudp.protocol import RPCProtocol
 
-from src.avails import RemotePeer, RequestHandler, const, use
+from src.avails import RemotePeer, const, use
 from src.avails.bases import BaseDispatcher, RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
@@ -160,7 +160,6 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
 class AnotherRoutingTable(routing.RoutingTable):
     @override
     def add_contact(self, peer):
-        print("adding a new peer to router", peer)
         super().add_contact(peer)
         Dock.peer_list.add_peer(peer)
 
@@ -176,6 +175,7 @@ class PeerServer(network.Server):
     def __init__(self, ksize=20, alpha=3, node=None, storage=None):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
+        self._transport = None
 
     @override
     async def bootstrap_node(self, addr):
@@ -260,6 +260,16 @@ class PeerServer(network.Server):
             if peer.id == peer_id:
                 return peer
 
+    @property
+    def transport(self):
+        return self._transport
+
+    @transport.setter
+    def transport(self, transport):
+        self._transport = transport
+        if hasattr(self, 'protocol'):
+            self.protocol.transport = transport
+
 
 def _get_new_kademlia_server() -> PeerServer:
     s = PeerServer(storage=Storage())
@@ -276,26 +286,16 @@ def _register_into_dispatcher(server, dispatcher: BaseDispatcher):
 
 def prepare_kad_server(req_transport, dispatcher):
     kad_server = _get_new_kademlia_server()
-    _register_into_dispatcher(kad_server, dispatcher)
     kad_server.transport = KademliaTransport(req_transport)
+    _register_into_dispatcher(kad_server, dispatcher)
     return kad_server
 
 
-class KademliaHandler(RequestHandler):
-    def __init__(self, kad_server):
-        self.kad_server = kad_server
+def KademliaHandler(kad_server):
+    def handle(event: RequestEvent):
+        return kad_server.protocol.datagram_received(event.request['data'], event.from_addr)
 
-    async def handle(self, event: RequestEvent):
-        self.kad_server.protocol.datagram_received(event.request['data'], event.from_addr)
-
-
-class KadDiscoveryReplyHandler(RequestHandler):
-    def __init__(self, kad_server):
-        self.kad_server = kad_server
-
-    async def handle(self, event: RequestEvent):
-        connect_address = tuple(event.request['connect_uri'])
-        return await self.kad_server.bootstrap([connect_address])
+    return handle
 
 
 # monkey-patching to custom RPCFindResponse
