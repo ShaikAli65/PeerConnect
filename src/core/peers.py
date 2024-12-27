@@ -87,16 +87,16 @@ import asyncio
 import time
 from collections import defaultdict
 from collections.abc import AsyncIterator
-from typing import NamedTuple, Optional, override
+from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import BaseHandler, GossipMessage, RemotePeer, use
-from src.avails.bases import GossipEvent
+from src.avails import GossipMessage, RemotePeer, use
 from src.avails.useables import echo_print, get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import GOSSIP, REQUESTS_HEADERS
+from src.core.transfers import GOSSIP
 
+# this list contains 20 evenly spread numbers in [0, 2**160]
 node_list_ids = [
     b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
     b'\x0c\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc',
@@ -245,6 +245,7 @@ class GossipSearch:
 
     @classmethod
     def search_for(cls, find_str, gossip_handler):
+        print("[GOSSIP][SEARCH] new search for:", find_str)
         m = cls._prepare_search_message(find_str)
         gossip_handler.gossip_message(m)
         cls._message_state_dict[m.id] = f = cls.search_iterator(m.id)
@@ -284,29 +285,11 @@ class GossipSearch:
                 m = RemotePeer.load_from(m)
             result_iter.add_peer(m)
         except KeyError:
-            echo_print("invalid gossip search response id")
+            echo_print("[GOSSIP][SEARCH] invalid gossip search response id")
 
 
 def get_search_handler():
     return GossipSearch
-
-
-class GossipSearchReqHandler(BaseHandler):
-    def __init__(self, searcher, transport):
-        self.searcher = searcher
-        self.transport = transport
-
-    async def handle(self, event: GossipEvent):
-        reply = self.searcher.request_arrived(*event)
-        return self.transport.sendto(reply, event.from_addr)
-
-
-class GossipSearchReplyHandler(BaseHandler):
-    def __init__(self, searcher):
-        self.searcher = searcher
-
-    async def handle(self, event: GossipEvent):
-        return self.searcher.reply_arrived(*event)
 
 
 def get_more_peers():
