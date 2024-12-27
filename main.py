@@ -14,7 +14,7 @@ def initial_states():
     s2 = State("boot_up initiating", bootup.initiate_bootup)
     s3 = State("loading profiles", profilemanager.load_profiles_to_program)
     s4 = State("printing configurations", configure.print_constants)
-    s5 = State("launching webpage", pagehandle.initiate_pagehandle, is_blocking=True)
+    s5 = State("launching webpage", pagehandle.initiate_page_handle, is_blocking=True)
     s6 = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s7 = State("initiating requests", requests.initiate, is_blocking=True)

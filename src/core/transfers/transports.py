@@ -18,7 +18,10 @@ class RequestsTransport(BaseTransport):  # just for type hinting
 
     Usage:
         >>> class Subclass(RequestsTransport):
-        >>>     trigger = b'\x11'  # some code of one byte
+        >>>     _trigger = b'\x11'  # some code of one byte
+    or:
+        >>> RequestsTransport(transport, _event_trigger_header=b'\x23')
+
     """
 
     __slots__ = 'transport', 'trigger'

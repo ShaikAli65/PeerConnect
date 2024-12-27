@@ -52,7 +52,7 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
         current *= factor
 
 
-async def async_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
+async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     same as :func: `get_timeouts` but delays itself in yielding
     possible use case:

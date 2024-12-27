@@ -2,14 +2,13 @@ import asyncio
 import getpass
 import os
 import sys
-from ipaddress import IPv4Address
 
 from kademlia import utils
 
-import src.core.discover
 
 sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
 
+from src.avails.connect import UDPProtocol
 from src.avails import RemotePeer, const
 from src.configurations import bootup, configure
 from src.core import Dock, connections, requests, set_current_remote_peer_object
@@ -17,18 +16,35 @@ from src.managers import profilemanager
 from src.managers.statemanager import State, StateManager
 
 
-async def fake_search_network():
-    if len(sys.argv) >= 2:
-        return '127.0.0.' + sys.argv[1], const.PORT_NETWORK
+def _create_listen_socket_mock(bind_address, multicast_addr):
+    loop = asyncio.get_running_loop()
+    sock = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
+    print("mocked socket creation")
+    return sock
+
+
+requests._create_listen_socket = _create_listen_socket_mock
+
+
+# async def setup_request_transport(bind_address, multicast_address, req_dispatcher):
+#     loop = asyncio.get_running_loop()
+#     base_socket = _create_listen_socket(bind_address, multicast_address)
+#     transport, proto = await loop.create_datagram_endpoint(
+#         functools.partial(RequestsEndPoint, req_dispatcher),
+#         sock=base_socket
+#     )
+#     req_dispatcher.transport = RequestsTransport(transport)
+#     return transport
 
 
 def test():
-    # src.core.discover.search_network = fake_search_network
-    # if len(sys.argv) >= 3:
-    #     const.THIS_IP = '127.0.0.' + sys.argv[2]
-    # else:
-    #     const.THIS_IP = '127.0.0.1'
+    const.THIS_IP = '127.0.0.' + sys.argv[1]
     const.SERVER_IP = const.THIS_IP
+    const.MULTICAST_IP_v4 = '127.0.0.1'
+    const.PORT_NETWORK = 4000
+    const.DISCOVER_RETRIES = 1
     set_current_remote_peer_object(
         RemotePeer(
             peer_id=utils.digest(f"{const.THIS_IP}{const.PORT_THIS}"),
@@ -54,12 +70,13 @@ def test_initial_states():
 
 
 async def initiate(states):
-    Dock.state_handle = StateManager()
-    await Dock.state_handle.put_states(states)
-    await Dock.state_handle.process_states()
+    Dock.state_manager_handle = StateManager()
+    await Dock.state_manager_handle.put_states(states)
+    await Dock.state_manager_handle.process_states()
 
 
 if __name__ == '__main__':
+    # print(isinstance(RequestsDispatcher, AbstractDispatcher))
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     const.debug = False
     asyncio.run(initiate(test_initial_states()), debug=True)
