@@ -1,10 +1,11 @@
 import configparser
-import datetime
 import os
+import time
 from pathlib import Path
 from typing import Optional, Union
 
-from src.avails import const, use
+from src.avails import const
+
 
 # from logs import error_log
 
@@ -166,8 +167,7 @@ class ProfileManager:
 
     @staticmethod
     def __uniquify(username):
-        num = datetime.datetime.now().toordinal()
-        return f"{username}{num}"
+        return f"{username}{int(time.time()*10)}"
 
     def __eq__(self, other):
         if isinstance(other, dict):
@@ -218,6 +218,11 @@ def load_profiles_to_program():
         except LookupError:
             ProfileManager.delete_profile(profile_id)
     return True
+
+
+def refresh_profile_list():
+    ProfileManager.PROFILE_LIST.clear()
+    load_profiles_to_program()
 
 
 def get_profile_from_profile_file_name(
