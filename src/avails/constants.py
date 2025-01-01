@@ -15,6 +15,7 @@ BROADCAST_IP = "<broadcast>"
 _BIND_IP_V4 = '0.0.0.0'
 _BIND_IP_V6 = '::'
 BIND_IP = _BIND_IP_V4
+WEBSOCKET_BIND_IP = 'localhost'
 
 
 IS_WINDOWS = platform == "win32"
@@ -23,6 +24,8 @@ IS_LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
+DEFAULT_PROFILE_NAME = 'default_profile.ini'
+
 FORMAT = 'utf-8'
 
 DATA = 0x00
