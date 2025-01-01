@@ -4,7 +4,12 @@ import itertools
 from typing import Union
 
 import websockets
-from websockets.asyncio.connection import Connection
+
+try:
+    from websockets.asyncio.connection import Connection
+except ImportError:
+    Connection = None
+
 from src.avails import DataWeaver, StatusMessage, WireData, const, use
 from src.avails.exceptions import WebSocketRegistryReStarted
 from src.avails.useables import wrap_with_tryexcept
@@ -39,13 +44,15 @@ class WebSocketRegistry:
     @classmethod
     async def start_data_sender(cls):
         if cls._started:
-            raise WebSocketRegistryReStarted('reentered registry')
+            raise WebSocketRegistryReStarted("reentered registry")
         cls._started = True
         while True:
             data_packet, data_type = await cls.message_queue.get()
             if safe_end.is_set():
                 break
-            await cls.get_websocket(data_type).send(str(data_packet))  # make sure that data is a string
+            await cls.get_websocket(data_type).send(
+                str(data_packet)
+            )  # make sure that data is a string
         cls._started = False
 
     @classmethod
@@ -85,16 +92,21 @@ class ReplyRegistry:
             fut = cls.messages_to_futures_mapping[data.id]
             fut.set_result(data)
 
+    @classmethod
+    def is_registered(cls, data: DataWeaver):
+        return data.id in cls.messages_to_futures_mapping
+
 
 def get_verified_type(data: DataWeaver, web_socket):
+    WebSocketRegistry.set_websocket(data.header, web_socket)
     if data.match_header(const.DATA):
         print("page data connected")  # debug
-        WebSocketRegistry.set_websocket(const.SIGNAL, web_socket)
-        return importlib.import_module('src.core.webpage_handlers.handledata').handler
+        return importlib.import_module("src.core.webpage_handlers.handledata").handler
     if data.match_header(const.SIGNAL):
         print("page signals connected")  # debug
-        WebSocketRegistry.set_websocket(const.DATA, web_socket)
-        return importlib.import_module('src.core.webpage_handlers.handlesignals').handler
+        return importlib.import_module(
+            "src.core.webpage_handlers.handlesignals"
+        ).handler
 
 
 async def handle_client(web_socket: Connection):
@@ -111,11 +123,12 @@ async def handle_client(web_socket: Connection):
 
         if handle_function:
             async for data in web_socket:
-                use.echo_print("data from page:", data, '\a')
+                use.echo_print("data from page:", data, "\a")
                 use.echo_print(f"forwarding to {use.func_str(handle_function)}")
                 parsed_data = DataWeaver(serial_data=data)
-                if parsed_data.is_reply:
+                if ReplyRegistry.is_registered(parsed_data):
                     ReplyRegistry.reply_arrived(parsed_data)
+                    continue
                 f = use.wrap_with_tryexcept(handle_function, parsed_data)
                 _asyncio.create_task(f())
                 if safe_end.is_set():
@@ -128,7 +141,7 @@ async def handle_client(web_socket: Connection):
 
 
 async def start_websocket_server():
-    start_server = await websockets.serve(handle_client, 'localhost', const.PORT_PAGE)
+    start_server = await websockets.serve(handle_client, "localhost", const.PORT_PAGE)
     use.echo_print(f"websocket server started at ws://{'localhost'}:{const.PORT_PAGE}")
     async with start_server:
         await Dock.finalizing.wait()
@@ -168,7 +181,7 @@ def send_status_data(data: StatusMessage):
 def new_message_arrived(message_data: WireData):
     d = DataWeaver(
         header=message_data.header,
-        content=message_data['message'],
+        content=message_data["message"],
         _id=message_data.id,
     )
     WebSocketRegistry.send_data(d, const.DATA)

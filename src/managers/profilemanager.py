@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 from typing import Optional, Union
 
-# from logs import error_log
-
 from src.avails import const, use
+
+# from logs import error_log
 
 
 class ProfileManager:
@@ -15,6 +15,7 @@ class ProfileManager:
     it is recommended to discard this class's object if an error is raised somewhere in using
     as it can lead to unexpected behaviour
     """
+
     _main_config = configparser.ConfigParser(allow_no_value=True)
     PROFILE_LIST = []
 
@@ -34,17 +35,18 @@ class ProfileManager:
 
         profile_data = self.__load_profile_data()
         self.match_pattern(profile_data)
+        return profile_data
 
     def match_pattern(self, profile_data):
         match profile_data:
             case {
-                'SERVER': {
-                    'ip': _,
-                    'port': _,
+                "SERVER": {
+                    "ip": _,
+                    "port": _,
                 },
-                'USER': {
-                    'name': _,
-                    'id':_,
+                "USER": {
+                    "name": _,
+                    "id": _,
                 },
             }:
                 return profile_data
@@ -55,7 +57,9 @@ class ProfileManager:
         try:
             config = configparser.ConfigParser()
             config.read(self.profile_file_path)
-            return {section: dict(config.items(section)) for section in config.sections()}
+            return {
+                section: dict(config.items(section)) for section in config.sections()
+            }
         except FileNotFoundError:
             return {}
 
@@ -70,7 +74,9 @@ class ProfileManager:
         prev_username = self.username
         self.profile_data.setdefault(config_header, {}).update(new_settings)
         if not prev_username == self.username:
-            new_profile_path = Path(const.PATH_PROFILES, self.__uniquify(self.username) + '.ini')
+            new_profile_path = Path(
+                const.PATH_PROFILES, self.__uniquify(self.username) + ".ini"
+            )
             os.rename(self.profile_file_path, new_profile_path)
             self.__remove_from_main_config(self.profile_file_path.name)
             self.__write_to_main_config(new_profile_path.name)
@@ -82,12 +88,16 @@ class ProfileManager:
 
     def save_profiles(self):
         config = configparser.ConfigParser()
-        config.update({profile: settings for profile, settings in self.profile_data.items()})
-        with open(self.profile_file_path, 'w') as file:
+        config.update(
+            {profile: settings for profile, settings in self.profile_data.items()}
+        )
+        with open(self.profile_file_path, "w") as file:
             config.write(file)
 
     def __raise_error(self):
-        raise LookupError(f"something wrong in profile data\n:\tprofile at {self.profile_file_path}\ndata:")
+        raise LookupError(
+            f"something wrong in profile data\n:\tprofile at {self.profile_file_path}\ndata:"
+        )
 
     @classmethod
     def add_profile(cls, profile_name, settings: dict):
@@ -97,31 +107,32 @@ class ProfileManager:
         :param settings:
         :return:
         """
-        profile_path = Path(const.PATH_PROFILES, cls.__uniquify(profile_name) + '.ini')
+        profile_path = Path(const.PATH_PROFILES, cls.__uniquify(profile_name) + ".ini")
         config = configparser.ConfigParser()
         for section, setting in settings.items():
             config[section] = setting
-        with open(profile_path, 'w') as file:
+        with open(profile_path, "w") as file:
             config.write(file)
         cls.__write_to_main_config(profile_path.name)
         cls.PROFILE_LIST.append(cls(profile_path))
 
     @classmethod
     def __write_to_main_config(cls, file_name):
-        cls._main_config.set('USER_PROFILES', file_name)
-        with open(const.PATH_CONFIG, 'w') as file:
+        cls._main_config.set("USER_PROFILES", file_name)
+        with open(const.PATH_CONFIG, "w") as file:
             cls._main_config.write(file)
 
     @classmethod
     def __remove_from_main_config(cls, profile_key):
-        cls._main_config.remove_option('USER_PROFILES', profile_key)  # debug
-        with open(const.PATH_CONFIG, 'w') as file:
+        cls._main_config.remove_option("USER_PROFILES", profile_key)  # debug
+        with open(const.PATH_CONFIG, "w") as file:
             cls._main_config.write(file)
 
     @classmethod
     def delete_profile(cls, profile_file_name):
-        profile_path = Path(const.PATH_PROFILES,
-                            profile_file_name)  # if not profile_username.endswith('.ini') else profile_username)
+        profile_path = Path(
+            const.PATH_PROFILES, profile_file_name
+        )  # if not profile_username.endswith('.ini') else profile_username)
         if profile_path.is_file():
             try:
                 profile_path.unlink(True)
@@ -131,15 +142,15 @@ class ProfileManager:
         cls.__remove_from_main_config(profile_path.name)
 
     def __repr__(self):
-        return f'<Profile name={self.username} file_path={self.profile_file_path}>'
+        return f"<Profile name={self.username} file_path={self.profile_file_path}>"
 
     @property
     def username(self):
-        return self.profile_data['USER']['name']
+        return self.profile_data["USER"]["name"]
 
     @property
     def id(self) -> int:
-        return self.profile_data['USER']['id']
+        return self.profile_data["USER"]["id"]
 
     @property
     def file_name(self):
@@ -147,11 +158,11 @@ class ProfileManager:
 
     @property
     def server_ip(self):
-        return self.profile_data['SERVER']['ip']
+        return self.profile_data["SERVER"]["ip"]
 
     @property
     def server_port(self):
-        return int(self.profile_data['SERVER']['port'])
+        return int(self.profile_data["SERVER"]["port"])
 
     @staticmethod
     def __uniquify(username):
@@ -160,18 +171,23 @@ class ProfileManager:
 
     def __eq__(self, other):
         if isinstance(other, dict):
-            return (self.id == other['id'] and self.username == other['USER']['name']
-                    and self.server_ip == other['SERVER']['ip'])
+            return (
+                self.id == other["id"]
+                and self.username == other["USER"]["name"]
+                and self.server_ip == other["SERVER"]["ip"]
+            )
         else:
             return self is other
 
     def __str__(self):
-        return (f"<ProfileManager(\n"
-                f"\tserver_ip={self.server_ip},\n"
-                f"\tusername={self.username},\n"
-                f"\tfile_name={self.file_name},\n"
-                f"\tserver_port={self.server_port}\n"
-                f")>")
+        return (
+            f"<ProfileManager(\n"
+            f"\tserver_ip={self.server_ip},\n"
+            f"\tusername={self.username},\n"
+            f"\tfile_name={self.file_name},\n"
+            f"\tserver_port={self.server_port}\n"
+            f")>"
+        )
 
 
 def all_profiles():
@@ -180,18 +196,21 @@ def all_profiles():
     make sure that you definitely call :func:`load_profiles_to_program()` in prior,
     :return dict[str, ProfileManager]:
     """
-    return {profile.file_name: profile.profile_data for profile in ProfileManager.PROFILE_LIST}
+    return {
+        profile.file_name: profile.profile_data
+        for profile in ProfileManager.PROFILE_LIST
+    }
 
 
 def load_profiles_to_program():
     if not os.path.exists(const.PATH_PROFILES):
-        raise EnvironmentError('profiles path not found')
+        raise EnvironmentError("profiles path not found")
 
     main_config = configparser.ConfigParser(allow_no_value=True)
     main_config.read(const.PATH_CONFIG)
 
     ProfileManager._main_config = main_config
-    for profile_id in main_config['USER_PROFILES']:
+    for profile_id in main_config["USER_PROFILES"]:
         try:
             profile = ProfileManager(profile_id)
             ProfileManager.PROFILE_LIST.append(profile)
@@ -200,12 +219,21 @@ def load_profiles_to_program():
     return True
 
 
-def get_profile_from_profile_file_name(profile_file_name) -> Union[ProfileManager, None]:
+def get_profile_from_profile_file_name(
+    profile_file_name,
+) -> Union[ProfileManager, None]:
     """
     Retrieves profile object from list given username
     :param profile_file_name:
     """
-    return next((profile for profile in ProfileManager.PROFILE_LIST if profile.file_name == profile_file_name), None)
+    return next(
+        (
+            profile
+            for profile in ProfileManager.PROFILE_LIST
+            if profile.file_name == profile_file_name
+        ),
+        None,
+    )
 
 
 _current_profile: Optional[ProfileManager] = None
