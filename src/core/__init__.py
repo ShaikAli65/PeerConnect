@@ -4,8 +4,7 @@ from typing import Optional, TYPE_CHECKING
 
 from src.avails import (
     BaseDispatcher, PeerDict as _PeerDict,
-    RemotePeer as _RemotePeer,
-    SocketCache as _SocketCache
+    RemotePeer as _RemotePeer, SocketCache as _SocketCache
 )
 
 
@@ -30,7 +29,7 @@ class Dock:
         from src.core.transfers import RumorMongerProtocol
         from src.core._kademlia import PeerServer
         from src.managers.statemanager import StateManager
-
+        peer_list: _PeerDict[str, _RemotePeer]
         global_gossip: RumorMongerProtocol
         kademlia_network_server: PeerServer
         state_manager_handle: StateManager

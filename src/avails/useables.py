@@ -281,14 +281,16 @@ class NotInUse:
     __slots__ = 'function', '__doc__'
 
     def __init__(self, function):
-        """
-        Decorator class to mark functions as not in use or not fully tested.
-        :raises ValueError : if function gets called
-        :Args:
-        - function: The function to be decorated.
-        """
-        self.__doc__ = """This class is used to mark functions that are not currently in use or haven't been fully tested.
+        """Decorator class to mark functions as not in use or not fully tested.
+
+        This class is used to mark functions that are not currently in use or haven't been fully tested.
         By marking a function with this class, it prevents the call to the function unless explicitly allowed by the user.
+
+        Args:
+            function: The function to be decorated.
+
+        Raises:
+            ValueError : if function gets called
         """
         self.function = function
 
