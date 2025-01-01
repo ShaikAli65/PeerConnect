@@ -7,6 +7,8 @@ import struct
 from itertools import count
 from pathlib import Path
 
+import tqdm
+
 from src.avails import DataWeaver, TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
 from src.core import get_this_remote_peer, peers
 from src.core.connections import Connector
@@ -43,7 +45,7 @@ async def new_directory_send_transfer(signal_data: DataWeaver):
         raise Exception(f"cannot find remote peer object for given id{signal_data.peer_id}")
 
     connection = await Connector.get_connection(remote_peer)
-    sender = DirectorySender(dir_path)
+    sender = DirectorySender(dir_path, transfer_id,)
 
 
 def new_directory_receive_request(request_packet: WireData):
@@ -51,19 +53,45 @@ def new_directory_receive_request(request_packet: WireData):
 
 
 class DirectorySender:
-    def __init__(self, root_path):
+    def __init__(self, root_path, transfer_id, send_func):
         """
         Args:
             root_path(Path): root path to read from and start the transfer
+            transfer_id(str): transfer id that synchronized both sides
+            send_func(Callable[[bytes],Coroutine[None, None, None]): function to call upon to send file data when ready
         """
         self.state = TransferState.PREPARING
         self.root_path = root_path
+        self.dir_iterator = self.root_path.rglob('*')
+        self.current_file = None
+        self.id = transfer_id
+        self.send_func = send_func
 
     async def start(self):
-        pass
+
+        progress = tqdm.tqdm(
+
+        )
+
+        stack = [self.dir_iterator]
+        while len(stack):
+            for item in stack.pop():
+                file_items = []
+                empty_dirs = []
+
+                if item.is_file():
+                    file_item = FileItem(path=item, seeked=0)
+                elif item.is_dir():
+                    if not any(item.iterdir()):
+                        print("sending empty dir:", send_path(sock, item, self.root_path.parent))
+                        continue
+                    stack.append(item.iterdir())
 
     def stop(self):
         pass
+
+    def pause(self):
+        self.dir_iterator = itertools.chain([self.current_file], self.dir_iterator)
 
     def continue_transfer(self):
         pass
