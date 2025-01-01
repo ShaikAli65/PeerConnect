@@ -18,8 +18,10 @@ from typing import NamedTuple, Optional, Union
 
 import umsgpack
 
-from src.avails import Actuator, const as _const
-from src.avails.connect import Socket as _Socket, is_socket_connected
+from src.avails import Actuator
+from src.avails import const as _const
+from src.avails.connect import Socket as _Socket
+from src.avails.connect import is_socket_connected
 from src.avails.exceptions import InvalidPacket
 from src.avails.useables import wait_for_sock_read
 
@@ -29,27 +31,29 @@ controller = Actuator()
 class Wire:
     @staticmethod
     async def send_async(sock: _Socket, data: bytes):
-        data_size = struct.pack('!I', len(data))
+        data_size = struct.pack("!I", len(data))
         return await sock.asendall(data_size + data)
 
     @staticmethod
     def send(sock: _Socket, data: bytes):
-        data_size = struct.pack('!I', len(data))
+        data_size = struct.pack("!I", len(data))
         return sock.sendall(data_size + data)
 
     @staticmethod
     def send_datagram(sock: _Socket | BaseTransport, address, data: bytes):
         if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
-            raise ValueError(f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
-                             f"got a packet of size {len(data)} + 4bytes size")
+            raise ValueError(
+                f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
+                f"got a packet of size {len(data)} + 4bytes size"
+            )
 
-        data_size = struct.pack('!I', len(data))
+        data_size = struct.pack("!I", len(data))
         return sock.sendto(data_size + data, address)
 
     @staticmethod
     async def receive_async(sock: _Socket):
         try:
-            data_size = struct.unpack('!I', await sock.arecv(4))[0]
+            data_size = struct.unpack("!I", await sock.arecv(4))[0]
             data = await sock.arecv(data_size)
             return data
         except struct.error:
@@ -65,19 +69,19 @@ class Wire:
         while len(length_buf) < 4:
             try:
                 data = sock.recv(4 - len(length_buf))
-                if data == b'':  # If socket connection is closed prematurely
+                if data == b"":  # If socket connection is closed prematurely
                     sock.setblocking(b)
                     raise ConnectionError("got empty bytes in a stream socket")
                 length_buf += data
             except BlockingIOError:
                 wait_for_sock_read(sock, controller, timeout)
-        data_length = struct.unpack('!I', length_buf)[0]
+        data_length = struct.unpack("!I", length_buf)[0]
 
         received_data = bytearray()
         while len(received_data) < data_length:
             try:
                 chunk = sock.recv(data_length - len(received_data))
-                if chunk == b'':  # Again, handle premature disconnection
+                if chunk == b"":  # Again, handle premature disconnection
                     raise ConnectionError("connection closed during data reception")
                 received_data += chunk
             except BlockingIOError:
@@ -92,8 +96,8 @@ class Wire:
 
     @staticmethod
     def load_datagram(data_payload) -> bytes:
-        data_size = struct.unpack('!I', data_payload[:4])[0]
-        return data_payload[4: data_size + 4]
+        data_size = struct.unpack("!I", data_payload[:4])[0]
+        return data_payload[4 : data_size + 4]
 
     @staticmethod
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
@@ -102,9 +106,14 @@ class Wire:
 
 
 class WireData:
-    _version = _const.VERSIONS['WIRE']
+    _version = _const.VERSIONS["WIRE"]
 
-    __slots__ = 'id', '_header', 'version', 'body',
+    __slots__ = (
+        "id",
+        "_header",
+        "version",
+        "body",
+    )
 
     def __init__(self, header=None, _id=None, version=_version, **kwargs):
         self._header = header
@@ -142,7 +151,12 @@ class WireData:
 
     @property
     def dict(self):  # for introspection or validation
-        return {'header': self._header, 'id': self.id, 'version': self.version, **self.body}
+        return {
+            "header": self._header,
+            "id": self.id,
+            "version": self.version,
+            **self.body,
+        }
 
     def __str__(self):
         return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
@@ -170,9 +184,13 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     except umsgpack.UnpackException as ue:
         raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
-        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+        raise InvalidPacket(
+            "Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)
+        )
     except struct.error as se:
-        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
+        raise InvalidPacket(
+            "struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se)
+        )
 
 
 class DataWeaver:
@@ -181,41 +199,41 @@ class DataWeaver:
     """
 
     __annotations__ = {
-        '__data': dict,
+        "__data": dict,
     }
-    __slots__ = '__data',
+    __slots__ = ("__data",)
 
     def __init__(
-            self,
-            *,
-            header: Union[str, int] = None,
-            content: Union[str, dict, list, tuple] = None,
-            _id: Union[int, str, tuple] = None,
-            _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
-            serial_data: str | bytes = None,
+        self,
+        *,
+        header: Union[str, int] = None,
+        content: Union[str, dict, list, tuple] = None,
+        _id: Union[int, str, tuple] = None,
+        _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
+        serial_data: str | bytes = None,
     ):
 
         if serial_data:
             self.__data: dict = _json.loads(serial_data)
         else:
             self.__data: dict = defaultdict(str)
-            self.__data['header'] = header
-            self.__data['content'] = content
-            self.__data['id'] = _id
-            self.__data['type'] = _type
+            self.__data["header"] = header
+            self.__data["content"] = content
+            self.__data["active_user_id"] = _id
+            self.__data["type"] = _type
 
     def dump(self) -> str:
         """
-            Modifies data in json string format and,
-            returns json string representation of the data
+        Modifies data in json string format and,
+        returns json string representation of the data
         """
         return str(self)
 
     def match_content(self, _content) -> bool:
-        return self.__data['content'] == _content
+        return self.__data["content"] == _content
 
     def match_header(self, _header) -> bool:
-        return self.__data['header'] == _header
+        return self.__data["header"] == _header
 
     def __getitem__(self, key):
         return self.__data[key]
@@ -225,27 +243,27 @@ class DataWeaver:
 
     @property
     def content(self):
-        return self.__data['content']
+        return self.__data["content"]
 
     @content.setter
     def content(self, _content):
-        self.__data['content'] = _content
+        self.__data["content"] = _content
 
     @property
     def header(self):
-        return self.__data['header']
+        return self.__data["header"]
 
     @header.setter
     def header(self, _header):
-        self.__data['header'] = _header
+        self.__data["header"] = _header
 
     @property
     def id(self):
-        return self.__data['id']
+        return self.__data["active_user_id"]
 
     @id.setter
     def id(self, _id):
-        self.__data['id'] = _id
+        self.__data["active_user_id"] = _id
 
     @property
     def type(self):
@@ -253,52 +271,47 @@ class DataWeaver:
 
     @type.setter
     def type(self, data):
-        self.__data['type'] = data
-
-    @property
-    def is_reply(self):
-        return self.__data['type'] == _const.REPLY
+        self.__data["type"] = data
 
     def __str__(self):
         return _json.dumps(self.__data)
 
     def __repr__(self):
-        return f'DataWeaver({self.__data})'
+        return f"DataWeaver({self.__data})"
 
 
-class StatusMessage:
-    ...
+class StatusMessage: ...
 
 
 class GossipMessage:
-    __slots__ = 'actual_data'
+    __slots__ = "actual_data"
 
     def __init__(self, message: WireData = None):
         self.actual_data = message or WireData()
 
     @property
     def message(self):
-        return self.actual_data.body.get('message', None)
+        return self.actual_data.body.get("message", None)
 
     @message.setter
     def message(self, data):
-        self.actual_data.body['message'] = data
+        self.actual_data.body["message"] = data
 
     @property
     def ttl(self):
-        return self.actual_data.body.get('ttl', None)
+        return self.actual_data.body.get("ttl", None)
 
     @ttl.setter
     def ttl(self, ttl):
-        self.actual_data.body['ttl'] = ttl
+        self.actual_data.body["ttl"] = ttl
 
     @property
     def created(self):
-        return self.actual_data.body.get('created', None)
+        return self.actual_data.body.get("created", None)
 
     @created.setter
     def created(self, value):
-        self.actual_data.body['created'] = value
+        self.actual_data.body["created"] = value
 
     @property
     def header(self):
@@ -320,10 +333,10 @@ class GossipMessage:
         wire_data = self.actual_data
         match wire_data.dict:
             case {
-                'id': _,
-                'header': _,
-                'created': _,
-                'ttl': _,
+                "id": _,
+                "header": _,
+                "created": _,
+                "ttl": _,
             }:
                 return True
             case _:
@@ -369,6 +382,7 @@ class PalmTreeInformResponse:
         active_addr(tuple[str, int]) : stream endpoint address
         session_key(str) : echoing back the session_key received
     """
+
     peer_id: str
     passive_addr: tuple[str, int]
     active_addr: tuple[str, int]
@@ -380,7 +394,9 @@ class PalmTreeInformResponse:
     @staticmethod
     def load_from(data: bytes):
         peer_id, passive_addr, active_addr, session_key = umsgpack.loads(data)
-        return PalmTreeInformResponse(peer_id, tuple(passive_addr), tuple(active_addr), session_key)
+        return PalmTreeInformResponse(
+            peer_id, tuple(passive_addr), tuple(active_addr), session_key
+        )
 
 
 @dataclass(slots=True)
@@ -396,6 +412,7 @@ class PalmTreeSession:
         link_wait_timeout (double) : timeout for any i/o operations
 
     """
+
     originate_id: str
     adjacent_peers: list[str]
     session_id: int
@@ -419,6 +436,7 @@ class OTMSession(PalmTreeSession):
         adjacent_peers(list[str]) : all the peers to whom we should be in contact
         chunk_size(int) : size of chunk to read/write in the current session
     """
+
     file_count: int
 
 

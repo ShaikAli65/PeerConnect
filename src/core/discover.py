@@ -2,7 +2,10 @@ import socket
 
 from src.avails import QueueMixIn, WireData, const, use
 from src.avails.bases import BaseDispatcher, RequestEvent
-from src.avails.connect import ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
+from src.avails.connect import (
+    ipv4_multicast_socket_helper,
+    ipv6_multicast_socket_helper,
+)
 from src.core import get_this_remote_peer
 from src.core.transfers import DISCOVERY
 from src.core.transfers.transports import DiscoveryTransport
@@ -10,7 +13,7 @@ from src.core.transfers.transports import DiscoveryTransport
 
 def DiscoveryReplyHandler(kad_server):
     async def handle(event: RequestEvent):
-        connect_address = tuple(event.request['connect_uri'])
+        connect_address = tuple(event.request["connect_uri"])
         print("[KADEMLIA] bootstrapping kademlia")
         return await kad_server.bootstrap([connect_address])
 
@@ -25,21 +28,27 @@ def DiscoveryRequestHandler(discovery_transport):
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
             _id=this_rp.id,
-            connect_uri=this_rp.req_uri
+            connect_uri=this_rp.req_uri,
         )
-        return discovery_transport.sendto(bytes(data_payload), tuple(req_packet['reply_addr']))
+        return discovery_transport.sendto(
+            bytes(data_payload), tuple(req_packet["reply_addr"])
+        )
 
     return handle
 
 
 class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
     def __init__(self, transport, stopping_flag):
-        super().__init__(transport=DiscoveryTransport(transport), stop_flag=stopping_flag)
+        super().__init__(
+            transport=DiscoveryTransport(transport), stop_flag=stopping_flag
+        )
 
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         handle = self.registry[wire_data.header]
-        print("[DISCOVERY] dispatching request with id", event.root_code, 'to', wire_data)
+        print(
+            "[DISCOVERY] dispatching request with id", event.root_code, "to", wire_data
+        )
         await handle(event)
 
 
