@@ -9,7 +9,6 @@ from src.core import Dock, get_this_remote_peer, transfers
 from src.avails.connect import get_free_port
 from src.core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, TransferState, onetomany
 
-
 transfers_book = TransfersBookKeeper()
 
 
@@ -22,11 +21,11 @@ class FileSender:
             transfers.FileItem(x, seeked=0) for x in file_list
         ]
         self.file_handle = None
-        self.file_id = transfers_book.get_new_id() + str(peer_id)
+        self._file_id = transfers_book.get_new_id() + str(peer_id)
         self.peer_obj = Dock.peer_list.get_peer(peer_id)
         self.file_pool = PeerFilePool(
             self.file_list,
-            _id=self.file_id,
+            _id=self._file_id,
         )
 
     async def send_files(self):
@@ -53,7 +52,7 @@ class FileSender:
             header=HEADERS.CMD_FILE_CONN,
             msg_id=get_this_remote_peer().peer_id,
             version=self.version,
-            file_id=self.file_id,
+            file_id=self._file_id,
         )
         await Wire.send_async(connection, bytes(handshake))
         print("authorization header sent for file connection")
@@ -65,6 +64,10 @@ class FileSender:
     def group_count(self):
         return len(self.file_list)
 
+    @property
+    def id(self):
+        return self._file_id
+
 
 class FileReceiver:
 
@@ -72,11 +75,11 @@ class FileReceiver:
         self.state = TransferState.PREPARING
         self.peer_id = data.id
         self.version_tobe_used = data.version
-        self.id = data['file_id']
+        self._file_id = data['file_id']
         loop = asyncio.get_event_loop()
         self.connection_wait = loop.create_future()
         self.connection = None
-        self.file_pool = PeerFilePool([], _id=self.id, download_path=const.PATH_DOWNLOAD)
+        self.file_pool = PeerFilePool([], _id=self._file_id, download_path=const.PATH_DOWNLOAD)
         self.result = None
 
     async def recv_file(self):
@@ -95,6 +98,10 @@ class FileReceiver:
 
     def connection_arrived(self, connection):
         self.connection_wait.set_result(connection)
+
+    @property
+    def id(self):
+        return self._file_id
 
 
 async def open_file_selector():
@@ -117,16 +124,10 @@ async def send_files_to_peer(peer_id, selected_files):
     transfers_book.add_to_completed(peer_id, file_sender)
 
 
-def _check_running(peer_id) -> FileSender:
-    file_handles = transfers_book._get_running_transfers(peer_id)
-    if file_handles:
-        return file_handles[0]
-
-
 async def file_recv_request_connection_arrived(connection: connect.Socket, file_req: WireData):
     print("new file connection arrived", file_req['file_id'])
     print("scheduling file transfer request", file_req)
-    await file_receiver(file_req,connection)
+    await file_receiver(file_req, connection)
 
 
 async def file_receiver(file_req: WireData, connection):
