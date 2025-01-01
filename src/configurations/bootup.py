@@ -7,6 +7,9 @@ import subprocess
 import urllib.request
 import webbrowser
 from ipaddress import IPv4Address, IPv6Address
+from pathlib import Path
+
+from kademlia.utils import digest
 
 import src.core.eventloop  # noqa
 from src.avails import RemotePeer, const, use
@@ -23,6 +26,16 @@ def initiate_bootup():
     except KeyError:
         write_default_configurations(const.PATH_CONFIG)
         config_map.read(const.PATH_CONFIG)
+
+    if not Path(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME).exists():
+        write_default_profile()
+
+    if const.DEFAULT_PROFILE_NAME not in config_map['USER_PROFILES']:
+        config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
+
+    with open(const.PATH_CONFIG,'w+') as fp:
+        config_map.write(fp)
+
     set_constants(config_map)
 
     ip_addr = get_ip(const.IP_VERSION)
@@ -32,8 +45,9 @@ def initiate_bootup():
         const.USING_IP_V6 = True
         # if we cannot work with ip-v6, program will fall back to ip-v4
         const.IP_VERSION = socket.AF_INET6
-        
+
     const.THIS_IP = str(ip_addr)
+    const.WEBSOCKET_BIND_IP = const.THIS_IP
     print(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 
@@ -156,9 +170,14 @@ def write_default_configurations(path):
         '[USER_PROFILES]\n'
         'admin\n'
     )
+    with open(path, 'w+') as config_file:
+        config_file.write(default_config_file)
+
+
+def write_default_profile():
     default_profile_file = (
         '[USER]\n'
-        'name = admin\n'
+        'name = new user\n'
         'id = 1234'
         '\n'
         '[SERVER]\n'
@@ -166,11 +185,14 @@ def write_default_configurations(path):
         'ip = 0.0.0.0\n'
         'id = 0\n'
     )
-
-    with open(path, 'w+') as config_file:
-        config_file.write(default_config_file)
-    with open(os.path.join(const.PATH_PROFILES, 'admin.ini'), 'w+') as profile_file:
+    with open(os.path.join(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME), 'w+') as profile_file:
         profile_file.write(default_profile_file)
+    parser = configparser.ConfigParser(allow_no_value=True)
+    parser.read(const.PATH_CONFIG)
+    parser.set('USER_PROFILES',const.DEFAULT_PROFILE_NAME)
+
+    with open(const.PATH_CONFIG,'w+') as fp:
+        parser.write(fp)
 
 
 def configure_this_remote_peer():
@@ -181,7 +203,7 @@ def configure_this_remote_peer():
 def make_this_remote_peer():
     profile = get_current_profile()
     rp = RemotePeer(
-        peer_id=profile.id.to_bytes((profile.id.bit_length() + 7) // 8, 'big'),
+        peer_id=digest(profile.id),
         username=profile.username,
         ip=const.THIS_IP,
         conn_port=const.PORT_THIS,
