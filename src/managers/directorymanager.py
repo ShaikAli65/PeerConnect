@@ -4,25 +4,86 @@ import os
 import pathlib
 import socket
 import struct
+from itertools import count
 from pathlib import Path
 
-from src.avails import Wire, WireData, connect, const, get_dialog_handler, use
+from src.avails import DataWeaver, TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
+from src.core import get_this_remote_peer, peers
+from src.core.connections import Connector
 from src.core.handles import TaskHandle
-from src.core.transfers import FileItem
+from src.core.transfers import FileItem, HEADERS, TransferState
+
+END_DIR_WITH = '/'
+
+transfers_book = TransfersBookKeeper()
 
 
 async def open_dir_selector():
     loop = asyncio.get_running_loop()
     result = loop.run_in_executor(None, get_dialog_handler().open_directory_dialog_window)
-    await result
-
-    return result.result()
+    return await result
 
 
-def new_directory_transfer_request(request_packet: WireData):
-    ...
+async def new_directory_send_transfer(signal_data: DataWeaver):
+    print("processing")
+    print(signal_data)
+    dir_path = await open_dir_selector()
+    if not dir_path:
+        print("cancelling dir send request, no directory specified")
+        return
+    dir_path = Path(dir_path)
+    transfer_id = transfers_book.get_new_id()
+    dir_recv_signal_packet = WireData(
+        header=HEADERS.CMD_RECV_DIR,
+        msg_id=get_this_remote_peer().peer_id,
+        transfer_id=transfer_id
+    )
+    remote_peer = await peers.get_remote_peer_at_every_cost(signal_data.peer_id)
+    if not remote_peer:
+        raise Exception(f"cannot find remote peer object for given id{signal_data.peer_id}")
+
+    connection = await Connector.get_connection(remote_peer)
+    sender = DirectorySender(dir_path)
 
 
+def new_directory_receive_request(request_packet: WireData):
+    transfer_id = request_packet.body['transfer_id']
+
+
+class DirectorySender:
+    def __init__(self, root_path):
+        """
+        Args:
+            root_path(Path): root path to read from and start the transfer
+        """
+        self.state = TransferState.PREPARING
+        self.root_path = root_path
+
+    async def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def continue_transfer(self):
+        pass
+
+
+class DirectoryReceiver:
+    def __init__(self):
+        self.state = TransferState.PREPARING
+
+    async def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def continue_transfer(self):
+        pass
+
+
+@use.NotInUse
 class DirectoryTaskHandle(TaskHandle):
     chunk_size = 1024
     end_dir_with = '/'
@@ -51,7 +112,8 @@ class DirectoryTaskHandle(TaskHandle):
                     break
             elif item.is_dir():
                 if not any(item.iterdir()):
-                    use.echo_print("sending empty dir:", self.__send_path(item, self.dir_path.parent, self.end_dir_with))
+                    use.echo_print("sending empty dir:",
+                                   self.__send_path(item, self.dir_path.parent, self.end_dir_with))
                     continue
 
     def __send_file(self, item_path: pathlib.Path):
@@ -108,7 +170,7 @@ class DirectoryTaskHandle(TaskHandle):
 
 
 DOWNLOADS_DIR = "./down"
-CHUNCK_SIZE = 1024
+CHUNK_SIZE = 1024
 
 
 def recv_something(_sock: socket.socket):
@@ -120,7 +182,7 @@ def recv_something(_sock: socket.socket):
 def recv_file(_fpath: Path, _size: int, _sock: socket.socket):
     with open(_fpath, "wb") as file:
         while _size > 0:
-            data = _sock.recv(min(CHUNCK_SIZE, _size))
+            data = _sock.recv(min(CHUNK_SIZE, _size))
             if not data:
                 break
             file.write(data)
@@ -128,7 +190,6 @@ def recv_file(_fpath: Path, _size: int, _sock: socket.socket):
 
 
 def recv_dir(_sock: socket.socket):
-
     while True:
         raw_length = _sock.recv(4)
         if not raw_length:
@@ -180,9 +241,8 @@ def send_file(sock: socket.socket, path: Path):
 
 
 def send_directory(sock: socket.socket, path: Path):
-
     item_iter = path.iterdir()
-    stack = [item_iter,]
+    stack = [item_iter, ]
     while len(stack):
         dir_iter = stack.pop()
         for item in dir_iter:
