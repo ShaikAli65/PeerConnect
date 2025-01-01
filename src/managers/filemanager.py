@@ -1,56 +1,28 @@
 import asyncio
-import enum
 from itertools import count
 from pathlib import Path
 
-from src.avails import FileDict, OTMInformResponse, OTMSession, RemotePeer, Wire, WireData, connect, const, \
+from src.avails import TransfersBookKeeper, OTMInformResponse, OTMSession, RemotePeer, Wire, WireData, connect, const, \
     get_dialog_handler, use
 from src.core import Dock, get_this_remote_peer, transfers
 
 from src.avails.connect import get_free_port
-from src.core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, onetomany
+from src.core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, TransferState, onetomany
 
 
-class FileRegistry:
-    all_files = FileDict()
-    file_counter = count()
-
-    @classmethod
-    def get_id_for_file(cls):
-        return str(next(cls.file_counter))
-
-    @classmethod
-    def get_scheduled_transfer(cls, any_id):
-        return cls.all_files.get_scheduled(any_id)
-
-    @classmethod
-    def schedule_transfer(cls, key, file_receiver_handle):
-        cls.all_files.add_to_scheduled(key, file_receiver_handle)
-
-
-class State(enum.Enum):
-    #
-    # remember to reflect changes in `StatusCodes` in fileobject.py
-    #
-    PREPARING = 1
-    CONNECTING = 2
-    SENDING = 3
-    RECEIVING = 4
-    PAUSED = 5
-    ABORTING = 6
-    COMPLETED = 7
+transfers_book = TransfersBookKeeper()
 
 
 class FileSender:
     version = const.VERSIONS['FO']
 
     def __init__(self, file_list: list[str | Path], peer_id):
-        self.state = State.PREPARING
+        self.state = TransferState.PREPARING
         self.file_list = [
             transfers.FileItem(x, seeked=0) for x in file_list
         ]
         self.file_handle = None
-        self.file_id = FileRegistry.get_id_for_file() + str(peer_id)
+        self.file_id = transfers_book.get_new_id() + str(peer_id)
         self.peer_obj = Dock.peer_list.get_peer(peer_id)
         self.file_pool = PeerFilePool(
             self.file_list,
@@ -59,7 +31,7 @@ class FileSender:
 
     async def send_files(self):
         use.echo_print('changing state to connection')  # debug
-        self.state = State.CONNECTING
+        self.state = TransferState.CONNECTING
         use.echo_print('sent file ')  # debug
         # await asyncio.sleep(0)  # temporarily yielding back
         connection = await connect.connect_to_peer(
@@ -71,15 +43,15 @@ class FileSender:
         with connection:
             await self.authorize_connection(connection)
             use.echo_print('changing state to sending')  # debug
-            self.state = State.SENDING
+            self.state = TransferState.SENDING
             await self.file_pool.send_files(connection.asendall)
-        self.state = State.COMPLETED
+        self.state = TransferState.COMPLETED
         print('completed sending')
 
     async def authorize_connection(self, connection):
         handshake = WireData(
             header=HEADERS.CMD_FILE_CONN,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
             version=self.version,
             file_id=self.file_id,
         )
@@ -97,7 +69,7 @@ class FileSender:
 class FileReceiver:
 
     def __init__(self, data: WireData):
-        self.state = State.PREPARING
+        self.state = TransferState.PREPARING
         self.peer_id = data.id
         self.version_tobe_used = data.version
         self.id = data['file_id']
@@ -108,13 +80,13 @@ class FileReceiver:
         self.result = None
 
     async def recv_file(self):
-        self.state = State.CONNECTING
+        self.state = TransferState.CONNECTING
         self.connection = await self.get_connection()
         print("got connection")
-        self.state = State.RECEIVING
+        self.state = TransferState.RECEIVING
         what, result = await self.file_pool.recv_files(self.connection.arecv)
         self.state = what
-        if what == State.COMPLETED:
+        if what == TransferState.COMPLETED:
             self.result = result
         use.echo_print('completed receiving')
 
@@ -132,21 +104,21 @@ async def open_file_selector():
 
 
 async def send_files_to_peer(peer_id, selected_files):
-    # :todo make send_files_to_peer a generator yielding status to page
-    if file_sender_handle := _check_running(peer_id):
+    # :todo make send_files_to_peer a generator or a status iterator yielding status to page
+    if file_sender_handle := transfers_book.check_running(peer_id):
         # if any transfer is running just attach FileItems to that transfer
         file_sender_handle.file_pool.attach_files((FileItem(path, 0) for path in selected_files))
         return
 
     # create a new file sending session
     file_sender = FileSender(selected_files, peer_id)
-    FileRegistry.all_files.add_to_current(peer_id=peer_id, file_pool=file_sender)
+    transfers_book.add_to_current(peer_id=peer_id, transfer_handle=file_sender)
     await file_sender.send_files()
-    FileRegistry.all_files.add_to_completed(peer_id, file_sender)
+    transfers_book.add_to_completed(peer_id, file_sender)
 
 
 def _check_running(peer_id) -> FileSender:
-    file_handles = FileRegistry.all_files.get_running_file(peer_id)
+    file_handles = transfers_book._get_running_transfers(peer_id)
     if file_handles:
         return file_handles[0]
 
@@ -161,16 +133,17 @@ async def file_receiver(file_req: WireData, connection):
     """
     Just a wrapper function which does bookkeeping for FileReceiver object
     """
+    peer_id = file_req.id
     file_handle = FileReceiver(file_req)
     file_handle.connection_arrived(connection)
-    FileRegistry.all_files.add_to_current(file_req.id, file_handle)
+    transfers_book.add_to_current(file_req.id, file_handle)
     await file_handle.recv_file()
-    FileRegistry.all_files.add_to_completed(file_req.id, file_handle)
+    transfers_book.add_to_completed(file_req.id, file_handle)
 
 
 def start_new_otm_file_transfer(files: list[Path], peers: list[RemotePeer]):
     file_sender = onetomany.OTMFilesSender(file_list=files, peers=peers, timeout=3)  # check regarding timeouts
-    FileRegistry.schedule_transfer(file_sender.session.session_id, file_sender.relay)
+    transfers_book.add_to_scheduled(file_sender.session.session_id, file_sender.relay)
     return file_sender
 
 
@@ -191,12 +164,12 @@ def new_otm_request_arrived(req_data: WireData, addr):
         passive_endpoint_address,
         get_this_remote_peer().uri
     )
-    f = use.wrap_with_tryexcept(relay.start_readside)
+    f = use.wrap_with_tryexcept(relay.start_read_side)
     asyncio.create_task(f())
-    FileRegistry.schedule_transfer(session.session_id, relay)
+    transfers_book.add_to_scheduled(session.session_id, relay)
     use.echo_print(use.COLORS[3], "adding otm session to registry", session.session_id)
     reply = OTMInformResponse(
-        peer_id=get_this_remote_peer().id,
+        peer_id=get_this_remote_peer().peer_id,
         passive_addr=passive_endpoint_address,
         active_addr=get_this_remote_peer().uri,
         session_key=session.key,
@@ -212,7 +185,7 @@ async def update_otm_stream_connection(connection, link_data: WireData):
     """
     use.echo_print(use.COLORS[3], "updating otm connection", connection.getpeername())
     session_id = link_data['session_id']
-    otm_relay = FileRegistry.get_scheduled_transfer(session_id)
+    otm_relay = transfers_book.get_scheduled(session_id)
     if otm_relay:
         await otm_relay.otm_add_stream_link(connection, link_data)
     else:

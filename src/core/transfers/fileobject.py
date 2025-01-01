@@ -37,9 +37,9 @@ def shorten_path(path, max_length):
 
 
 class FileItem:
-    """
-    Overview:
-        The _FileItem class is designed to represent a file with its metadata, such as name, size, path, and whether it has been seeked.
+    """The _FileItem class is designed to represent a file with its metadata
+
+        such as name, size, path, and whether it has been seeked.
         It provides methods to manage file renaming, error handling, and serialization.
 
     Attributes:
@@ -51,21 +51,28 @@ class FileItem:
         original_ext: Preserves the original file extension for potential renaming.
 
     Methods:
-        __init__: Initializes the file object, fetching its size and name from the filesystem.
         __str__ and __repr__: Provide human-readable representations of the object for debugging and logging.
         add_error_ext: Adds an error extension to the file name to signify an error state.
-        remove_error_ext: Removes the error extension and restores the file to its original name, assuming the original extension was preserved.
+        remove_error_ext: Removes the error extension and restores the file to its original name,
+            assuming the original extension was preserved.
         load_from: Static method that reconstructs a _FileItem from serialized data.
         __bytes__ and __iter__: Define how the object can be serialized and iterated over.
         name property: Getter and setter for the file name, with the setter also updating the underlying file path on disk.
 
     Error Handling:
-        The add_error_ext method renames the file to include an error extension, while remove_error_ext restores the original name. Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
+        The add_error_ext method renames the file to include an error extension, while remove_error_ext restores the original name.
+        Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
 
     """
     __slots__ = '_name', 'size', 'path', 'seeked', 'original_ext'
 
     def __init__(self, path, seeked):
+        """Initializes the file object, fetching its size and name from the filesystem.
+
+        Args:
+            path(Path): file path to use operate with during transfer
+            seeked(int): used to persist transfer state
+        """
         self.path: Path = path
         self.seeked = seeked
         if self.path.exists():
@@ -248,9 +255,9 @@ class PeerFilePool:
         # self.file_count = await self.__get_int_from_sender(recv_function)
         w = await self.receive_file_loop(self.file_count, recv_function)
         if w:
-            return StatusCodes.COMPLETED, self
+            return TransferState.COMPLETED, self
         else:
-            return StatusCodes.PAUSED, False
+            return TransferState.PAUSED, False
 
     async def receive_file_loop(self, count, recv_function):
         while True:
@@ -379,6 +386,8 @@ class PeerFilePool:
         return await self.receive_file_loop(self.file_count, sender_sock.asendall)
 
     def attach_files(self, files: Iterable[FileItem]):
+        # :todo: add a check for if the file transfer is finalizing or not
+
         self.file_items.extend(files)
 
     @staticmethod
@@ -504,3 +513,16 @@ class PeerFilePool:
     Receiving Files: Files are received asynchronously, with checks for existing files to avoid overwriting and renaming on error.
     Error Management: When a file transfer fails (e.g., due to lack of space), the system renames the file to indicate the issue. Upon successful transfer, it restores the file to its original state.
 """
+
+
+class TransferState(enum.Enum):
+    #
+    # remember to reflect changes in `StatusCodes` in fileobject.py
+    #
+    PREPARING = 1
+    CONNECTING = 2
+    SENDING = 3
+    RECEIVING = 4
+    PAUSED = 5
+    ABORTING = 6
+    COMPLETED = 7
