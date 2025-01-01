@@ -103,12 +103,14 @@ class Acceptor:
     async def verify(self, connection):
         """
 
-        Verfies the tcp connection based on a predefined algorithm
-        acts as a multiplexer endpoint delegating the connection socket
+        Verifies the tcp connection based on a predefined algorithm
+        acts as a multiplexer endpoint delegating the connected socket
         to respective communication managers
 
-        :param connection: connection from peer
-        :returns peer_id: if verification is successful else None (implying socket to be removed)
+        Args:
+             connection: connection from peer
+        Returns:
+            Any | None: if verification is successful else None (implying socket to be ignored)
         """
         data = await Wire.receive_async(connection)
         hand_shake = WireData.load_from(data)
@@ -124,15 +126,12 @@ class Acceptor:
 
         if hand_shake.match_header(HEADERS.GOSSIP_UPDATE_STREAM_LINK):
             use.echo_print("got a gossip stream link connection request delegating to gossip manager")  # debug
-            # f = use.wrap_with_tryexcept(gossipmanager.update_gossip_stream_socket, connection, hand_shake)
-            # asyncio.create_task(f())
             self._spawn_task(src.core.gossip.update_gossip_stream_socket, connection, hand_shake)
             return None
 
         if hand_shake.match_header(HEADERS.OTM_UPDATE_STREAM_LINK):
             use.echo_print("got a otm stream link connection request delegating to file manager")  # debug
-            # f = use.wrap_with_tryexcept(filemanager.update_otm_stream_connection, connection, hand_shake)
-            # asyncio.create_task(f())
+
             self._spawn_task(filemanager.update_otm_stream_connection, connection, hand_shake)
 
             return None
@@ -149,7 +148,7 @@ class Acceptor:
                 print("new data arrived", data)  # debug
                 self.__process_data(data)
             except TypeError as tp:
-                print("got type error possible data illformed", tp)
+                print("got type error possible data ill formed", tp)
 
     @staticmethod
     def __process_data(data: WireData):
@@ -178,7 +177,7 @@ class Acceptor:
 class Connector:
     _current_connected = connect.Socket()
 
-    # :todo: make this more advanced such that it can handle mulitple requests related to same socket
+    # :todo: make this more advanced such that it can handle multiple requests related to same socket
 
     @classmethod
     async def get_connection(cls, peer_obj: RemotePeer) -> connect.Socket:

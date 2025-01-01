@@ -64,7 +64,7 @@ function_dict = {
 
 
 async def handler(signal_data: DataWeaver):
-    print("handlesignals handler", signal_data)
+    print("[HANDLE SIGNALS] handler", signal_data)
     func = None
     try:
         print(signal_data)
