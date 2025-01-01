@@ -4,10 +4,21 @@ from src.avails import const
 
 
 class RemotePeer:
-    """
+    """Used to represent a peer details in network
+
+    There are some attributes that are kept to keep this class compatible with kademlia package
     This Follows a structure that is required by kademila package's Node
     and added extra things used by code
-    Warning : If any attributes are added then they should be added to __iter__ method
+
+    Note:
+        * All the code that is used in peer-connect is meant to use
+            1. ``:attr peer_id:`` to refer to peer object, (the conversions to ids are made at low level functions that work with kademlia)
+
+            2. ``:attr uri:`` to work with (ip, port) that is used to connect with peer
+
+            3. ``:attr req_uri:`` to work with (ip, port) that is used to contact with requests endpoint
+
+        * If any attributes are added then they should be added to __iter__ method
     """
     version = const.VERSIONS['RP']
 
@@ -17,7 +28,7 @@ class RemotePeer:
         'status': int,
         'callbacks': int,
         'req_uri': tuple[str, int],
-        'id': str,
+        'id': bytes,
     }
 
     __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', 'long_id', '_byte_cache'
@@ -84,6 +95,10 @@ class RemotePeer:
         return umsgpack.dumps(list_of_attributes)
 
     @property
+    def peer_id(self):
+        return str(self.long_id)
+
+    @property
     def serialized(self):
         hashed = hash(tuple(self))
 
@@ -123,3 +138,9 @@ class RemotePeer:
         if not isinstance(obj, RemotePeer):
             return NotImplemented
         return self.long_id < obj.long_id
+
+
+def convert_peer_id_to_byte_id(peer_id: str):
+    int_ed = int(peer_id)
+    byt_ed = int_ed.to_bytes(16)
+    return byt_ed

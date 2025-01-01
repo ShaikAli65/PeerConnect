@@ -51,15 +51,12 @@ class OTMFilesRelay(PalmTreeRelay):
         # this is a generator `:method: OTMFilesReceiver.data_receiver` that takes byte-chunk inside it
         self.chunk_recv_handler = self.file_receiver.data_receiver()
 
-        # self.recv_buffer = bytearray(const.MAX_OTM_BUFFERING)
-        # self.recv_buffer_view = memoryview(self.recv_buffer)
         self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
         self.chunk_counter = 0
 
-    async def start_readside(self):
-        """
-        Starts reading and forwarding part of the protocol if called
-        this function is not called when this relay is the one who is sending the files to others
+    async def start_read_side(self):
+        """Starts reading and forwarding part of the protocol
+        if called this function is not called when this relay is the one who is sending the files to others
         """
         await self.set_up()
         await self._recv_file_metadata()
@@ -80,7 +77,7 @@ class OTMFilesRelay(PalmTreeRelay):
     def _make_update_stream_link_packet(self):
         h = WireData(
             header=HEADERS.OTM_UPDATE_STREAM_LINK,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
             session_id=self.session.session_id,
             peer_addr=self.passive_endpoint_addr,
         )
@@ -195,7 +192,7 @@ class OTMFilesSender:
 
     def make_session(self):
         return OTMSession(
-            originate_id=get_this_remote_peer().id,
+            originate_id=get_this_remote_peer().peer_id,
             session_id=use.get_unique_id(),
             key=use.get_unique_id(),
             fanout=const.DEFAULT_GOSSIP_FANOUT,  # make this linearly scalable based on file count and no.of recipients
@@ -226,7 +223,7 @@ class OTMFilesSender:
         # ========> debug
         print_signal = WireData(
             header='gossip_print_every_onces_states',
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
         )
         await asyncio.sleep(1)  # debug
         await self.relay.gossip_print_every_onces_states(print_signal, tuple())
@@ -256,7 +253,7 @@ class OTMFilesSender:
     def create_inform_packet(self):
         return WireData(
             header=HEADERS.OTM_FILE_TRANSFER,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
             protocol1=str(self.__class__),
             protocol2=str(self.palm_tree.__class__),
             session_id=self.session.session_id,

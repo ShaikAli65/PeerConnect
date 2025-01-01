@@ -18,7 +18,7 @@ async def test_file_transfer():
         data = DataWeaver(
             header=transfers.HEADERS.HANDLE_SEND_FILE,
             content={
-                'peer_id': p.id,
+                'peer_id': p.peer_id,
             }
         )
         try:

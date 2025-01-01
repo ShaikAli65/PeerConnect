@@ -62,7 +62,7 @@ async def test_one_to_many_file_transfer():
             content={
                 'peer_list': [x for x in Dock.peer_list.keys()],
             },
-            _id=p.id,
+            _id=p.peer_id,
         )
         await handledata.send_file_to_multiple_peers(command_data)
 

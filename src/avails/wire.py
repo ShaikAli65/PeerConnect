@@ -18,14 +18,12 @@ from typing import NamedTuple, Optional, Union
 
 import umsgpack
 
-from src.avails import Actuator
-from src.avails import const as _const
-from src.avails.connect import Socket as _Socket
-from src.avails.connect import is_socket_connected
+from src.avails import Actuator, const as _const
+from src.avails.connect import Socket as _Socket, is_socket_connected
 from src.avails.exceptions import InvalidPacket
 from src.avails.useables import wait_for_sock_read
 
-controller = Actuator()
+_controller = Actuator()
 
 
 class Wire:
@@ -63,7 +61,7 @@ class Wire:
                 raise OSError("connection broken")
 
     @staticmethod
-    def receive(sock: _Socket, timeout=None, controller=controller):
+    def receive(sock: _Socket, timeout=None, controller=_controller):
         b = sock.getblocking()
         length_buf = bytearray()
         while len(length_buf) < 4:
@@ -97,7 +95,7 @@ class Wire:
     @staticmethod
     def load_datagram(data_payload) -> bytes:
         data_size = struct.unpack("!I", data_payload[:4])[0]
-        return data_payload[4 : data_size + 4]
+        return data_payload[4: data_size + 4]
 
     @staticmethod
     async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
@@ -108,16 +106,14 @@ class Wire:
 class WireData:
     _version = _const.VERSIONS["WIRE"]
 
-    __slots__ = (
-        "id",
-        "_header",
-        "version",
-        "body",
-    )
+    # :todo: make `id` a little bit explicit
 
-    def __init__(self, header=None, _id=None, version=_version, **kwargs):
+    __slots__ = 'id', '_header', 'version', 'body', 'peer_id'
+
+    def __init__(self, header=None, msg_id=None, peer_id=None, version=_version, **kwargs):
         self._header = header
-        self.id = _id
+        self.id = msg_id
+        self.peer_id = peer_id
         self.version = version
         self.body = kwargs
 
@@ -150,6 +146,10 @@ class WireData:
         return self._header
 
     @property
+    def msg_id(self):
+        return self.id
+
+    @property
     def dict(self):  # for introspection or validation
         return {
             "header": self._header,
@@ -168,9 +168,9 @@ class WireData:
 def unpack_datagram(data_payload) -> Optional[WireData]:
     """Utility function to unpack raw datagram
 
-        from `datagram_received` callback from asyncio's DatagramProtocol
+        from `datagram_received` callback from asyncio' s DatagramProtocol
         or any other datagram transferred using wire protocol
-        Unpack the raw data received using peer-connect's wire protocol
+        Unpack the raw data received using peer-connect' s wire protocol
         into WireData and handle exceptions
     Args:
         data_payload(bytes) : byte string to unpack
@@ -184,33 +184,29 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     except umsgpack.UnpackException as ue:
         raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue))
     except TypeError as tp:
-        raise InvalidPacket(
-            "Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)
-        )
+        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
     except struct.error as se:
-        raise InvalidPacket(
-            "struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se)
-        )
+        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
 
 
 class DataWeaver:
     """
-    A wrapper class purposely designed to store data (as {header, content, id} format)
+    A wrapper class purposely designed to handle data (as {header, content, msg_id, peer_id} format)
     """
 
     __annotations__ = {
         "__data": dict,
     }
-    __slots__ = ("__data",)
+    __slots__ = "__data",
 
     def __init__(
-        self,
-        *,
-        header: Union[str, int] = None,
-        content: Union[str, dict, list, tuple] = None,
-        _id: Union[int, str, tuple] = None,
-        _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
-        serial_data: str | bytes = None,
+            self,
+            *,
+            header: Union[str, int] = None,
+            content: Union[str, dict, list, tuple] = None,
+            _id: Union[int, str, tuple] = None,
+            _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
+            serial_data: str | bytes = None,
     ):
 
         if serial_data:
@@ -258,20 +254,24 @@ class DataWeaver:
         self.__data["header"] = _header
 
     @property
-    def id(self):
-        return self.__data["active_user_id"]
+    def peer_id(self):
+        return self.__data["peerId"]
 
-    @id.setter
-    def id(self, _id):
-        self.__data["active_user_id"] = _id
+    @peer_id.setter
+    def peer_id(self, peer_id):
+        self.__data["peerId"] = peer_id
+
+    @property
+    def msg_id(self):
+        return self.__data["msgId"]
+
+    @msg_id.setter
+    def msg_id(self, message_id):
+        self.__data["msgId"] = message_id
 
     @property
     def type(self):
         return int(self.header[0])
-
-    @type.setter
-    def type(self, data):
-        self.__data["type"] = data
 
     def __str__(self):
         return _json.dumps(self.__data)
@@ -280,7 +280,8 @@ class DataWeaver:
         return f"DataWeaver({self.__data})"
 
 
-class StatusMessage: ...
+class StatusMessage:
+    ...
 
 
 class GossipMessage:

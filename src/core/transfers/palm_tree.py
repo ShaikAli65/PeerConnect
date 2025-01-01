@@ -212,7 +212,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         if self._may_be_make_rejection(tree_check_packet, addr):
             return
 
-        this_peer_id = get_this_remote_peer().id
+        this_peer_id = get_this_remote_peer().peer_id
         sender_id = tree_check_packet.id
         self.__expected_parent_peers.add(tree_check_packet.id)
 
@@ -258,7 +258,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         if reject_reason:
             gossip_link_reject_message = WireData(
                 header=HEADERS.GOSSIP_TREE_REJECT,
-                _id=get_this_remote_peer().id,
+                msg_id=get_this_remote_peer().peer_id,
             )
             Wire.send_datagram(self.transport, addr, bytes(gossip_link_reject_message))
             self.print_state(f"rejected gossip tree link {addr}", reject_reason)
@@ -281,7 +281,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         """
         upgrade_conn_packet = WireData(
             header=HEADERS.GOSSIP_UPGRADE_CONN,
-            _id=this_peer_id,
+            msg_id=this_peer_id,
         )
         passive_link, active_link = self.all_links[sender_id]
 
@@ -366,7 +366,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
 
         tree_check_packet = WireData(
             header=HEADERS.GOSSIP_TREE_CHECK,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
             message_id=get_unique_id(str),
             session_id=self.session.session_id,
         )
@@ -412,7 +412,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         """
         h = WireData(
             header=HEADERS.GOSSIP_UPDATE_STREAM_LINK,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
             session_id=self.session.session_id,
             peer_addr=self.passive_endpoint_addr,
         )
@@ -738,7 +738,7 @@ class PalmTreeProtocol:
         tree_check_message_id = get_unique_id(str)
         spanning_trigger_header = WireData(
             header=HEADERS.GOSSIP_TREE_CHECK,
-            _id=self.center_peer.id,
+            msg_id=self.center_peer.id,
             message_id=tree_check_message_id,
             session_id=self.session.session_id,
         )
@@ -756,7 +756,7 @@ class PalmTreeProtocol:
         with UDPProtocol.create_async_sock(loop, const.IP_VERSION) as s:
             tree_gather_packet = WireData(
                 header=HEADERS.GOSSIP_TREE_GATHER,
-                _id=self.center_peer.id,
+                msg_id=self.center_peer.id,
                 level=0,
                 parent=None,
                 reply_addr=s.getsockname(),

@@ -114,7 +114,7 @@ class Acceptor:
         hand_shake = WireData.load_from(data)
 
         if hand_shake.match_header(HEADERS.CMD_VERIFY_HEADER):
-            peer_id = hand_shake.id
+            peer_id = hand_shake.peer_id
             self.currently_in_connection[peer_id] += 1
             use.echo_print("verified peer", peer_id)  # debug
             return peer_id
@@ -156,9 +156,9 @@ class Acceptor:
         if data.match_header(HEADERS.CMD_TEXT):
             pagehandle.new_message_arrived(data)
         elif data.match_header(HEADERS.CMD_RECV_FILE):
-            directorymanager.new_directory_transfer_request(data)
+            directorymanager.new_directory_recieve_request(data)
         elif data.match_header(HEADERS.CMD_CLOSING_HEADER):
-            directorymanager.new_directory_transfer_request(data)
+            directorymanager.new_directory_recieve_request(data)
 
     async def reset_socket(self):
         self.main_socket.close()
@@ -212,7 +212,7 @@ class Connector:
     async def _verifier(cls, connection_socket):
         verification_data = WireData(
             header=HEADERS.CMD_VERIFY_HEADER,
-            _id=get_this_remote_peer().id,
+            msg_id=get_this_remote_peer().peer_id,
         )
         await Wire.send_async(connection_socket, bytes(verification_data))
         use.echo_print("Sent verification to ", connection_socket.getpeername())  # debug

@@ -41,7 +41,7 @@ def GossipSearchReqHandler(searcher, transport, gossiper: RumorMongerProtocol,
 
 def GossipSearchReplyHandler(searcher):
     async def handle(event: GossipEvent):
-        print("[SEARCH] reply recieved:", event.message, "for", event.from_addr)
+        print("[GOSSIP][SEARCH] reply recieved:", event.message, "for", event.from_addr)
         return searcher.reply_arrived(*event)
 
     return handle
@@ -126,7 +126,7 @@ async def new_gossip_request_arrived(req_data: WireData, addr):
         chunk_size=1024,
     )
     response = PalmTreeInformResponse(
-        peer_id=get_this_remote_peer().id,
+        peer_id=get_this_remote_peer().peer_id,
         active_addr=stream_endpoint_addr,
         passive_addr=datagram_endpoint_addr,
         session_key=req_data['session_key']

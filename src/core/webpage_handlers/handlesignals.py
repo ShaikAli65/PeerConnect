@@ -20,13 +20,18 @@ def receive_restart_signal(data: DataWeaver):
 
 
 async def search_for_user(data: DataWeaver):
-    search_string = data["search_string"]
+    search_string = data["searchPeerInNetwork"]
     print("got a search request", search_string)
     peer_list = await peers.search_for_nodes_with_name(search_string)
     print("sending list", peer_list)
     response_data = DataWeaver(
         header=HEADERS.HANDLE_SEARCH_RESPONSE,
-        content=[{"name": peer.username, "id": peer.id} for peer in peer_list],
+        content=[{
+            "name": peer.username,
+            "peerId": peer.peer_id,
+            "ip":peer.ip,
+        } for peer in peer_list
+        ],
     )
     dispatch_data(response_data)
 

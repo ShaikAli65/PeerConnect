@@ -23,8 +23,7 @@ async def send_file_to_peer(command_data: DataWeaver):
 
 
 async def send_text(command_data: DataWeaver):
-    peer_id = command_data.content["peer_id"]
-    peer_obj = await peers.get_remote_peer_at_every_cost(peer_id)
+    peer_obj = await peers.get_remote_peer_at_every_cost(command_data.peer_id)
 
     if peer_obj is None:
         return  # send data to page that peer is not reachable
@@ -32,7 +31,7 @@ async def send_text(command_data: DataWeaver):
     connection = await Connector.get_connection(peer_obj)
     data = WireData(
         header=HEADERS.CMD_TEXT,
-        _id=get_this_remote_peer().id,
+        msg_id=get_this_remote_peer().peer_id,
         message=command_data.content,
     )
     # :todo: wrap around with try except, signal page status update
@@ -40,7 +39,7 @@ async def send_text(command_data: DataWeaver):
 
 
 async def send_file_to_multiple_peers(command_data: DataWeaver):
-    peer_ids = command_data.content["peer_list"]
+    peer_ids = command_data.content["peerList"]
     peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = await filemanager.open_file_selector()
     if not selected_files:

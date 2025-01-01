@@ -27,7 +27,7 @@ def DiscoveryRequestHandler(discovery_transport):
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
-            _id=this_rp.id,
+            msg_id=this_rp.peer_id,
             connect_uri=this_rp.req_uri,
         )
         return discovery_transport.sendto(
@@ -54,7 +54,11 @@ class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
 
 async def search_network(transport, broad_cast_addr, multicast_addr):
     this_rp = get_this_remote_peer()
-    ping_data = WireData(DISCOVERY.NETWORK_FIND, this_rp.id, reply_addr=this_rp.req_uri)
+    ping_data = WireData(
+        DISCOVERY.NETWORK_FIND,
+        this_rp.peer_id,
+        reply_addr=this_rp.req_uri
+    )
 
     if const.USING_IP_V4:
         async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):

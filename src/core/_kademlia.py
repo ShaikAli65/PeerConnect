@@ -159,14 +159,14 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
 
 class AnotherRoutingTable(routing.RoutingTable):
     @override
-    def add_contact(self, peer):
+    def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
         Dock.peer_list.add_peer(peer)
 
     @override
-    def remove_contact(self, peer):
+    def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        Dock.peer_list.remove_peer(peer.id)
+        Dock.peer_list.remove_peer(peer.peer_id)
 
 
 class PeerServer(network.Server):

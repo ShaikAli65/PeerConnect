@@ -1,5 +1,5 @@
 from src.avails import DataWeaver, use
-from src.core.transfers._headers import HEADERS
+from src.core.transfers import HEADERS
 from src.core.webpage_handlers.pagehandle import dispatch_data
 from src.managers import (
     ProfileManager,

@@ -92,6 +92,7 @@ from typing import Optional, override
 from kademlia import crawling, storage
 
 from src.avails import GossipMessage, RemotePeer, use
+from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import echo_print, get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
 from src.core.transfers import GOSSIP
@@ -199,17 +200,18 @@ class Storage(storage.ForgetfulStorage):
         return self.peer_data_storage.items()
 
     def store_peers_in_list(self, list_key, list_of_peers):
-        if list_key in self.node_lists_ids:
-            # temporary fix
-            filtered_peers = set()
-            for peer in list_of_peers:
-                if isinstance(peer, list):
-                    filtered_peers.add(peer[0])
-                else:
-                    filtered_peers.add(peer)
+        if list_key not in self.node_lists_ids:
+            return False
 
-            self.peer_data_storage[list_key] |= filtered_peers
-            # Dock.peer_list.extend(RemotePeer.load_from(x) for x in list_of_peers)
+        # temporary fix
+        filtered_peers = set()
+        for peer in list_of_peers:
+            if isinstance(peer, list):
+                filtered_peers.add(peer[0])
+            else:
+                filtered_peers.add(peer)
+        self.peer_data_storage[list_key] |= filtered_peers
+
         return True
 
 
@@ -306,7 +308,8 @@ async def gossip_search(search_string) -> AsyncIterator[RemotePeer]:
 
 def search_for_nodes_with_name(search_string):
     """
-    searches for nodes relevant to given :param:search_string
+    searches for nodes relevant to given ``:param search_string:``
+
     Returns:
          a generator of peers that matches with the search_string
     """
@@ -314,19 +317,28 @@ def search_for_nodes_with_name(search_string):
     return SearchCrawler.search_for_nodes(peer_server, search_string)
 
 
-async def get_remote_peer(peer_id) -> Optional[RemotePeer]:
+async def get_remote_peer(peer_id):
+    """Gets the ``RemotePeer`` object corresponding to ``:func RemotePeer.peer_id:`` from the network
+
+    Just a wrapper around ``:method kademlia_network_server.get_remote_peer:``
+    with conversions related to ids
+
+    This call is expensive as it performs a distributed search across the network
+    try using ``Dock.peer_list`` instead if possible
+
+    Args:
+        peer_id(str): id to search for
+
+    Returns:
+        RemotePeer | None: obj found
     """
-    Just a wrapper function around :method:`kademlia_network_server.get_remote_peer`
-    This function call is expensive as it performs a
-    distributed search across the network
-    try using Dock.peer_list instead
-    """
-    return await Dock.kademlia_network_server.get_remote_peer(peer_id)
+    byte_id = convert_peer_id_to_byte_id(peer_id)
+    return await Dock.kademlia_network_server.get_remote_peer(byte_id)
 
 
 async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
     """
-    Just a helper function, tries to check for peer_id in cached Dock.peer_list
+    Just a helper, tries to check for peer_id in cached Dock.peer_list
     if there is a chance that cached remote peer object is expired then use :func: `peers.get_remote_peer`
     if not found the performs a distributed search in the network
     """
