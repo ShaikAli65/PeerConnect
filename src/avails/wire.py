@@ -279,6 +279,19 @@ class DataWeaver:
     def __repr__(self):
         return f"DataWeaver({self.__data})"
 
+    def field_check(self):
+        missing = None
+        match self.__data:
+            case {
+                'msgId':_,
+                'content':_,
+                'header':_,
+            }:
+                return
+            case _:
+                missing_fields = [field for field in ['msgId', 'content', 'header'] if field not in self.__data]
+                raise InvalidPacket(f"fields missing: {missing_fields}")
+
 
 class StatusMessage:
     ...
