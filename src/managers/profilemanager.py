@@ -172,12 +172,13 @@ class ProfileManager:
     def __eq__(self, other):
         if isinstance(other, dict):
             return (
-                self.id == other["id"]
+                self.id == other["USER"]["id"]
                 and self.username == other["USER"]["name"]
                 and self.server_ip == other["SERVER"]["ip"]
             )
-        else:
-            return self is other
+        if isinstance(other, ProfileManager):
+            return self.id == other.id and self.username == other.username
+        return self is other
 
     def __str__(self):
         return (
