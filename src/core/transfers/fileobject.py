@@ -194,7 +194,12 @@ class PeerFilePool:
             file_item = self.file_items[index]
             self.current_file = index
 
-            if (self.to_stop or await self.send_file(send_function, file=file_item)) is False:
+            progress = await self.send_file_setup(send_function,file=file_item)
+            result = await self.send_actual_file(send_function, file_item, progress)
+
+            print("file sent", file_item)
+
+            if (self.to_stop or result) is False:
                 if self.to_stop:
                     with contextlib.suppress(OSError):
                         await send_function(struct.pack('?', False))
@@ -209,7 +214,7 @@ class PeerFilePool:
         return True
 
     @classmethod
-    async def send_file(cls, send_function, file: FileItem):
+    async def send_file_setup(cls, send_function, file: FileItem):
         print("sending file data", f"[PID:{os.getpid()}]")  # debug
 
         file_object = bytes(file)
@@ -224,13 +229,27 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        result = await cls.send_actual_file(send_function, file, send_progress)
-        print("file sent", file)
-        send_progress.close()
-        return result
+        return send_progress
 
     @classmethod
-    async def send_actual_file(cls, send_function, file, send_progress, chunk_len=None):
+    async def send_actual_file(cls, send_function, file:FileItem, send_progress, chunk_len=None):
+        """Sends file to other send using `send_function`
+
+        calls ``send_function`` and awaits on it every time this function tries to send a chunk
+
+        Note:
+            file parameter gets mutated and it's size attribute gets updated according to data sent
+
+        Arguments:
+            send_function(Callable): function to call when a chunk is ready
+            file(FileItem): file to send
+            send_progress(tqdm.tqdm): tqdm progress to update accordingly
+            chunk_len(int): .
+
+        Returns:
+            bool: True if file transfer was successful
+
+        """
         send_progress.update(file.seeked)
         chunk_size = chunk_len or cls.calculate_chunk_size(file.size)
         print('sending file data', file)  # debug
@@ -245,14 +264,13 @@ class PeerFilePool:
                 except ConnectionResetError:
                     print("got a connection reset error in file transfer")
                     file.seeked = seek  # can be ignored mostly for now
-                    return False
+                    raise
                 send_progress.update(len(chunk))
                 seek += len(chunk)
         file.seeked = seek  # can be ignored mostly for now
         return True
 
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
-        # self.file_count = await self.__get_int_from_sender(recv_function)
         w = await self.receive_file_loop(self.file_count, recv_function)
         if w:
             return TransferState.COMPLETED, self
@@ -492,7 +510,7 @@ class PeerFilePool:
 
     Key Methods:
     send_files: Initiates the sending process and sends the number of files to the receiver.
-    send_file_loop and send_file: Handle the actual sending of files, using tqdm for progress indication.
+    send_file_loop and send_file_setup: Handle the actual sending of files, using tqdm for progress indication.
     recv_files: Receives files from a sender, initializing the process by receiving the file count.
     recv_actual_file: Manages the actual receiving of the file data and handles errors.
     _add_error_ext and _remove_error_ext: These are utility methods for handling file errors during transmission.
