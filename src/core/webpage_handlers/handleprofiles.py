@@ -1,5 +1,6 @@
 from src.avails import DataWeaver, use
-from src.core.transfers import HEADERS
+from src.core.transfers import HANDLE, HEADERS
+from src.core.webpage_handlers import logger
 from src.core.webpage_handlers.pagehandle import dispatch_data
 from src.managers import (
     ProfileManager,
@@ -16,8 +17,8 @@ async def align_profiles(signal_data: DataWeaver):
 
 
 def send_profiles():
-    userdata = DataWeaver(header=HEADERS.HANDLE_PEER_LIST, content=all_profiles())
-    use.echo_print("::[HANDLE PROFILES] profiles sent")
+    userdata = DataWeaver(header=HANDLE.PEER_LIST, content=all_profiles())
+    logger("::[PROFILES] profiles sent")
     return dispatch_data(userdata, expect_reply=True)
 
 
@@ -42,7 +43,7 @@ async def configure_further_profile_data(profiles_data):
     if removed_profiles := set(all_profiles()) - set(profiles_data):
         for profile_file_name in removed_profiles:
             ProfileManager.delete_profile(profile_file_name)
-        use.echo_print("deleted profiles :", removed_profiles)
+        logger.info(f"deleted profiles: {removed_profiles}")
 
     for may_be_profile_name, profile_settings in profiles_data.items():
         profile_object = get_profile_from_profile_file_name(may_be_profile_name)
@@ -51,11 +52,8 @@ async def configure_further_profile_data(profiles_data):
             profile_name = profile_settings['USER']['name']
 
             # new profile does not have any id associated with it
-            try:
-                ProfileManager.add_profile(profile_name, profile_settings)
-            except Exception as e:
-                print("-" * 80, e)
-            use.echo_print("[HANDLE PROFILE] added profile :", may_be_profile_name, profile_settings)
+            ProfileManager.add_profile(profile_name, profile_settings)
+            logger.info(f"[HANDLE PROFILE] added profile :{may_be_profile_name}, {profile_settings}")
             continue
 
         for header, content in profile_settings.items():
@@ -69,4 +67,4 @@ async def set_selected_profile(page_data: DataWeaver):
             selected_profile = profile
             break
     set_current_profile(selected_profile)
-    use.echo_print("::profile selected and updated", selected_profile)
+    logger.info("::profile selected and updated", extra={'selected': selected_profile})

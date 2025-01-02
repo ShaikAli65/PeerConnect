@@ -1,7 +1,9 @@
+import logging
 import socket
 
 from src.avails import QueueMixIn, WireData, const, use
-from src.avails.bases import BaseDispatcher, RequestEvent
+from src.avails.bases import BaseDispatcher
+from src.avails.events import RequestEvent
 from src.avails.connect import (
     ipv4_multicast_socket_helper,
     ipv6_multicast_socket_helper,
@@ -10,12 +12,15 @@ from src.core import get_this_remote_peer
 from src.core.transfers import DISCOVERY
 from src.core.transfers.transports import DiscoveryTransport
 
+_logger = logging.getLogger(__name__)
+
 
 def DiscoveryReplyHandler(kad_server):
     async def handle(event: RequestEvent):
         connect_address = tuple(event.request["connect_uri"])
-        print("[KADEMLIA] bootstrapping kademlia")
-        return await kad_server.bootstrap([connect_address])
+        _logger.debug("[DISCOVERY] bootstrapping kademlia")
+        await kad_server.bootstrap([connect_address])
+        _logger.debug("[DISCOVERY] bootstrapping completed")
 
     return handle
 
@@ -23,14 +28,14 @@ def DiscoveryReplyHandler(kad_server):
 def DiscoveryRequestHandler(discovery_transport):
     async def handle(event: RequestEvent):
         req_packet = event.request
-        print("replying to req:", req_packet.body)
+        _logger.info("[DISCOVERY] replying to req with addr:", req_packet.body)
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
             msg_id=this_rp.peer_id,
             connect_uri=this_rp.req_uri,
         )
-        return discovery_transport.sendto(
+        discovery_transport.sendto(
             bytes(data_payload), tuple(req_packet["reply_addr"])
         )
 
@@ -46,9 +51,7 @@ class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         handle = self.registry[wire_data.header]
-        print(
-            "[DISCOVERY] dispatching request with id", event.root_code, "to", wire_data
-        )
+        _logger.debug(f"[DISCOVERY] dispatching request with id={event.root_code}")
         await handle(event)
 
 

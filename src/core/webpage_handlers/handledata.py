@@ -4,7 +4,7 @@ from sys import stderr
 from src.avails import DataWeaver, Wire, WireData, use
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.connections import Connector
-from src.core.transfers import HEADERS
+from src.core.transfers import HANDLE, HEADERS
 from src.managers import filemanager
 from src.managers.filemanager import send_files_to_peer
 
@@ -55,11 +55,11 @@ async def send_dir_to_multiple_peers(command_data: DataWeaver): ...
 
 
 function_dict = {
-    HEADERS.HANDLE_SEND_DIR: send_a_directory,
-    HEADERS.HANDLE_SEND_FILE: send_file_to_peer,
-    HEADERS.HANDLE_SEND_TEXT: send_text,
-    HEADERS.HANDLE_SEND_FILE_TO_MULTIPLE_PEERS: send_file_to_multiple_peers,
-    HEADERS.HANDLE_SEND_DIR_TO_MULTIPLE_PEERS: send_dir_to_multiple_peers,
+    HANDLE.SEND_DIR: send_a_directory,
+    HANDLE.SEND_FILE: send_file_to_peer,
+    HANDLE.SEND_TEXT: send_text,
+    HANDLE.SEND_FILE_TO_MULTIPLE_PEERS: send_file_to_multiple_peers,
+    HANDLE.SEND_DIR_TO_MULTIPLE_PEERS: send_dir_to_multiple_peers,
 }
 
 

@@ -2,22 +2,21 @@
 All the stuff related to kademlia goes here
 """
 import asyncio
-import logging
 from typing import override
 
 import kademlia.node
 from kademlia import crawling, network, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
+from kademlia.protocol import log
 from rpcudp.protocol import RPCProtocol
 
 from src.avails import RemotePeer, const, use
-from src.avails.bases import BaseDispatcher, RequestEvent
+from src.avails.bases import BaseDispatcher
+from src.avails.events import RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
 from src.core.transfers import REQUESTS_HEADERS
 from src.core.transfers.transports import KademliaTransport
-
-log = logging.getLogger(__name__)
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -95,7 +94,6 @@ class RPCReceiver(RPCProtocol):
                  source.long_id)
         node = RemotePeer(key)
         neighbors = self.router.find_neighbors(node, exclude=source)
-        # print("found neighbours", neighbors)
         return list(map(tuple, neighbors))
 
     def rpc_find_value(self, sender, sender_peer, key):
@@ -212,14 +210,14 @@ class PeerServer(network.Server):
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
-            print('added this peer object in', closest_list_id)  # debug
+            log.debug(f'added this peer object in list_id={closest_list_id}')  # debug
 
         else:
-            print("failed adding this peer object to lists")
+            log.error("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
             self.add_this_peer_future = asyncio.create_task(f())
-            print("scheduled callback to add this object to lists")
+            log.debug("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)

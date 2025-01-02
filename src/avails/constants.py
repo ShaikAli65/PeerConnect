@@ -44,6 +44,7 @@ PATH_PROFILES = '../../profiles'
 PATH_PAGE = '../webpage'
 PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
+PATH_LOG_CONFIG = f'..\\configurations\\log_config.json'
 
 IP_VERSION = socket.AF_INET
 USING_IP_V4 = True

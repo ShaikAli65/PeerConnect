@@ -1,6 +1,7 @@
 import configparser
 import ipaddress
 import json
+import logging
 import os
 import socket
 import subprocess
@@ -12,10 +13,13 @@ from pathlib import Path
 from kademlia.utils import digest
 
 import src.core.eventloop  # noqa
+import src.managers.logmanager as log_manager
 from src.avails import RemotePeer, const, use
 from src.configurations.configure import set_constants, validate_ports
 from src.core import set_current_remote_peer_object
 from src.managers import get_current_profile
+
+_logger = logging.getLogger(__name__)
 
 
 def initiate_bootup():
@@ -33,11 +37,11 @@ def initiate_bootup():
     if const.DEFAULT_PROFILE_NAME not in config_map['USER_PROFILES']:
         config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
-    with open(const.PATH_CONFIG,'w+') as fp:
+    with open(const.PATH_CONFIG, 'w+') as fp:
         config_map.write(fp)
 
     set_constants(config_map)
-
+    log_manager.initiate()
     ip_addr = get_ip(const.IP_VERSION)
 
     if ip_addr.version == 6:
@@ -48,7 +52,7 @@ def initiate_bootup():
 
     const.THIS_IP = str(ip_addr)
     const.WEBSOCKET_BIND_IP = const.THIS_IP
-    print(f"{const.THIS_IP=}")
+    _logger.info(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 
 
@@ -128,7 +132,7 @@ def get_v6_from_shell():
             if 'inet6' in line and 'fe80' not in line and '::1' not in line:
                 ip_v6.append(line.split()[1].split('/')[0])
     except Exception as exp:
-        print(f"Error occurred: {exp}")
+        _logger.critical(f"Error occurred at ip lookup", exc_info=exp)
         return
     return ip_v6[0]
 
@@ -189,9 +193,9 @@ def write_default_profile():
         profile_file.write(default_profile_file)
     parser = configparser.ConfigParser(allow_no_value=True)
     parser.read(const.PATH_CONFIG)
-    parser.set('USER_PROFILES',const.DEFAULT_PROFILE_NAME)
+    parser.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
-    with open(const.PATH_CONFIG,'w+') as fp:
+    with open(const.PATH_CONFIG, 'w+') as fp:
         parser.write(fp)
 
 
@@ -255,4 +259,4 @@ def launch_web_page():
             subprocess.Popen(['xdg-open', page_url])
 
     except FileNotFoundError:
-        use.echo_print("::webpage not found, look's like the what you downloaded is corrupted")
+        _logger.critical("::webpage not found, look's like the what you downloaded is corrupted")

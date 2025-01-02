@@ -1,16 +1,18 @@
 import asyncio
 import functools
 import inspect
+import logging
 
-import src.core.gossip
-from src.avails import InvalidPacket, QueueMixIn, Wire, WireData, const, unpack_datagram, use
-from src.avails.bases import BaseDispatcher, RequestEvent
+from src.avails import InvalidPacket, QueueMixIn, const, unpack_datagram
+from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
+from src.avails.events import RequestEvent
 from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
 from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
-from src.core.transfers import DISCOVERY, HEADERS, REQUESTS_HEADERS
+from src.core.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.core.transfers.transports import RequestsTransport
-from src.managers import filemanager
+
+_logger = logging.getLogger(__name__)
 
 
 async def initiate():
@@ -81,10 +83,10 @@ def _create_listen_socket(bind_address, multicast_addr):
 
     if const.USING_IP_V4:
         ipv4_multicast_socket_helper(sock, multicast_addr)
-        print("registered request socket for multicast v4")
+        _logger.info("[REQUESTS] registered request socket for multicast v4")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
-        print("registered request socket for multicast v6")
+        _logger.info("[REQUESTS] registered request socket for multicast v6")
     return sock
 
 
@@ -94,7 +96,7 @@ class RequestsDispatcher(QueueMixIn, BaseDispatcher):
 
     async def submit(self, req_event: RequestEvent):
         handler = self.registry[req_event.root_code]
-        print("[REQUESTS] dispatching request with code", req_event.root_code, 'to', handler)
+        _logger.info(f"[REQUESTS] dispatching request with code: {req_event.root_code} to {handler}")
         # expected type of handlers
         # 1. Dispatcher objects that are coupled with QueueMixIn (sync)
         # 2. Dispatcher objects that are not coupled with QueueMixIn (async)
@@ -121,37 +123,19 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print(
-            "started requests endpoint at", transport.get_extra_info("socket")
-        )  # debug
+        _logger.info(f"[REQUESTS] started requests endpoint at {transport.get_extra_info("socket")}")
 
     def datagram_received(self, actual_data, addr):
         code, stripped_data = actual_data[:1], actual_data[1:]
         try:
             req_data = unpack_datagram(stripped_data)
         except InvalidPacket as ip:
-            print(f"[REQUESTS] error:", ip)
+            _logger.info(f"[REQUESTS] error:", ip)
             return
 
-        print(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...' from: {addr}")
+        _logger.info(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...' from: {addr}")
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
-
-    def handle_request(self, req_data: WireData, addr):
-        """Handle different request types based on the header"""
-        if req_data.match_header(HEADERS.OTM_FILE_TRANSFER):
-            self.handle_one_to_many_file_session(req_data, addr)
-        elif req_data.match_header(HEADERS.GOSSIP_CREATE_SESSION):
-            self.handle_gossip_session(req_data, addr)
-
-    def handle_one_to_many_file_session(self, req_data, addr):
-        reply = filemanager.new_otm_request_arrived(req_data, addr)
-        Wire.send_datagram(self.transport, addr, reply)
-
-    @staticmethod
-    def handle_gossip_session(req_data, addr):
-        f = use.wrap_with_tryexcept(src.core.gossip.new_gossip_request_arrived, req_data, addr)
-        asyncio.create_task(f())
 
 
 async def end_requests():

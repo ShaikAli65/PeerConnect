@@ -84,6 +84,7 @@ referring 1.3 :
 
 """
 import asyncio
+import logging
 import time
 from collections import defaultdict
 from collections.abc import AsyncIterator
@@ -93,7 +94,7 @@ from kademlia import crawling, storage
 
 from src.avails import GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
-from src.avails.useables import echo_print, get_unique_id
+from src.avails.useables import get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
 from src.core.transfers import GOSSIP
 
@@ -121,6 +122,8 @@ node_list_ids = [
     b'\xf3333333333333333333$',
 ]
 
+_logger = logging.getLogger(__name__)
+
 
 class PeerListGetter(crawling.ValueSpiderCrawl):
     initial_list = Dock.peer_list
@@ -134,18 +137,18 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     async def _handle_found_values(self, values):
         peer = self.nearest_without_value.popleft()
         if peer:
-            echo_print(use.COLORS[0], "found values", values)
+            _logger.debug(f"found values {values}")
             await self.protocol.call_store_peers_in_list(peer, self.node.id, values)
         return values
 
     @classmethod
     async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
-        print("previous index", cls.previously_fetched_index)
+        _logger.debug(f"previous index {cls.previously_fetched_index}")
         if cls.previously_fetched_index >= len(cls.node_list_ids) - 1:
             cls.previously_fetched_index = 0
 
         find_list_id = cls.node_list_ids[cls.previously_fetched_index]
-        print("looking into", find_list_id)
+        _logger.debug(f"looking into {find_list_id}")
         list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
         cls.previously_fetched_index += 1
 
@@ -247,7 +250,7 @@ class GossipSearch:
 
     @classmethod
     def search_for(cls, find_str, gossip_handler):
-        print("[GOSSIP][SEARCH] new search for:", find_str)
+        _logger.info(f"[GOSSIP][SEARCH] new search for: {find_str}")
         m = cls._prepare_search_message(find_str)
         gossip_handler.gossip_message(m)
         cls._message_state_dict[m.id] = f = cls.search_iterator(m.id)
@@ -286,8 +289,8 @@ class GossipSearch:
             if m := reply_data.message:
                 m = RemotePeer.load_from(m)
             result_iter.add_peer(m)
-        except KeyError:
-            echo_print("[GOSSIP][SEARCH] invalid gossip search response id")
+        except KeyError as ke:
+            _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id",exc_info=ke)
 
 
 def get_search_handler():
@@ -296,7 +299,7 @@ def get_search_handler():
 
 def get_more_peers():
     peer_server = Dock.kademlia_network_server
-    print("getting more peers")  # debug
+    _logger.debug("getting more peers")
     return PeerListGetter.get_more_peers(peer_server)
 
 
