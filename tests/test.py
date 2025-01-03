@@ -5,11 +5,13 @@ import random
 import sys
 from typing import NamedTuple
 
-import _path  # noqa
 from kademlia import utils
 
-from src.avails.connect import UDPProtocol
+import _path  # noqa
+import src
+from src import managers
 from src.avails import RemotePeer, const
+from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
 from src.core import Dock, connections, requests, set_current_remote_peer_object
 from src.managers import profilemanager
@@ -56,11 +58,12 @@ def test():
     # print(peers.get_this_remote_peer())
 
 
-def mock_profile():
-    def profile_getter():
-        return NamedTuple('MockProfile', (('id', int),('username', str)))(random.getrandbits(255), getpass.getuser())
+def profile_getter():
+    return NamedTuple('MockProfile', (('id', int), ('username', str)))(random.getrandbits(255), getpass.getuser())
 
-    profilemanager.get_current_profile = profile_getter
+
+def mock_profile():
+    src.managers.profilemanager._current_profile = profile_getter()
 
 
 def test_initial_states():
