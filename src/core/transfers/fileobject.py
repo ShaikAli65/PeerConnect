@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import enum
 import mmap
@@ -11,6 +12,7 @@ import tqdm
 import umsgpack
 
 from src.avails import const
+from src.avails.exceptions import TransferIncomplete
 
 
 def stringify_size(size):
@@ -37,10 +39,10 @@ def shorten_path(path, max_length):
 
 
 class FileItem:
-    """The _FileItem class is designed to represent a file with its metadata
+    """Designed to represent a file with its metadata
 
-        such as name, size, path, and whether it has been seeked.
-        It provides methods to manage file renaming, error handling, and serialization.
+    Such as name, size, path, and whether it has been seeked.
+    It provides methods to manage file renaming, error handling, and serialization.
 
     Attributes:
         __slots__: Used for memory optimization, defining the attributes the class can have.
@@ -50,16 +52,7 @@ class FileItem:
         seeked: A variable indicating how much of the file has been read or processed.
         original_ext: Preserves the original file extension for potential renaming.
 
-    Methods:
-        __str__ and __repr__: Provide human-readable representations of the object for debugging and logging.
-        add_error_ext: Adds an error extension to the file name to signify an error state.
-        remove_error_ext: Removes the error extension and restores the file to its original name,
-            assuming the original extension was preserved.
-        load_from: Static method that reconstructs a _FileItem from serialized data.
-        __bytes__ and __iter__: Define how the object can be serialized and iterated over.
-        name property: Getter and setter for the file name, with the setter also updating the underlying file path on disk.
-
-    Error Handling:
+    Note:
         The add_error_ext method renames the file to include an error extension, while remove_error_ext restores the original name.
         Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
 
@@ -135,7 +128,7 @@ class FileItem:
         If the original extension is not available, raises a ValueError.
         """
         if not hasattr(self, 'original_ext'):
-            raise ValueError("Original extension is not set; cannot remove error extension.")
+            raise ValueError("Original extension is not set; cannot remove_and_close error extension.")
 
         # Restore the original name by replacing the current suffix with the original suffix
         original_path = self.path.with_suffix(self.original_ext)
@@ -177,7 +170,7 @@ class PeerFilePool:
         self.id = _id
 
         # list index pointing to file that is currently getting processed
-        # this keeps a reference to fileitem when receiving file
+        # this keeps a reference to file item when receiving file
         self.current_file: FileItem | int = 0
         self.file_count = len(self.file_items)
         self.download_path = download_path
@@ -194,8 +187,8 @@ class PeerFilePool:
             file_item = self.file_items[index]
             self.current_file = index
 
-            progress = await self.send_file_setup(send_function,file=file_item)
-            result = await self.send_actual_file(send_function, file_item, progress)
+            progress = await send_file_setup(send_function, file=file_item)
+            result = await send_actual_file(send_function, file_item, progress)
 
             print("file sent", file_item)
 
@@ -213,157 +206,37 @@ class PeerFilePool:
 
         return True
 
-    @classmethod
-    async def send_file_setup(cls, send_function, file: FileItem):
-        print("sending file data", f"[PID:{os.getpid()}]")  # debug
-
-        file_object = bytes(file)
-        file_packet = struct.pack('!I', len(file_object)) + file_object
-        await send_function(file_packet)  # possible : any sort of socket/connection errors
-
-        send_progress = tqdm.tqdm(
-            range(file.size),
-            f"[PID:{multiprocessing.current_process().ident}]"
-            f" sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024
-        )
-        return send_progress
-
-    @classmethod
-    async def send_actual_file(cls, send_function, file:FileItem, send_progress, chunk_len=None):
-        """Sends file to other send using `send_function`
-
-        calls ``send_function`` and awaits on it every time this function tries to send a chunk
-
-        Note:
-            file parameter gets mutated and it's size attribute gets updated according to data sent
-
-        Arguments:
-            send_function(Callable): function to call when a chunk is ready
-            file(FileItem): file to send
-            send_progress(tqdm.tqdm): tqdm progress to update accordingly
-            chunk_len(int): .
-
-        Returns:
-            bool: True if file transfer was successful
-
-        """
-        send_progress.update(file.seeked)
-        chunk_size = chunk_len or cls.calculate_chunk_size(file.size)
-        print('sending file data', file)  # debug
-        with open(file.path, 'rb') as f:
-            seek = file.seeked
-            f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-            for offset in range(seek, file.size, chunk_size):
-                chunk = f_mapped[offset: offset + chunk_size]
-                try:
-                    await send_function(chunk)  # possible: connection reset err
-                    # :todo: add timeout mechanisms
-                except ConnectionResetError:
-                    print("got a connection reset error in file transfer")
-                    file.seeked = seek  # can be ignored mostly for now
-                    raise
-                send_progress.update(len(chunk))
-                seek += len(chunk)
-        file.seeked = seek  # can be ignored mostly for now
-        return True
-
     async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
-        w = await self.receive_file_loop(self.file_count, recv_function)
+        w = await self.receive_file_loop(recv_function)
         if w:
             return TransferState.COMPLETED, self
         else:
             return TransferState.PAUSED, False
 
-    async def receive_file_loop(self, count, recv_function):
+    async def receive_file_loop(self, recv_function):
         while True:
             what = struct.unpack('?', await recv_function(1))[0]
             if not what:
                 print("received end of transfer signal, finalizing file recv loop")  # debug
-                return True 
+                return True
 
             if self.to_stop:
                 return False
 
-            if await self.recv_file(recv_function) is False:
-                return False
+            file_item, progress = await recv_file_setup(recv_function, self.download_path)
+            self.current_file = file_item
+            self.file_items.append(file_item)
+            try:
+                await recv_actual_file(lambda: self.to_stop, recv_function, file_item, progress)
+            except* OSError as oe:
+                if 'No space left on device' in str(oe):
+                    add_error_ext(file_item, self.download_path, self.__error_ext)
+            except* TransferIncomplete:
+                add_error_ext(file_item, self.download_path,
+                              self.__error_ext)  # Mark error if not all data was received
+
             print("completed receiving", self.current_file)  # debug
             self.file_count += 1
-
-    async def recv_file(self, recv_function):
-        file_item_size = await self.__get_int_from_sender(recv_function)
-        raw_file_item = await recv_function(file_item_size)
-        file_item = FileItem.load_from(raw_file_item, self.download_path)
-        if not file_item:
-            return False
-        self.validatename(file_item)
-        progress = tqdm.tqdm(
-            range(file_item.size),
-            f"::receiving {file_item.name[:17] + '...' if len(file_item.name) > 20 else file_item.name} ",
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024
-        )
-        self.current_file = file_item
-        what = await self.recv_actual_file(recv_function, file_item, progress)
-        progress.close()
-        return what
-
-    async def recv_actual_file(self, recv_function, file_item: FileItem, progress):
-        """
-        Receive a file over a network connection and write it to disk.
-
-        Args:
-            recv_function (Asynchronous Callable): A function to receive data.
-            file_item (FileItem): An object containing file metadata.
-            progress (ProgressTracker): An object to track progress of file writing.
-
-        Returns:
-            bool: True if the file was received successfully, False otherwise.
-        """
-
-        mode = 'xb' if file_item.seeked == 0 else 'rb+'  # Create a new file or open for reading and writing
-        # Check for the existence of the file for resuming
-        if file_item.seeked > 0 and not os.path.exists(file_item.path):
-            print(f"File {file_item.path} not found for resuming transfer.")  # debug
-            raise FileNotFoundError(f"File {file_item.path} not found for resuming transfer.")
-
-        chunk_size = self.calculate_chunk_size(file_item.size)
-
-        try:
-            with open(file_item.path, mode) as file:
-                f_write, remaining_bytes = file.write, file_item.size
-                file.seek(file_item.seeked)
-                remaining_bytes -= file_item.seeked
-                progress.update(file_item.seeked)
-
-                while not self.to_stop and remaining_bytes > 0:
-                    try:
-                        data = await recv_function(min(chunk_size, remaining_bytes))
-                    except ConnectionResetError:
-                        break
-
-                    if not data:
-                        break
-
-                    try:
-                        f_write(data)  # Attempt to write data to file
-                        # :TODO deal with blocking nature of file i/o
-                    except OSError as e:
-                        if 'No space left on device' in str(e):
-                            self._add_error_ext(file_item)
-                            return False
-                        raise  # Re-raise if it's an unexpected OSError
-                    remaining_bytes -= len(data)
-                    progress.update(len(data))
-        finally:
-            file_item.seeked = file_item.size - remaining_bytes  # Update the seek position
-            if remaining_bytes > 0:
-                self._add_error_ext(file_item)  # Mark error if not all data was received
-                return False
-        return True
 
     async def send_files_again(self, receiver_sock):
         # ----------------------
@@ -376,7 +249,7 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        await self.send_actual_file(receiver_sock.asendall, start_file, progress)
+        await send_actual_file(receiver_sock.asendall, start_file, progress)
         progress.close()
         # -> ---------------------- file continuation part
         self.current_file += 1
@@ -393,19 +266,17 @@ class PeerFilePool:
             unit_scale=True,
             unit_divisor=1024
         )
-        what = await self.recv_actual_file(sender_sock, start_file, progress)
+        what = await recv_actual_file(lambda: self.to_stop, sender_sock, start_file, progress)
         if not what:
             print('got error again returning')  # debug
             progress.close()
             return
-        self._remove_error_ext(start_file)
+        remove_error_ext(start_file, self.download_path)
         # -> ---------------------- file continuation part
 
-        return await self.receive_file_loop(self.file_count, sender_sock.asendall)
+        return await self.receive_file_loop(sender_sock.asendall)
 
     def attach_files(self, files: Iterable[FileItem]):
-        # :todo: add a check for if the file transfer is finalizing or not
-
         self.file_items.extend(files)
 
     @staticmethod
@@ -418,78 +289,223 @@ class PeerFilePool:
         packed_int = struct.pack('!I', integer)
         return await send_function(packed_int)
 
-    def _add_error_ext(self, file_item: FileItem):
-        """
-            Handles file error by renaming the file with an error extension.
-        """
-        try:
-            file_item.add_error_ext(self.__error_ext)
-        except FileExistsError:
-            return self.validatename(file_item)
-
-    def _remove_error_ext(self, file_item: FileItem):
-        """
-            Removes file error ext by renaming the file with its actual file extension .
-        """
-        try:
-            file_item.remove_error_ext()
-        except FileExistsError:
-            return self.validatename(file_item)
-
-    def validatename(self, file_item: FileItem) -> str:
-        """
-        Ensures a unique filename if a file with the same name already exists
-        in the `self.download_dir`
-
-        Args:
-            file_item (FileItem): The original filename.
-
-        Returns:
-            str: The validated filename, ensuring uniqueness.
-        """
-
-        original_path = Path(file_item.path)
-        base = original_path.stem  # Base name without extension
-        ext = original_path.suffix  # File extension
-        new_file_name = original_path.name  # Start with the original name
-
-        counter = 1
-        while (self.download_path / new_file_name).exists():
-            new_file_name = f"{base} ({counter}){ext}"
-            counter += 1
-        file_item.name = new_file_name
-
-        return new_file_name
-
     def __repr__(self):
         """
             Returns the file details
         """
-        return f"_PeerFile(paths={self.file_items.__repr__()})"
+        return f"<PeerFilePool(paths={self.file_items!r})>"
 
     def __iter__(self):
         """
-        :returns Internal file_paths list's iterator :
+        Returns:
+             Internal file_paths iterator
         """
         return self.file_items.__iter__()
 
-    @staticmethod
-    def calculate_chunk_size(file_size: int):
-        min_buffer_size = 64 * 1024  # 64 KB
-        max_buffer_size = (2 ** 20) * 2  # 2 MB
 
-        min_file_size = 2 ** 10
-        max_file_size = (2 ** 30) * 10  # 10 GB
+def add_error_ext(file_item: FileItem, root_path, error_ext):
+    """
+        Handles file error by renaming the file with an error extension.
 
-        if file_size <= min_file_size:
-            return min_buffer_size
-        elif file_size >= max_file_size:
-            return max_buffer_size
-        else:
-            # Linear scaling between min and max buffer sizes
-            buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (
-                    max_file_size - min_file_size)
-        return int(buffer_size)
+        Arguments:
+            file_item(FileItem): file item to operate on
+            root_path(Path): directory to validate new name with
+            error_ext(str): dotted extension to add to file item
+    """
+    try:
+        file_item.add_error_ext(error_ext)
+    except FileExistsError:
+        return validatename(file_item, root_path)
+
+
+def remove_error_ext(file_item, root_path):
+    """
+        Removes file error ext by renaming the file with its actual file extension.
+
+        Note:
+            the parameter ``file_item`` should have gone through add_error_ext function call which
+            preserves the actual extension
+
+        Args:
+            file_item(FileItem): file item to operate on
+            root_path(Path): directory to validate new name with
+    """
+    try:
+        file_item.remove_error_ext()
+    except FileExistsError:
+        return validatename(file_item, root_path)
+
+
+def validatename(file_item: FileItem, root_path) -> str:
+    """
+    Ensures a unique filename if a file with the same name already exists
+    in the `self.download_dir`
+
+    Args:
+        file_item (FileItem): The original filename.
+        root_path(Path): Directory path to validate with
+    Returns:
+        str: The validated filename, ensuring uniqueness.
+    """
+
+    original_path = Path(file_item.path)
+    base = original_path.stem  # Base name without extension
+    ext = original_path.suffix  # File extension
+    new_file_name = original_path.name  # Start with the original name
+
+    counter = 1
+    while (root_path / new_file_name).exists():
+        new_file_name = f"{base} ({counter}){ext}"
+        counter += 1
+    file_item.name = new_file_name
+
+    return new_file_name
+
+
+def calculate_chunk_size(file_size: int):
+    min_buffer_size = 64 * 1024  # 64 KB
+    max_buffer_size = (2 ** 20) * 2  # 2 MB
+
+    min_file_size = 2 ** 10
+    max_file_size = (2 ** 30) * 10  # 10 GB
+
+    if file_size <= min_file_size:
+        return min_buffer_size
+    elif file_size >= max_file_size:
+        return max_buffer_size
+    else:
+        # Linear scaling between min and max buffer sizes
+        buffer_size = min_buffer_size + (max_buffer_size - min_buffer_size) * (file_size - min_file_size) / (
+                max_file_size - min_file_size)
+    return int(buffer_size)
+
+
+async def send_file_setup(send_function, file: FileItem):
+    print("sending file data", f"[PID:{os.getpid()}]")  # debug
+
+    file_object = bytes(file)
+    file_packet = struct.pack('!I', len(file_object)) + file_object
+    await send_function(file_packet)  # possible : any sort of socket/connection errors
+
+    send_progress = tqdm.tqdm(
+        range(file.size),
+        f"[PID:{multiprocessing.current_process().ident}]"
+        f" sending {file.name[:17] + '...' if len(file.name) > 20 else file.name} ",
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024
+    )
+    return send_progress
+
+
+async def send_actual_file(send_function, file: FileItem, send_progress, chunk_len=None, timeout=4):
+    """Sends file to other send using `send_function`
+
+    calls ``send_function`` and awaits on it every time this function tries to send a chunk
+
+    Note:
+        file parameter gets mutated and it's size attribute gets updated according to data sent
+
+    Arguments:
+        send_function(Callable): function to call when a chunk is ready
+        file(FileItem): file to send
+        send_progress(tqdm.tqdm): tqdm progress to update accordingly
+        chunk_len(int): length of each chunk passed into ``send_function`` for each call
+        timeout(int): timeout in seconds used to wait upon send_function
+
+    Returns:
+        bool: True if file transfer was successful
+    """
+    send_progress.update(file.seeked)
+    chunk_size = chunk_len or calculate_chunk_size(file.size)
+    print('sending file data', file)  # debug
+    with open(file.path, 'rb') as f:
+        seek = file.seeked
+        f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        for offset in range(seek, file.size, chunk_size):
+            chunk = f_mapped[offset: offset + chunk_size]
+            try:
+                await asyncio.wait_for(send_function(chunk), timeout)
+                # :todo: add timeout mechanisms
+            except ConnectionResetError:
+                print("got a connection reset error in file transfer")
+                file.seeked = seek  # can be ignored mostly for now
+                raise
+            send_progress.update(len(chunk))
+            seek += len(chunk)
+            await asyncio.sleep(0)
+    file.seeked = seek  # can be ignored mostly for now
+    return True
+
+
+async def recv_file_setup(recv_function, download_path):
+    raw_int = await recv_function(4)
+    file_item_size = struct.unpack('!I', raw_int)[0]
+    raw_file_item = await recv_function(file_item_size)
+    file_item = FileItem.load_from(raw_file_item, download_path)
+    validatename(file_item, download_path)
+    progress = tqdm.tqdm(
+        range(file_item.size),
+        f"::receiving {file_item.name[:17] + '...' if len(file_item.name) > 20 else file_item.name} ",
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024
+    )
+    return file_item, progress
+
+
+async def recv_actual_file(stopping_flag, recv_function, file_item: FileItem, progress):
+    """
+    Receive a file over a network connection and write it to disk.
+
+    Args:
+        recv_function (Asynchronous Callable): A function to receive data.
+        file_item (FileItem): An object containing file metadata.
+        progress (ProgressTracker): An object to track progress of file writing.
+        stopping_flag(Callable): gets called to check when looping over byte chunks received from ``recv_function``
+    Returns:
+        bool: True if the file was received successfully, False otherwise.
+    """
+
+    mode = 'xb' if file_item.seeked == 0 else 'rb+'  # Create a new file or open for reading and writing
+    # Check for the existence of the file for resuming
+    if file_item.seeked > 0 and not os.path.exists(file_item.path):
+        print(f"File {file_item.path} not found for resuming transfer.")  # debug
+        raise FileNotFoundError(f"File {file_item.path} not found for resuming transfer.")
+
+    chunk_size = calculate_chunk_size(file_item.size)
+    any_exception = None
+    try:
+        with open(file_item.path, mode) as file:
+            f_write, remaining_bytes = file.write, file_item.size
+            file.seek(file_item.seeked)
+            remaining_bytes -= file_item.seeked
+            progress.update(file_item.seeked)
+
+            while (not stopping_flag()) and remaining_bytes > 0:
+                try:
+                    data = await recv_function(min(chunk_size, remaining_bytes))
+                except ConnectionResetError:
+                    break
+
+                if not data:
+                    break
+
+                f_write(data)  # Attempt to write data to file
+                # :TODO deal with blocking nature of file i/o
+
+                remaining_bytes -= len(data)
+                progress.update(len(data))
+    except Exception as e:
+        any_exception = e
+    finally:
+        file_item.seeked = file_item.size - remaining_bytes  # Update the seek position
+        if remaining_bytes > 0:
+            incomplete_transfer = TransferIncomplete(remaining_bytes)
+            if any_exception:
+                raise ExceptionGroup("multiple exceptions", (incomplete_transfer, any_exception))
+            else:
+                raise incomplete_transfer
 
 
 """
