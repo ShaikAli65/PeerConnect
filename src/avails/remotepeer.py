@@ -37,8 +37,8 @@ class RemotePeer:
                  peer_id=b'\x00',
                  username=None,
                  ip=None,
-                 conn_port=8088,
-                 req_port=8089,
+                 conn_port=const.PORT_THIS,
+                 req_port=const.PORT_REQ,
                  status=0):
         self.username = username
         self.ip = str(ip)
