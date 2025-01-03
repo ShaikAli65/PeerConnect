@@ -106,8 +106,6 @@ class Wire:
 class WireData:
     _version = _const.VERSIONS["WIRE"]
 
-    # :todo: make `id` a little bit explicit
-
     __slots__ = 'id', '_header', 'version', 'body', 'peer_id'
 
     def __init__(self, header=None, msg_id=None, peer_id=None, version=_version, **kwargs):
@@ -204,7 +202,8 @@ class DataWeaver:
             *,
             header: Union[str, int] = None,
             content: Union[str, dict, list, tuple] = None,
-            _id: Union[int, str, tuple] = None,
+            peer_id: Union[int, str] = None,
+            msg_id: Union[int, str] = None,
             _type: Union[_const.DATA, _const.SIGNAL] = _const.SIGNAL,
             serial_data: str | bytes = None,
     ):
@@ -215,7 +214,8 @@ class DataWeaver:
             self.__data: dict = defaultdict(str)
             self.__data["header"] = header
             self.__data["content"] = content
-            self.__data["active_user_id"] = _id
+            self.__data["peerId"] = peer_id
+            self.__data["msgId"] = msg_id
             self.__data["type"] = _type
 
     def dump(self) -> str:
@@ -280,12 +280,12 @@ class DataWeaver:
         return f"DataWeaver({self.__data})"
 
     def field_check(self):
-        missing = None
         match self.__data:
             case {
                 'msgId':_,
                 'content':_,
                 'header':_,
+                'peerId':_,
             }:
                 return
             case _:
