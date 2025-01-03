@@ -13,7 +13,7 @@ class Multicast(asyncio.DatagramProtocol):
         print('new message arrived', addr)
         print("forwarding to", end=' ')
         for peer in (self.all_peers - {addr}):
-            print(addr, end=' ')
+            print(peer, end=' ')
             self.transport.sendto(data, peer)
         print('')
         self.all_peers.add(addr)
@@ -28,6 +28,8 @@ async def main():
         local_addr=(multicast_ip, multicast_port)
     )
     await asyncio.Event().wait()
+
+    print("stopping")
 
 
 if __name__ == "__main__":

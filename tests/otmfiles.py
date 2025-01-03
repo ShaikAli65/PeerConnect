@@ -1,19 +1,16 @@
 import asyncio
 import os
-import sys
-sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
 
-from src.core.transfers import HEADERS
+import _path  # noqa
+from src.avails import DataWeaver, const
+from src.core import Dock
+from src.core.transfers import HANDLE
+from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
 from test import initiate, test_initial_states
-from src.avails import DataWeaver
-from src.core.webpage_handlers import handledata
-from src.avails import const
-from src.core import Dock
 
 
 async def test_one_to_many_file_transfer():
-
     # await async_input()
     """
     Last test results:
@@ -58,11 +55,11 @@ async def test_one_to_many_file_transfer():
     try:
         p = next(iter(Dock.peer_list))
         command_data = DataWeaver(
-            header=HEADERS.HANDLE_SEND_FILE_TO_MULTIPLE_PEERS,
+            header=HANDLE.SEND_FILE_TO_MULTIPLE_PEERS,
             content={
                 'peer_list': [x for x in Dock.peer_list.keys()],
             },
-            _id=p.peer_id,
+            peer_id=p.peer_id,
         )
         await handledata.send_file_to_multiple_peers(command_data)
 

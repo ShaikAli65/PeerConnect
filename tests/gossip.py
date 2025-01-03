@@ -1,18 +1,14 @@
 import asyncio
 import os
-import sys
 import time
 
-
-sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
-
+import _path  # noqa
+from src.avails import GossipMessage, WireData, const
 from src.avails.useables import get_unique_id
+from src.core import get_gossip, peers
+from src.core.transfers import GOSSIP
 from src.managers.statemanager import State
 from test import initiate, test_initial_states
-from src.avails import GossipMessage, WireData
-from src.core import get_gossip, peers
-from src.core.transfers import GOSSIP, REQUESTS_HEADERS
-from src.avails import const
 
 TEST_MESSAGE = "WHAT'S UP EVERYBODY"
 TEST_USERNAME = 'test'

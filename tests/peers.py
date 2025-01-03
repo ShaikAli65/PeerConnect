@@ -1,18 +1,17 @@
 import asyncio
 import os
-import sys
 
-sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
-
+import _path  # noqa
+from src.avails import const
+from src.avails.useables import async_input
+from src.core import Dock, peers
 from src.managers.statemanager import State
 from test import initiate, test_initial_states
-from src.core import Dock, peers
-from src.avails import const
 
 
 async def test_list_of_peers():
     while True:
-        await asyncio.get_event_loop().run_in_executor(None, func=lambda: input("enter"))
+        await async_input("ENTER")
         peer_list = await peers.get_more_peers()
         print(peer_list)
 

@@ -2,11 +2,8 @@ import asyncio
 import getpass
 import os
 import sys
-
+import _path  # noqa
 from kademlia import utils
-
-
-sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
 
 from src.avails.connect import UDPProtocol
 from src.avails import RemotePeer, const
