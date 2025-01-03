@@ -2,6 +2,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import socket
 
 from src.avails import InvalidPacket, QueueMixIn, const, unpack_datagram
 from src.avails.bases import BaseDispatcher
@@ -82,11 +83,12 @@ def _create_listen_socket(bind_address, multicast_addr):
     )
 
     if const.USING_IP_V4:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         ipv4_multicast_socket_helper(sock, multicast_addr)
-        _logger.info("[REQUESTS] registered request socket for multicast v4")
+        _logger.info("[REQUESTS] registered request socket for multicast v4", extra={'addr': multicast_addr})
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
-        _logger.info("[REQUESTS] registered request socket for multicast v6")
+        _logger.info("[REQUESTS] registered request socket for multicast v6", extra={'addr': multicast_addr})
     return sock
 
 
@@ -133,7 +135,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"[REQUESTS] error:", exc_info=ip)
             return
 
-        _logger.info(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...'",extra={'from':addr})
+        _logger.info(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...'", extra={'from': addr})
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 

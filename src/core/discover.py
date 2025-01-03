@@ -65,6 +65,7 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
     if const.USING_IP_V4:
         async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
             transport.sendto(bytes(ping_data), broad_cast_addr)
-
+        _logger.debug("[DISCOVERY] sent discovery request to broadcast", extra={'addr': broad_cast_addr})
     async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
         transport.sendto(bytes(ping_data), multicast_addr)
+    _logger.debug("[DISCOVERY] sent discovery request to multicast", extra={'addr': multicast_addr})
