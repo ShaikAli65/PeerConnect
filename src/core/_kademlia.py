@@ -5,7 +5,7 @@ import asyncio
 from typing import override
 
 import kademlia.node
-from kademlia import crawling, network, protocol, routing
+from kademlia import crawling, network, node, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
 from kademlia.protocol import log
 from rpcudp.protocol import RPCProtocol
@@ -56,7 +56,7 @@ class RPCCaller(RPCProtocol):
         return self.handle_call_response(result, node_to_ask)
 
     async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
-        if not isinstance(list_key, bytes):
+        if isinstance(list_key, (RemotePeer, node.Node)):
             list_key = list_key.id
         address = peer_to_ask.req_uri
         result = await self.store_peers_in_list(address, self.source_node.serialized, list_key, peer_list)
@@ -300,5 +300,3 @@ def KademliaHandler(kad_server):
 crawling.RPCFindResponse = RPCFindResponse
 network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer
-if __name__ == '__main__':
-    print(KadProtocol.mro())
