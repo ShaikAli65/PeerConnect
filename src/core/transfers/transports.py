@@ -2,7 +2,7 @@ import struct
 from asyncio import BaseTransport
 from typing import override
 
-from src.avails import Wire, WireData
+from src.avails import WireData, connect, is_socket_connected
 from src.core.transfers import REQUESTS_HEADERS
 
 
@@ -59,3 +59,26 @@ class DiscoveryTransport(RequestsTransport):
 class GossipTransport(RequestsTransport):
     __slots__ = ()
     _trigger = REQUESTS_HEADERS.GOSSIP
+
+
+class StreamTransport:
+    __slots__ = 'socket',
+
+    def __init__(self, socket_transport: connect.Socket):
+        super().__init__()
+        self.socket = socket_transport
+
+    async def send(self, data: bytes):
+        data_size = struct.pack("!I", len(data))
+        return await self.socket.asendall(data_size + data)
+
+    async def recv(self):
+        try:
+            data_size = struct.unpack("!I", await self.socket.arecv(4))[0]
+            data = await self.socket.arecv(data_size)
+            return data
+        except struct.error:
+            if is_socket_connected(self.socket):
+                raise
+            else:
+                raise OSError("connection broken")
