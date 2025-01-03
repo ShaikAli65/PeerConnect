@@ -17,8 +17,8 @@ def initial_states():
     s5 = State("launching webpage", pagehandle.initiate_page_handle, is_blocking=True)
     s6 = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    s7 = State("initiating requests", requests.initiate, is_blocking=True)
-    s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s8 = State("initiating requests", requests.initiate, is_blocking=True)
+    s9 = State("initiating comms", connections.initiate_connections, is_blocking=True)
     return tuple(locals().values())
 
 
