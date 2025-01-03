@@ -12,6 +12,8 @@ class DISPATCHS(IntEnum):
     REQUESTS = 1
     DISCOVER = 2
     GOSSIP = 3
+    CONNECTIONS = 4
+    STREAM_DATA = 5
 
 
 class Dock:
