@@ -1,13 +1,8 @@
 import logging
-import socket
 
 from src.avails import QueueMixIn, WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
-from src.avails.connect import (
-    ipv4_multicast_socket_helper,
-    ipv6_multicast_socket_helper,
-)
 from src.core import get_this_remote_peer
 from src.core.transfers import DISCOVERY
 from src.core.transfers.transports import DiscoveryTransport
@@ -51,11 +46,11 @@ class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         handle = self.registry[wire_data.header]
-        _logger.debug(f"[DISCOVERY] dispatching request with id={event.root_code}")
+        _logger.debug(f"[DISCOVERY] dispatching request", extra={'id': event.root_code})
         await handle(event)
 
 
-async def search_network(transport, broad_cast_addr, multicast_addr):
+async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
     this_rp = get_this_remote_peer()
     ping_data = WireData(
         DISCOVERY.NETWORK_FIND,
@@ -69,14 +64,3 @@ async def search_network(transport, broad_cast_addr, multicast_addr):
 
     async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
         transport.sendto(bytes(ping_data), multicast_addr)
-
-
-def _add_broadcast(sock):
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-
-def _add_multicast(multicast_sock, addr):
-    if const.USING_IP_V4:
-        ipv4_multicast_socket_helper(multicast_sock, addr)
-    else:
-        ipv6_multicast_socket_helper(multicast_sock, addr)

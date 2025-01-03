@@ -68,7 +68,7 @@ async def discovery_initiate(broad_cast_address, kad_server, multicast_address, 
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
-    await discover.search_network(
+    await discover.send_discovery_requests(
         discover_dispatcher.transport,
         broad_cast_address,
         multicast_address
@@ -130,10 +130,10 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         try:
             req_data = unpack_datagram(stripped_data)
         except InvalidPacket as ip:
-            _logger.info(f"[REQUESTS] error:", ip)
+            _logger.info(f"[REQUESTS] error:", exc_info=ip)
             return
 
-        _logger.info(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...' from: {addr}")
+        _logger.info(f"[REQUESTS] received: {code} : '{str(req_data)[:15]}...'",extra={'from':addr})
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 
