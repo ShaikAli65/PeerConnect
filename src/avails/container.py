@@ -27,6 +27,11 @@ class HasPeerId(Protocol):
     peer_id: str
 
 
+class HasIdProperty(Protocol):
+    @property
+    def id(self): ...
+
+
 class PeerDict(dict):
     __slots__ = '__lock',
 
@@ -95,10 +100,10 @@ class TransfersBookKeeper:
         self.__completed = defaultdict(WeakSet)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
 
-    def add_to_current(self, peer_id: str, transfer_handle: HasID):
+    def add_to_current(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
         self.__current[peer_id].add(transfer_handle)
 
-    def add_to_completed(self, peer_id: str, transfer_handle: HasID):
+    def add_to_completed(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
         self.__current[peer_id].discard(transfer_handle)
         self.__completed[peer_id].add(transfer_handle)
 
@@ -224,7 +229,7 @@ class SocketCache:
         except KeyError:
             return False
 
-    def remove(self, peer_id):
+    def remove_and_close(self, peer_id):
         # with self.__thread_lock:
         try:
             sock = self.socket_cache[peer_id]
