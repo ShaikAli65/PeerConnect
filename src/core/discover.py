@@ -12,6 +12,8 @@ _logger = logging.getLogger(__name__)
 
 def DiscoveryReplyHandler(kad_server):
     async def handle(event: RequestEvent):
+        if event.from_addr[0] == const.THIS_IP:
+            return
         connect_address = tuple(event.request["connect_uri"])
         _logger.debug("[DISCOVERY] bootstrapping kademlia")
         await kad_server.bootstrap([connect_address])
@@ -22,6 +24,8 @@ def DiscoveryReplyHandler(kad_server):
 
 def DiscoveryRequestHandler(discovery_transport):
     async def handle(event: RequestEvent):
+        if event.from_addr[0] == const.THIS_IP:
+            return
         req_packet = event.request
         _logger.info("[DISCOVERY] replying to req with addr:", req_packet.body)
         this_rp = get_this_remote_peer()
