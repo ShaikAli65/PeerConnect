@@ -1,12 +1,11 @@
 import asyncio
+import enum
 from abc import ABC, abstractmethod
 from typing import Callable, NamedTuple
 
-from src.avails import GossipMessage, WireData
+from src.avails import GossipMessage
+from src.avails.events import RequestEvent
 from src.avails.exceptions import DispatcherFinalizing
-
-
-# from src.core.transfers import REQUESTS_HEADERS  #  can't import here circular import
 
 
 class QueueMixIn:
@@ -85,17 +84,6 @@ class QueueMixIn:
             await self.listener_task
 
 
-class RequestEvent(NamedTuple):
-    root_code: bytes
-    request: WireData
-    from_addr: tuple[str, int]
-
-
-class GossipEvent(NamedTuple):
-    message: GossipMessage
-    from_addr: tuple[str, int]
-
-
 class AbstractHandler(ABC):
 
     @abstractmethod
@@ -104,7 +92,6 @@ class AbstractHandler(ABC):
 
 
 class BaseHandler(AbstractHandler):
-    """:todo: try making all handlers into functions with closers containing attributes passed to constructors"""
     __slots__ = ()
 
     def __call__(self, *args, **kwargs):
@@ -153,7 +140,7 @@ class BaseDispatcher(AbstractDispatcher):
         """Called when event occurs
         """
 
-    def register_handler(self, event_trigger: str, handler: BaseHandler | AbstractDispatcher | Callable):
+    def register_handler(self, event_trigger: enum.Enum | str | bytes, handler: BaseHandler | AbstractDispatcher | Callable):
         """
         Args:
             handler(BaseHandler): this is called when registered event occurs
@@ -180,6 +167,4 @@ __all__ = (
     'AbstractDispatcher',
     'BaseHandler',
     'BaseDispatcher',
-    'RequestEvent',
-    'GossipEvent',
 )
