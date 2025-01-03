@@ -1,7 +1,10 @@
 import asyncio
 import getpass
 import os
+import random
 import sys
+from typing import NamedTuple
+
 import _path  # noqa
 from kademlia import utils
 
@@ -22,9 +25,6 @@ def _create_listen_socket_mock(bind_address, multicast_addr):
     return sock
 
 
-requests._create_listen_socket = _create_listen_socket_mock
-
-
 # async def setup_request_transport(bind_address, multicast_address, req_dispatcher):
 #     loop = asyncio.get_running_loop()
 #     base_socket = _create_listen_socket(bind_address, multicast_address)
@@ -37,6 +37,7 @@ requests._create_listen_socket = _create_listen_socket_mock
 
 
 def test():
+    requests._create_listen_socket = _create_listen_socket_mock
     const.THIS_IP = '127.0.0.' + sys.argv[1]
     const.SERVER_IP = const.THIS_IP
     const.MULTICAST_IP_v4 = '127.0.0.1'
@@ -55,13 +56,22 @@ def test():
     # print(peers.get_this_remote_peer())
 
 
+def mock_profile():
+    def profile_getter():
+        return NamedTuple('MockProfile', (('id', int),('username', str)))(random.getrandbits(255), getpass.getuser())
+
+    profilemanager.get_current_profile = profile_getter
+
+
 def test_initial_states():
     s1 = State("setpaths", configure.set_paths)
     s2 = State("boot_up initiating", bootup.initiate_bootup)
-    s3 = State("adding shit", test)
+    # s3 = State("adding shit", test)
     s4 = State("loading profiles", profilemanager.load_profiles_to_program)
-    s5 = State("printing configurations", configure.print_constants)
-    s6 = State("intitating requests", requests.initiate)
+    s5 = State("mocking profile", mock_profile)
+    s6 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
+    s7 = State("printing configurations", configure.print_constants)
+    s8 = State("intitating requests", requests.initiate)
     s9 = State("initiating comms", connections.initiate_connections, is_blocking=True)
     return tuple(locals().values())
 
