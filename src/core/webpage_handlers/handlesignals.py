@@ -2,7 +2,7 @@ from sys import stderr
 
 from src.avails import DataWeaver, use
 from src.core import Dock, peers
-from src.core.transfers import HANDLE, HEADERS
+from src.core.transfers import HANDLE
 from src.core.webpage_handlers.handleprofiles import (
     align_profiles,
     set_selected_profile,
@@ -46,7 +46,7 @@ async def send_list(data: DataWeaver):
         content=[
             {
                 "name": peer.username,
-                "id": peer.id
+                "id": peer.peer_id
             } for peer in peer_list
         ],
     )
@@ -78,7 +78,7 @@ async def handler(signal_data: DataWeaver):
         await func(signal_data)
     except Exception as exp:
         print(
-            f"Got an exception at handlesignals - {use.func_str(func)}",
+            f"Got an exception at handle signals - {use.func_str(func)}",
             exp,
             file=stderr,
         )
