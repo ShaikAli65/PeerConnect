@@ -10,7 +10,6 @@ import tqdm
 
 from src.avails import DataWeaver, TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
 from src.core import get_this_remote_peer, peers
-from src.core.connections import Connector
 from src.core.handles import TaskHandle
 from src.core.transfers import FileItem, HEADERS, TransferState
 
@@ -42,6 +41,7 @@ async def new_directory_send_transfer(signal_data: DataWeaver):
     remote_peer = await peers.get_remote_peer_at_every_cost(signal_data.peer_id)
     if not remote_peer:
         raise Exception(f"cannot find remote peer object for given id{signal_data.peer_id}")
+    from src.core.connections import Connector
 
     connection = await Connector.get_connection(remote_peer)
     sender = DirectorySender(dir_path, transfer_id,)
