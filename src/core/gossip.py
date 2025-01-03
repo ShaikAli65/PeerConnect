@@ -1,8 +1,9 @@
 import asyncio
 from typing import Callable, Coroutine
 
-from src.avails import (BaseDispatcher, GossipEvent, GossipMessage, PalmTreeInformResponse, PalmTreeSession, QueueMixIn,
+from src.avails import (BaseDispatcher, GossipMessage, PalmTreeInformResponse, PalmTreeSession, QueueMixIn,
                         Wire, WireData, connect, const, use)
+from src.avails.events import GossipEvent
 from src.core import Dock, get_gossip, get_this_remote_peer
 from src.core.peers import get_search_handler
 from src.core.transfers import (GOSSIP, GossipTransport, PalmTreeProtocol, PalmTreeRelay, REQUESTS_HEADERS,
@@ -41,7 +42,7 @@ def GossipSearchReqHandler(searcher, transport, gossiper: RumorMongerProtocol,
 
 def GossipSearchReplyHandler(searcher):
     async def handle(event: GossipEvent):
-        print("[GOSSIP][SEARCH] reply recieved:", event.message, "for", event.from_addr)
+        print("[GOSSIP][SEARCH] reply received:", event.message, "for", event.from_addr)
         return searcher.reply_arrived(*event)
 
     return handle

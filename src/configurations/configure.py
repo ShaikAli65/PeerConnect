@@ -39,7 +39,6 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
 
 def print_constants():
-
     print_string = (
         f'\n:configuration choices{"=" * 32}\n'
         f'{"USERNAME": <15} : {const.USERNAME: <10}\n'
@@ -66,15 +65,16 @@ def print_constants():
 
 
 def set_paths():
-    const.PATH_CURRENT = Path(os.path.join(os.getcwd()))
-    const.PATH_PROFILES = Path(os.path.join(const.PATH_CURRENT, 'profiles'))
-    const.PATH_LOG = Path(os.path.join(const.PATH_CURRENT, 'logs'))
-    const.PATH_PAGE = Path(os.path.join(const.PATH_CURRENT, 'src', 'webpage'))
-    const.PATH_CONFIG = Path(os.path.join(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE))
-    downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Downloads'))
+    const.PATH_CURRENT = Path(os.getcwd())
+    const.PATH_PROFILES = Path(const.PATH_CURRENT, 'profiles')
+    const.PATH_LOG = Path(const.PATH_CURRENT, 'logs')
+    const.PATH_PAGE = Path(const.PATH_CURRENT, 'src', 'webpage')
+    const.PATH_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE)
+    const.PATH_LOG_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', 'log_config.json')
+    downloads_path = Path(os.path.expanduser('~'), 'Downloads')
     # check if the directory exists
     if not os.path.exists(downloads_path):
-        downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Desktop'))
+        downloads_path = Path(os.path.expanduser('~'), 'Desktop')
 
     const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, 'PeerConnect'))
     try:
@@ -85,7 +85,7 @@ def set_paths():
 
 
 def validate_ports(ip):
-    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ,]
+    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, ]
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port, ip):
             ports_list[i] = connect.get_free_port(ip)

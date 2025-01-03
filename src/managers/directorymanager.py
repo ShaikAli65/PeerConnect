@@ -4,7 +4,6 @@ import os
 import pathlib
 import socket
 import struct
-from itertools import count
 from pathlib import Path
 
 import tqdm

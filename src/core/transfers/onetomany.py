@@ -22,9 +22,9 @@ from typing import Generator, Optional, override
 import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, const, use
-from src.core.transfers.palm_tree import HEADERS, PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
-from src.core.transfers.fileobject import PeerFilePool, FileItem
 from src.core import get_this_remote_peer
+from src.core.transfers.fileobject import FileItem, calculate_chunk_size
+from src.core.transfers.palm_tree import HEADERS, PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
 
 
 class OTMLink(PalmTreeLink):
@@ -199,7 +199,7 @@ class OTMFilesSender:
             file_count=len(self.file_items),
             adjacent_peers=[],
             link_wait_timeout=self.timeout,
-            chunk_size=PeerFilePool.calculate_chunk_size(sum(file.size for file in self.file_items)),
+            chunk_size=calculate_chunk_size(sum(file.size for file in self.file_items)),
         )
 
     async def start(self):
