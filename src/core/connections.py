@@ -42,7 +42,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     async def submit(self, event: ConnectionEvent):
         handler = self.registry[event.handshake.header]
         _logger.info(f"[CONNECTIONS] dispatching connection with header {event.handshake.header} to {handler}")
-        r = handler()
+        r = handler(event)
 
         if isawaitable(r):
             await r
@@ -55,7 +55,7 @@ class StreamDataDispatcher(QueueMixIn, BaseDispatcher):
 
         _logger.info(f"[STREAM DATA] dispatching request with header {message_header} to {handler}")
 
-        r = handler()
+        r = handler(event)
 
         if isawaitable(r):
             await r
@@ -116,7 +116,7 @@ class Acceptor:
         self.__loop = asyncio.get_running_loop()
         self.all_tasks = set()
         self.max_timeout = 90
-        _logger.info("[ACCEPTOR] ::Initiating Acceptor ",extra={'addr': self.address})
+        _logger.info("[ACCEPTOR] ::Initiating Acceptor ", extra={'addr': self.address})
         self._initialized = True
         self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add,
                                              done_callback=lambda t: self.all_tasks.remove(t))
@@ -128,7 +128,7 @@ class Acceptor:
 
     async def initiate(self):
         self.connection_dispatcher.transport = self.main_socket
-        with await self.start_socket() as self.main_socket:
+        with await self._start_socket() as self.main_socket:
             _logger.info("[ACCEPTOR] ::Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
@@ -137,7 +137,7 @@ class Acceptor:
                     tg.create_task(self.__accept_connection(initial_conn))
                     await asyncio.sleep(0)
 
-    async def start_socket(self):
+    async def _start_socket(self):
         addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
         sock_family, sock_type, _, _, address = addr_info[0]
         sock = const.PROTOCOL.create_async_server_sock(
@@ -155,7 +155,7 @@ class Acceptor:
             raw_hand_shake = await transport.recv()
         except (socket.error, OSError) as e:
             # error_log(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")
-            _logger.error(f"[ACCEPTOR] Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")  # debug
+            _logger.error(f"[ACCEPTOR] Socket error", exc_info=e)
             initial_conn.close()
             return
 
@@ -166,7 +166,7 @@ class Acceptor:
 
     async def reset_socket(self):
         self.main_socket.close()
-        self.main_socket = await self.start_socket()
+        self.main_socket = await self._start_socket()
 
     def end(self):
         self.main_socket.close()
@@ -174,6 +174,9 @@ class Acceptor:
         current_connections = Dock.connected_peers.socket_cache
         for connection in current_connections.values():
             connection.close()
+
+    def __del__(self):
+        self.end()
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
