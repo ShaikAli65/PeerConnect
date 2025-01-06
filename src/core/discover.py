@@ -27,7 +27,7 @@ def DiscoveryRequestHandler(discovery_transport):
         req_packet = event.request
         if req_packet["reply_addr"][0] == const.THIS_IP:
             return
-        _logger.info("[DISCOVERY] replying to req with addr:", req_packet.body)
+        _logger.info(f"[DISCOVERY] replying to req with addr: {req_packet.body}")
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
@@ -50,7 +50,7 @@ class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         handle = self.registry[wire_data.header]
-        _logger.debug(f"[DISCOVERY] dispatching request", extra={'id': event.root_code})
+        _logger.debug(f"[DISCOVERY] dispatching request {handle}")
         await handle(event)
 
 
@@ -65,7 +65,7 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
     if const.USING_IP_V4:
         async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
             transport.sendto(bytes(ping_data), broad_cast_addr)
-        _logger.debug("[DISCOVERY] sent discovery request to broadcast", extra={'addr': broad_cast_addr})
+        _logger.debug(f"[DISCOVERY] sent discovery request to broadcast {broad_cast_addr}",)
     async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
         transport.sendto(bytes(ping_data), multicast_addr)
-    _logger.debug("[DISCOVERY] sent discovery request to multicast", extra={'addr': multicast_addr})
+    _logger.debug(f"[DISCOVERY] sent discovery request to multicast {multicast_addr}")

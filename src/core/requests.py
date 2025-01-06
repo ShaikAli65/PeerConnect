@@ -86,11 +86,12 @@ def _create_listen_socket(bind_address, multicast_addr):
 
     if const.USING_IP_V4:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        _logger.debug("[REQUESTS] registered request socket for broadcast")
         ipv4_multicast_socket_helper(sock, multicast_addr)
-        _logger.info("[REQUESTS] registered request socket for multicast v4", extra={'addr': multicast_addr})
+        _logger.debug(f"[REQUESTS] registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
-        _logger.info("[REQUESTS] registered request socket for multicast v6", extra={'addr': multicast_addr})
+        _logger.debug(f"[REQUESTS] registered request socket for multicast v6 {multicast_addr}")
     return sock
 
 
