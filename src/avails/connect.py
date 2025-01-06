@@ -275,11 +275,11 @@ async def create_connection_async(address, timeout=None) -> Socket:
     return sock
 
 
-BASIC_URI = 'uri'
+CONN_URI = 'uri'
 REQ_URI = 'req_uri'
 
 
-def connect_to_peer(_peer_obj=None, to_which: str = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
+def connect_to_peer(_peer_obj=None, to_which: str = CONN_URI, timeout=0.001, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -312,7 +312,7 @@ def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.1, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -380,16 +380,25 @@ def ipv4_multicast_socket_helper(
         sock,
         multicast_addr,
         *,
-        loop_back=1,
+        loop_back=0,
         reuse_addr=1,
+        ttl=1,
         add_membership=True
 ):
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, loop_back)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
-    group = socket.inet_aton(f"{multicast_addr[0]}")
     if add_membership:
+        group = socket.inet_aton(f"{multicast_addr[0]}")
         mreq = struct.pack('4sl', group, socket.INADDR_ANY)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+    sock_options = {
+        'membership': add_membership,
+        'loop_back': loop_back,
+        'ttl':ttl,
+        'reuse_addr':reuse_addr
+    }
+    _logger.debug(f"socket{sock} options for multicast {sock_options}")
 
 
 def ipv6_multicast_socket_helper(
@@ -408,3 +417,11 @@ def ipv6_multicast_socket_helper(
     if add_membership:
         mreq = group + struct.pack('@I', 0)  # default interface
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+    sock_options = {
+        'membership': add_membership,
+        'loop_back': loop_back,
+        'hops':hops,
+        'reuse_addr':reuse_addr
+    }
+    _logger.debug(f"socket={sock} options for multicast {sock_options}")
+
