@@ -102,9 +102,11 @@ class TransfersBookKeeper:
 
     def add_to_current(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
         self.__current[peer_id].add(transfer_handle)
+        self.__continued[peer_id].discard(transfer_handle)
 
     def add_to_completed(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
         self.__current[peer_id].discard(transfer_handle)
+        self.__continued[peer_id].discard(transfer_handle)
         self.__completed[peer_id].add(transfer_handle)
 
     def add_to_scheduled(self, key, file_handle):
@@ -132,7 +134,7 @@ class TransfersBookKeeper:
     def get_scheduled(self, file_id):
         return self.__scheduled.get(file_id, None)
 
-    def get_file(self, peer_id: str, file_id):
+    def get_transfer(self, peer_id: str, file_id):
         try:
             return self._get_running_transfers(peer_id, file_id)
         except StopIteration:
