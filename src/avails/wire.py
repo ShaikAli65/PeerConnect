@@ -180,11 +180,11 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
         loaded = WireData.load_from(data)
         return loaded
     except umsgpack.UnpackException as ue:
-        raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue))
+        raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue)) from ue
     except TypeError as tp:
-        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp))
+        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)) from  tp
     except struct.error as se:
-        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se))
+        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se)) from se
 
 
 class DataWeaver:
