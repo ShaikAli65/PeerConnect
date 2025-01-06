@@ -154,12 +154,7 @@ def get_v6_from_api64():
 
 
 def clear_logs():
-    with open(os.path.join(const.PATH_LOG, 'error.logs'), 'w') as e:
-        e.write('')
-    with open(os.path.join(const.PATH_LOG, 'activity.logs'), 'w') as a:
-        a.write('')
-    with open(os.path.join(const.PATH_LOG, 'server.logs'), 'w') as s:
-        s.write('')
+    pass
 
 
 def write_default_configurations(path):

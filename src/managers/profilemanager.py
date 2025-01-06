@@ -7,9 +7,6 @@ from typing import Optional, Union
 from src.avails import const
 
 
-# from logs import error_log
-
-
 class ProfileManager:
     """
     This class used to contain a profile instance of profiles
@@ -131,9 +128,12 @@ class ProfileManager:
 
     @classmethod
     def write_selected_profile(cls, profile):
-        cls._main_config.remove_option("SELECTED_PROFILE", profile.file_name)
-        cls._main_config.set("SELECTED_PROFILE", profile.file_name)
+        cls._main_config.remove_section("SELECTED_PROFILE")
+        with open(const.PATH_CONFIG, "w") as file:
+            cls._main_config.write(file)
 
+        cls._main_config.add_section("SELECTED_PROFILE")
+        cls._main_config.set("SELECTED_PROFILE", profile.file_name)
         with open(const.PATH_CONFIG, "w") as file:
             cls._main_config.write(file)
 
@@ -178,9 +178,8 @@ class ProfileManager:
         return f"{username}{int(time.time() * 10)}"
 
     @classmethod
-    @property
     def prev_selected_profile_file_name(cls):
-        return cls._main_config["SELECTED_PROFILE"]
+        return next(iter(cls._main_config["SELECTED_PROFILE"]))
 
     def __eq__(self, other):
         if isinstance(other, dict):
@@ -214,9 +213,11 @@ def all_profiles():
         profile.file_name: profile.profile_data
         for profile in ProfileManager.PROFILE_LIST
     }
-    profiles[ProfileManager.prev_selected_profile_file_name].extend({
+    profiles[ProfileManager.prev_selected_profile_file_name()].update({
         'selected': True,
     })
+
+    return profiles
 
 
 def load_profiles_to_program():
