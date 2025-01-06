@@ -71,15 +71,6 @@ function_dict = {
 
 async def handler(signal_data: DataWeaver):
     print("[HANDLE SIGNALS] handler", signal_data)
-    func = None
-    try:
-        print(signal_data)
-        func = function_dict[signal_data.header]
-        await func(signal_data)
-    except Exception as exp:
-        print(
-            f"Got an exception at handle signals - {use.func_str(func)}",
-            exp,
-            file=stderr,
-        )
-        raise
+    print(signal_data)
+    func = function_dict[signal_data.header]
+    await func(signal_data)

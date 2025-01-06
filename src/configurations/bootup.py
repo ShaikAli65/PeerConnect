@@ -173,6 +173,8 @@ def write_default_configurations(path):
         '\n'
         '[USER_PROFILES]\n'
         'admin\n'
+        '[SELECTED_PROFILE]\n'
+        'default_profile.ini\n'
     )
     with open(path, 'w+') as config_file:
         config_file.write(default_config_file)

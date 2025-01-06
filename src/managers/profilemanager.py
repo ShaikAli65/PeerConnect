@@ -23,9 +23,9 @@ class ProfileManager:
     def __init__(self, profiles_file, *, profile_data=None):
         self.profile_file_path = Path(const.PATH_PROFILES, profiles_file)
         if profile_data:
-            self.profile_data = profile_data
+            self.profile_data: dict[str, dict] = profile_data
         else:
-            self.profile_data = self.get_profile_data()
+            self.profile_data: dict[str, dict] = self.get_profile_data()
 
     def get_profile_data(self) -> dict:
         """
@@ -130,6 +130,14 @@ class ProfileManager:
             cls._main_config.write(file)
 
     @classmethod
+    def write_selected_profile(cls, profile):
+        cls._main_config.remove_option("SELECTED_PROFILE", profile.file_name)
+        cls._main_config.set("SELECTED_PROFILE", profile.file_name)
+
+        with open(const.PATH_CONFIG, "w") as file:
+            cls._main_config.write(file)
+
+    @classmethod
     def delete_profile(cls, profile_file_name):
         profile_path = Path(
             const.PATH_PROFILES, profile_file_name
@@ -167,14 +175,18 @@ class ProfileManager:
 
     @staticmethod
     def __uniquify(username):
-        return f"{username}{int(time.time()*10)}"
+        return f"{username}{int(time.time() * 10)}"
+
+    @classmethod
+    def prev_selected_profile_file_name(cls):
+        return next(iter(cls._main_config["SELECTED_PROFILE"]))
 
     def __eq__(self, other):
         if isinstance(other, dict):
             return (
-                self.id == other["USER"]["id"]
-                and self.username == other["USER"]["name"]
-                and self.server_ip == other["SERVER"]["ip"]
+                    self.id == other["USER"]["id"]
+                    and self.username == other["USER"]["name"]
+                    and self.server_ip == other["SERVER"]["ip"]
             )
         if isinstance(other, ProfileManager):
             return self.id == other.id and self.username == other.username
@@ -197,10 +209,15 @@ def all_profiles():
     make sure that you definitely call :func:`load_profiles_to_program()` in prior,
     :return dict[str, ProfileManager]:
     """
-    return {
+    profiles = {
         profile.file_name: profile.profile_data
         for profile in ProfileManager.PROFILE_LIST
     }
+    profiles[ProfileManager.prev_selected_profile_file_name()].update({
+        'selected': True,
+    })
+
+    return profiles
 
 
 def load_profiles_to_program():
@@ -226,7 +243,7 @@ def refresh_profile_list():
 
 
 def get_profile_from_profile_file_name(
-    profile_file_name,
+        profile_file_name,
 ) -> Union[ProfileManager, None]:
     """
     Retrieves profile object from list given username
@@ -248,6 +265,7 @@ _current_profile: Optional[ProfileManager] = None
 def set_current_profile(profile):
     global _current_profile
     _current_profile = profile
+    ProfileManager.write_selected_profile(profile)
 
 
 def get_current_profile() -> ProfileManager:
