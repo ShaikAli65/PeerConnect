@@ -210,10 +210,11 @@ def all_profiles():
     :return dict[str, ProfileManager]:
     """
     profiles = {
-        profile.file_name: profile.profile_data
+        profile.file_name: profile.profile_data.copy()
         for profile in ProfileManager.PROFILE_LIST
     }
-    profiles[ProfileManager.prev_selected_profile_file_name()].update({
+    prev = ProfileManager.prev_selected_profile_file_name()
+    profiles[prev].update({
         'selected': True,
     })
 

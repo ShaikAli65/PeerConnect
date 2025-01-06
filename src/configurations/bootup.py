@@ -202,6 +202,7 @@ def configure_this_remote_peer():
     set_current_remote_peer_object(rp)
     const.USERNAME = rp.username
 
+
 def make_this_remote_peer():
     profile = get_current_profile()
     rp = RemotePeer(

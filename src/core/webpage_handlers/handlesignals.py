@@ -46,7 +46,8 @@ async def send_list(data: DataWeaver):
         content=[
             {
                 "name": peer.username,
-                "id": peer.peer_id
+                "ip":peer.ip,
+                "id": peer.peer_id,
             } for peer in peer_list
         ],
     )
