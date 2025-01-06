@@ -1,21 +1,25 @@
 import asyncio
 import itertools
+import logging
 import os
 import pathlib
 import socket
 import struct
+import traceback
 from pathlib import Path
 
-import tqdm
-
-from src.avails import DataWeaver, TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
-from src.core import get_this_remote_peer, peers
+from src.avails import TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
+from src.avails.events import ConnectionEvent
+from src.core import Dock, get_this_remote_peer, peers
 from src.core.handles import TaskHandle
-from src.core.transfers import FileItem, HEADERS, TransferState
+from src.core.transfers import FileItem, HEADERS
+from src.core.transfers.directory import DirectoryReceiveManager, DirectorySenderManager, \
+    rename_directory_with_increment
 
 END_DIR_WITH = '/'
 
 transfers_book = TransfersBookKeeper()
+_logger = logging.getLogger(__name__)
 
 
 async def open_dir_selector():
@@ -24,9 +28,7 @@ async def open_dir_selector():
     return await result
 
 
-async def new_directory_send_transfer(signal_data: DataWeaver):
-    print("processing")
-    print(signal_data)
+async def new_directory_send_transfer(peer_id):
     dir_path = await open_dir_selector()
     if not dir_path:
         print("cancelling dir send request, no directory specified")
@@ -35,80 +37,147 @@ async def new_directory_send_transfer(signal_data: DataWeaver):
     transfer_id = transfers_book.get_new_id()
     dir_recv_signal_packet = WireData(
         header=HEADERS.CMD_RECV_DIR,
-        msg_id=get_this_remote_peer().peer_id,
-        transfer_id=transfer_id
+        peer_id=get_this_remote_peer().peer_id,
+        transfer_id=transfer_id,
+        dir_name=dir_path.name,
     )
-    remote_peer = await peers.get_remote_peer_at_every_cost(signal_data.peer_id)
+    remote_peer = await peers.get_remote_peer_at_every_cost(peer_id)
     if not remote_peer:
-        raise Exception(f"cannot find remote peer object for given id{signal_data.peer_id}")
-    from src.core.connections import Connector
+        raise Exception(f"cannot find remote peer object for given id{peer_id}")
+    # from src.core.connections import Connector
+    # connection = await Connector.get_connection(remote_peer)
 
-    connection = await Connector.get_connection(remote_peer)
-    sender = DirectorySender(dir_path, transfer_id,)
+    connection = await connect.connect_to_peer(
+        remote_peer,
+        to_which=connect.CONN_URI,
+        timeout=1,
+        retries=3
+    )
 
+    with connection:
+        Wire.send(connection, bytes(dir_recv_signal_packet))
 
-def new_directory_receive_request(request_packet: WireData):
-    transfer_id = request_packet.body['transfer_id']
+        try:
+            confirmation = await asyncio.wait_for(connection.arecv(1), timeout=300)
+            if confirmation == b'\x00':
+                _logger.info("not sending directory, other end rejected")
+                return
+        except asyncio.TimeoutError:
+            _logger.info("not sending directory, did not receive confirmation within 3 seconds")
+            return
+        except ConnectionResetError:
+            _logger.error("not sending directory", exc_info=True)
 
-
-class DirectorySender:
-    def __init__(self, root_path, transfer_id, send_func):
-        """
-        Args:
-            root_path(Path): root path to read from and start the transfer
-            transfer_id(str): transfer id that synchronized both sides
-            send_func(Callable[[bytes],Coroutine[None, None, None]): function to call upon to send file data when ready
-        """
-        self.state = TransferState.PREPARING
-        self.root_path = root_path
-        self.dir_iterator = self.root_path.rglob('*')
-        self.current_file = None
-        self.id = transfer_id
-        self.send_func = send_func
-
-    async def start(self):
-
-        progress = tqdm.tqdm(
-
+        sender = DirectorySenderManager(
+            dir_path,
+            transfer_id,
+            connection.asendall,
+            connection.arecv,
         )
-
-        stack = [self.dir_iterator]
-        while len(stack):
-            for item in stack.pop():
-                file_items = []
-                empty_dirs = []
-
-                if item.is_file():
-                    file_item = FileItem(path=item, seeked=0)
-                elif item.is_dir():
-                    if not any(item.iterdir()):
-                        print("sending empty dir:", send_path(sock, item, self.root_path.parent))
-                        continue
-                    stack.append(item.iterdir())
-
-    def stop(self):
-        pass
-
-    def pause(self):
-        self.dir_iterator = itertools.chain([self.current_file], self.dir_iterator)
-
-    def continue_transfer(self):
-        pass
+        _logger.info(f"sending directory: {dir_path} to {remote_peer}")
+        try:
+            await sender.start()
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
 
 
-class DirectoryReceiver:
-    def __init__(self):
-        self.state = TransferState.PREPARING
+def pause_transfer(peer_id, transfer_id):
+    transfer_handle = transfers_book.get_transfer(peer_id, transfer_id)
+    if not transfer_handle:
+        raise ValueError(f"transfer {transfer_id} not found")
 
-    async def start(self):
-        pass
+    transfer_handle.pause()
+    transfers_book.add_to_continued(peer_id, transfer_handle)
 
-    def stop(self):
-        pass
 
-    def continue_transfer(self):
-        pass
+def DirConnectionHandler():
+    async def handler(event: ConnectionEvent):
+        transfer_id = event.handshake.body['transfer_id']
+        transfer_id = event.handshake.peer_id + transfer_id
 
+        connection = event.transport.socket
+        dir_name = event.handshake.body['dir_name']
+        dir_path = rename_directory_with_increment(const.PATH_DOWNLOAD, Path(dir_name))
+        receiver = DirectoryReceiveManager(
+            transfer_id,
+            connection.arecv,
+            connection.asendall,
+            dir_path,
+        )
+        await connection.asendall(b'\x01')
+        transfers_book.add_to_current(transfer_id, receiver)
+        _logger.info(f"receiving directory from {Dock.peer_list.get_peer(event.handshake.peer_id)} peer_id={event.handshake.peer_id}")
+        try:
+            await receiver.start()
+            _logger.info(f"directory received from {Dock.peer_list.get_peer(event.handshake.peer_id)}")
+            transfers_book.add_to_completed(transfer_id, receiver)
+        except Exception as e:
+            print("*" * 80, e)
+            traceback.print_exc()
+
+    return handler
+
+
+#
+# class DirectorySender:
+#     def __init__(self, root_path, transfer_id, send_func):
+#         """
+#         Args:
+#             root_path(Path): root path to read from and start the transfer
+#             transfer_id(str): transfer id that synchronized both sides
+#             send_func(Callable[[bytes],Coroutine[None, None, None]): function to call upon to send file data when ready
+#         """
+#         self.state = TransferState.PREPARING
+#         self.root_path = root_path
+#         self.dir_iterator = self.root_path.rglob('*')
+#         self.current_file = None
+#         self.id = transfer_id
+#         self.send_func = send_func
+#
+#     async def start(self):
+#
+#         progress = tqdm.tqdm(
+#
+#         )
+#
+#         stack = [self.dir_iterator]
+#         while len(stack):
+#             for item in stack.pop():
+#                 file_items = []
+#                 empty_dirs = []
+#
+#                 if item.is_file():
+#                     file_item = FileItem(path=item, seeked=0)
+#                 elif item.is_dir():
+#                     if not any(item.iterdir()):
+#                         print("sending empty dir:", send_path(sock, item, self.root_path.parent))
+#                         continue
+#                     stack.append(item.iterdir())
+#
+#     def stop(self):
+#         pass
+#
+#     def pause(self):
+#         self.dir_iterator = itertools.chain([self.current_file], self.dir_iterator)
+#
+#     def continue_transfer(self):
+#         pass
+#
+#
+# class DirectoryReceiver:
+#     def __init__(self):
+#         self.state = TransferState.PREPARING
+#
+#     async def start(self):
+#         pass
+#
+#     def stop(self):
+#         pass
+#
+#     def continue_transfer(self):
+#         pass
+#
 
 @use.NotInUse
 class DirectoryTaskHandle(TaskHandle):

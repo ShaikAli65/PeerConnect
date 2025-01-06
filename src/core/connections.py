@@ -17,7 +17,7 @@ from src.core.transfers import HEADERS
 from src.core.transfers.transports import StreamTransport
 from src.core.webpage_handlers import pagehandle
 from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
-
+from src.managers.directorymanager import DirConnectionHandler
 _logger = logging.getLogger(__name__)
 
 
@@ -32,6 +32,7 @@ async def initiate_connections():
     Dock.dispatchers[DISPATCHS.STREAM_DATA] = acceptor.data_dispatcher
 
     acceptor.connection_dispatcher.register_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
+    acceptor.connection_dispatcher.register_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
     acceptor.connection_dispatcher.register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
     acceptor.connection_dispatcher.register_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
     # acceptor.connection_dispatcher.register_handler(HEADERS.GOSSIP_UPDATE_STREAM_LINK)
@@ -132,8 +133,8 @@ class Acceptor:
             _logger.info("[ACCEPTOR] ::Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
-                    initial_conn, _ = await self.main_socket.aaccept()
-                    use.echo_print(f"[ACCEPTOR] New connection from {_}")
+                    initial_conn, addr = await self.main_socket.aaccept()
+                    _logger.debug(f"[ACCEPTOR] New connection from {addr}")
                     tg.create_task(self.__accept_connection(initial_conn))
                     await asyncio.sleep(0)
 
