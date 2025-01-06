@@ -1,6 +1,3 @@
-from src.core.webpage_handlers import pagehandle, storage
+import logging
 
-__all__ = [
-    'storage',
-    'pagehandle',
-]
+logger = logging.getLogger(__package__)

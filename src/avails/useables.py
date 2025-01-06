@@ -9,6 +9,7 @@ import sys
 import threading
 import traceback
 from sys import _getframe  # noqa
+from typing import Final
 from uuid import uuid4
 
 import select
@@ -52,7 +53,7 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
         current *= factor
 
 
-async def async_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
+async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     same as :func: `get_timeouts` but delays itself in yielding
     possible use case:
@@ -196,7 +197,7 @@ def awaitable(syncfunc):
     return decorate
 
 
-COLORS = [
+COLORS: Final[list[str]] = [
     "\033[91m",  # Red
     "\033[92m",  # Green
     "\033[93m",  # Yellow
@@ -204,7 +205,7 @@ COLORS = [
     "\033[95m",  # Magenta
 ]
 
-COLOR_RESET = "\033[0m"
+COLOR_RESET: Final[str] = "\033[0m"
 
 
 def wrap_with_tryexcept(func, *args, **kwargs):
@@ -219,6 +220,7 @@ def wrap_with_tryexcept(func, *args, **kwargs):
         args, kwargs : to forward
 
     """
+
     @functools.wraps(func)
     async def wrapped_with_tryexcept():
         try:
@@ -226,11 +228,23 @@ def wrap_with_tryexcept(func, *args, **kwargs):
             # print("wrapping with try except", func_str(func))
             return await func(*args, **kwargs)
         except Exception as e:
-            global COLORS
+
             print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
             traceback.print_exc()
-            print(COLOR_RESET)
+            tb = traceback.extract_tb(e.__traceback__)
+            filtered_tb = [frame for frame in tb if "wrapped_with_tryexcept" not in frame.name]
 
+            print(
+                f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
+                file=sys.stderr,
+            )
+            # Print the filtered traceback
+            for frame in filtered_tb:
+                print(f"  File \"{frame.filename}\", line {frame.lineno}, in {frame.name}")
+                if frame.line:
+                    print(f"    {frame.line}")
+            print(COLOR_RESET)
+            raise
     return wrapped_with_tryexcept
 
 
@@ -281,14 +295,16 @@ class NotInUse:
     __slots__ = 'function', '__doc__'
 
     def __init__(self, function):
-        """
-        Decorator class to mark functions as not in use or not fully tested.
-        :raises ValueError : if function gets called
-        :Args:
-        - function: The function to be decorated.
-        """
-        self.__doc__ = """This class is used to mark functions that are not currently in use or haven't been fully tested.
+        """Decorator class to mark functions as not in use or not fully tested.
+
+        This class is used to mark functions that are not currently in use or haven't been fully tested.
         By marking a function with this class, it prevents the call to the function unless explicitly allowed by the user.
+
+        Args:
+            function: The function to be decorated.
+
+        Raises:
+            ValueError : if function gets called
         """
         self.function = function
 

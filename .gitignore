@@ -1,5 +1,7 @@
 *.ini
 !default*.ini
+logs/*
+!logs/.gitkeep
 *.logs
 .idea
 .vscode

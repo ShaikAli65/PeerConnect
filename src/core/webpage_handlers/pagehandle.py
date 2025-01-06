@@ -1,36 +1,40 @@
-import asyncio
 import asyncio as _asyncio
 import importlib
 import itertools
-import threading
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import websockets
 
-from src.avails import DataWeaver, StatusMessage, WireData, const, use
+from src.avails import DataWeaver, InvalidPacket, StatusMessage, const, use
+from src.avails.events import StreamDataEvent
+from src.avails.exceptions import UnknownConnectionType, WebSocketRegistryReStarted
 from src.avails.useables import wrap_with_tryexcept
+from src.core import Dock
+from src.core.webpage_handlers import logger
 
-PAGE_HANDLE_WAIT = _asyncio.Event()
-safe_end = threading.Event()
+if TYPE_CHECKING:
+    from websockets.asyncio.connection import Connection
+else:
+    Connection = None
 
-DATA = 0x00
-SIGNAL = 0x01
+safe_end = Dock.finalizing
+PROFILE_WAIT = _asyncio.Event()
 
 
 class WebSocketRegistry:
-    SOCK_TYPE_DATA = DATA
-    SOCK_TYPE_SIGNAL = SIGNAL
-    connections: list[Optional[websockets.WebSocketServerProtocol]] = [None, None]
-    message_queue = asyncio.Queue()
+    # :todo: make WebSocketRegistry compatible with QueueMixIn and attach with it
+    connections: dict[int, Connection] = {}
+    message_queue = _asyncio.Queue()
     connections_completed = _asyncio.Event()
     _start_data_sender_task_reference = None
+    _started = False
 
     @classmethod
-    def get_websocket(cls, type_id: Union[DATA, SIGNAL]):
+    def get_websocket(cls, type_id: Union[const.DATA, const.SIGNAL]):
         return cls.connections[type_id]
 
     @classmethod
-    def set_websocket(cls, type_id: Union[DATA, SIGNAL], websocket):
+    def set_websocket(cls, type_id: Union[const.DATA, const.SIGNAL], websocket):
         cls.connections[type_id] = websocket
 
     @classmethod
@@ -38,36 +42,40 @@ class WebSocketRegistry:
         """
         does not actually send data, adds to a message queue
         """
-        cls.message_queue.put((data, type_of_data))
+        cls.message_queue.put_nowait((data, type_of_data))
 
     @classmethod
     async def start_data_sender(cls):
+        if cls._started:
+            raise WebSocketRegistryReStarted("reentered registry")
+        cls._started = True
         while True:
             data_packet, data_type = await cls.message_queue.get()
             if safe_end.is_set():
-                return
-            await cls.get_websocket(data_type).send(str(data_packet))  # make sure that data is a string
+                break
+            web_socket = cls.get_websocket(data_type)
+            await web_socket.send(
+                str(data_packet)  # make sure that data is a string
+            )
+        cls._started = False
 
     @classmethod
-    def clear(cls):
+    async def _clear(cls):
         cls.message_queue.put_nowait((None, None))
-        for i in cls.connections:
-            if i is not None:
-                i.close()
+        for i in cls.connections.values():
+            await i.close()
         del cls.connections
 
     @classmethod
     async def __aenter__(cls):
         f = wrap_with_tryexcept(cls.start_data_sender)
-        cls._start_data_sender_task_reference = asyncio.create_task(f())
+        cls._start_data_sender_task_reference = _asyncio.create_task(f())
         return cls
 
     @classmethod
     async def __aexit__(cls, exc_type, exc_val, exc_tb):
-        safe_end.set()
-        cls.clear()
+        await cls._clear()
         cls._start_data_sender_task_reference.cancel()
-        return True
 
 
 class ReplyRegistry:
@@ -76,73 +84,96 @@ class ReplyRegistry:
 
     @classmethod
     def register_reply(cls, data: DataWeaver):
-        data.id = next(cls.id_factory)
-        fut = asyncio.get_event_loop().create_future()
-        cls.messages_to_futures_mapping[data.id] = fut
+        loop = _asyncio.get_event_loop()
+        data.msg_id = next(cls.id_factory)
+        cls.messages_to_futures_mapping[data.msg_id] = fut = loop.create_future()
         return fut
 
     @classmethod
     def reply_arrived(cls, data: DataWeaver):
-        if data.id in cls.messages_to_futures_mapping:
-            fut = cls.messages_to_futures_mapping[data.id]
+        if data.msg_id in cls.messages_to_futures_mapping:
+            fut = cls.messages_to_futures_mapping[data.msg_id]
             fut.set_result(data)
 
-
-def get_verified_type(data: DataWeaver, web_socket):
-    if data.match_header(WebSocketRegistry.SOCK_TYPE_DATA):
-        print("page data connected")  # debug
-        WebSocketRegistry.set_websocket(SIGNAL, web_socket)
-        return importlib.import_module('src.core.webpage_handlers.handledata').handler
-    if data.match_header(WebSocketRegistry.SOCK_TYPE_SIGNAL):
-        print("page signals connected")  # debug
-        WebSocketRegistry.set_websocket(DATA, web_socket)
-        return importlib.import_module('src.core.webpage_handlers.handlesignals').handler
+    @classmethod
+    def is_registered(cls, data: DataWeaver):
+        return data.msg_id in cls.messages_to_futures_mapping
 
 
-async def handle_client(web_socket: websockets.WebSocketServerProtocol):
+def _get_verified_type(data: DataWeaver, web_socket):
+    WebSocketRegistry.set_websocket(data.header, web_socket)
+    if data.match_header(const.DATA):
+        logger.debug("[PAGE HANDLE] page data connected")  # debug
+        return importlib.import_module("src.core.webpage_handlers.handledata").handler
+    if data.match_header(const.SIGNAL):
+        logger.debug("[PAGE HANDLE] page signals connected")  # debug
+        return importlib.import_module(
+            "src.core.logger.debug()lesignals"
+        ).handler
+
+
+async def validate_connection(web_socket):
     try:
-        wire_data = await web_socket.recv()
-        verification = DataWeaver(serial_data=wire_data)
-        handle_function = get_verified_type(verification, web_socket)
-        print("waiting for data", use.func_str(handle_function))
-        if handle_function:
-            async for data in web_socket:
-                use.echo_print("data from page:", data, '\a')
-                use.echo_print(f"forwarding to {use.func_str(handle_function)}")
-                parsed_data = DataWeaver(serial_data=data)
-                if parsed_data.is_reply:
-                    ReplyRegistry.reply_arrived(parsed_data)
-                f = use.wrap_with_tryexcept(handle_function, parsed_data)
-                _asyncio.create_task(f())
-                if safe_end.is_set():
-                    return
-        else:
-            print("Unknown connection type")
-            await web_socket.close()
+        wire_data = await _asyncio.wait_for(web_socket.recv(), const.SERVER_TIMEOUT)
+    except TimeoutError:
+        logger.error("[PAGE HANDLE] timeout reached, cancelling websocket", web_socket)
+        await web_socket.close()
+        raise ConnectionError() from None
+
+    verification = DataWeaver(serial_data=wire_data)
+    handle_function = _get_verified_type(verification, web_socket)
+    logger.info("[PAGE HANDLE] waiting for data func :", use.func_str(handle_function))
+
+    if not handle_function:
+        logger.info("[PAGE HANDLE] Unknown connection type")
+        await web_socket.close()
+        raise UnknownConnectionType()
+    return handle_function
+
+
+async def handle_client(web_socket: Connection):
+    try:
+        try:
+            handle_function = await validate_connection(web_socket)
+        except (ConnectionError, UnknownConnectionType):
+            return
+
+        async for data in web_socket:
+            logger.info("[PAGE HANDLE] data from page:", data, "\a")
+            logger.info(f"[PAGE HANDLE] forwarding to {use.func_str(handle_function)}")
+            parsed_data = DataWeaver(serial_data=data)
+
+            try:
+                parsed_data.field_check()
+            except InvalidPacket as ip:
+                logger.debug("[PAGE HANDLE]", exc_info=ip)
+                return
+
+            if ReplyRegistry.is_registered(parsed_data):
+                ReplyRegistry.reply_arrived(parsed_data)
+                continue
+
+            f = use.wrap_with_tryexcept(handle_function, parsed_data)
+            _asyncio.create_task(f())
+            if safe_end.is_set():
+                return
+
     except websockets.exceptions.ConnectionClosed:
-        print("Websocket Connection closed")
+        logger.info("[PAGE HANDLE] Websocket Connection closed")
 
 
 async def start_websocket_server():
-    start_server = await websockets.serve(handle_client, const.THIS_IP, const.PORT_PAGE)
-    use.echo_print(f"websocket server started at ws://{const.THIS_IP}:{const.PORT_PAGE}")
+    start_server = await websockets.serve(handle_client, const.WEBSOCKET_BIND_IP, const.PORT_PAGE)
+    logger.info(f"[PAGE HANDLE] websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")
     async with start_server:
-        await PAGE_HANDLE_WAIT.wait()
-    use.echo_print("ending websocket server")
+        await Dock.finalizing.wait()
+
+    logger.info("[PAGE HANDLE] ending websocket server")
 
 
-async def initiate_pagehandle():
-    f = use.wrap_with_tryexcept(WebSocketRegistry.start_data_sender)
-    asyncio.create_task(f())
-
+async def initiate_page_handle():
     async with WebSocketRegistry():
         await start_websocket_server()
-    print("3al;pksdfnoidsabnfgibgiuferqbguerbguiobedguertbnu")
-
-
-def end():
-    global PAGE_HANDLE_WAIT
-    PAGE_HANDLE_WAIT.set()
 
 
 def dispatch_data(data, expect_reply=False):
@@ -155,31 +186,34 @@ def dispatch_data(data, expect_reply=False):
     Returns:
         bool | asyncio.Future
     """
+
+    def check_closing():
+        if safe_end.is_set():
+            logger.debug("[PAGE HANDLE] Can't send data to page, safe_end is flip")
+            return True
+        return False
+
     if check_closing():
         return False
-    print(f"::Sending data to page: {data}")
+    logger.info(f"[PAGE HANDLE] ::Sending data to page: {data!r}")
+    WebSocketRegistry.send_data(data, data.type)
     if expect_reply:
         return ReplyRegistry.register_reply(data)
-    WebSocketRegistry.send_data(data, data.type)
     return True
 
 
 def send_status_data(data: StatusMessage):
-    print(f"::Status update to page: {data}")
-    WebSocketRegistry.send_data(data, SIGNAL)
+    logger.info(f"[PAGE HANDLE] ::Status update to page: {data!r}")
+    WebSocketRegistry.send_data(data, const.SIGNAL)
 
 
-def new_message_arrived(message_data: WireData):
-    d = DataWeaver(
-        header=message_data.header,
-        content=message_data['message'],
-        _id=message_data.id,
-    )
-    WebSocketRegistry.send_data(d, DATA)
+def MessageHandler():
+    async def handler(event: StreamDataEvent):
+        d = DataWeaver(
+            header=event.data.header,
+            content=event.data["message"],
+            peer_id=event.data.peer_id,
+        )
+        WebSocketRegistry.send_data(d, const.DATA)
 
-
-def check_closing():
-    if safe_end.is_set():
-        use.echo_print("Can't send data to page, safe_end is flip", safe_end)
-        return True
-    return False
+    return handler

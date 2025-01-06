@@ -10,11 +10,12 @@ SERVER_IP = '127.0.0.1'
 THIS_IP = '127.0.0.1'
 
 MULTICAST_IP_v4 = "224.0.11.11"
-MULTICAST_IP_v6 = "ff02::1"
+MULTICAST_IP_v6 = "ff02::1:3"
 BROADCAST_IP = "<broadcast>"
 _BIND_IP_V4 = '0.0.0.0'
 _BIND_IP_V6 = '::'
 BIND_IP = _BIND_IP_V4
+WEBSOCKET_BIND_IP = 'localhost'
 
 
 IS_WINDOWS = platform == "win32"
@@ -23,8 +24,12 @@ IS_LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
 DEFAULT_CONFIG_FILE = 'default_config.ini'
+DEFAULT_PROFILE_NAME = 'default_profile.ini'
+
 FORMAT = 'utf-8'
 
+DATA = 0x00
+SIGNAL = 0x01
 
 PORT_THIS = 3485
 PORT_REQ = 3486
@@ -39,6 +44,7 @@ PATH_PROFILES = '../../profiles'
 PATH_PAGE = '../webpage'
 PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
 PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
+PATH_LOG_CONFIG = f'..\\configurations\\log_config.json'
 
 IP_VERSION = socket.AF_INET
 USING_IP_V4 = True
@@ -68,6 +74,9 @@ NODE_POV_GOSSIP_TTL = 3
 DEFAULT_GOSSIP_FANOUT = 5
 PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS = 7
 
+REQUESTS = 'uri'
+RELIABLE = 'req_uri'
+
 VERSIONS = {
     'GLOBAL': 1.1,
     'RP': 1.0,
@@ -75,5 +84,5 @@ VERSIONS = {
     'DO': 1.0,
     'WIRE':1.0,
 }
-DISCOVER_RETRIES = 3
+DISCOVER_RETRIES = 2
 DISCOVER_TIMEOUT = 3

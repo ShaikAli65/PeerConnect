@@ -1,96 +1,71 @@
-import asyncio
-import socket
-from typing import Literal
+import logging
 
-from src.avails import Wire, WireData, const, use
-from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
-from src.avails.constants import DISCOVER_RETRIES
+from src.avails import QueueMixIn, WireData, const, use
+from src.avails.bases import BaseDispatcher
+from src.avails.events import RequestEvent
 from src.core import get_this_remote_peer
-from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers import DISCOVERY
+from src.core.transfers.transports import DiscoveryTransport
+
+_logger = logging.getLogger(__name__)
 
 
-async def search_network(broad_cast_addr, multicast_addr):
-    this_id = get_this_remote_peer().id
-    ping_data = WireData(REQUESTS_HEADERS.NETWORK_FIND, this_id)
-    const.BIND_IP = const.THIS_IP
-    loop = asyncio.get_event_loop()
-    bind_address = (const.BIND_IP, const.PORT_NETWORK)
+def DiscoveryReplyHandler(kad_server):
+    async def handle(event: RequestEvent):
+        if event.from_addr[0] == const.THIS_IP:
+            return
+        connect_address = tuple(event.request["connect_uri"])
+        _logger.debug("[DISCOVERY] bootstrapping kademlia")
+        await kad_server.bootstrap([connect_address])
+        _logger.debug("[DISCOVERY] bootstrapping completed")
 
-    with UDPProtocol.create_async_server_sock(
-            loop,
-            bind_address,
-            family=const.IP_VERSION
-    ) as common_sock:
-        common_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        replies = []
-        if const.USING_IP_V4:
-            broad_cast_responses = await broadcast_search(common_sock, broad_cast_addr, ping_data)
-            replies.append(broad_cast_responses)
-
-        multicast_responses = await multicast_search(common_sock, multicast_addr, ping_data)
-        replies.append(multicast_responses)
-        return replies
+    return handle
 
 
-async def broadcast_search(broadcast_sock, broadcast_addr: tuple[Literal['<broadcast>'] | str, int], req_payload):
-    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    f = _request_response_loop(
-        broadcast_sock,
-        broadcast_addr,
-        req_payload,
-        DISCOVER_RETRIES
+def DiscoveryRequestHandler(discovery_transport):
+    async def handle(event: RequestEvent):
+        req_packet = event.request
+        if req_packet["reply_addr"][0] == const.THIS_IP:
+            return
+        _logger.info(f"[DISCOVERY] replying to req with addr: {req_packet.body}")
+        this_rp = get_this_remote_peer()
+        data_payload = WireData(
+            header=DISCOVERY.NETWORK_FIND_REPLY,
+            msg_id=this_rp.peer_id,
+            connect_uri=this_rp.req_uri,
+        )
+        discovery_transport.sendto(
+            bytes(data_payload), tuple(req_packet["reply_addr"])
+        )
+
+    return handle
+
+
+class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
+    def __init__(self, transport, stopping_flag):
+        super().__init__(
+            transport=DiscoveryTransport(transport), stop_flag=stopping_flag
+        )
+
+    async def submit(self, event: RequestEvent):
+        wire_data = event.request
+        handle = self.registry[wire_data.header]
+        _logger.debug(f"[DISCOVERY] dispatching request {handle}")
+        await handle(event)
+
+
+async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
+    this_rp = get_this_remote_peer()
+    ping_data = WireData(
+        DISCOVERY.NETWORK_FIND,
+        this_rp.peer_id,
+        reply_addr=this_rp.req_uri
     )
-    answer = await f
-    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 0)
-    return answer
 
-
-async def _request_response_loop(sock, send_addr, req_payload, retry_count):
-    reply_fut = asyncio.get_event_loop().create_future()
-
-    async def _reply_waiter():
-        while True:
-            print(sock)
-            raw_data, addr = await Wire.recv_datagram_async(sock)
-            reply = WireData.load_from(raw_data)
-            print("got", reply, addr, sock.getsockname())
-            if addr == sock.getsockname():
-                print('ignoring echo')  # debug
-                continue
-            if reply.match_header(REQUESTS_HEADERS.NETWORK_FIND_REPLY):
-                print("reply detected", reply)  # debug
-                result = tuple(reply['connect_uri'])
-                reply_fut.set_result(result)  # we got address to bootstrap with
-                return result
-
-    task = asyncio.create_task(_reply_waiter())
-
-    for timeout in use.get_timeouts(max_retries=retry_count):
-        Wire.send_datagram(sock, send_addr, bytes(req_payload))
-        print(f"sent{send_addr}" + ("=" * 80))
-        try:
-            resp = await asyncio.wait_for(asyncio.shield(reply_fut), timeout)
-            # resp = await asyncio.wait_for(reply_fut, timeout)
-            # resp = await asyncio.wait_for(_reply_waiter(), timeout)
-            print("got" + ("=" * 80), resp)
-            task.cancel()
-            return resp
-        except TimeoutError:
-            print("timeout")
-
-    task.cancel()
-
-
-async def multicast_search(multicast_sock, multicast_addr, req_payload):
     if const.USING_IP_V4:
-        ipv4_multicast_socket_helper(multicast_sock, multicast_addr)
-    else:
-        ipv6_multicast_socket_helper(multicast_sock, multicast_addr)
-
-    answer = await _request_response_loop(
-        multicast_sock,
-        multicast_addr,
-        req_payload,
-        DISCOVER_RETRIES
-    )
-    return answer
+        async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
+            transport.sendto(bytes(ping_data), broad_cast_addr)
+        _logger.debug(f"[DISCOVERY] sent discovery request to broadcast {broad_cast_addr}",)
+    async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
+        transport.sendto(bytes(ping_data), multicast_addr)
+    _logger.debug(f"[DISCOVERY] sent discovery request to multicast {multicast_addr}")

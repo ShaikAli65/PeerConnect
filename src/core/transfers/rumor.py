@@ -2,28 +2,28 @@ import asyncio
 import random
 import time
 
-from src.avails import GossipMessage, RumorMessageItem, Wire, const
+from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, const
 from src.core import Dock
+from src.core.transfers.transports import GossipTransport
 
 
-class RumorMessageList:
+class SimpleRumorMessageList(RumorMessageList):
 
     def __init__(self, ttl):
-        # tuple(timein, messageItem)
-        self.message_list = {}
+        self._message_list = {}
         self.ttl = ttl
         self.dropped = set()
         # self._disseminate()
 
     def _disseminate(self):
         current_time = self._get_current_clock()
-        current_message_ids = list(self.message_list.keys())
+        current_message_ids = list(self._message_list.keys())
         # :warning: make sure to create a copy of keys before iteration
-        # if there is any possiblity of context change
+        # if there is any possibility of context change
         for message_id in current_message_ids:
-            message_item = self.message_list[message_id]
+            message_item = self._message_list[message_id]
             if self._is_old_enough(current_time, message_item.time_in):
-                self.message_list.pop(message_id)
+                self._message_list.pop(message_id)
                 self.dropped.add(message_id)
         loop = asyncio.get_event_loop()
         self.message_remover = loop.call_later(self.ttl / 2, self._disseminate)  # noqa
@@ -44,7 +44,7 @@ class RumorMessageList:
         message_item = RumorMessageItem(
             message.id, self._get_current_clock(), message.created, set()
         )
-        self.message_list[message.id] = message_item
+        self._message_list[message.id] = message_item
 
     def _calculate_gossip_probability(self, message):
         # Implement Probabilistic Gossiping formula
@@ -53,16 +53,16 @@ class RumorMessageList:
         return gossip_probability
 
     def remove_message(self, message_id):
-        self.message_list.pop(message_id)
+        self._message_list.pop(message_id)
         self.dropped.add(message_id)
 
     def __contains__(self, item):
-        return item in self.message_list
+        return item in self._message_list
 
     def sample_peers(self, message_id, sample_size):
-        # using reserviour sampling algorithm
+        # using reservoir sampling algorithm
         # :todo: try working with bloom filters
-        _m: RumorMessageItem = self.message_list[message_id]
+        _m: RumorMessageItem = self._message_list[message_id]
         peer_list = self._get_list_of_peers() - _m.peer_list
         reservoir = []
         for i, peer_id in enumerate(peer_list):
@@ -77,7 +77,6 @@ class RumorMessageList:
 
 
 class RumorPolicy:
-
     global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
     min_chance = 0.6
 
@@ -106,43 +105,44 @@ class RumorPolicy:
 class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
+    Once a message is created then it's is not subject to any change at any peer
     """
 
     alpha = 3
     policy_class = RumorPolicy
 
-    def __init__(self, datagram_transport, message_list_class: type[RumorMessageList]):
+    def __init__(self, datagram_transport: GossipTransport, message_list_class: type[SimpleRumorMessageList]):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
-        self.send_sock = datagram_transport
+        self.transport = datagram_transport
         self.policy = self.policy_class(self)
         self._is_initiated = True
 
-    def message_arrived(self, data: GossipMessage):
-        print("got a message to gossip", data)
+    def message_arrived(self, data: GossipMessage, from_addr):
 
         if not data.fields_check():
             print(f"fields missing, ignoring message: {data.actual_data}")
             return
+
         if not self.policy.should_rumor(data):
             return
 
         if data.id in self.message_list:
             # no need to re-enter message into list, this refreshes timer of that message
-            print("gossip forwarding seen message")
+            print("[GOSSIP] forwarding seen message")
             self._gossip_forward(message=data)
         else:
             self.gossip_message(data)
 
-        print("Gossip message received and processed: %s" % data)
+        print("[GOSSIP] message received and processed: %s" % data)
 
     def __forward_payload(self, message, peer_id):
         peer_obj = Dock.peer_list.get_peer(peer_id)
         if peer_obj is not None:
-            Wire.send_datagram(self.send_sock, peer_obj.req_uri, bytes(message))
+            self.transport.sendto(bytes(message), peer_obj.req_uri)
             return peer_obj
 
     def gossip_message(self, message):
-        print("gossiping new message", message, "to")
+        print("[GOSSIP] gossiping new message", message, "to")
         self.message_list.push(message)
         self._gossip_forward(message)
 
@@ -157,8 +157,11 @@ class RumorMongerProtocol:
             p = self.__forward_payload(message, peer_id)
             print(p.req_uri)
 
+    def is_seen(self, message: GossipMessage):
+        return message.id in self.message_list
+
     def __del__(self):
-        self.send_sock.close()
+        self.transport.close()
 
     def __repr__(self):
         return str(f"<RumorMongerProtocol initiated={self._is_initiated}>")

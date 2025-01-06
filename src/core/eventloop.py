@@ -1,4 +1,5 @@
 import asyncio as _asyncio
+import logging
 import sys
 
 from src.avails.connect import Socket
@@ -26,7 +27,7 @@ if sys.platform == 'win32':
         _loop_factory = CustomProactorEventLoop
 
 
-    print('\033[32m setting up event loop',sys.platform, '\033[0m')  # debug
+    logging.getLogger().info(f'setting up event loop {sys.platform}')
     _asyncio.set_event_loop_policy(CustomWindowsProactorEventLoopPolicy())
     # _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
 

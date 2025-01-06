@@ -2,7 +2,8 @@ import asyncio
 import contextlib
 import socket
 from collections import OrderedDict, defaultdict
-from typing import TYPE_CHECKING, Union, ValuesView
+from itertools import count
+from typing import Iterable, Protocol, TYPE_CHECKING, Union, ValuesView
 from weakref import WeakSet
 
 from src.avails import connect
@@ -16,6 +17,19 @@ This module contains simple storages used across the peer connect
 5. SocketStore
 6. SocketCache
 """
+
+
+class HasID(Protocol):
+    id: int | str  # Specify the type of the `id` attribute (e.g., int)
+
+
+class HasPeerId(Protocol):
+    peer_id: str
+
+
+class HasIdProperty(Protocol):
+    @property
+    def id(self): ...
 
 
 class PeerDict(dict):
@@ -35,15 +49,15 @@ class PeerDict(dict):
     def get_peer(self, peer_id) -> RemotePeer:
         return self.get(peer_id, None)
 
-    def add_peer(self, peer_obj):
+    def add_peer(self, peer_obj: RemotePeer | HasPeerId):
         # with self.__lock:
-        self[peer_obj.id] = peer_obj
+        self[peer_obj.peer_id] = peer_obj
 
-    def extend(self, iterable_of_peer_objects):
+    def extend(self, iterable_of_peer_objects: Iterable[RemotePeer | HasPeerId]):
         for peer_obj in iterable_of_peer_objects:
-            self[peer_obj.id] = peer_obj
+            self[peer_obj.peer_id] = peer_obj
 
-    def remove_peer(self, peer_id):
+    def remove_peer(self, peer_id: str):
         return self.pop(peer_id, None)
 
     def peers(self) -> ValuesView[RemotePeer]:
@@ -60,10 +74,10 @@ class PeerDict(dict):
         return self.values().__iter__()
 
 
-class FileDict:
-    """
-    stores file handles/pools references
-    all the containers are two-dimensional
+class TransfersBookKeeper:
+    """Stores file/dir handles/pools references
+
+    All the containers are two-dimensional
     {
         peer id: set{file_handles/pools}  # uses set 
     }
@@ -71,6 +85,7 @@ class FileDict:
     current : stores strong references to file handles/pools that are running
     continued : stores strong references file handles/pools that are paused or are meant to resumed
     """
+    _id_counter = count()
     __slots__ = '__continued', '__completed', '__current', '__scheduled'
     __annotations__ = {
         '__continued': dict,
@@ -85,49 +100,51 @@ class FileDict:
         self.__completed = defaultdict(WeakSet)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
 
-    def add_to_current(self, peer_id, file_pool):
-        self.__current[peer_id].add(file_pool)
+    def add_to_current(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
+        self.__current[peer_id].add(transfer_handle)
+        self.__continued[peer_id].discard(transfer_handle)
 
-    def add_to_completed(self, peer_id, file_pool):
-        self.__current[peer_id].discard(file_pool)
-        self.__completed[peer_id].add(file_pool)
+    def add_to_completed(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
+        self.__current[peer_id].discard(transfer_handle)
+        self.__continued[peer_id].discard(transfer_handle)
+        self.__completed[peer_id].add(transfer_handle)
 
     def add_to_scheduled(self, key, file_handle):
         self.__scheduled[key] = file_handle
 
-    def add_to_continued(self, peer_id, file_pool):
+    def add_to_continued(self, peer_id: str, file_pool):
         self.__current[peer_id].discard(file_pool)
         self.__continued[peer_id].add(file_pool)
 
-    def swap(self, peer_id, file_pool):
+    def swap(self, peer_id: str, file_pool):
         self.__continued[peer_id].remove(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def get_running_file(self, peer_id, file_id=None):
+    def _get_running_transfers(self, peer_id: str, file_id=None):
         if file_id:
             return next(file for file in self.__current[peer_id] if file.id == file_id)
         return list(self.__current[peer_id])
 
-    def get_completed_file(self, peer_id, file_id):
+    def _get_completed_transfer(self, peer_id: str, file_id):
         return next(file for file in self.__completed[peer_id] if file.id == file_id)
 
-    def get_continued_file(self, peer_id, file_id):
+    def _get_continued_file(self, peer_id: str, file_id):
         return next(file for file in self.__continued[peer_id] if file.id == file_id)
 
     def get_scheduled(self, file_id):
         return self.__scheduled.get(file_id, None)
 
-    def get_file(self, peer_id, file_id):
+    def get_transfer(self, peer_id: str, file_id):
         try:
-            return self.get_running_file(peer_id, file_id)
+            return self._get_running_transfers(peer_id, file_id)
         except StopIteration:
             pass
         try:
-            return self.get_completed_file(peer_id, file_id)
+            return self._get_completed_transfer(peer_id, file_id)
         except StopIteration:
             pass
         try:
-            return self.get_continued_file(peer_id, file_id)
+            return self._get_continued_file(peer_id, file_id)
         except StopIteration:
             pass
         return None
@@ -143,6 +160,15 @@ class FileDict:
     @property
     def current(self):
         return self.__current.values()
+
+    @classmethod
+    def get_new_id(cls):
+        return str(next(cls._id_counter))
+
+    def check_running(self, peer_id):
+        if running := self._get_running_transfers(peer_id):
+            return running[0]
+        return None
 
     def stop_all_files(self):
         for file_set in self.__current.values():
@@ -205,7 +231,7 @@ class SocketCache:
         except KeyError:
             return False
 
-    def remove(self, peer_id):
+    def remove_and_close(self, peer_id):
         # with self.__thread_lock:
         try:
             sock = self.socket_cache[peer_id]
@@ -221,7 +247,7 @@ class SocketCache:
         self.socket_cache.clear()
 
     def __close_all_socks(self):
-        for sock in self.socket_cache.values():
+        for sock in list(self.socket_cache.values()):
             try:
                 sock.close()
             except Exception:  # noqa

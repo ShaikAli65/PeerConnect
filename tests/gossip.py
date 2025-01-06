@@ -1,18 +1,14 @@
 import asyncio
 import os
-import sys
 import time
 
-
-sys.path.append("C:\\Users\\7862s\\Desktop\\PeerConnect\\")
-
+import _path  # noqa
+from src.avails import GossipMessage, WireData, const
 from src.avails.useables import get_unique_id
+from src.core import get_gossip, peers
+from src.core.transfers import GOSSIP
 from src.managers.statemanager import State
 from test import initiate, test_initial_states
-from src.avails import GossipMessage, WireData
-from src.core import get_gossip, peers
-from src.core.transfers import REQUESTS_HEADERS
-from src.avails import const
 
 TEST_MESSAGE = "WHAT'S UP EVERYBODY"
 TEST_USERNAME = 'test'
@@ -20,7 +16,7 @@ TEST_USERNAME = 'test'
 
 def generate_gossip():
     message = GossipMessage(message=WireData())
-    message.header = REQUESTS_HEADERS.GOSSIP_MESSAGE
+    message.header = GOSSIP.MESSAGE
     message.id = get_unique_id()
     message.message = TEST_MESSAGE
     message.ttl = 3
@@ -30,6 +26,7 @@ def generate_gossip():
 
 
 async def test_gossip():
+    await asyncio.sleep(3)
     # for _ in range(10):
     message = generate_gossip()
     get_gossip().gossip_message(message)
@@ -40,6 +37,7 @@ async def test_plam_tree():
 
 
 async def test_gossip_search_user(username=TEST_USERNAME):
+    await asyncio.sleep(3)
     async for peer in peers.gossip_search(username):
         print("GOT SOME REPLY", peer)
 

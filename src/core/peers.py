@@ -84,6 +84,7 @@ referring 1.3 :
 
 """
 import asyncio
+import logging
 import time
 from collections import defaultdict
 from collections.abc import AsyncIterator
@@ -92,10 +93,12 @@ from typing import Optional, override
 from kademlia import crawling, storage
 
 from src.avails import GossipMessage, RemotePeer, use
-from src.avails.useables import echo_print, get_unique_id
+from src.avails.remotepeer import convert_peer_id_to_byte_id
+from src.avails.useables import get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers import GOSSIP
 
+# this list contains 20 evenly spread numbers in [0, 2**160]
 node_list_ids = [
     b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
     b'\x0c\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc',
@@ -119,6 +122,8 @@ node_list_ids = [
     b'\xf3333333333333333333$',
 ]
 
+_logger = logging.getLogger(__name__)
+
 
 class PeerListGetter(crawling.ValueSpiderCrawl):
     initial_list = Dock.peer_list
@@ -132,18 +137,18 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
     async def _handle_found_values(self, values):
         peer = self.nearest_without_value.popleft()
         if peer:
-            echo_print(use.COLORS[0], "found values", values)
+            _logger.debug(f"found values {values}")
             await self.protocol.call_store_peers_in_list(peer, self.node.id, values)
         return values
 
     @classmethod
     async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
-        print("previous index", cls.previously_fetched_index)
+        _logger.debug(f"previous index {cls.previously_fetched_index}")
         if cls.previously_fetched_index >= len(cls.node_list_ids) - 1:
             cls.previously_fetched_index = 0
 
         find_list_id = cls.node_list_ids[cls.previously_fetched_index]
-        print("looking into", find_list_id)
+        _logger.debug(f"looking into {find_list_id}")
         list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
         cls.previously_fetched_index += 1
 
@@ -157,18 +162,17 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
 class SearchCrawler:
     node_list_ids = node_list_ids
-    list_id_mapper_handle = None
 
     @classmethod
-    async def get_relevant_peers_for_list_id(cls, node_server, list_id):
+    async def get_relevant_peers_for_list_id(cls, kad_server, list_id):
         peer = RemotePeer(list_id)
-        nearest = node_server.protocol.router.find_neighbors(peer)
+        nearest = kad_server.protocol.router.find_neighbors(peer)
         crawler = crawling.NodeSpiderCrawl(
-            node_server.protocol,
+            kad_server.protocol,
             peer,
             nearest,
-            node_server.ksize,
-            node_server.alpha
+            kad_server.ksize,
+            kad_server.alpha
         )
         responsible_nodes = await crawler.find()
         return responsible_nodes
@@ -186,6 +190,7 @@ class SearchCrawler:
 
 
 class Storage(storage.ForgetfulStorage):
+    # :todo: introduce diff based reads
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)
 
@@ -198,18 +203,18 @@ class Storage(storage.ForgetfulStorage):
         return self.peer_data_storage.items()
 
     def store_peers_in_list(self, list_key, list_of_peers):
-        if list_key in self.node_lists_ids:
-            # :todo fix this "list" bug
-            # temporary fix
-            filtered_peers = set()
-            for peer in list_of_peers:
-                if isinstance(peer, list):
-                    filtered_peers.add(peer[0])
-                else:
-                    filtered_peers.add(peer)
+        if list_key not in self.node_lists_ids:
+            return False
 
-            self.peer_data_storage[list_key] |= filtered_peers
-            Dock.peer_list.extend(RemotePeer.load_from(x) for x in list_of_peers)
+        # temporary fix
+        filtered_peers = set()
+        for peer in list_of_peers:
+            if isinstance(peer, list):
+                filtered_peers.add(peer[0])
+            else:
+                filtered_peers.add(peer)
+        self.peer_data_storage[list_key] |= filtered_peers
+
         return True
 
 
@@ -245,6 +250,7 @@ class GossipSearch:
 
     @classmethod
     def search_for(cls, find_str, gossip_handler):
+        _logger.info(f"[GOSSIP][SEARCH] new search for: {find_str}")
         m = cls._prepare_search_message(find_str)
         gossip_handler.gossip_message(m)
         cls._message_state_dict[m.id] = f = cls.search_iterator(m.id)
@@ -260,7 +266,7 @@ class GossipSearch:
     @staticmethod
     def _prepare_reply(reply_id):
         gm = GossipMessage()
-        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REPLY
+        gm.header = GOSSIP.SEARCH_REPLY
         gm.id = reply_id
         gm.message = get_this_remote_peer().serialized
         gm.created = time.time()
@@ -269,7 +275,7 @@ class GossipSearch:
     @staticmethod
     def _prepare_search_message(find_str):
         gm = GossipMessage()
-        gm.header = REQUESTS_HEADERS.GOSSIP_SEARCH_REQ
+        gm.header = GOSSIP.SEARCH_REQ
         gm.message = find_str
         gm.id = get_unique_id()
         gm.created = time.time()
@@ -277,14 +283,14 @@ class GossipSearch:
 
     @classmethod
     def reply_arrived(cls, reply_data: GossipMessage, addr):
-        Dock.global_gossip.message_arrived(reply_data)
+        Dock.global_gossip.message_arrived(reply_data, addr)
         try:
             result_iter = cls._message_state_dict[reply_data.id]
             if m := reply_data.message:
                 m = RemotePeer.load_from(m)
             result_iter.add_peer(m)
-        except KeyError:
-            echo_print("invalid gossip search response id")
+        except KeyError as ke:
+            _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id",exc_info=ke)
 
 
 def get_search_handler():
@@ -293,7 +299,7 @@ def get_search_handler():
 
 def get_more_peers():
     peer_server = Dock.kademlia_network_server
-    print("getting more peers")  # debug
+    _logger.debug("getting more peers")
     return PeerListGetter.get_more_peers(peer_server)
 
 
@@ -305,7 +311,8 @@ async def gossip_search(search_string) -> AsyncIterator[RemotePeer]:
 
 def search_for_nodes_with_name(search_string):
     """
-    searches for nodes relevant to given :param:search_string
+    searches for nodes relevant to given ``:param search_string:``
+
     Returns:
          a generator of peers that matches with the search_string
     """
@@ -313,24 +320,33 @@ def search_for_nodes_with_name(search_string):
     return SearchCrawler.search_for_nodes(peer_server, search_string)
 
 
-async def get_remote_peer(peer_id) -> Optional[RemotePeer]:
+async def get_remote_peer(peer_id):
+    """Gets the ``RemotePeer`` object corresponding to ``:func RemotePeer.peer_id:`` from the network
+
+    Just a wrapper around ``:method kademlia_network_server.get_remote_peer:``
+    with conversions related to ids
+
+    This call is expensive as it performs a distributed search across the network
+    try using ``Dock.peer_list`` instead if possible
+
+    Args:
+        peer_id(str): id to search for
+
+    Returns:
+        RemotePeer | None: obj found
     """
-    Just a wrapper function around :method:`kademlia_network_server.get_remote_peer`
-    This function call is expensive as it performs a
-    distributed search across the network
-    try using Dock.peer_list instead
-    """
-    return await Dock.kademlia_network_server.get_remote_peer(peer_id)
+    byte_id = convert_peer_id_to_byte_id(peer_id)
+    return await Dock.kademlia_network_server.get_remote_peer(byte_id)
 
 
 async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
     """
-    Just a helper function, tries to check for peer_id in cached Dock.peer_list
+    Just a helper, tries to check for peer_id in cached Dock.peer_list
     if there is a chance that cached remote peer object is expired then use :func: `peers.get_remote_peer`
     if not found the performs a distributed search in the network
     """
     try:
-        peer_obj = Dock.peer_list[peer_id]
+        peer_obj = Dock.peer_list.get_peer(peer_id)
     except KeyError:
         peer_obj = await get_remote_peer(peer_id)
 

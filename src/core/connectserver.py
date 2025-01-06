@@ -3,6 +3,8 @@ import queue
 import time
 import struct
 import socket
+import logging
+
 from src.avails import (
     RemotePeer,
     Wire,
@@ -14,6 +16,8 @@ from src.avails import (
 from src.core import get_this_remote_peer, Dock
 from src.core.transfers import HEADERS
 
+_logger = logging.getLogger(__name__)
+
 
 async def get_initial_list(no_of_users, initiate_socket):
     ping_queue = queue.Queue()
@@ -23,7 +27,8 @@ async def get_initial_list(no_of_users, initiate_socket):
         _nomad = await RemotePeer.load_from(raw_data)
         ping_queue.put(_nomad)
         # requests_handler.signal_status(ping_queue, )
-        use.echo_print(f"::User received from server :\n {_nomad}")
+        _logger.debug(f"::User received from server : {_nomad!r}")
+
     # except socket.error as e:
     #     error_log('::Exception while receiving list of users at connect server.py/get_initial_list, exp:' + str(e))
     #     if not e.errno == 10054:
@@ -53,7 +58,7 @@ async def list_error_handler():
         await Wire.send_async(conn, HEADERS.REQ_FOR_LIST)
         # request = SimplePeerBytes(refer_sock=conn, data=HEADERS.REQ_FOR_LIST)
         # await request.send()
-        list_len = struct.unpack('!Q',await conn.arecv(8))[0]
+        list_len = struct.unpack('!Q', await conn.arecv(8))[0]
         await get_initial_list(list_len, conn)
 
 
@@ -69,23 +74,24 @@ async def list_from_forward_control(list_owner: RemotePeer):
 
 
 async def initiate_connection():
-    use.echo_print(f"::Connecting to server {const.SERVER_IP}${const.PORT_SERVER}")
+    _logger.info(f"Connecting to server {const.SERVER_IP}${const.PORT_SERVER}")
     server_connection = await setup_server_connection()
     if server_connection is None:
-        use.echo_print("\n::Can't connect to server")
+        _logger.info("Can't connect to server")
         return False
     with server_connection:
         text = await Wire.receive_async(server_connection)
         # text = SimplePeerBytes(server_connection)
         # if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
         if text == HEADERS.SERVER_OK:
-            use.echo_print('\n::Connection accepted by server')
+            _logger.info('Connection accepted by server')
             await get_list_from(server_connection)
         elif text == HEADERS.REDIRECT:
             # server may send a peer's details to get list from
             raw_data = await Wire.receive_async(server_connection)
             recv_list_user = RemotePeer.load_from(raw_data)
-            use.echo_print('::Connection redirected by server to : ', recv_list_user.req_uri)
+            _logger.info(f'Connection redirected by server to : {recv_list_user.req_uri}')
+            # _logger.info(f'Connection redirected by server to : {recv_list_user.req_uri}','abc')
             await list_from_forward_control(recv_list_user)
         else:
             return None
@@ -126,9 +132,9 @@ async def send_quit_status_to_server():
         with sock:
             this_peer = get_this_remote_peer()
             await Wire.send_async(sock, bytes(this_peer))
-        use.echo_print("::sent leaving status to server")
+        _logger.info("::sent leaving status to server")
         return True
     except Exception as exp:
-        print(f"at {use.func_str(send_quit_status_to_server)}", exp)
+        _logger.error(f"at {use.func_str(send_quit_status_to_server)}", exc_info=exp)
         # server_log(f'::Failed disconnecting from server at {__name__}/{__file__}, exp : {exp}', 4)
         return False

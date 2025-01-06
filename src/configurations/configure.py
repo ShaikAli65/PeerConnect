@@ -4,9 +4,8 @@ import os
 import socket
 from pathlib import Path
 
-import src.avails.connect as connect
 import src.avails.constants as const
-from src.avails import connect, constants, use
+from src.avails import connect, use
 
 
 def set_constants(config_map: configparser.ConfigParser) -> bool:
@@ -21,8 +20,6 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
     const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
     const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
-    const.PORT_NETWORK = config_map.getint('NERD_OPTIONS', 'network_port')
-
     const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
     const.PAGE_SERVE_PORT = config_map.getint('NERD_OPTIONS', 'page_serve_port')
 
@@ -41,14 +38,15 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
 
 def print_constants():
-
+    ip_version = ipaddress.ip_address(const.THIS_IP).version
     print_string = (
         f'\n:configuration choices{"=" * 32}\n'
         f'{"USERNAME": <15} : {const.USERNAME: <10}\n'
         f'{"THIS_IP": <15} : {f"{const.THIS_IP}": <10}\n'
         f'{"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}\n'
-        f'{"IP_VERSION": <15} : {ipaddress.ip_address(const.THIS_IP).version: <10}\n'
+        f'{"IP_VERSION": <15} : {ip_version: <10}\n'
         f'{"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}\n'
+        f'{"MULTICAST_IP": <15} : {f"{const.MULTICAST_IP_v4 if ip_version == 4 else const.MULTICAST_IP_v6}": <10}\n'
         f'{"PORT_THIS": <15} : {const.PORT_THIS: <10}\n'
         f'{"SERVER_PORT": <15} : {const.PORT_SERVER: <10}\n'
         f'{"NETWORK_PORT": <15} : {const.PORT_NETWORK: <10}\n'
@@ -68,15 +66,16 @@ def print_constants():
 
 
 def set_paths():
-    const.PATH_CURRENT = Path(os.path.join(os.getcwd()))
-    const.PATH_PROFILES = Path(os.path.join(const.PATH_CURRENT, 'profiles'))
-    const.PATH_LOG = Path(os.path.join(const.PATH_CURRENT, 'logs'))
-    const.PATH_PAGE = Path(os.path.join(const.PATH_CURRENT, 'src', 'webpage'))
-    const.PATH_CONFIG = Path(os.path.join(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE))
-    downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Downloads'))
+    const.PATH_CURRENT = Path(os.getcwd())
+    const.PATH_PROFILES = Path(const.PATH_CURRENT, 'profiles')
+    const.PATH_LOG = Path(const.PATH_CURRENT, 'logs')
+    const.PATH_PAGE = Path(const.PATH_CURRENT, 'src', 'webpage')
+    const.PATH_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE)
+    const.PATH_LOG_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', 'log_config.json')
+    downloads_path = Path(os.path.expanduser('~'), 'Downloads')
     # check if the directory exists
     if not os.path.exists(downloads_path):
-        downloads_path = Path(os.path.join(os.path.expanduser('~'), 'Desktop'))
+        downloads_path = Path(os.path.expanduser('~'), 'Desktop')
 
     const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, 'PeerConnect'))
     try:
@@ -87,7 +86,7 @@ def set_paths():
 
 
 def validate_ports(ip):
-    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ,]
+    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, ]
     for i, port in enumerate(ports_list):
         if not connect.is_port_empty(port, ip):
             ports_list[i] = connect.get_free_port(ip)

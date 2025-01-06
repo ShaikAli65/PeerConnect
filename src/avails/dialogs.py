@@ -5,15 +5,11 @@ from abc import ABC, abstractmethod
 
 try:
     import tkinter as tk
+    from tkinter import filedialog
 except ImportError:
     tk = False
-else:
-    try:
-        tk.Tk().withdraw()
-        from tkinter import filedialog
-    except tk.TclError:
-        tk = False
-
+    filedialog = False
+tk = False
 import src.avails.constants as const
 
 
@@ -36,8 +32,8 @@ class TkDialogs(IDialogs):
         """
         Opens the system-like file picker dialog using Tkinter.
         """
-        root = tk.Tk()
-        root.withdraw()  # Hide the root window
+        # root = tk.Tk()
+        # root.withdraw()  # Hide the root window
         files = filedialog.askopenfilenames(initialdir=cls.recent_dir, title="Select files to send")
         if files:
             cls.recent_dir = os.path.dirname(files[0])
@@ -111,6 +107,9 @@ class FileExplorerDialog(IDialogs):
                        f'$folderBrowser.SelectedPath']
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
             directory = result.stdout.strip() if result.returncode == 0 else ""
+            lines = directory.strip().split('\n')
+            # Extract the last line
+            directory = lines[-1]
         elif const.IS_DARWIN:  # macOS
             command = ['osascript', '-e',
                        f'tell application "System Events" to choose folder']

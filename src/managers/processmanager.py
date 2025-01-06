@@ -18,7 +18,8 @@ from src.avails import (
     const,
     use
 )
-from src.core.handles import DirectoryTaskHandle, FileTaskHandle, TaskHandleProxy
+from src.core.handles import FileTaskHandle, TaskHandleProxy
+from src.managers.directorymanager import DirectoryTaskHandle
 
 
 class HandleRepr:

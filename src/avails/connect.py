@@ -1,4 +1,5 @@
 import asyncio as _asyncio
+import logging
 import socket
 import socket as _socket
 import struct
@@ -6,6 +7,8 @@ from abc import ABC, abstractmethod
 from typing import IO, Optional, Self
 
 from src.avails import const, useables
+
+_logger = logging.getLogger(__name__)
 
 
 class Socket(_socket.socket):
@@ -175,7 +178,7 @@ class TCPProtocol(Protocol):
             addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
             addr_family, sock_type, _, _, address = addr_info[0]
         except TypeError as tpe:
-            useables.echo_print("something wrong with the given address ", tpe)
+            _logger.error(f"something wrong with the given address", exc_info=tpe)
             raise
         sock = cls.create_async_sock(loop, addr_family)
 
@@ -232,7 +235,7 @@ class UDPProtocol(Protocol):
                                 fileno: Optional[int] = None):
         server_sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
         server_sock.bind(bind_address)
-        # server_sock.listen(backlog)
+        server_sock.listen(backlog)
         return server_sock
 
     @classmethod
@@ -256,7 +259,7 @@ def create_connection_sync(address, addr_family=None, sock_type=None, timeout=No
             sock_type = _socket.SOCK_STREAM
         addr_info = _socket.getaddrinfo(*address, family=addr_family, type=sock_type)
     except TypeError as tpe:
-        useables.echo_print("something wrong with the given address ", tpe)
+        _logger.info("something wrong with the given address ", exc_info=tpe)
         raise
 
     addr_family, sock_type, _, _, address = addr_info[0]
@@ -272,11 +275,11 @@ async def create_connection_async(address, timeout=None) -> Socket:
     return sock
 
 
-BASIC_URI = 'uri'
+CONN_URI = 'uri'
 REQ_URI = 'req_uri'
 
 
-def connect_to_peer(_peer_obj=None, to_which: str = BASIC_URI, timeout=0.001, retries: int = 1) -> Socket:
+def connect_to_peer(_peer_obj=None, to_which: str = CONN_URI, timeout=0.001, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -284,7 +287,7 @@ def connect_to_peer(_peer_obj=None, to_which: str = BASIC_URI, timeout=0.001, re
     :param timeout: self-explanatory
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
-    :param retries: if given tries reconnecting with exponential backoffs using :func:`useables.get_timeouts`
+    :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
             uses :param timeout: as initial value
     :return:
     """
@@ -294,7 +297,6 @@ def connect_to_peer(_peer_obj=None, to_which: str = BASIC_URI, timeout=0.001, re
         try:
             return create_connection_sync(address, addr_family=sock_family, sock_type=sock_type, timeout=timeout)
         except (OSError, _socket.error) as exp:
-            useables.echo_print("got exception at connect_to_peer", exp, "retry count", retry_count)
             retry_count += 1
             if retry_count >= retries:
                 raise
@@ -310,15 +312,15 @@ def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.1, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
-    *args will be passed into socket.setsockoption
+    *args will be passed into socket.setsockopt
     :param timeout: self-explanatory
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
-    :param retries: if given tries reconnecting with exponential backoffs using :func:`useables.get_timeouts`
+    :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
     :param timeout: uses as initial value
     :returns: connected socket
     """
@@ -330,7 +332,6 @@ async def connect_to_peer(_peer_obj=None, to_which: int = BASIC_URI, timeout=0.1
         try:
             return await create_connection_async(address, timeout)
         except (OSError, _socket.error) as exp:
-            useables.echo_print("got ", type(exp), "retry count", retry_count)
             retry_count += 1
             if retry_count >= retries:
                 raise
@@ -375,15 +376,52 @@ def is_port_empty(port, addr=None):
             return False  # Port is not empty or some other error occurred
 
 
-def ipv4_multicast_socket_helper(sock, multicast_addr):
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
-    group = socket.inet_aton(f"{multicast_addr[0]}")
-    mreq = struct.pack('4sl', group, socket.INADDR_ANY)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+def ipv4_multicast_socket_helper(
+        sock,
+        multicast_addr,
+        *,
+        loop_back=0,
+        reuse_addr=1,
+        ttl=1,
+        add_membership=True
+):
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, loop_back)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
+    if add_membership:
+        group = socket.inet_aton(f"{multicast_addr[0]}")
+        mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+    sock_options = {
+        'membership': add_membership,
+        'loop_back': loop_back,
+        'ttl':ttl,
+        'reuse_addr':reuse_addr
+    }
+    _logger.debug(f"socket{sock} options for multicast {sock_options}")
 
 
-def ipv6_multicast_socket_helper(sock, multicast_addr):
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 2)  # :todo: review this magic number
+def ipv6_multicast_socket_helper(
+        sock, multicast_addr,
+        *,
+        loop_back=1,
+        reuse_addr=1,
+        add_membership=True,
+        hops=2  # :todo: review this magic number
+):
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_LOOP, loop_back)
+    # this function makes socket to go with default interface
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, hops)
     group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
-    mreq = group + struct.pack('@I', 0)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+    if add_membership:
+        mreq = group + struct.pack('@I', 0)  # default interface
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+    sock_options = {
+        'membership': add_membership,
+        'loop_back': loop_back,
+        'hops':hops,
+        'reuse_addr':reuse_addr
+    }
+    _logger.debug(f"socket={sock} options for multicast {sock_options}")
+

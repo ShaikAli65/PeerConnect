@@ -2,18 +2,21 @@
 All the stuff related to kademlia goes here
 """
 import asyncio
-import logging
 from typing import override
-import kademlia.node
-from kademlia import crawling, network, routing, protocol
-from kademlia.crawling import NodeSpiderCrawl
 
-from src.avails import RemotePeer, use, const
+import kademlia.node
+from kademlia import crawling, network, node, protocol, routing
+from kademlia.crawling import NodeSpiderCrawl
+from kademlia.protocol import log
+from rpcudp.protocol import RPCProtocol
+
+from src.avails import RemotePeer, const, use
+from src.avails.bases import BaseDispatcher
+from src.avails.events import RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
-
-
-log = logging.getLogger(__name__)
+from src.core.transfers import REQUESTS_HEADERS
+from src.core.transfers.transports import KademliaTransport
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -27,23 +30,57 @@ class RPCFindResponse(crawling.RPCFindResponse):
         return [RemotePeer(*nodeple) for nodeple in nodelist]
 
 
-class RequestProtocol(protocol.KademliaProtocol):
-    def __init__(self, source_node, storage, ksize):
-        super().__init__(source_node, storage, ksize)
-        self.router = AnotherRoutingTable(self, ksize, source_node)
-        self.storage = storage
+class RPCCaller(RPCProtocol):
+    __slots__ = ()
 
-    def _check_in(self, peer):
-        s = RemotePeer.load_from(peer)
-        self.welcome_if_new(s)
-        return s
+    async def call_find_node(self, node_to_ask, node_to_find):
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.find_node(node_to_ask.req_uri, self.source_node.serialized,
+                                      node_to_find.id)
+        return self.handle_call_response(result, node_to_ask)
 
-    @override
+    async def call_find_value(self, node_to_ask, node_to_find):
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.find_value(node_to_ask.req_uri, self.source_node.serialized,
+                                       node_to_find.id)
+        return self.handle_call_response(result, node_to_ask)
+
+    async def call_ping(self, node_to_ask):
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.ping(node_to_ask.req_uri, self.source_node.serialized)
+        return self.handle_call_response(result, node_to_ask)
+
+    async def call_store(self, node_to_ask, key, value):
+        # address = (node_to_ask.ip, node_to_ask.port)
+        result = await self.store(node_to_ask.req_uri, self.source_node.serialized, key, value)
+        return self.handle_call_response(result, node_to_ask)
+
+    async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
+        if isinstance(list_key, (RemotePeer, node.Node)):
+            list_key = list_key.id
+        address = peer_to_ask.req_uri
+        result = await self.store_peers_in_list(address, self.source_node.serialized, list_key, peer_list)
+        return self.handle_call_response(result, peer_to_ask)
+
+    async def call_find_peer_list(self, peer_to_ask, node_to_find):
+        address = peer_to_ask.req_uri
+        result = await self.find_list_of_peers(address, self.source_node.serialized, node_to_find.id)
+        return self.handle_call_response(result, peer_to_ask)
+
+    async def call_search_peers(self, peer_to_ask: RemotePeer, search_string):
+        # address = peer_to_ask.network_uri
+        result = await self.search_peers(peer_to_ask.req_uri, self.source_node.serialized, search_string)
+        self.handle_call_response(result, peer_to_ask)
+        return list(map(RemotePeer.load_from, result[1]))
+
+
+class RPCReceiver(RPCProtocol):
+    __slots__ = ()
+
     def rpc_ping(self, sender, sender_peer):
         self._check_in(sender_peer)
         return self.source_node.serialized
 
-    @override
     def rpc_store(self, sender, sender_peer, key, value):
         source = self._check_in(sender_peer)
         log.debug("got a store request from %s, storing '%s'='%s'",
@@ -51,17 +88,14 @@ class RequestProtocol(protocol.KademliaProtocol):
         self.storage[key] = value
         return True
 
-    @override
     def rpc_find_node(self, sender, sender_peer, key):
         source = self._check_in(sender_peer)
         log.info("finding neighbors of %i in local table",
                  source.long_id)
         node = RemotePeer(key)
         neighbors = self.router.find_neighbors(node, exclude=source)
-        # print("found neighbours", neighbors)
         return list(map(tuple, neighbors))
 
-    @override
     def rpc_find_value(self, sender, sender_peer, key):
         # source = self._check_in(sender_peer)
         self._check_in(sender_peer)
@@ -88,49 +122,17 @@ class RequestProtocol(protocol.KademliaProtocol):
         relevant_peers = use.search_relevant_peers(Dock.peer_list, search_string)
         return list(map(bytes, relevant_peers))
 
-    @override
-    async def call_find_node(self, node_to_ask, node_to_find):
-        # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_node(node_to_ask.req_uri, self.source_node.serialized,
-                                      node_to_find.id)
-        return self.handle_call_response(result, node_to_ask)
 
-    @override
-    async def call_find_value(self, node_to_ask, node_to_find):
-        # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.find_value(node_to_ask.req_uri, self.source_node.serialized,
-                                       node_to_find.id)
-        return self.handle_call_response(result, node_to_ask)
+class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
+    def __init__(self, source_node, storage, ksize):
+        super().__init__(source_node, storage, ksize)
+        self.router = AnotherRoutingTable(self, ksize, source_node)
+        self.storage = storage
 
-    @override
-    async def call_ping(self, node_to_ask):
-        # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.ping(node_to_ask.req_uri, self.source_node.serialized)
-        return self.handle_call_response(result, node_to_ask)
-
-    @override
-    async def call_store(self, node_to_ask, key, value):
-        # address = (node_to_ask.ip, node_to_ask.port)
-        result = await self.store(node_to_ask.req_uri, self.source_node.serialized, key, value)
-        return self.handle_call_response(result, node_to_ask)
-
-    async def call_store_peers_in_list(self, peer_to_ask, list_key, peer_list):
-        if not isinstance(list_key, bytes):
-            list_key = list_key.id
-        address = peer_to_ask.req_uri
-        result = await self.store_peers_in_list(address, self.source_node.serialized, list_key, peer_list)
-        return self.handle_call_response(result, peer_to_ask)
-
-    async def call_find_peer_list(self, peer_to_ask, node_to_find):
-        address = peer_to_ask.req_uri
-        result = await self.find_list_of_peers(address, self.source_node.serialized, node_to_find.id)
-        return self.handle_call_response(result, peer_to_ask)
-
-    async def call_search_peers(self, peer_to_ask: RemotePeer, search_string):
-        # address = peer_to_ask.network_uri
-        result = await self.search_peers(peer_to_ask.req_uri, self.source_node.serialized, search_string)
-        self.handle_call_response(result, peer_to_ask)
-        return list(map(RemotePeer.load_from, result[1]))
+    def _check_in(self, peer):
+        s = RemotePeer.load_from(peer)
+        self.welcome_if_new(s)
+        return s
 
     def _send_peer_lists(self, peer):
         for list_key, peer_list in self.storage.all_peers_in_lists():
@@ -155,31 +157,30 @@ class RequestProtocol(protocol.KademliaProtocol):
 
 class AnotherRoutingTable(routing.RoutingTable):
     @override
-    def add_contact(self, peer):
-        print("adding a new peer to router", peer)
+    def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
         Dock.peer_list.add_peer(peer)
 
     @override
-    def remove_contact(self, peer):
+    def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        Dock.peer_list.remove_peer(peer.id)
+        Dock.peer_list.remove_peer(peer.peer_id)
 
 
 class PeerServer(network.Server):
-    protocol_class = RequestProtocol
+    protocol_class = KadProtocol
 
     def __init__(self, ksize=20, alpha=3, node=None, storage=None):
         super().__init__(ksize, alpha, node, storage)
         self.add_this_peer_future = None
+        self._transport = None
 
     @override
     async def bootstrap_node(self, addr):
         result = await self.protocol.ping(addr, bytes(self.node))
         return RemotePeer.load_from(result[1]) if result[0] else None
 
-    def bind_transport(self, transport):
-        self.transport = transport
+    def start(self):
         self.protocol = self._create_protocol()
         self.refresh_table()
 
@@ -209,14 +210,14 @@ class PeerServer(network.Server):
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
-            print('added this peer object in', closest_list_id)  # debug
+            log.debug(f'added this peer object in list_id={closest_list_id}')  # debug
 
         else:
-            print("failed adding this peer object to lists")
+            log.error("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
             self.add_this_peer_future = asyncio.create_task(f())
-            print("scheduled callback to add this object to lists")
+            log.debug("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -250,21 +251,52 @@ class PeerServer(network.Server):
         node = RemotePeer(peer_id=peer_id)
         nodes = self.protocol.router.find_neighbors(node)
 
-        spider = NodeSpiderCrawl(self.protocol,node, nodes,
+        spider = NodeSpiderCrawl(self.protocol, node, nodes,
                                  self.ksize, self.alpha)
         found_peers = await spider.find()
         for peer in found_peers:
             if peer.id == peer_id:
                 return peer
 
+    @property
+    def transport(self):
+        return self._transport
 
-def get_new_kademlia_server() -> PeerServer:
+    @transport.setter
+    def transport(self, transport):
+        self._transport = transport
+        if hasattr(self, 'protocol'):
+            self.protocol.transport = transport
+
+
+def _get_new_kademlia_server() -> PeerServer:
     s = PeerServer(storage=Storage())
     s.node = get_this_remote_peer()
+    s.start()
     return s
+
+
+def _register_into_dispatcher(server, dispatcher: BaseDispatcher):
+    handler = KademliaHandler(server)
+    event_header = REQUESTS_HEADERS.KADEMLIA
+    dispatcher.register_handler(event_header, handler)
+
+
+def prepare_kad_server(req_transport, dispatcher):
+    kad_server = _get_new_kademlia_server()
+    kad_server.transport = KademliaTransport(req_transport)
+    _register_into_dispatcher(kad_server, dispatcher)
+    return kad_server
+
+
+def KademliaHandler(kad_server):
+    def handle(event: RequestEvent):
+        return kad_server.protocol.datagram_received(event.request['data'], event.from_addr)
+
+    return handle
 
 
 # monkey-patching to custom RPCFindResponse
 crawling.RPCFindResponse = RPCFindResponse
-network.Server.protocol_class = RequestProtocol
+network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer
