@@ -108,7 +108,7 @@ def _get_verified_type(data: DataWeaver, web_socket):
     if data.match_header(const.SIGNAL):
         logger.debug("[PAGE HANDLE] page signals connected")  # debug
         return importlib.import_module(
-            "src.core.logger.debug()lesignals"
+            "src.core.webpage_handlers.handlesignals"
         ).handler
 
 
@@ -116,13 +116,13 @@ async def validate_connection(web_socket):
     try:
         wire_data = await _asyncio.wait_for(web_socket.recv(), const.SERVER_TIMEOUT)
     except TimeoutError:
-        logger.error("[PAGE HANDLE] timeout reached, cancelling websocket", web_socket)
+        logger.error(f"[PAGE HANDLE] timeout reached, cancelling {web_socket=}")
         await web_socket.close()
         raise ConnectionError() from None
 
     verification = DataWeaver(serial_data=wire_data)
     handle_function = _get_verified_type(verification, web_socket)
-    logger.info("[PAGE HANDLE] waiting for data func :", use.func_str(handle_function))
+    logger.info("[PAGE HANDLE] waiting for data from websocket")
 
     if not handle_function:
         logger.info("[PAGE HANDLE] Unknown connection type")
@@ -139,7 +139,7 @@ async def handle_client(web_socket: Connection):
             return
 
         async for data in web_socket:
-            logger.info("[PAGE HANDLE] data from page:", data, "\a")
+            logger.info(f"[PAGE HANDLE] data from page: {data=}")
             logger.info(f"[PAGE HANDLE] forwarding to {use.func_str(handle_function)}")
             parsed_data = DataWeaver(serial_data=data)
 

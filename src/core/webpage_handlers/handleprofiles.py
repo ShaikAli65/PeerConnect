@@ -1,7 +1,7 @@
-from src.avails import DataWeaver, use
-from src.core.transfers import HANDLE, HEADERS
+from src.avails import DataWeaver
+from src.core.transfers import HANDLE
 from src.core.webpage_handlers import logger
-from src.core.webpage_handlers.pagehandle import dispatch_data
+from src.core.webpage_handlers.pagehandle import PROFILE_WAIT, dispatch_data
 from src.managers import (
     ProfileManager,
     all_profiles,
@@ -14,11 +14,12 @@ async def align_profiles(signal_data: DataWeaver):
     further_data = await send_profiles()
     await configure_further_profile_data(further_data)
     refresh_profile_list()
+    PROFILE_WAIT.set()
 
 
 def send_profiles():
     userdata = DataWeaver(header=HANDLE.PEER_LIST, content=all_profiles())
-    logger("::[PROFILES] profiles sent")
+    logger.info("::[PROFILES] sending profiles")
     return dispatch_data(userdata, expect_reply=True)
 
 
