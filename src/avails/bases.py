@@ -1,7 +1,14 @@
 import asyncio
 import enum
+import sys
 from abc import ABC, abstractmethod
 from typing import Callable, NamedTuple
+
+if sys.version_info >= (3, 13):
+    from asyncio import QueueShutDown
+else:
+    class QueueShutDown(Exception):
+        ...
 
 from src.avails import GossipMessage
 from src.avails.events import RequestEvent
@@ -27,7 +34,7 @@ class QueueMixIn:
 
     A stop method is provided, which
         * cancels internal queue to end the processing
-        * stops the **queue**, immediately discarding buffered events
+        * stops the **queue**, does not discarding buffered events waits for completion
         * cancels taskgroup(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
         * if ``:func listener_task:`` is then it is also cancelled
 
@@ -37,6 +44,7 @@ class QueueMixIn:
         task_group (asyncio.TaskGroup): used to spawn tasks
         running(bool): gets set to true when ``:func listen_for_events:`` is called
     """
+    _sentinel = object()
 
     def __init__(self, *args, start_listening=True, **kwargs):
         """
@@ -64,7 +72,9 @@ class QueueMixIn:
             while True:
                 try:
                     args, kwargs = await que.get()
-                except asyncio.QueueShutDown:
+                    if args == self._sentinel:
+                        raise QueueShutDown()
+                except QueueShutDown:
                     break
 
                 if stop_flag():
@@ -76,7 +86,10 @@ class QueueMixIn:
             raise DispatcherFinalizing('stop method is called for dispatcher')
 
         self.task_group.create_task(bomb())
-        self._queue.shutdown(immediate=True)
+        if sys.version_info >= (3, 13):
+            self._queue.shutdown()
+        else:
+            await self._queue.put([self._sentinel] * 2)
         self.running = False
         if self.listener_task:
             self.listener_task.cancel()
@@ -140,7 +153,8 @@ class BaseDispatcher(AbstractDispatcher):
         """Called when event occurs
         """
 
-    def register_handler(self, event_trigger: enum.Enum | str | bytes, handler: BaseHandler | AbstractDispatcher | Callable):
+    def register_handler(self, event_trigger: enum.Enum | str | bytes,
+                         handler: BaseHandler | AbstractDispatcher | Callable):
         """
         Args:
             handler(BaseHandler): this is called when registered event occurs
