@@ -20,8 +20,10 @@ class Multicast(asyncio.DatagramProtocol):
 
 
 async def main():
-    multicast_ip = '127.0.0.1'
+    # multicast_ip = '127.0.0.1'
+    multicast_ip = '172.16.196.238'
     multicast_port = 4000
+
     loop = asyncio.get_running_loop()
     await loop.create_datagram_endpoint(
         Multicast,

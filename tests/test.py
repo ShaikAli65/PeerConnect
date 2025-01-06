@@ -58,11 +58,25 @@ def test():
     # print(peers.get_this_remote_peer())
 
 
+def get_a_peer() -> RemotePeer | None:
+    try:
+        p = next(iter(Dock.peer_list))
+    except StopIteration:
+        print("no peers available")
+        return None
+    return p
+
+
 def profile_getter():
     return NamedTuple('MockProfile', (('id', int), ('username', str)))(random.getrandbits(255), getpass.getuser())
 
 
 def mock_profile():
+    # const.MULTICAST_IP_v4 = '172.16.196.238'
+    # const.PORT_NETWORK = 4000
+    # requests._create_listen_socket = _create_listen_socket_mock
+    # const.THIS_IP = '172.16.196.238'
+
     src.managers.profilemanager._current_profile = profile_getter()
 
 

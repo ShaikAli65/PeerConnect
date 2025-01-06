@@ -7,12 +7,12 @@ from src.core import Dock, transfers
 from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
 from test import initiate, test_initial_states
+from tests.test import get_a_peer
 
 
 async def test_file_transfer():
-    await asyncio.sleep(1)
-    try:
-        p = next(iter(Dock.peer_list))
+    await asyncio.sleep(2)
+    if p := get_a_peer():
         data = DataWeaver(
             header=transfers.HANDLE.SEND_FILE,
             content={
@@ -23,8 +23,6 @@ async def test_file_transfer():
             await handledata.send_file_to_peer(data)
         except Exception as e:
             print(e)
-    except StopIteration:
-        print("no peers available")
 
 
 if __name__ == '__main__':
