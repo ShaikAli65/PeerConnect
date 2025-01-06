@@ -1,11 +1,15 @@
 import asyncio
+import contextlib
 import logging
+import socket
+import traceback
 from pathlib import Path
 
 from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, Wire, WireData, connect, const, \
     get_dialog_handler, use
 from src.avails.connect import get_free_port
 from src.avails.events import ConnectionEvent
+from src.avails.exceptions import TransferIncomplete
 from src.core import Dock, get_this_remote_peer, transfers
 from src.core.transfers import FileItem, HEADERS, OTMFilesRelay, PeerFilePool, TransferState, onetomany
 
@@ -33,19 +37,30 @@ class FileSender:
     async def send_files(self):
         _logger.info('changing state to connection', extra={'id': self._file_id})  # debug
         self.state = TransferState.CONNECTING
-        with await connect.connect_to_peer(
-                self.peer_obj,
-                connect.BASIC_URI,
-                timeout=2,
-                retries=2,
-        ) as connection:
-            self.socket = connection
-            await self.authorize_connection(connection)
+        async with self._prepare_socket() as self.socket:
             _logger.info('changing state to sending', extra={'id': self._file_id})
             self.state = TransferState.SENDING
-            await self.file_pool.send_files(connection.asendall)
+            try:
+                await self.file_pool.send_files(self.socket.asendall)
+            except ConnectionResetError as cre:
+                _logger.error("got connection reset, pausing transfer", exc_info=cre)
+                self.state = TransferState.PAUSED
+                raise
+        _logger.info('completed sending', extra={'id': self.id})
 
         self.state = TransferState.COMPLETED
+
+    @contextlib.asynccontextmanager
+    async def _prepare_socket(self):
+        with await connect.connect_to_peer(
+            self.peer_obj,
+            connect.CONN_URI,
+            timeout=2,
+            retries=2,
+        ) as connection:
+            connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
+            await self.authorize_connection(connection)
+            yield connection
 
     async def authorize_connection(self, connection):
         handshake = WireData(
@@ -55,7 +70,7 @@ class FileSender:
             file_id=self._file_id,
         )
         await Wire.send_async(connection, bytes(handshake))
-        _logger.info("authorization header sent for file connection", extra={'id': self._file_id})
+        _logger.debug("authorization header sent for file connection", extra={'id': self._file_id})
 
     async def status(self):
         ...
@@ -85,13 +100,21 @@ class FileReceiver:
     async def recv_file(self):
         self.state = TransferState.CONNECTING
         self.connection = await self.get_connection()
-        _logger.info("got connection", extra={'id': self._file_id})
+        _logger.debug(f"got connection {self._file_id=}")
         self.state = TransferState.RECEIVING
-        what, result = await self.file_pool.recv_files(self.connection.arecv)
-        self.state = what
-        if what == TransferState.COMPLETED:
-            self.result = result
-        _logger.info(f'completed receiving: {self.file_pool}', extra={'id': self._file_id})
+
+        try:
+            self.state = await self.file_pool.receive_file_loop(self.connection.arecv)
+        except TransferIncomplete as ti:
+            if ti.args[0] == TransferState.PAUSED:
+                self.state = TransferState.PAUSED
+                _logger.debug(f'paused receiving: {self.file_pool}')
+                return
+
+        if self.state == TransferState.COMPLETED:
+            _logger.info(f'completed receiving: {self.file_pool}')
+        elif self.state == TransferState.PAUSED:
+            _logger.debug(f'paused receiving: {self.file_pool}')
 
     def get_connection(self):
         return self.connection_wait
@@ -120,10 +143,15 @@ async def send_files_to_peer(peer_id, selected_files):
     # create a new file sending session
     file_sender = FileSender(selected_files, peer_id)
     transfers_book.add_to_current(peer_id=peer_id, transfer_handle=file_sender)
-    await file_sender.send_files()
-    _logger.info('completed sending', extra={'id': file_sender.id})
+    try:
+        await file_sender.send_files()
+    except OSError as oe:
+        if file_sender.state == TransferState.PAUSED:
+            transfers_book.add_to_continued(peer_id, file_sender)
+        _logger.error("failed to send files to peer", exc_info=oe)
 
-    transfers_book.add_to_completed(peer_id, file_sender)
+    if (file_sender.state == TransferState.COMPLETED) or (file_sender.state == TransferState.ABORTING):
+        transfers_book.add_to_completed(peer_id, file_sender)
 
 
 async def file_receiver(file_req: WireData, connection):
@@ -139,8 +167,10 @@ async def file_receiver(file_req: WireData, connection):
 
     transfers_book.add_to_current(file_req.id, file_handle)
     await file_handle.recv_file()
-
-    transfers_book.add_to_completed(file_req.id, file_handle)
+    if file_handle.state == TransferState.COMPLETED:
+        transfers_book.add_to_completed(file_req.id, file_handle)
+    if file_handle.state == TransferState.PAUSED:
+        transfers_book.add_to_continued(file_req.id, file_handle)
 
 
 def start_new_otm_file_transfer(files: list[Path], peers: list[RemotePeer]):
@@ -185,8 +215,12 @@ def FileConnectionHandler():
         with event.transport.socket:
             file_req = event.handshake
             _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
-            _logger.info(f"scheduling file transfer request {file_req!r}")
-            await file_receiver(file_req, event.transport.socket)
+            _logger.debug(f"scheduling file transfer request {file_req!r}")
+            try:
+                await file_receiver(file_req, event.transport.socket)
+            except Exception as e:
+                print(e)
+                traceback.print_exc()
 
     return handler
 
