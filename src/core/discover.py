@@ -24,9 +24,9 @@ def DiscoveryReplyHandler(kad_server):
 
 def DiscoveryRequestHandler(discovery_transport):
     async def handle(event: RequestEvent):
-        if event.from_addr[0] == const.THIS_IP:
-            return
         req_packet = event.request
+        if req_packet["reply_addr"][0] == const.THIS_IP:
+            return
         _logger.info("[DISCOVERY] replying to req with addr:", req_packet.body)
         this_rp = get_this_remote_peer()
         data_payload = WireData(

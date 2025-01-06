@@ -42,6 +42,8 @@ async def initiate():
         transport
     )
 
+    await kad_server.add_this_peer_to_lists()
+
 
 async def setup_transport(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()

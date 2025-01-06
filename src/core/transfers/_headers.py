@@ -13,7 +13,7 @@ class HEADERS:
     CMD_TEXT = b"this is message "
     CMD_RECV_DIR = b"cmd to recv dir "
     CMD_FILE_CONN = b"connection for file transfer"
-
+    CMD_DIR_CONN = b'connection for dir transfer'
     GOSSIP_CREATE_SESSION = b"gossip_session_activate"
     GOSSIP_DOWNGRADE_CONN = "gossip_downgrade_connection"
     GOSSIP_UPGRADE_CONN = "gossip_upgrade_connection"

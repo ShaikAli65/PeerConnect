@@ -206,37 +206,39 @@ class PeerFilePool:
 
         return True
 
-    async def recv_files(self, recv_function: Callable[[int], Awaitable[bytes]]):
-        w = await self.receive_file_loop(recv_function)
-        if w:
-            return TransferState.COMPLETED, self
-        else:
-            return TransferState.PAUSED, False
-
     async def receive_file_loop(self, recv_function):
         while True:
-            what = struct.unpack('?', await recv_function(1))[0]
+            try:
+                what = struct.unpack('?', await recv_function(1))[0]
+            except struct.error as e:
+                if e.args == ("unpack requires a buffer of 1 bytes",):
+                    raise TransferIncomplete(TransferState.PAUSED) from e
+                raise
+
             if not what:
                 print("received end of transfer signal, finalizing file recv loop")  # debug
-                return True
+                return TransferState.COMPLETED
 
             if self.to_stop:
-                return False
+                return TransferState.PAUSED
 
             file_item, progress = await recv_file_setup(recv_function, self.download_path)
             self.current_file = file_item
             self.file_items.append(file_item)
             try:
                 await recv_actual_file(lambda: self.to_stop, recv_function, file_item, progress)
-            except* OSError as oe:
-                if 'No space left on device' in str(oe):
-                    add_error_ext(file_item, self.download_path, self.__error_ext)
-            except* TransferIncomplete:
+                print("completed receiving", self.current_file)  # debug
+                self.file_count += 1
+            except TransferIncomplete:
+                # if ti.__cause__ and isinstance(ti.__cause__, OSError):
+                #     if 'No space left on device' in str(ti.__cause__):
+                #         add_error_ext(file_item, self.download_path, self.__error_ext)
                 add_error_ext(file_item, self.download_path,
                               self.__error_ext)  # Mark error if not all data was received
-
-            print("completed receiving", self.current_file)  # debug
-            self.file_count += 1
+                progress.close()
+                raise
+                # return False
+            progress.close()
 
     async def send_files_again(self, receiver_sock):
         # ----------------------
@@ -293,7 +295,7 @@ class PeerFilePool:
         """
             Returns the file details
         """
-        return f"<PeerFilePool(paths={self.file_items!r})>"
+        return f"<PeerFilePool(id={self.id}, paths={self.file_items!r})>"
 
     def __iter__(self):
         """
@@ -428,12 +430,11 @@ async def send_actual_file(send_function, file: FileItem, send_progress, chunk_l
                 await asyncio.wait_for(send_function(chunk), timeout)
                 # :todo: add timeout mechanisms
             except ConnectionResetError:
-                print("got a connection reset error in file transfer")
                 file.seeked = seek  # can be ignored mostly for now
                 raise
             send_progress.update(len(chunk))
             seek += len(chunk)
-            await asyncio.sleep(0)
+            # await asyncio.sleep(0)
     file.seeked = seek  # can be ignored mostly for now
     return True
 
@@ -483,11 +484,7 @@ async def recv_actual_file(stopping_flag, recv_function, file_item: FileItem, pr
             progress.update(file_item.seeked)
 
             while (not stopping_flag()) and remaining_bytes > 0:
-                try:
-                    data = await recv_function(min(chunk_size, remaining_bytes))
-                except ConnectionResetError:
-                    break
-
+                data = await recv_function(min(chunk_size, remaining_bytes))
                 if not data:
                     break
 
@@ -503,7 +500,7 @@ async def recv_actual_file(stopping_flag, recv_function, file_item: FileItem, pr
         if remaining_bytes > 0:
             incomplete_transfer = TransferIncomplete(remaining_bytes)
             if any_exception:
-                raise ExceptionGroup("multiple exceptions", (incomplete_transfer, any_exception))
+                raise incomplete_transfer from any_exception
             else:
                 raise incomplete_transfer
 
