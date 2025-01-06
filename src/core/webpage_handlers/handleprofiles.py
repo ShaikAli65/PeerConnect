@@ -67,4 +67,4 @@ async def set_selected_profile(page_data: DataWeaver):
             selected_profile = profile
             break
     set_current_profile(selected_profile)
-    logger.info("::profile selected and updated", extra={'selected': selected_profile})
+    logger.info(f"::profile selected and updated {selected_profile=}")
