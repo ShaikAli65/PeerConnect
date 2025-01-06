@@ -107,6 +107,9 @@ class FileExplorerDialog(IDialogs):
                        f'$folderBrowser.SelectedPath']
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
             directory = result.stdout.strip() if result.returncode == 0 else ""
+            lines = directory.strip().split('\n')
+            # Extract the last line
+            directory = lines[-1]
         elif const.IS_DARWIN:  # macOS
             command = ['osascript', '-e',
                        f'tell application "System Events" to choose folder']
