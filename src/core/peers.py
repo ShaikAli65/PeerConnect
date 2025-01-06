@@ -92,11 +92,12 @@ from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import GossipMessage, RemotePeer, use
+from src.avails import DataWeaver, GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import GOSSIP
+from src.core.transfers import GOSSIP, HANDLE
+from src.core.webpage_handlers import pagehandle
 
 # this list contains 20 evenly spread numbers in [0, 2**160]
 node_list_ids = [
@@ -126,7 +127,7 @@ _logger = logging.getLogger(__name__)
 
 
 class PeerListGetter(crawling.ValueSpiderCrawl):
-    initial_list = Dock.peer_list
+    peers_cache = {}
     previously_fetched_index = 0
     node_list_ids = node_list_ids
 
@@ -153,7 +154,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         cls.previously_fetched_index += 1
 
         if list_of_peers:
-            cls.initial_list.extend(list_of_peers)
+            cls.peers_cache.update({x.peer_id: x for x in list_of_peers})
 
             return list(set(list_of_peers))
 
@@ -197,7 +198,6 @@ class Storage(storage.ForgetfulStorage):
     def get_list_of_peers(self, list_key):
         if list_key in self.peer_data_storage:
             return list(self.peer_data_storage.get(list_key))
-        return None
 
     def all_peers_in_lists(self):
         return self.peer_data_storage.items()
@@ -290,7 +290,7 @@ class GossipSearch:
                 m = RemotePeer.load_from(m)
             result_iter.add_peer(m)
         except KeyError as ke:
-            _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id",exc_info=ke)
+            _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id", exc_info=ke)
 
 
 def get_search_handler():
@@ -329,11 +329,12 @@ async def get_remote_peer(peer_id):
     This call is expensive as it performs a distributed search across the network
     try using ``Dock.peer_list`` instead if possible
 
-    Args:
+
+DataWeaver(
+    header=HANDLE.Args:
         peer_id(str): id to search for
 
     Returns:
-        RemotePeer | None: obj found
     """
     byte_id = convert_peer_id_to_byte_id(peer_id)
     return await Dock.kademlia_network_server.get_remote_peer(byte_id)
@@ -351,3 +352,23 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
         peer_obj = await get_remote_peer(peer_id)
 
     return peer_obj
+
+
+def new_peer(peer):
+    data = DataWeaver(
+        header=HANDLE.NEW_PEER,
+        content={
+            "name": peer.username,
+            "ip": peer.ip,
+        },
+        peer_id=peer.peer_id,
+    )
+    pagehandle.dispatch_data(data)
+
+
+def remove_peer(peer):
+    data = DataWeaver(
+        header=HANDLE.REMOVE_PEER,
+        peer_id=peer.peer_id,
+    )
+    pagehandle.dispatch_data(data)

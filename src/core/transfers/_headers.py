@@ -38,7 +38,8 @@ class HANDLE(enum.StrEnum):
     RELOAD = "this is reload  "
     POP_DIR_SELECTOR = "pop dir selector"
     OPEN_FILE = "open file       "
-
+    NEW_PEER = 'new peer'
+    REMOVE_PEER = 'remove peer'
     SEARCH_FOR_NAME = "1search name"
     SEND_PROFILES = "1send profiles"
     PEER_LIST = "1this is a profiles list"

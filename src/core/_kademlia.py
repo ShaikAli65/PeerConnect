@@ -160,11 +160,13 @@ class AnotherRoutingTable(routing.RoutingTable):
     def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
         Dock.peer_list.add_peer(peer)
+        peers.new_peer(peer)
 
     @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
         Dock.peer_list.remove_peer(peer.peer_id)
+        peers.remove_peer(peer)
 
 
 class PeerServer(network.Server):
