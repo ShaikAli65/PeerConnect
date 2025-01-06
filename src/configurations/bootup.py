@@ -16,7 +16,7 @@ import src.core.eventloop  # noqa
 import src.managers.logmanager as log_manager
 from src.avails import RemotePeer, const, use
 from src.configurations.configure import set_constants, validate_ports
-from src.core import set_current_remote_peer_object
+from src.core import Dock, set_current_remote_peer_object
 from src.managers import get_current_profile
 
 _logger = logging.getLogger(__name__)
@@ -41,7 +41,8 @@ def initiate_bootup():
         config_map.write(fp)
 
     set_constants(config_map)
-    log_manager.initiate()
+
+    Dock.exit_stack.enter_context(log_manager.initiate())
     ip_addr = get_ip(const.IP_VERSION)
 
     if ip_addr.version == 6:
@@ -51,7 +52,7 @@ def initiate_bootup():
         const.IP_VERSION = socket.AF_INET6
 
     const.THIS_IP = str(ip_addr)
-    # const.WEBSOCKET_BIND_IP = const.THIS_IP
+    const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 

@@ -1,4 +1,5 @@
 import asyncio as _asyncio
+from contextlib import AsyncExitStack
 from enum import IntEnum
 from typing import Optional, TYPE_CHECKING
 
@@ -26,7 +27,7 @@ class Dock:
     finalizing = _asyncio.Event()
     requests_endpoint: Optional[_asyncio.DatagramTransport] = None
     dispatchers: dict[DISPATCHS, BaseDispatcher] = {}
-
+    exit_stack = AsyncExitStack()
     if TYPE_CHECKING:
         from src.core.transfers import RumorMongerProtocol
         from src.core._kademlia import PeerServer
