@@ -14,7 +14,7 @@
     "rfile_handler": {
       "class": "logging.handlers.RotatingFileHandler",
       "level": "DEBUG",
-      "formatter": "default",
+      "formatter": "detailed",
       "filename": "this gets set at runtime",
       "maxBytes": 5242880,
       "backupCount": 3,
@@ -35,7 +35,6 @@
       "class": "logging.handlers.QueueHandler",
       "handlers": ["rfile_handler"]
     }
-
   },
   "loggers": {
     "": {
