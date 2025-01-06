@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
-git stash
-git pull
+# git stash
+# git pull
 
 runner="py"
 if command -v python3 &>/dev/null; then
