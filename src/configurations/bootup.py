@@ -114,9 +114,9 @@ def get_v6():
             ip, _, _, _ = sock_tuple[4]
             ipaddr = IPv6Address(ip)
             if ipaddr.is_link_local:
-                back_up = ip
+                back_up = ipaddr
             elif not ipaddr.is_link_local:
-                return ip
+                return ipaddr
         return back_up
     elif const.IS_DARWIN or const.IS_LINUX:
         return get_v6_from_shell() or get_v6_from_api64()
@@ -202,7 +202,7 @@ def write_default_profile():
 def configure_this_remote_peer():
     rp = make_this_remote_peer()
     set_current_remote_peer_object(rp)
-
+    const.USERNAME = rp.username
 
 def make_this_remote_peer():
     profile = get_current_profile()
