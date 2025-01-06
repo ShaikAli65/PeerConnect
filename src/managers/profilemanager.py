@@ -178,8 +178,9 @@ class ProfileManager:
         return f"{username}{int(time.time() * 10)}"
 
     @classmethod
+    @property
     def prev_selected_profile_file_name(cls):
-        return next(iter(cls._main_config["SELECTED_PROFILE"]))
+        return cls._main_config["SELECTED_PROFILE"]
 
     def __eq__(self, other):
         if isinstance(other, dict):
@@ -213,11 +214,9 @@ def all_profiles():
         profile.file_name: profile.profile_data
         for profile in ProfileManager.PROFILE_LIST
     }
-    profiles[ProfileManager.prev_selected_profile_file_name()].update({
+    profiles[ProfileManager.prev_selected_profile_file_name].extend({
         'selected': True,
     })
-
-    return profiles
 
 
 def load_profiles_to_program():
