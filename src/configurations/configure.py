@@ -4,9 +4,8 @@ import os
 import socket
 from pathlib import Path
 
-import src.avails.connect as connect
 import src.avails.constants as const
-from src.avails import connect, constants, use
+from src.avails import connect, use
 
 
 def set_constants(config_map: configparser.ConfigParser) -> bool:
@@ -39,13 +38,15 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
 
 def print_constants():
+    ip_version = ipaddress.ip_address(const.THIS_IP).version
     print_string = (
         f'\n:configuration choices{"=" * 32}\n'
         f'{"USERNAME": <15} : {const.USERNAME: <10}\n'
         f'{"THIS_IP": <15} : {f"{const.THIS_IP}": <10}\n'
         f'{"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}\n'
-        f'{"IP_VERSION": <15} : {ipaddress.ip_address(const.THIS_IP).version: <10}\n'
+        f'{"IP_VERSION": <15} : {ip_version: <10}\n'
         f'{"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}\n'
+        f'{"MULTICAST_IP": <15} : {f"{const.MULTICAST_IP_v4 if ip_version == 4 else const.MULTICAST_IP_v6}": <10}\n'
         f'{"PORT_THIS": <15} : {const.PORT_THIS: <10}\n'
         f'{"SERVER_PORT": <15} : {const.PORT_SERVER: <10}\n'
         f'{"NETWORK_PORT": <15} : {const.PORT_NETWORK: <10}\n'
