@@ -1,3 +1,4 @@
+import asyncio
 import sys
 
 import websockets.server
@@ -104,12 +105,14 @@ async def handler(_websocket):
 
 
 def initiate_control():
-    global loop
-    asyncio.set_event_loop(loop)
-    start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_DATA,)
-    # start_server.ws_server.start_serving()
-    loop.run_until_complete(start_server)
-    loop.run_forever()
+    async def _helper():
+        global loop
+        loop = asyncio.get_event_loop()
+        start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_DATA,)
+        async with start_server:
+            await safe_end.wait()
+
+    asyncio.run(_helper())
 
 
 async def feed_user_data_to_page(_data, ip):
