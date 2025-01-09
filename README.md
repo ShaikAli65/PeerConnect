@@ -6,16 +6,11 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 
 ## Features
 
-- **P2P Communication**: Enables direct data transfer and messaging between peers, eliminating the need for centralized control.
+- **P2P Communication**: Enables direct data transfer and messaging between peers, reducing the need for centralized control.
 - **Local Network Optimization**: Tuned for high-performance within local area networks (LANs).
 - **Custom Protocols**: Implements several distributed protocols to optimize communication and data sharing between peers.
 - **Standard Library Use**: Core functionality implemented using Python’s standard library to avoid unnecessary dependencies.
-
-## Internals
-- **Network Discovery**: finds other peers incrementally in the local network and lists them to the user   
-- **k 
-- **Messaging**: 
-
+  
 ## Main Branch
 
 The code in the main branch is a fully functional version of PeerConnect. It employs a **threaded synchronous model** and includes:
