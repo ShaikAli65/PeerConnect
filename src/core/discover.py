@@ -26,6 +26,7 @@ def DiscoveryRequestHandler(discovery_transport):
     async def handle(event: RequestEvent):
         req_packet = event.request
         if req_packet["reply_addr"][0] == const.THIS_IP:
+            _logger.debug("[DISCOVERY] ignoring echo")
             return
         _logger.info(f"[DISCOVERY] replying to req with addr: {req_packet.body}")
         this_rp = get_this_remote_peer()
@@ -56,16 +57,17 @@ class DiscoveryDispatcher(QueueMixIn, BaseDispatcher):
 
 async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
     this_rp = get_this_remote_peer()
-    ping_data = WireData(
+    ping_data = bytes(WireData(
         DISCOVERY.NETWORK_FIND,
         this_rp.peer_id,
         reply_addr=this_rp.req_uri
     )
-
+    )
     if const.USING_IP_V4:
-        async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
-            transport.sendto(bytes(ping_data), broad_cast_addr)
-        _logger.debug(f"[DISCOVERY] sent discovery request to broadcast {broad_cast_addr}",)
-    async for _ in use.async_timeouts(max_retries=const.DISCOVER_RETRIES):
-        transport.sendto(bytes(ping_data), multicast_addr)
+        async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
+            transport.sendto(ping_data, broad_cast_addr)
+            # transport.transport._sock.sendto(ping_data,broad_cast_addr)
+        _logger.debug(f"[DISCOVERY] sent discovery request to broadcast {broad_cast_addr}", )
+    async for _ in use.async_timeouts(initial=0.1,max_retries=const.DISCOVER_RETRIES):
+        transport.sendto(ping_data, multicast_addr)
     _logger.debug(f"[DISCOVERY] sent discovery request to multicast {multicast_addr}")

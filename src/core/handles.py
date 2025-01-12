@@ -1,15 +1,5 @@
-import os
-import struct
-import socket
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from multiprocessing.managers import BaseProxy
-from pathlib import Path
-
-from src.avails import (
-    connect,
-    use,
-)
-from src.core.transfers import PeerFilePool
 
 
 class TaskHandle:
@@ -64,31 +54,5 @@ class TaskHandleProxy(BaseProxy):
         return self._callmethod('cancel')
 
 
-class FileTaskHandle(TaskHandle):
-    def __init__(self, handle_id, file_list, files_id, connection: connect.Socket, function_code):
-        super().__init__(handle_id)
-        # later converted into PeerFilePool in may be different Process
-        self.file_pool = file_list
-        self.files_id = files_id
-        self.socket = connection
-        self.function_code = function_code
-
-    def start(self):
-        use.echo_print('starting ', self.function_code, 'with', self.socket)  # debug
-        self.file_pool = PeerFilePool(self.file_pool, _id=self.files_id)
-        self._result = getattr(self.file_pool, self.function_code)(self.socket)
-        print('completed file task', self._result)  # debug
-        return self._handle_id, self._result
-
-    def chain(self, file_list):
-        # :todo complete chaining of extra files
-        self.file_pool.add_continuation(file_list)
-
-    def cancel(self):
-        self.file_pool.stop()
-
-    def status(self):
-        ...
-
-    def __str__(self):
-        return self.ident.__str__() + ',' + self.file_pool.__str__() + ',' + self.socket.__str__() + ',' + id(self)
+class FileTaskHandle(TaskHandle, ABC):
+    pass

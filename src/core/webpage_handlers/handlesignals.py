@@ -1,6 +1,4 @@
-from sys import stderr
-
-from src.avails import DataWeaver, use
+from src.avails import DataWeaver
 from src.core import Dock, peers
 from src.core.transfers import HANDLE
 from src.core.webpage_handlers.handleprofiles import (
@@ -11,12 +9,16 @@ from src.core.webpage_handlers.pagehandle import dispatch_data
 from src.managers.statemanager import State
 
 
-def restart(): ...
+def _restart(): ...
 
 
 def receive_restart_signal(data: DataWeaver):
-    s = State("restarting", func=restart)
+    s = State("restarting", func=_restart)
     Dock.state_manager_handle.state_queue.put(s)
+
+
+async def close_app():
+    ...
 
 
 async def search_for_user(data: DataWeaver):
@@ -46,7 +48,7 @@ async def send_list(data: DataWeaver):
         content=[
             {
                 "name": peer.username,
-                "ip":peer.ip,
+                "ip": peer.ip,
                 "id": peer.peer_id,
             } for peer in peer_list
         ],

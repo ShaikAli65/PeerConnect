@@ -42,7 +42,7 @@ async def initiate_connections():
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     async def submit(self, event: ConnectionEvent):
         handler = self.registry[event.handshake.header]
-        _logger.info(f"[CONNECTIONS] dispatching connection with header {event.handshake.header} to {handler}")
+        _logger.info(f"dispatching connection with header {event.handshake.header} to {handler}")
         r = handler(event)
 
         if isawaitable(r):
@@ -117,7 +117,7 @@ class Acceptor:
         self.__loop = asyncio.get_running_loop()
         self.all_tasks = set()
         self.max_timeout = 90
-        _logger.info("[ACCEPTOR] ::Initiating Acceptor ", extra={'addr': self.address})
+        _logger.info(f"Initiating Acceptor {self.address}")
         self._initialized = True
         self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add,
                                              done_callback=lambda t: self.all_tasks.remove(t))
@@ -130,11 +130,11 @@ class Acceptor:
     async def initiate(self):
         self.connection_dispatcher.transport = self.main_socket
         with await self._start_socket() as self.main_socket:
-            _logger.info("[ACCEPTOR] ::Listening for connections")
+            _logger.info("Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
                     initial_conn, addr = await self.main_socket.aaccept()
-                    _logger.debug(f"[ACCEPTOR] New connection from {addr}")
+                    _logger.info(f"New connection from {addr}")
                     tg.create_task(self.__accept_connection(initial_conn))
                     await asyncio.sleep(0)
 
@@ -201,8 +201,8 @@ class Connector:
         del sock
         peer_sock = await cls._add_connection(peer_obj)
         await cls._verifier(peer_sock)
-        _logger.info(
-            ("[CONNECTIONS] cache miss --current :",
+        _logger.debug(
+            ("cache miss --current :",
              f"{textwrap.fill(peer_obj.username, width=10)}",
              f"{peer_sock.getpeername()[:2]}",
              f"{peer_sock.getsockname()[:2]}")
@@ -225,5 +225,5 @@ class Connector:
             msg_id=get_this_remote_peer().peer_id,
         )
         await Wire.send_async(connection_socket, bytes(verification_data))
-        _logger.info(f"[CONNECTIONS] Sent verification to {connection_socket.getpeername()}")  # debug
+        _logger.info(f"Sent verification to {connection_socket.getpeername()}")  # debug
         return True
