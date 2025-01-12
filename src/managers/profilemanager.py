@@ -214,6 +214,9 @@ def all_profiles():
         for profile in ProfileManager.PROFILE_LIST
     }
     prev = ProfileManager.prev_selected_profile_file_name()
+    if prev not in profiles:
+        prev = const.DEFAULT_PROFILE_NAME
+
     profiles[prev].update({
         'selected': True,
     })
