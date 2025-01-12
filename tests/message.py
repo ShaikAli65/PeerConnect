@@ -12,7 +12,7 @@ from test import initiate, test_initial_states
 async def test_message():
     message = await async_input()
     Dock.peer_list.add_peer(peer_obj=RemotePeer(
-        peer_id=B'',
+        byte_id=B'',
     ))
     DataWeaver(
         header=HANDLE.SEND_TEXT,

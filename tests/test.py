@@ -47,7 +47,7 @@ def test():
     const.DISCOVER_RETRIES = 1
     set_current_remote_peer_object(
         RemotePeer(
-            peer_id=utils.digest(f"{const.THIS_IP}{const.PORT_THIS}"),
+            byte_id=utils.digest(f"{const.THIS_IP}{const.PORT_THIS}"),
             username=f"test-{getpass.getuser()}",
             ip=const.THIS_IP,
             conn_port=const.PORT_THIS,

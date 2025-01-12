@@ -2,16 +2,23 @@ import asyncio
 import os
 
 import _path  # noqa
-from src.avails import const
-from src.managers.directorymanager import new_directory_send_transfer
+from src.avails import DataWeaver, const
+from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
 from test import get_a_peer, initiate, test_initial_states
 
 
 async def test_dir_transfer():
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
     if p := get_a_peer():
-        await new_directory_send_transfer(p.peer_id)
+        await handledata.new_dir_transfer(
+            DataWeaver(
+                peer_id=p.peer_id,
+                content={
+                    'path':"C:/Users/7862s/Desktop/statemachines",
+                }
+            )
+        )
 
 
 if __name__ == '__main__':

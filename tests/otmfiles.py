@@ -61,7 +61,7 @@ async def test_one_to_many_file_transfer():
             },
             peer_id=p.peer_id,
         )
-        await handledata.send_file_to_multiple_peers(command_data)
+        await handledata.send_files_to_multiple_peers(command_data)
 
     except StopIteration:
         print("no peers available")

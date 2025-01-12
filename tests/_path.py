@@ -1,4 +1,7 @@
-from pathlib import Path
-import sys
 import os
-sys.path.append(str(Path(os.getcwd(),'..').resolve()))
+import sys
+from pathlib import Path
+
+if "tests" in Path(os.getcwd()).parts:
+    sys.path.append(str(Path(os.getcwd(),'..').resolve()))
+
