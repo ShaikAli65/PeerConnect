@@ -17,7 +17,13 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate():
-    const.BIND_IP = const.THIS_IP
+
+    # const.BIND_IP = const.THIS_IP
+
+    # TL;DR: causing some unknown behaviour in linux system
+
+    # a discovery request packet is observed in wire shark but that packet is
+    # not getting delivered to application socket in linux is we bind to specific interface address
 
     bind_address = (const.BIND_IP, const.PORT_REQ)
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
@@ -86,7 +92,12 @@ def _create_listen_socket(bind_address, multicast_addr):
 
     if const.USING_IP_V4:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        _logger.debug("[REQUESTS] registered request socket for broadcast")
+
+        log = "registered request socket for broadcast"
+        if not sock.getsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST):
+            log = "not " + log
+        _logger.debug(log)
+
         ipv4_multicast_socket_helper(sock, multicast_addr)
         _logger.debug(f"[REQUESTS] registered request socket for multicast v4 {multicast_addr}")
     else:
