@@ -92,8 +92,8 @@ class RPCReceiver(RPCProtocol):
         source = self._check_in(sender_peer)
         log.info("finding neighbors of %i in local table",
                  source.long_id)
-        node = RemotePeer(key)
-        neighbors = self.router.find_neighbors(node, exclude=source)
+        peer = RemotePeer(key)
+        neighbors = self.router.find_neighbors(peer, exclude=source)
         return list(map(tuple, neighbors))
 
     def rpc_find_value(self, sender, sender_peer, key):
@@ -165,8 +165,8 @@ class AnotherRoutingTable(routing.RoutingTable):
     @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        Dock.peer_list.remove_peer(peer.peer_id)
-        peers.remove_peer(peer)
+        # Dock.peer_list.remove_peer(peer.peer_id)
+        # peers.remove_peer(peer)
 
 
 class PeerServer(network.Server):
@@ -213,12 +213,13 @@ class PeerServer(network.Server):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
             log.debug(f'added this peer object in list_id={closest_list_id}')  # debug
+
         else:
-            # log.error("failed adding this peer object to lists")
+            log.error("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
             self.add_this_peer_future = asyncio.create_task(f())
-            # log.debug("scheduled callback to add this object to lists")
+            log.debug("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -243,20 +244,20 @@ class PeerServer(network.Server):
         results = [self.protocol.call_store_peers_in_list(n, list_key, peer_objs) for n in relevant_peers]
         return any(await asyncio.gather(*results))
 
-    async def get_remote_peer(self, peer_id):
+    async def get_remote_peer(self, byte_id):
         """
         Every call to this function not only gathers remote_peer object corresponding to peer_id
         but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent
         """
-        node = RemotePeer(peer_id=peer_id)
-        nodes = self.protocol.router.find_neighbors(node)
+        peer = RemotePeer(byte_id=byte_id)
+        nodes = self.protocol.router.find_neighbors(peer)
 
-        spider = NodeSpiderCrawl(self.protocol, node, nodes,
+        spider = NodeSpiderCrawl(self.protocol, peer, nodes,
                                  self.ksize, self.alpha)
         found_peers = await spider.find()
         for peer in found_peers:
-            if peer.id == peer_id:
+            if peer.id == byte_id:
                 return peer
 
     @property

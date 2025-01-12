@@ -52,7 +52,7 @@ def initiate_bootup():
         const.IP_VERSION = socket.AF_INET6
 
     const.THIS_IP = str(ip_addr)
-    const.WEBSOCKET_BIND_IP = const.THIS_IP
+    # const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{const.THIS_IP=}")
     validate_ports(const.THIS_IP)
 
@@ -206,7 +206,7 @@ def configure_this_remote_peer():
 def make_this_remote_peer():
     profile = get_current_profile()
     rp = RemotePeer(
-        peer_id=digest(profile.id),
+        byte_id=digest(profile.id),
         username=profile.username,
         ip=const.THIS_IP,
         conn_port=const.PORT_THIS,

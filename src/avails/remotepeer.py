@@ -34,7 +34,7 @@ class RemotePeer:
     __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', 'long_id', '_byte_cache'
 
     def __init__(self,
-                 peer_id=b'\x00',
+                 byte_id=b'\x00',
                  username=None,
                  ip=None,
                  conn_port=const.PORT_THIS,
@@ -45,8 +45,8 @@ class RemotePeer:
         self._conn_port = conn_port
         self._req_port = req_port
         self.status = status
-        self.id = peer_id
-        self.long_id = int(peer_id.hex(), 16)
+        self.id = byte_id
+        self.long_id = int(byte_id.hex(), 16)
         self._byte_cache = None, None
 
     def same_home_as(self, node):
