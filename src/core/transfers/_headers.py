@@ -32,15 +32,15 @@ class HEADERS:
 
 class HANDLE(enum.StrEnum):
     __slots__ = ()
-    COMMAND = "this is command "
-    SEARCH_RESPONSE = "result for search name"
-    SEND_PEER_LIST_RESPONSE = "result for send peer list"
-    RELOAD = "this is reload  "
-    POP_DIR_SELECTOR = "pop dir selector"
-    OPEN_FILE = "open file       "
-    NEW_PEER = 'new peer'
-    REMOVE_PEER = 'remove peer'
-    SEARCH_FOR_NAME = "1search name"
+    COMMAND = "1this is command "
+    SEARCH_RESPONSE = "1result for search name"
+    SEND_PEER_LIST_RESPONSE = "1result for send peer list"
+    RELOAD = "1this is reload  "
+    POP_DIR_SELECTOR = "1pop dir selector"
+    OPEN_FILE = "1open file       "
+    NEW_PEER = '1new peer'
+    REMOVE_PEER = '1remove peer'
+    SEARCH_FOR_NAME = "0search name"
     SEND_PROFILES = "1send profiles"
     PEER_LIST = "1this is a profiles list"
     SYNC_USERS = "1sync users      "

@@ -213,13 +213,12 @@ class PeerServer(network.Server):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
             log.debug(f'added this peer object in list_id={closest_list_id}')  # debug
-
         else:
-            log.error("failed adding this peer object to lists")
+            # log.error("failed adding this peer object to lists")
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
             self.add_this_peer_future = asyncio.create_task(f())
-            log.debug("scheduled callback to add this object to lists")
+            # log.debug("scheduled callback to add this object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
