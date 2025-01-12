@@ -1,5 +1,5 @@
 class DispatcherFinalizing(Exception):
-    """Operation called when Dispatcher finalizing"""
+    """Dispatcher is finalizing no longer working"""
 
 
 class WebSocketRegistryReStarted(Exception):
@@ -16,3 +16,7 @@ class UnknownConnectionType(Exception):
 
 class TransferIncomplete(Exception):
     """Data Transfer was paused or broken in between"""
+
+
+class TransferRejected(Exception):
+    """Data Transfer request was rejected"""
