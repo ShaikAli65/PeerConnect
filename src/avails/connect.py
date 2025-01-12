@@ -17,7 +17,7 @@ class Socket(_socket.socket):
     designed to integrate with asyncio for asynchronous I/O operations.
     It provides both synchronous and asynchronous methods for common socket operations.
 
-    Attributes
+    Attributes:
         __loop (asyncio.AbstractEventLoop): The event loop used for asynchronous operations.
          This must be set using the set_loop method before any asynchronous methods are called.
     """
@@ -52,6 +52,8 @@ class Socket(_socket.socket):
         custom_socket = self.__class__(self.family, self.type, self.proto, fileno=fd)
         if _socket.getdefaulttimeout() is None and self.gettimeout():
             custom_socket.setblocking(True)
+        if self.__loop:
+            custom_socket.set_loop(self.__loop)
         return custom_socket, addr
 
     async def aaccept(self):
@@ -251,6 +253,48 @@ class UDPProtocol(Protocol):
         return "<connect.UDProtocol>"
 
 
+class _PauseMixIn:
+    __slots__ = ()
+
+    def pause(self):
+        self._stopper.clear()  # noqa
+
+
+class _ResumeMixIn:
+    __slots__ = ()
+
+    def resume(self):
+        self._stopper.set()  # noqa
+
+
+class Sender(_PauseMixIn, _ResumeMixIn):
+    __slots__ = 'sock', 'send_func', '_stopper'
+
+    def __init__(self, sock):
+        self.sock = sock
+        self.send_func = _asyncio.get_event_loop().sock_sendall
+        self._stopper = _asyncio.Event()
+        self._stopper.set()
+
+    async def __call__(self, buf: bytes):
+        await self._stopper.wait()
+        return await self.send_func(self.sock, buf)
+
+
+class Receiver(_PauseMixIn, _ResumeMixIn):
+    __slots__ = 'sock', 'recv_func', '_stopper'
+
+    def __init__(self, sock):
+        self.sock = sock
+        self.recv_func = _asyncio.get_event_loop().sock_recv
+        self._stopper = _asyncio.Event()
+        self._stopper.set()
+
+    async def __call__(self, nbytes: int):
+        await self._stopper.wait()
+        return await self.recv_func(self.sock, nbytes)
+
+
 def create_connection_sync(address, addr_family=None, sock_type=None, timeout=None) -> Socket:
     try:
         if addr_family is None:
@@ -283,7 +327,6 @@ def connect_to_peer(_peer_obj=None, to_which: str = CONN_URI, timeout=0.001, ret
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
-    *args will be passed into socket.setsockoption
     :param timeout: self-explanatory
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
@@ -296,7 +339,7 @@ def connect_to_peer(_peer_obj=None, to_which: str = CONN_URI, timeout=0.001, ret
     for timeout in useables.get_timeouts(timeout, max_retries=retries):
         try:
             return create_connection_sync(address, addr_family=sock_family, sock_type=sock_type, timeout=timeout)
-        except (OSError, _socket.error) as exp:
+        except (OSError, _socket.error):
             retry_count += 1
             if retry_count >= retries:
                 raise
@@ -322,7 +365,8 @@ async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1,
     :param _peer_obj: RemotePeer object
     :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
     :param timeout: uses as initial value
-    :returns: connected socket
+    :returns: connected socket if successful
+    :raises: OSError
     """
 
     address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
@@ -331,7 +375,7 @@ async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1,
     for timeout in useables.get_timeouts(timeout, max_retries=retries):
         try:
             return await create_connection_async(address, timeout)
-        except (OSError, _socket.error) as exp:
+        except OSError:
             retry_count += 1
             if retry_count >= retries:
                 raise
@@ -339,8 +383,11 @@ async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1,
 
 def is_socket_connected(sock: Socket):
     blocking = sock.getblocking()
-    sock.setblocking(False)
+    keep_alive = sock.getsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE)
+
     try:
+        sock.setblocking(False)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
         sock.getpeername()
         data = sock.recv(1, _socket.MSG_PEEK)
         return data != b''
@@ -351,6 +398,7 @@ def is_socket_connected(sock: Socket):
     finally:
         try:
             sock.setblocking(blocking)
+            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, keep_alive)
         except OSError:
             return False
 
@@ -395,8 +443,8 @@ def ipv4_multicast_socket_helper(
     sock_options = {
         'membership': add_membership,
         'loop_back': loop_back,
-        'ttl':ttl,
-        'reuse_addr':reuse_addr
+        'ttl': ttl,
+        'reuse_addr': reuse_addr
     }
     _logger.debug(f"socket{sock} options for multicast {sock_options}")
 
@@ -407,7 +455,7 @@ def ipv6_multicast_socket_helper(
         loop_back=1,
         reuse_addr=1,
         add_membership=True,
-        hops=2  # :todo: review this magic number
+        hops=1
 ):
     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_LOOP, loop_back)
     # this function makes socket to go with default interface
@@ -420,8 +468,7 @@ def ipv6_multicast_socket_helper(
     sock_options = {
         'membership': add_membership,
         'loop_back': loop_back,
-        'hops':hops,
-        'reuse_addr':reuse_addr
+        'hops': hops,
+        'reuse_addr': reuse_addr
     }
     _logger.debug(f"socket={sock} options for multicast {sock_options}")
-
