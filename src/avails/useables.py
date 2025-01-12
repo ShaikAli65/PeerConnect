@@ -4,14 +4,15 @@ import inspect
 import os
 import platform
 import socket
+import struct
 import subprocess
 import sys
 import threading
 import traceback
 from sys import _getframe  # noqa
-from typing import Final
+from typing import Awaitable, Final
 from uuid import uuid4
-
+import typing
 import select
 
 from src.avails import const
@@ -25,6 +26,36 @@ def get_unique_id(_type: type = str):
     if _type == bytes:
         return uuid4().bytes
     return _type(uuid4())
+
+
+SHORT_INT = 4
+LONG_INT = 8
+
+
+async def recv_int(get_bytes:typing.Callable[[int],Awaitable[bytes]], type=SHORT_INT) -> int:
+    """Receives integer from get_bytes function
+
+    awaits on ``get_bytes``, gets bytes based on ``type`` argument
+    unpacks it using ``struct.unpack``
+
+    Args:
+        get_bytes (Callable[[int], Awaitable[bytes]]): function to receive bytes from
+        type: `SHORT_INT` and `LONG_INT`
+
+    Returns:
+        int: unpacked integer
+
+    Raises:
+        ValueError : on ConnectionResetError or struct.error
+    """
+    try:
+        byted_int = await get_bytes(type)
+        integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
+        return integer
+    except struct.error as se:
+        raise ValueError(f"unable to unpack integer from: {byted_int}") from se
+    except ConnectionResetError as ce:
+        raise ValueError(f"unable to receive integer") from ce
 
 
 def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
@@ -245,6 +276,7 @@ def wrap_with_tryexcept(func, *args, **kwargs):
                     print(f"    {frame.line}")
             print(COLOR_RESET)
             raise
+
     return wrapped_with_tryexcept
 
 
