@@ -329,12 +329,11 @@ async def get_remote_peer(peer_id):
     This call is expensive as it performs a distributed search across the network
     try using ``Dock.peer_list`` instead if possible
 
-
-DataWeaver(
-    header=HANDLE.Args:
+    Args:
         peer_id(str): id to search for
 
     Returns:
+        RemotePeer | None
     """
     byte_id = convert_peer_id_to_byte_id(peer_id)
     return await Dock.kademlia_network_server.get_remote_peer(byte_id)

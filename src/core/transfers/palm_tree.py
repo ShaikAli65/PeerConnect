@@ -169,7 +169,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         relay state to LINKS_INITIALIZED.
 
         Args:
-            state_data (WireData): Contains peer addresses for relay setup.
+            state_data (WireData): Contains peer addresses for relay status_setup.
             addr (tuple): Address of the peer initiating the update.
         """
         if self.state >= RelayState.LINKS_INITIALIZED:

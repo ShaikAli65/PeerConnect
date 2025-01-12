@@ -3,7 +3,7 @@
     PalmTreeProtocol in gossip protocols
     here's the plan
     . file manager gets command to set up file transfer
-    . OTMFilesRelay gets called for setup
+    . OTMFilesRelay gets called for status_setup
     . OTMFilesReceiver (which follows asyncio.Buffered Protocol ??) reference is passed into OTMRelay
     . OTMFilesReceiver does not need a reference to OTMRelay cause it does nothing but receives file data ??
       no need to interact with Relay cause data is flown RELAY -> OTM FILES RECV, not the other way around
