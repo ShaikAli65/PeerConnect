@@ -1,3 +1,4 @@
+import traceback
 from pathlib import Path
 from sys import stderr
 
@@ -5,21 +6,44 @@ from src.avails import DataWeaver, Wire, WireData, use
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.connections import Connector
 from src.core.transfers import HANDLE, HEADERS
-from src.managers import filemanager
-from src.managers.filemanager import send_files_to_peer
+from src.managers import directorymanager, filemanager
+from src.managers.directorymanager import send_directory
 
 
-async def send_a_directory(command_data: DataWeaver): ...
+async def new_dir_transfer(command_data: DataWeaver):
+    if p := command_data.content['path']:
+        dir_path = p
+    else:
+        dir_path = await directorymanager.open_dir_selector()
+        if not dir_path:
+            return
+
+    peer_id = command_data.peer_id
+    remote_peer = await peers.get_remote_peer_at_every_cost(peer_id)
+    if not remote_peer:
+        raise Exception(f"cannot find remote peer object for given id{peer_id}")
+
+    async with send_directory(remote_peer, dir_path) as sender:
+        async for message in sender:
+            continue
+            print(message)
 
 
-async def send_file_to_peer(command_data: DataWeaver):
+async def send_file(command_data: DataWeaver):
     selected_files = await filemanager.open_file_selector()
-    if selected_files:
-        # print(selected_files)
-        selected_files = [Path(x) for x in selected_files]
-        peer_id = command_data.content["peer_id"]
+    if not selected_files:
+        return
 
-        await send_files_to_peer(peer_id, selected_files)
+    selected_files = [Path(x) for x in selected_files]
+    peer_id = command_data.peer_id
+    try:
+        async with filemanager.send_files_to_peer(peer_id, selected_files) as files_sender:
+            async for status in files_sender:
+                print(status)
+    except OSError as e:
+        traceback.print_exc()
+        print("{eror}", e)
+        # pagehandle.dispatch_data(DataWeaver)
 
 
 async def send_text(command_data: DataWeaver):
@@ -38,7 +62,7 @@ async def send_text(command_data: DataWeaver):
     await Wire.send_async(connection, bytes(data))
 
 
-async def send_file_to_multiple_peers(command_data: DataWeaver):
+async def send_files_to_multiple_peers(command_data: DataWeaver):
     peer_ids = command_data.content["peerList"]
     peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = await filemanager.open_file_selector()
@@ -55,10 +79,10 @@ async def send_dir_to_multiple_peers(command_data: DataWeaver): ...
 
 
 function_dict = {
-    HANDLE.SEND_DIR: send_a_directory,
-    HANDLE.SEND_FILE: send_file_to_peer,
+    HANDLE.SEND_DIR: new_dir_transfer,
+    HANDLE.SEND_FILE: send_file,
     HANDLE.SEND_TEXT: send_text,
-    HANDLE.SEND_FILE_TO_MULTIPLE_PEERS: send_file_to_multiple_peers,
+    HANDLE.SEND_FILE_TO_MULTIPLE_PEERS: send_files_to_multiple_peers,
     HANDLE.SEND_DIR_TO_MULTIPLE_PEERS: send_dir_to_multiple_peers,
 }
 
