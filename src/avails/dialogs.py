@@ -100,11 +100,13 @@ class FileExplorerDialog(IDialogs):
         """
         if const.IS_WINDOWS:
             command = ["powershell", "-Command",
-                       f'[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms");'
+                       f'[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms")|Out-Null;'
                        f'$folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog;'
                        f'$folderBrowser.SelectedPath = "{cls.recent_dir}";'
-                       f'$folderBrowser.ShowDialog() | Out-Null;'
-                       f'$folderBrowser.SelectedPath']
+                       '$folderBrowser.Description = "Select a folder";'
+                       'if($folderBrowser.ShowDialog() -eq "OK"){$folder += $folderBrowser.SelectedPath};'
+                       "$folder"
+                       ]
             result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
             directory = result.stdout.strip() if result.returncode == 0 else ""
             lines = directory.strip().split('\n')
