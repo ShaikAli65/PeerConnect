@@ -121,14 +121,15 @@ class WireData:
             self.id,
             self.version,
             self.body,
+            self.peer_id,
         ]
         return umsgpack.dumps(list_of_attributes)
 
     @classmethod
     def load_from(cls, data: bytes):
         list_of_attributes = umsgpack.loads(data)
-        header, _id, version, body = list_of_attributes
-        return cls(header, _id, version=version, **body)
+        header, _id, version, body, peer_id = list_of_attributes
+        return cls(header, _id, peer_id, version=version, **body)
 
     def match_header(self, data):
         return self._header == data
@@ -153,6 +154,7 @@ class WireData:
             "header": self._header,
             "id": self.id,
             "version": self.version,
+            "peer_id": self.peer_id,
             **self.body,
         }
 
@@ -182,7 +184,7 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
     except umsgpack.UnpackException as ue:
         raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue)) from ue
     except TypeError as tp:
-        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)) from  tp
+        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)) from tp
     except struct.error as se:
         raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se)) from se
 
@@ -282,10 +284,10 @@ class DataWeaver:
     def field_check(self):
         match self.__data:
             case {
-                'msgId':_,
-                'content':_,
-                'header':_,
-                'peerId':_,
+                'msgId': _,
+                'content': _,
+                'header': _,
+                'peerId': _,
             }:
                 return
             case _:
