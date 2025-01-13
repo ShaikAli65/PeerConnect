@@ -18,7 +18,7 @@ from src.avails.useables import get_unique_id
 from src.avails.wire import PalmTreeInformResponse, PalmTreeSession, Wire
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.transfers import HEADERS
-from src.core.transfers.tree import TreeLink
+from src.core.transfers.otm.tree import TreeLink
 
 
 class PalmTreeLink(TreeLink):
@@ -80,10 +80,10 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
     link_init_class = PalmTreeLink
 
     def __init__(
-        self,
-        session,
-        passive_endpoint_addr: tuple[str, int] = None,
-        active_endpoint_addr: tuple[str, int] = None,
+            self,
+            session,
+            passive_endpoint_addr: tuple[str, int] = None,
+            active_endpoint_addr: tuple[str, int] = None,
     ):
 
         self.session_task = None
@@ -289,7 +289,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         self.active_links[sender_id] = active_link
 
         for timeout in use.get_timeouts(
-            initial=0.1, max_retries=3, max_value=self.session.link_wait_timeout
+                initial=0.1, max_retries=3, max_value=self.session.link_wait_timeout
         ):
             if self._parent_link_fut.done():
                 break
@@ -327,7 +327,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         )
         self._tree_check_window_index = window_end
 
-        peer_ids = list(self.all_links)[window_start : window_end + 1]
+        peer_ids = list(self.all_links)[window_start: window_end + 1]
 
         sampled_peer_ids = set(peer_ids) - {sender_id} - set(self.active_links)
 
@@ -507,7 +507,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             self.print_state("found parent link active rejecting further connections")
             connection.close()
         elif (
-            peer_id in self.__expected_parent_peers
+                peer_id in self.__expected_parent_peers
         ):  # this confirms that we have requested the peer to make a connection
             active_link.connection = connection
             await Wire.send_async(connection, HEADERS.GOSSIP_LINK_OK)
@@ -517,7 +517,8 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
 
         # stream connections are assumed to be active links for now
 
-    async def _parent_link_broken(self): ...
+    async def _parent_link_broken(self):
+        ...
 
     def _get_forward_links(self):
         """
@@ -600,8 +601,9 @@ class PalmTreeProtocol:
     request_timeout = 3
     mediator_class = None
 
-    def __init__(self, center_peer: RemotePeer, session, peers: list[RemotePeer]):
+    def __init__(self, center_peer, session, peers_list):
         """
+
         Builds tree using top down approach
         # call order :
         # inform peers
@@ -609,12 +611,20 @@ class PalmTreeProtocol:
         # update states
         # trigger_spanning_formation
         # gather_tree
+
         Note:
             Do not include center_peer in peers list passed in
+
+        Args:
+            center_peer(RemotePeer) : center peer of the session, usually this peer
+            session(PalmTreeSession): session object related to current transfer
+            peers_list(list[RemotePeer]): list of remote peer objects participating in transfer
+
         """
-        self.peer_list = peers
+
+        self.peer_list = peers_list
         self.center_peer = center_peer
-        self.adjacency_list: dict[str : list[RemotePeer]] = defaultdict(list)
+        self.adjacency_list: dict[str: list[RemotePeer]] = defaultdict(list)
         self.confirmed_peers: dict[str, PalmTreeInformResponse] = {}
         self.create_hypercube()
         self.session = session
@@ -633,14 +643,11 @@ class PalmTreeProtocol:
     def create_hypercube(self):
         """Create the hypercube topology of peers"""
         center_peer_included_list = [self.center_peer] + self.peer_list
-        peer_id_to_peer_mapping = {
-            i: peer for i, peer in enumerate(center_peer_included_list)
-        }
-        # imagine writing :: zip(range(len(self.peer_list)), self.peer_list)
+        peer_id_to_peer_mapping = dict(enumerate(center_peer_included_list))
 
         dimensions = (
-            2 ** math.ceil(math.log2(len(center_peer_included_list)))
-        ).bit_length() - 1
+                             2 ** math.ceil(math.log2(len(center_peer_included_list)))
+                     ).bit_length() - 1
 
         for i in range(len(center_peer_included_list)):
             for j in range(dimensions):
@@ -678,7 +685,7 @@ class PalmTreeProtocol:
         # send an audit event to page confirming peers
 
     async def _trigger_schedular_of_peer(
-        self, trigger_request, peer
+            self, trigger_request, peer
     ) -> tuple[bool, RemotePeer | PalmTreeInformResponse]:
         loop = asyncio.get_event_loop()
         connection = await UDPProtocol.create_connection_async(
@@ -722,12 +729,12 @@ class PalmTreeProtocol:
                 addresses_mapping=(
                     (peer_id, peer_response.passive_addr, peer_response.active_addr)
                     for peer_id, peer_response in zip(
+                    self.adjacency_list[self.center_peer.id],
+                    map(
+                        lambda x: self.confirmed_peers.get(x),
                         self.adjacency_list[self.center_peer.id],
-                        map(
-                            lambda x: self.confirmed_peers.get(x),
-                            self.adjacency_list[self.center_peer.id],
-                        ),
-                    )
+                    ),
+                )
                     if peer_response
                 ),  # keeping this as a generator because it's gonna
                 #    directly iterated over in the undelying function

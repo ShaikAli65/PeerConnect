@@ -3,13 +3,15 @@ import logging
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
+import src.core.transfers.otm.sender
 from src.avails import DataWeaver, OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, WireData, const, \
     get_dialog_handler, use
 from src.avails.connect import get_free_port
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete
 from src.core import Dock, get_this_remote_peer
-from src.core.transfers import FileItem, HANDLE, OTMFilesRelay, TransferState, files, onetomany
+from src.core.transfers import HANDLE, TransferState, files
+from src.core.transfers.otm.relay import OTMFilesRelay
 from src.core.webpage_handlers import pagehandle
 
 transfers_book = TransfersBookKeeper()
@@ -29,8 +31,8 @@ async def send_files_to_peer(peer_id, selected_files):
     Gets peer information from peers module
 
     Args:
-        peer_id: id of peer to send file to
-        selected_files: list of file paths
+        peer_id(str): id of peer to send file to
+        selected_files(list[str | Path]): list of file paths
 
     Yields:
         An async generator that yields ``(FileItem, int)`` tuple, second element contains number saying how much file was transferred
@@ -38,7 +40,7 @@ async def send_files_to_peer(peer_id, selected_files):
 
     if file_sender_handle := transfers_book.check_running(peer_id):
         # if any transfer is running just attach FileItems to that transfer
-        file_sender_handle.attach_files((FileItem(path, 0) for path in selected_files))
+        file_sender_handle.attach_files(selected_files)
         return
 
     # create a new file sender
@@ -92,7 +94,7 @@ async def file_receiver(file_req: WireData, connection):
 
 
 def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer]):
-    file_sender = onetomany.OTMFilesSender(file_list=files_list, peers=peers, timeout=3)  # check regarding timeouts
+    file_sender = src.core.transfers.otm.sender.FilesSender(file_list=files_list, peers=peers, timeout=3)  # check regarding timeouts
     transfers_book.add_to_scheduled(file_sender.session.session_id, file_sender.relay)
     return file_sender
 
@@ -187,7 +189,7 @@ def OTMConnectionHandler():
         if otm_relay:
             await otm_relay.otm_add_stream_link(connection, link_data)
         else:
-            _logger.error("otm session not found with id", extra={'session id': session_id})
-            _logger.error("ignoring request from", extra={'addr': connection.getpeername()})
+            _logger.error(f"otm session not found with id={session_id}")
+            _logger.error(f"ignoring request from {connection.getpeername()}")
 
     return handler

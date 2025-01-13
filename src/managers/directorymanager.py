@@ -13,7 +13,7 @@ from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.core.handles import TaskHandle
-from src.core.transfers import FileItem, HEADERS, shorten_path
+from src.core.transfers import HEADERS
 from src.core.transfers.directory import Receiver, Sender, \
     rename_directory_with_increment
 
@@ -112,7 +112,7 @@ def DirConnectionHandler():
                 await sender(b'\x01')
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(
-                    f"receiving directory from {Dock.peer_list.get_peer(event.handshake.peer_id)}, saving at {shorten_path(dir_path, 20)}"
+                    f"receiving directory from {Dock.peer_list.get_peer(event.handshake.peer_id)}, saving at {use.shorten_path(dir_path, 20)}"
                 )
                 async with aclosing(receiver.start()) as receiver:
                     async for item in receiver:
@@ -197,17 +197,7 @@ class DirectoryTaskHandle(TaskHandle):
             self.recv_file(abs_path)
             # print("received file", f_size)
 
-    def recv_file(self, file_path):
-        size = self.socket.recv(8)
-        file_item = FileItem(file_path, 0)
-
-        ...
-
-    def cancel(self):
-        ...
-
-    def status(self):
-        ...
-
-    def chain(self):
-        ...
+    def recv_file(self, file_path):...
+    def cancel(self):...
+    def status(self):...
+    def chain(self):...
