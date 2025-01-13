@@ -2,12 +2,13 @@ import asyncio
 import random
 import time
 
-from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, const
+from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, RumorPolicy, const
 from src.core import Dock
 from src.core.transfers.transports import GossipTransport
 
 
 class SimpleRumorMessageList(RumorMessageList):
+    __slots__ = '_message_list', 'ttl', 'dropped'
 
     def __init__(self, ttl):
         self._message_list = {}
@@ -20,6 +21,7 @@ class SimpleRumorMessageList(RumorMessageList):
         current_message_ids = list(self._message_list.keys())
         # :warning: make sure to create a copy of keys before iteration
         # if there is any possibility of context change
+
         for message_id in current_message_ids:
             message_item = self._message_list[message_id]
             if self._is_old_enough(current_time, message_item.time_in):
@@ -76,9 +78,11 @@ class SimpleRumorMessageList(RumorMessageList):
         return reservoir
 
 
-class RumorPolicy:
+class DefaultRumorPolicy(RumorPolicy):
     global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
     min_chance = 0.6
+
+    __slots__ = 'protocol_class',
 
     def __init__(self, protocol_class):
         self.protocol_class = protocol_class
@@ -109,7 +113,7 @@ class RumorMongerProtocol:
     """
 
     alpha = 3
-    policy_class = RumorPolicy
+    policy_class: RumorPolicy = DefaultRumorPolicy
 
     def __init__(self, datagram_transport: GossipTransport, message_list_class: type[SimpleRumorMessageList]):
         self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
@@ -149,9 +153,8 @@ class RumorMongerProtocol:
     def _gossip_forward(self, message: GossipMessage):
         sampled_peers = self.message_list.sample_peers(message.id, self.alpha)
 
-        # debug
         if sampled_peers:
-            print("gossiping message to")
+            print("gossiping message to")  # debug
 
         for peer_id in sampled_peers:
             p = self.__forward_payload(message, peer_id)

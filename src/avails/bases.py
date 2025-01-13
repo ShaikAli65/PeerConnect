@@ -173,6 +173,14 @@ class RumorMessageList(ABC):
         pass
 
 
+class RumorPolicy(ABC):
+    @abstractmethod
+    def __init__(self, protocol_class): ...
+
+    @abstractmethod
+    def should_rumor(self, message: GossipMessage): ...
+
+
 __all__ = (
     'RumorMessageList',
     'RequestHandler',
@@ -181,4 +189,5 @@ __all__ = (
     'AbstractDispatcher',
     'BaseHandler',
     'BaseDispatcher',
+    'RumorPolicy',
 )
