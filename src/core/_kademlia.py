@@ -1,6 +1,7 @@
 """
 All the stuff related to kademlia goes here
 """
+
 import asyncio
 from typing import override
 
@@ -82,7 +83,7 @@ class RPCReceiver(RPCProtocol):
         return self.source_node.serialized
 
     def rpc_store(self, sender, sender_peer, key, value):
-        source = self._check_in(sender_peer)
+        self._check_in(sender_peer)
         log.debug("got a store request from %s, storing '%s'='%s'",
                   sender, key.hex(), value)
         self.storage[key] = value
@@ -172,8 +173,8 @@ class AnotherRoutingTable(routing.RoutingTable):
 class PeerServer(network.Server):
     protocol_class = KadProtocol
 
-    def __init__(self, ksize=20, alpha=3, node=None, storage=None):
-        super().__init__(ksize, alpha, node, storage)
+    def __init__(self, ksize=20, alpha=3, peer_id=None, storage=None):
+        super().__init__(ksize, alpha, peer_id, storage)
         self.add_this_peer_future = None
         self._transport = None
 
@@ -187,8 +188,8 @@ class PeerServer(network.Server):
         self.refresh_table()
 
     async def get_list_of_nodes(self, list_key):
-        node = RemotePeer(list_key)
-        nearest = self.protocol.router.find_neighbors(node)
+        peer = RemotePeer(list_key)
+        nearest = self.protocol.router.find_neighbors(peer)
         if not nearest:
             log.warning("There are no known neighbors to get key %s", list_key)
             return None
