@@ -1,13 +1,13 @@
 from src.avails import DataWeaver
-from src.core.transfers import HANDLE
-from src.core.webpage_handlers import logger
-from src.core.webpage_handlers.pagehandle import PROFILE_WAIT, dispatch_data
 from src.managers import (
     ProfileManager,
     all_profiles,
     get_profile_from_profile_file_name,
     refresh_profile_list, set_current_profile,
 )
+from src.transfers import HANDLE
+from src.webpage_handlers import logger
+from src.webpage_handlers.pagehandle import PROFILE_WAIT, dispatch_data
 
 
 async def align_profiles(signal_data: DataWeaver):

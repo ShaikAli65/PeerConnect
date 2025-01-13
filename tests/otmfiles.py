@@ -4,9 +4,9 @@ import os
 import _path  # noqa
 from src.avails import DataWeaver, const
 from src.core import Dock
-from src.core.transfers import HANDLE
-from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
+from src.transfers import HANDLE
+from src.webpage_handlers import handledata
 from test import initiate, test_initial_states
 
 

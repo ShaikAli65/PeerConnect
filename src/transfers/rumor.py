@@ -4,7 +4,7 @@ import time
 
 from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, RumorPolicy, const
 from src.core import Dock
-from src.core.transfers.transports import GossipTransport
+from src.transfers.transports import GossipTransport
 
 
 class SimpleRumorMessageList(RumorMessageList):

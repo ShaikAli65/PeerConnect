@@ -17,8 +17,8 @@ from src.avails.remotepeer import RemotePeer
 from src.avails.useables import get_unique_id
 from src.avails.wire import PalmTreeInformResponse, PalmTreeSession, Wire
 from src.core import Dock, get_this_remote_peer, peers
-from src.core.transfers import HEADERS
-from src.core.transfers.otm.tree import TreeLink
+from src.transfers import HEADERS
+from src.transfers.otm.tree import TreeLink
 
 
 class PalmTreeLink(TreeLink):
@@ -429,7 +429,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         """
         Downgrades a connection from active to passive, updating relay state.
 
-        downgrade connnection request is made to this peer, which
+        downgrade connection request is made to this peer, which
         removes connection from `self.active_links`,
         clears the active link,
         and adds passive link to `self.passive_links` list
@@ -455,7 +455,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
         """
         if data.id in self.active_links:
             if self.active_links[data.id].is_online:
-                self.print_state("not upgrading found an exisiting connection online ")
+                self.print_state("not upgrading found an existing connection online ")
                 self.print_state(self.active_links[data.id])
                 return
 
@@ -737,7 +737,7 @@ class PalmTreeProtocol:
                 )
                     if peer_response
                 ),  # keeping this as a generator because it's gonna
-                #    directly iterated over in the undelying function
+                #    directly iterated over in the underlying function
             )
         )
 

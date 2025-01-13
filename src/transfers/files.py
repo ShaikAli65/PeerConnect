@@ -9,9 +9,9 @@ from pathlib import Path
 from src.avails import Wire, WireData, connect, const
 from src.avails.exceptions import TransferIncomplete
 from src.avails.status import StatusMixIn
-from src.core import get_this_remote_peer, transfers
-from src.core.transfers import HEADERS
-from src.core.transfers._fileobject import FileItem, TransferState, recv_file_contents, \
+from src.core import get_this_remote_peer
+from src.transfers import HEADERS
+from src.transfers._fileobject import FileItem, TransferState, recv_file_contents, \
     send_actual_file, validatename
 
 _logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class Sender(StatusMixIn):
     def __init__(self, file_list, peer_obj, transfer_id, *, status_yield_frequency=10):
         self.state = TransferState.PREPARING
         self.file_list = [
-            transfers.FileItem(x, seeked=0) for x in file_list
+            FileItem(x, seeked=0) for x in file_list
         ]
         self.socket = None
         self._file_id = transfer_id

@@ -212,15 +212,16 @@ async def send_actual_file(
         file,
         *,
         chunk_len=None,
-        timeout=4000
+        timeout=5
 ):
     """Sends file to other end using ``send_function``
+
     Opens file in **rb** mode from the ``path`` attribute from ``file item``
     reads ``seeked`` attribute of ``file item`` to start the transfer from
     calls ``send_function`` and awaits on it every time this function tries to send a chunk
     if chunk_size parameter is not provided then calculates chunk size by calling ``calculate_chunk_size``
 
-    Arguments:
+    Args:
         send_function(Callable): function to call when a chunk is ready
         file(FileItem): file to send
         chunk_len(int): length of each chunk passed into ``send_function`` for each call

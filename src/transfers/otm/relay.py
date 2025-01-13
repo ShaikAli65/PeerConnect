@@ -4,21 +4,26 @@ from typing import Optional, override
 
 from src.avails import WireData, constants as const, useables as use
 from src.core import get_this_remote_peer
-from src.core.transfers import HEADERS
-from src.core.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
-from src.core.transfers.otm.receiver import FilesReceiver
+from src.transfers import HEADERS
+from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
+from src.transfers.otm.receiver import FilesReceiver
 
 
 class OTMFilesRelay(PalmTreeRelay):
     # :todo: try using temporary-spooled files
-    def __init__(self, session, passive_endpoint_addr: tuple[str, int] = None,
-                 active_endpoint_addr: tuple[str, int] = None):
+    def __init__(
+            self,
+            session,
+            file_receiver,
+            passive_endpoint_addr,
+            active_endpoint_addr,
+    ):
         super().__init__(session, passive_endpoint_addr, active_endpoint_addr)
         self._read_link = None
-        self.file_receiver = FilesReceiver(session, self)
+        self.file_receiver: FilesReceiver = file_receiver
         # this is a generator `:method: OTMFilesReceiver.data_receiver` that takes byte-chunk inside it
-        self.chunk_recv_handler = self.file_receiver.data_receiver()
-
+        self.chunk_recv_gen = self.file_receiver.data_receiver()
+        self._forward_limiter = asyncio.Semaphore(self.session.fanout)
         self.recv_buffer_queue = collections.deque(maxlen=const.MAX_OTM_BUFFERING)
         self.chunk_counter = 0
 
@@ -28,42 +33,32 @@ class OTMFilesRelay(PalmTreeRelay):
         Not called when this relay is the one who is sending the files to others
 
         """
-        await self.set_up()
+        await super().session_init()
         await self._recv_file_metadata()
-        next(self.chunk_recv_handler)  # starting the reverse generator
+        next(self.chunk_recv_gen)  # starting the reverse generator
         await self._start_reader()
-
-    def set_up(self):
-        return super().session_init()
 
     async def _recv_file_metadata(self):
         self._read_link = await self._parent_link_fut
         # this future is set when a sender makes a connection
 
-        files_metadata: bytes = await self._read_link.connection.arecv(self.session.chunk_size + 1)
+        files_metadata: bytes = await self._read_link.recv(self.session.chunk_size)
 
         self.file_receiver.update_metadata(files_metadata)
 
         await self.send_file_metadata(files_metadata)
 
     async def _start_reader(self):
-        read_conn = self._read_link.connection
+        recv_bytes = self._read_link.recv
+        chunk_size = self.session.chunk_size
         while True:
             try:
-                chunk_detail = await self._read_link.recv(1)
-                if chunk_detail == b'0':
-                    # we received an empty chunk that need to be addressed later
-                    self._empty_chunk_received()
-                    self.chunk_counter += 1
-                    continue
-
-                whole_chunk = await read_conn.arecv(self.session.chunk_size)
-
+                whole_chunk = await recv_bytes(chunk_size)
                 if not whole_chunk:
-                    self._end_of_transfer()
+                    await self._read_link_broken()
 
                 self.chunk_counter += 1
-                self.chunk_recv_handler.send(whole_chunk)
+                self.chunk_recv_gen.send((self.chunk_counter, whole_chunk))
                 await self._forward_chunk(whole_chunk)
 
             except OSError as e:
@@ -101,31 +96,21 @@ class OTMFilesRelay(PalmTreeRelay):
         )
         return bytes(h)
 
-    def _empty_chunk_received(self):
-        pass
-
     def _end_of_transfer(self):
 
         ...
 
     async def _forward_chunk(self, chunk: bytes):
-        timeout = self.session.link_wait_timeout
+        async with self._forward_limiter:
+            for link in self._get_forward_links():
+                try:
+                    if link.is_lagging:
+                        print(f"found {link} lagging ignoring")
+                        continue
 
-        is_forwarded_to_atleast_once = False
-        # await self._is_connection_to_atleast_one_link_made
-        # this future has the first link that made a connection, ignoring the result for now
-        for link in self._get_forward_links():
-            try:
-                await asyncio.wait_for(link.connection.asendall(chunk), timeout)
-                is_forwarded_to_atleast_once = True
-            except TimeoutError:
-                link.status = PalmTreeLink.LAGGING  # mark this link as lagging
-
-        if is_forwarded_to_atleast_once is False:
-            await asyncio.sleep(timeout)  # add further edge case logic
-            # :todo: heavy recursion bug need to be reviewed
-            # temporarily yielding back to wait for incoming/outgoing connections
-            await self._forward_chunk(chunk)
+                    await asyncio.wait_for(link.send(chunk), self.session.link_wait_timeout)
+                except TimeoutError:
+                    link.status = TreeLink.LAGGING
 
     async def send_file_metadata(self, data):
         # this is the first step of a file transfer
@@ -144,6 +129,7 @@ class OTMPalmTreeProtocol(PalmTreeProtocol):
 
 
 class OTMLink(PalmTreeLink):
-    def __init__(self, a: tuple, b: tuple, peer_id, connection=None, link_type: int = PalmTreeLink.PASSIVE,*, buffer_len):
+    def __init__(self, a: tuple, b: tuple, peer_id, connection=None, link_type: int = PalmTreeLink.PASSIVE, *,
+                 buffer_len):
         super().__init__(a, b, peer_id, connection, link_type)
         self.buffer = asyncio.Queue(maxsize=buffer_len)

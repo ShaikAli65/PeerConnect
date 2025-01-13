@@ -4,7 +4,7 @@ from src.avails import BaseDispatcher, GossipMessage, QueueMixIn
 from src.avails.events import GossipEvent
 from src.core import Dock, get_gossip
 from src.core.peers import get_search_handler
-from src.core.transfers import GOSSIP, GossipTransport, REQUESTS_HEADERS, \
+from src.transfers import GOSSIP, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
 
 

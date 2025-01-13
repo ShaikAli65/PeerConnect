@@ -5,9 +5,9 @@ from sys import stderr
 from src.avails import DataWeaver, Wire, WireData, use
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.connections import Connector
-from src.core.transfers import HANDLE, HEADERS
 from src.managers import directorymanager, filemanager
 from src.managers.directorymanager import send_directory
+from src.transfers import HANDLE, HEADERS
 
 
 async def new_dir_transfer(command_data: DataWeaver):

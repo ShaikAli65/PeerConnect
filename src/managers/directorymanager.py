@@ -13,8 +13,8 @@ from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.core.handles import TaskHandle
-from src.core.transfers import HEADERS
-from src.core.transfers.directory import Receiver, Sender, \
+from src.transfers import HEADERS
+from src.transfers.directory import Receiver, Sender, \
     rename_directory_with_increment
 
 transfers_book = TransfersBookKeeper()

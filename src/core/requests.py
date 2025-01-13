@@ -10,8 +10,8 @@ from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_m
 from src.avails.events import RequestEvent
 from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
 from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
-from src.core.transfers import DISCOVERY, REQUESTS_HEADERS
-from src.core.transfers.transports import RequestsTransport
+from src.transfers import DISCOVERY, REQUESTS_HEADERS
+from src.transfers.transports import RequestsTransport
 
 _logger = logging.getLogger(__name__)
 
@@ -66,7 +66,13 @@ async def gossip_initiate(req_dispatcher, transport):
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
 
 
-async def discovery_initiate(broad_cast_address, kad_server, multicast_address, req_dispatcher, transport):
+async def discovery_initiate(
+        broad_cast_address,
+        kad_server,
+        multicast_address,
+        req_dispatcher,
+        transport
+):
     discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
     req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
     Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher

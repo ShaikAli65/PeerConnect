@@ -4,8 +4,8 @@ from src.avails import QueueMixIn, WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.core import get_this_remote_peer
-from src.core.transfers import DISCOVERY
-from src.core.transfers.transports import DiscoveryTransport
+from src.transfers import DISCOVERY
+from src.transfers.transports import DiscoveryTransport
 
 _logger = logging.getLogger(__name__)
 

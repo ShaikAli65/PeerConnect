@@ -109,8 +109,8 @@ class TransfersBookKeeper:
         self.__continued[peer_id].discard(transfer_handle)
         self.__completed[peer_id].add(transfer_handle)
 
-    def add_to_scheduled(self, key, file_handle):
-        self.__scheduled[key] = file_handle
+    def add_to_scheduled(self, key, transfer_handle: HasID | HasIdProperty):
+        self.__scheduled[key] = transfer_handle
 
     def add_to_continued(self, peer_id: str, file_pool):
         self.__current[peer_id].discard(file_pool)

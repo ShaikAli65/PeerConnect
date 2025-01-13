@@ -29,7 +29,7 @@ class Dock:
     dispatchers: dict[DISPATCHS, BaseDispatcher] = {}
     exit_stack = AsyncExitStack()
     if TYPE_CHECKING:
-        from src.core.transfers import RumorMongerProtocol
+        from src.transfers import RumorMongerProtocol
         from src.core._kademlia import PeerServer
         from src.managers.statemanager import StateManager
         peer_list: _PeerDict[str, _RemotePeer]

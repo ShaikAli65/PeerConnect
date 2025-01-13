@@ -1,12 +1,12 @@
 from src.avails import DataWeaver
 from src.core import Dock, peers
-from src.core.transfers import HANDLE
-from src.core.webpage_handlers.handleprofiles import (
+from src.managers.statemanager import State
+from src.transfers import HANDLE
+from src.webpage_handlers.handleprofiles import (
     align_profiles,
     set_selected_profile,
 )
-from src.core.webpage_handlers.pagehandle import dispatch_data
-from src.managers.statemanager import State
+from src.webpage_handlers.pagehandle import dispatch_data
 
 
 def _restart(): ...

@@ -6,9 +6,9 @@ import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, constants as const, useables as use
 from src.core import get_this_remote_peer
-from src.core.transfers import HEADERS
-from src.core.transfers._fileobject import FileItem, calculate_chunk_size
-from src.core.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
+from src.transfers import HEADERS
+from src.transfers._fileobject import FileItem, calculate_chunk_size
+from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
 
 
 class FilesSender:
@@ -18,7 +18,7 @@ class FilesSender:
         self.file_items = [FileItem(file_path, 0) for file_path in file_list]
         self.timeout = timeout
 
-        self.session = self.make_session()
+        self.session = self._make_session()
         self.palm_tree = OTMPalmTreeProtocol(
             get_this_remote_peer(),
             self.session,
@@ -27,7 +27,7 @@ class FilesSender:
 
         self.relay: OTMFilesRelay = self.palm_tree.relay
 
-    def make_session(self):
+    def _make_session(self):
         return OTMSession(
             originate_id=get_this_remote_peer().peer_id,
             session_id=use.get_unique_id(),
@@ -85,7 +85,7 @@ class FilesSender:
             f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
             for offset in range(seek, file_item.size, chunk_size):
                 chunk = f_mapped[offset: offset + chunk_size]
-                await self.relay.send_file_chunk(chunk)
+            await self.relay.send_file_chunk(chunk)
 
     def _create_inform_packet(self):
         return WireData(
@@ -104,3 +104,7 @@ class FilesSender:
 
     def _make_file_metadata(self):
         return umsgpack.dumps([bytes(x) for x in self.file_items])
+
+    @property
+    def id(self):
+        return self.session.session_id

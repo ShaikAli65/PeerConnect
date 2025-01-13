@@ -13,11 +13,12 @@ from typing import Optional
 from src.avails import (BaseDispatcher, QueueMixIn, RemotePeer, SocketStore, Wire, WireData, connect, const, use)
 from src.avails.events import ConnectionEvent, StreamDataEvent
 from src.core import DISPATCHS, Dock, get_this_remote_peer
-from src.core.transfers import HEADERS
-from src.core.transfers.transports import StreamTransport
-from src.core.webpage_handlers import pagehandle
-from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
 from src.managers.directorymanager import DirConnectionHandler
+from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
+from src.transfers import HEADERS
+from src.transfers.transports import StreamTransport
+from src.webpage_handlers import pagehandle
+
 _logger = logging.getLogger(__name__)
 
 

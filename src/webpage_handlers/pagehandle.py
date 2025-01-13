@@ -10,7 +10,7 @@ from src.avails.events import StreamDataEvent
 from src.avails.exceptions import UnknownConnectionType, WebSocketRegistryReStarted
 from src.avails.useables import wrap_with_tryexcept
 from src.core import Dock
-from src.core.webpage_handlers import logger
+from src.webpage_handlers import logger
 
 if TYPE_CHECKING:
     from websockets.asyncio.connection import Connection

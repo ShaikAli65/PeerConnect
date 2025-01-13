@@ -96,8 +96,8 @@ from src.avails import DataWeaver, GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
 from src.core import Dock, get_gossip, get_this_remote_peer
-from src.core.transfers import GOSSIP, HANDLE
-from src.core.webpage_handlers import pagehandle
+from src.transfers import GOSSIP, HANDLE
+from src.webpage_handlers import pagehandle
 
 # this list contains 20 evenly spread numbers in [0, 2**160]
 node_list_ids = [

@@ -16,8 +16,8 @@ from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
-from src.core.transfers import REQUESTS_HEADERS
-from src.core.transfers.transports import KademliaTransport
+from src.transfers import REQUESTS_HEADERS
+from src.transfers.transports import KademliaTransport
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -163,11 +163,11 @@ class AnotherRoutingTable(routing.RoutingTable):
         Dock.peer_list.add_peer(peer)
         peers.new_peer(peer)
 
-    @override
-    def remove_contact(self, peer: RemotePeer):
-        super().remove_contact(peer)
-        # Dock.peer_list.remove_peer(peer.peer_id)
-        # peers.remove_peer(peer)
+    # @override
+    # def remove_contact(self, peer: RemotePeer):
+    #     super().remove_contact(peer)
+    #     Dock.peer_list.remove_peer(peer.peer_id)
+    #     peers.remove_peer(peer)
 
 
 class PeerServer(network.Server):

@@ -4,8 +4,8 @@ import os
 import _path  # noqa
 from src.avails import DataWeaver, const
 from src.core import transfers
-from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
+from src.webpage_handlers import handledata
 from test import initiate, test_initial_states
 from tests.test import get_a_peer
 
