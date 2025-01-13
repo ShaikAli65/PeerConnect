@@ -63,13 +63,14 @@ async def send_text(command_data: DataWeaver):
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
-    peer_ids = command_data.content["peerList"]
-    peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = await filemanager.open_file_selector()
     if not selected_files:
         return
+    peer_ids = command_data.content["peerList"]
+    peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = [Path(x) for x in selected_files]
     file_sender = filemanager.start_new_otm_file_transfer(selected_files, peer_objects)
+
     async for update in file_sender.start():
         print(update)
         # :todo: feed updates to frontend
