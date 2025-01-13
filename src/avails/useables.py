@@ -9,10 +9,12 @@ import subprocess
 import sys
 import threading
 import traceback
+import typing
+from pathlib import Path
 from sys import _getframe  # noqa
 from typing import Awaitable, Final
 from uuid import uuid4
-import typing
+
 import select
 
 from src.avails import const
@@ -32,7 +34,18 @@ SHORT_INT = 4
 LONG_INT = 8
 
 
-async def recv_int(get_bytes:typing.Callable[[int],Awaitable[bytes]], type=SHORT_INT) -> int:
+def shorten_path(path: Path, max_length):
+    if len(str(path)) <= max_length:
+        return str(path)
+    selected_parts = list(path.parts)
+    part_ptr = 1
+    while len("".join(selected_parts)) >= max_length:
+        selected_parts.pop(part_ptr)
+    selected_parts.insert(1, '..')
+    return os.path.sep.join(selected_parts)
+
+
+async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHORT_INT):
     """Receives integer from get_bytes function
 
     awaits on ``get_bytes``, gets bytes based on ``type`` argument
