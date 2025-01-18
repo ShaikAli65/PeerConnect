@@ -5,8 +5,8 @@ import _path  # noqa
 from src.avails import DataWeaver, const
 from src.core import Dock
 from src.managers.statemanager import State
-from src.transfers import HANDLE
 from src.webpage_handlers import handledata
+from src.webpage_handlers.headers import HANDLE
 from test import initiate, test_initial_states
 
 

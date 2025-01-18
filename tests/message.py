@@ -5,7 +5,7 @@ import _path  # noqa
 from src.avails import DataWeaver, RemotePeer, const
 from src.avails.useables import async_input
 from src.core import Dock
-from src.transfers import HANDLE
+from src.webpage_handlers.headers import HANDLE
 from test import initiate, test_initial_states
 
 
