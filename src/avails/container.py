@@ -3,10 +3,11 @@ import contextlib
 import socket
 from collections import OrderedDict, defaultdict
 from itertools import count
-from typing import Iterable, Protocol, TYPE_CHECKING, Union, ValuesView
+from typing import Iterable, TYPE_CHECKING, Union, ValuesView
 from weakref import WeakSet
 
-from src.avails import connect
+import src.avails.connect as connect
+from src.avails.bases import HasID, HasIdProperty, HasPeerId
 
 """
 This module contains simple storages used across the peer connect
@@ -17,19 +18,6 @@ This module contains simple storages used across the peer connect
 5. SocketStore
 6. SocketCache
 """
-
-
-class HasID(Protocol):
-    id: int | str  # Specify the type of the `id` attribute (e.g., int)
-
-
-class HasPeerId(Protocol):
-    peer_id: str
-
-
-class HasIdProperty(Protocol):
-    @property
-    def id(self): ...
 
 
 class PeerDict(dict):
