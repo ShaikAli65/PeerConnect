@@ -88,7 +88,7 @@ class Socket(_socket.socket):
         return await self.__loop.sock_recvfrom(self, buffsize)
 
 
-class Protocol(ABC):
+class NetworkProtocol(ABC):
     __slots__ = ()
 
     @staticmethod
@@ -134,7 +134,7 @@ class Protocol(ABC):
         return self.__repr__().__format__(format_spec)
 
 
-class TCPProtocol(Protocol):
+class TCPProtocol(NetworkProtocol):
     __slots__ = ()
 
     @staticmethod
@@ -180,15 +180,12 @@ class TCPProtocol(Protocol):
             addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
             addr_family, sock_type, _, _, address = addr_info[0]
         except TypeError as tpe:
-            _logger.error(f"something wrong with the given address", exc_info=tpe)
+            _logger.error(f"something wrong with the given address: {address}", exc_info=tpe)
             raise
         sock = cls.create_async_sock(loop, addr_family)
 
-        try:
-            if timeout:
-                return await _asyncio.wait_for(sock.aconnect(address), timeout)
-        except _asyncio.TimeoutError:
-            raise
+        if timeout:
+            return await _asyncio.wait_for(sock.aconnect(address), timeout)
 
         await sock.aconnect(address)
         return sock
@@ -200,7 +197,7 @@ class TCPProtocol(Protocol):
         return self.__repr__().__format__(format_spec)
 
 
-class UDPProtocol(Protocol):
+class UDPProtocol(NetworkProtocol):
     __slots__ = ()
 
     @staticmethod
@@ -354,13 +351,24 @@ def resolve_address(_peer_obj, to_which):
     return address, sock_family, sock_type
 
 
+@useables.awaitable(resolve_address)
+async def resolve_address(_peer_obj, to_which):
+    addr = getattr(_peer_obj, to_which)
+    loop = _asyncio.get_running_loop()
+    address_info, *_ = await loop.getaddrinfo(addr[0], addr[1], type=_socket.SOCK_STREAM)
+    address = address_info[4]  # [:2]
+    sock_family = address_info[0]
+    sock_type = address_info[1]
+    return address, sock_family, sock_type
+
+
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=None, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
     *args will be passed into socket.setsockopt
-    :param timeout: self-explanatory
+    :param timeout: self-explanatory, default is None
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
     :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
@@ -369,9 +377,13 @@ async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=0.1,
     :raises: OSError
     """
 
-    address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
+    address, sock_family, sock_type = await resolve_address(_peer_obj, to_which)
     address = address[:2]
     retry_count = 0
+
+    if timeout is None:
+        return await create_connection_async(address)
+
     for timeout in useables.get_timeouts(timeout, max_retries=retries):
         try:
             return await create_connection_async(address, timeout)
