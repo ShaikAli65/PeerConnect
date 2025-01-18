@@ -18,10 +18,10 @@ from typing import NamedTuple, Optional, Union
 
 import umsgpack
 
-from src.avails import Actuator, const as _const
 from src.avails.connect import Socket as _Socket, is_socket_connected
 from src.avails.exceptions import InvalidPacket
 from src.avails.useables import wait_for_sock_read
+from src.avails.waiters import Actuator, const as _const
 
 _controller = Actuator()
 
@@ -152,7 +152,7 @@ class WireData:
     def dict(self):  # for introspection or validation
         return {
             "header": self._header,
-            "id": self.id,
+            "msg_id": self.id,
             "version": self.version,
             "peer_id": self.peer_id,
             **self.body,
@@ -270,6 +270,10 @@ class DataWeaver:
     @msg_id.setter
     def msg_id(self, message_id):
         self.__data["msgId"] = message_id
+
+    @property
+    def id(self):  # just for compatibilty with registry mix in class
+        return self.msg_id
 
     @property
     def type(self):
