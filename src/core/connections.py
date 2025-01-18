@@ -1,28 +1,31 @@
 import asyncio
-import functools
 import logging
 import socket
 import textwrap
 import threading
 from asyncio import TaskGroup
 from collections import defaultdict
+from contextlib import AsyncExitStack
 from inspect import isawaitable
 from types import ModuleType
 from typing import Optional
 
-from src.avails import (BaseDispatcher, QueueMixIn, RemotePeer, SocketStore, Wire, WireData, connect, const, use)
+from src.avails import (BaseDispatcher, RemotePeer, SocketStore, Wire, WireData, connect, const, use)
 from src.avails.events import ConnectionEvent, StreamDataEvent
+from src.avails.mixins import QueueMixIn
 from src.core import DISPATCHS, Dock, get_this_remote_peer
-from src.core.transfers import HEADERS
-from src.core.transfers.transports import StreamTransport
-from src.core.webpage_handlers import pagehandle
-from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
 from src.managers.directorymanager import DirConnectionHandler
+from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
+from src.transfers import HEADERS
+from src.transfers.transports import StreamTransport
+from src.webpage_handlers import pagehandle
+
 _logger = logging.getLogger(__name__)
 
 
 async def initiate_connections():
     acceptor = Acceptor()
+    await Dock.exit_stack.enter_async_context(acceptor)
     acceptor.data_dispatcher.register_handler(
         HEADERS.CMD_TEXT,
         pagehandle.MessageHandler()
@@ -30,16 +33,19 @@ async def initiate_connections():
 
     Dock.dispatchers[DISPATCHS.CONNECTIONS] = acceptor.connection_dispatcher
     Dock.dispatchers[DISPATCHS.STREAM_DATA] = acceptor.data_dispatcher
+    register_handler = acceptor.connection_dispatcher.register_handler
 
-    acceptor.connection_dispatcher.register_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
-    acceptor.connection_dispatcher.register_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
-    acceptor.connection_dispatcher.register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
-    acceptor.connection_dispatcher.register_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
+    register_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
+    register_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
+    register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
+    register_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
     # acceptor.connection_dispatcher.register_handler(HEADERS.GOSSIP_UPDATE_STREAM_LINK)
     await acceptor.initiate()
 
 
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
+    __slots__ = ()
+
     async def submit(self, event: ConnectionEvent):
         handler = self.registry[event.handshake.header]
         _logger.info(f"dispatching connection with header {event.handshake.header} to {handler}")
@@ -50,6 +56,8 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
 
 
 class StreamDataDispatcher(QueueMixIn, BaseDispatcher):
+    __slots__ = ()
+
     async def submit(self, event: StreamDataEvent):
         message_header = event.data.header
         handler = self.registry[message_header]
@@ -114,18 +122,15 @@ class Acceptor:
         self.main_socket: Optional[connect.Socket] = None
         self.back_log = 4
         self.currently_in_connection = defaultdict(int)
-        self.__loop = asyncio.get_running_loop()
-        self.all_tasks = set()
         self.max_timeout = 90
         _logger.info(f"Initiating Acceptor {self.address}")
         self._initialized = True
-        self._spawn_task = functools.partial(use.spawn_task, bookeep=self.all_tasks.add,
-                                             done_callback=lambda t: self.all_tasks.remove(t))
 
         self.connection_dispatcher = ConnectionDispatcher(None, Dock.finalizing.is_set)
         self.data_dispatcher = StreamDataDispatcher(None, Dock.finalizing.is_set)
         data_handler = ProcessDataHandler(self.data_dispatcher, Dock.finalizing.is_set)
         self.connection_dispatcher.register_handler(HEADERS.CMD_VERIFY_HEADER, data_handler)
+        self._exit_stack = AsyncExitStack()
 
     async def initiate(self):
         self.connection_dispatcher.transport = self.main_socket
@@ -134,15 +139,16 @@ class Acceptor:
             async with TaskGroup() as tg:
                 while not self.stopping():
                     initial_conn, addr = await self.main_socket.aaccept()
+                    self._exit_stack.enter_context(initial_conn)
                     _logger.info(f"New connection from {addr}")
                     tg.create_task(self.__accept_connection(initial_conn))
                     await asyncio.sleep(0)
 
     async def _start_socket(self):
-        addr_info = await self.__loop.getaddrinfo(*self.address, family=const.IP_VERSION)
-        sock_family, sock_type, _, _, address = addr_info[0]
+        addr_info, *_ = await use.get_addr_info(*self.address, family=const.IP_VERSION)
+        sock_family, sock_type, _, _, address = addr_info
         sock = const.PROTOCOL.create_async_server_sock(
-            self.__loop,
+            asyncio.get_running_loop(),
             address,
             family=const.IP_VERSION,
             backlog=self.back_log
@@ -172,9 +178,14 @@ class Acceptor:
     def end(self):
         self.main_socket.close()
         self.stopping = True
-        current_connections = Dock.connected_peers.socket_cache
-        for connection in current_connections.values():
-            connection.close()
+
+    async def __aenter__(self):
+        await self._exit_stack.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._exit_stack.__aexit__(exc_tb, exc_type, exc_tb)
+        self.end()
 
     def __del__(self):
         self.end()

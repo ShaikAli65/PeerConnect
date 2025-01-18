@@ -2,10 +2,11 @@ import asyncio
 import os
 
 import _path  # noqa
+import src.webpage_handlers
+import src.webpage_handlers.headers
 from src.avails import DataWeaver, const
-from src.core import transfers
-from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
+from src.webpage_handlers import handledata
 from test import initiate, test_initial_states
 from tests.test import get_a_peer
 
@@ -14,7 +15,7 @@ async def test_file_transfer():
     await asyncio.sleep(2)
     if p := get_a_peer():
         data = DataWeaver(
-            header=transfers.HANDLE.SEND_FILE,
+            header=src.webpage_handlers.headers.HANDLE.SEND_FILE,
             peer_id=p.peer_id,
         )
         try:

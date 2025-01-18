@@ -21,11 +21,15 @@ def initiate():
 
     logging.config.dictConfig(log_config)
     q_handler = logging.getHandlerByName("queue_handler")
-    queue_listener = q_handler.listener
+
+    if q_handler is None:
+        yield
+        return
+
+    queue_listener = getattr(q_handler, 'listener')
     queue_listener.start()
     yield
     queue_listener.stop()
     for handler in queue_listener.handlers:
         handler.close()
     print("closing logging")
-

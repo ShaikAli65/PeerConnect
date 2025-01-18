@@ -4,9 +4,9 @@ import os
 from src.avails import const
 from src.configurations import bootup, configure
 from src.core import Dock, connections, requests
-from src.core.webpage_handlers import pagehandle
 from src.managers import profilemanager
 from src.managers.statemanager import State, StateManager
+from src.webpage_handlers import pagehandle
 
 
 def initial_states():
@@ -17,8 +17,8 @@ def initial_states():
     s5 = State("launching webpage", pagehandle.initiate_page_handle, is_blocking=True)
     s6 = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    s8 = State("initiating requests", requests.initiate, is_blocking=True)
-    s9 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s9 = State("initiating requests", requests.initiate, is_blocking=True)
     return tuple(locals().values())
 
 

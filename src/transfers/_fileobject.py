@@ -8,6 +8,7 @@ from pathlib import Path
 
 import umsgpack
 
+from src.avails import use
 from src.avails.exceptions import TransferIncomplete
 
 
@@ -18,17 +19,6 @@ def stringify_size(size):
         size /= 1024
         index += 1
     return f"{size:.2f} {sizes[index]}"
-
-
-def shorten_path(path: Path, max_length):
-    if len(str(path)) <= max_length:
-        return str(path)
-    selected_parts = list(path.parts)
-    part_ptr = 1
-    while len("".join(selected_parts)) >= max_length:
-        selected_parts.pop(part_ptr)
-    selected_parts.insert(1, '..')
-    return os.path.sep.join(selected_parts)
 
 
 class FileItem:
@@ -91,7 +81,7 @@ class FileItem:
     def __str__(self):
         size_str = stringify_size(self.size)
         name_str = f"...{self._name[-20:]}" if len(self._name) > 20 else self._name
-        str_str = f"FileItem({name_str}, {size_str}, {shorten_path(self.path, 20)})"
+        str_str = f"FileItem({name_str}, {size_str}, {use.shorten_path(self.path, 20)})"
         return str_str
 
     def __repr__(self):
@@ -222,15 +212,16 @@ async def send_actual_file(
         file,
         *,
         chunk_len=None,
-        timeout=4000
+        timeout=5
 ):
     """Sends file to other end using ``send_function``
+
     Opens file in **rb** mode from the ``path`` attribute from ``file item``
     reads ``seeked`` attribute of ``file item`` to start the transfer from
     calls ``send_function`` and awaits on it every time this function tries to send a chunk
     if chunk_size parameter is not provided then calculates chunk size by calling ``calculate_chunk_size``
 
-    Arguments:
+    Args:
         send_function(Callable): function to call when a chunk is ready
         file(FileItem): file to send
         chunk_len(int): length of each chunk passed into ``send_function`` for each call
@@ -326,9 +317,6 @@ def _finalize_transfer(exp, file_item):
 
 
 class TransferState(enum.Enum):
-    #
-    # remember to reflect changes in `StatusCodes` in fileobject.py
-    #
     PREPARING = 1
     CONNECTING = 2
     SENDING = 3

@@ -1,20 +1,13 @@
 import asyncio
-import queue
-import time
-import struct
-import socket
 import logging
+import queue
+import socket
+import struct
+import time
 
-from src.avails import (
-    RemotePeer,
-    Wire,
-    use,
-    connect,
-    const,
-)
-
-from src.core import get_this_remote_peer, Dock
-from src.core.transfers import HEADERS
+from src.avails import (RemotePeer, Wire, connect, const, use)
+from src.core import Dock, get_this_remote_peer
+from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
 

@@ -4,26 +4,25 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, QueueMixIn, const, unpack_datagram
+from src.avails import InvalidPacket, const, unpack_datagram
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
+from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
 from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
-from src.core.transfers import DISCOVERY, REQUESTS_HEADERS
-from src.core.transfers.transports import RequestsTransport
+from src.transfers import DISCOVERY, REQUESTS_HEADERS
+from src.transfers.transports import RequestsTransport
 
 _logger = logging.getLogger(__name__)
 
 
 async def initiate():
-
     # const.BIND_IP = const.THIS_IP
+    # a discovery request packet is observed in wire shark but that packet is
+    # not getting delivered to application socket in linux when we bind to specific interface address
 
     # TL;DR: causing some unknown behaviour in linux system
-
-    # a discovery request packet is observed in wire shark but that packet is
-    # not getting delivered to application socket in linux is we bind to specific interface address
 
     bind_address = (const.BIND_IP, const.PORT_REQ)
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
@@ -32,10 +31,15 @@ async def initiate():
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
     transport = await setup_transport(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
-    Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
 
-    kad_server = _kademlia.prepare_kad_server(transport, req_dispatcher)
-    await gossip_initiate(req_dispatcher, transport)
+    kad_server = _kademlia.prepare_kad_server(transport)
+    _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
+
+    # await gossip_initiate(req_dispatcher, transport)
+    gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
+
+    Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
+    Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
 
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = kad_server
@@ -48,7 +52,7 @@ async def initiate():
         transport
     )
 
-    await kad_server.add_this_peer_to_lists()
+    # await kad_server.add_this_peer_to_lists()
 
 
 async def setup_transport(bind_address, multicast_address, req_dispatcher):
@@ -59,29 +63,6 @@ async def setup_transport(bind_address, multicast_address, req_dispatcher):
         sock=base_socket
     )
     return transport
-
-
-async def gossip_initiate(req_dispatcher, transport):
-    gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
-    Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
-
-
-async def discovery_initiate(broad_cast_address, kad_server, multicast_address, req_dispatcher, transport):
-    discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
-    req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
-    Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
-
-    discovery_reply_handler = DiscoveryReplyHandler(kad_server)
-    discovery_req_handler = DiscoveryRequestHandler(discover_dispatcher.transport)
-
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
-
-    await discover.send_discovery_requests(
-        discover_dispatcher.transport,
-        broad_cast_address,
-        multicast_address
-    )
 
 
 def _create_listen_socket(bind_address, multicast_addr):
@@ -99,20 +80,51 @@ def _create_listen_socket(bind_address, multicast_addr):
         _logger.debug(log)
 
         ipv4_multicast_socket_helper(sock, multicast_addr)
-        _logger.debug(f"[REQUESTS] registered request socket for multicast v4 {multicast_addr}")
+        _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
-        _logger.debug(f"[REQUESTS] registered request socket for multicast v6 {multicast_addr}")
+        _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
     return sock
 
 
-class RequestsDispatcher(QueueMixIn, BaseDispatcher):
+async def discovery_initiate(
+        broad_cast_address,
+        kad_server,
+        multicast_address,
+        req_dispatcher,
+        transport
+):
+    discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
+    Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
+
+    discovery_reply_handler = DiscoveryReplyHandler(kad_server)
+    discovery_req_handler = DiscoveryRequestHandler(discover_dispatcher.transport)
+
+    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
+    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
+
+    await discover.send_discovery_requests(
+        discover_dispatcher.transport,
+        broad_cast_address,
+        multicast_address
+    )
+
+
+class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
+    __slots__ = ()
+
     def __init__(self, transport, stop_flag):
         super().__init__(transport, stop_flag)
 
     async def submit(self, req_event: RequestEvent):
-        handler = self.registry[req_event.root_code]
-        _logger.info(f"[REQUESTS] dispatching request with code: {req_event.root_code} to {handler}")
+        self.msg_arrived(req_event.request)
+        try:
+            handler = self.registry[req_event.root_code]
+        except KeyError:
+            return
+
+        _logger.debug(f"dispatching request with code: {req_event.root_code} to {handler}")
         # expected type of handlers
         # 1. Dispatcher objects that are coupled with QueueMixIn (sync)
         # 2. Dispatcher objects that are not coupled with QueueMixIn (async)
@@ -124,6 +136,7 @@ class RequestsDispatcher(QueueMixIn, BaseDispatcher):
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
+    __slots__ = 'transport', 'dispatcher'
 
     def __init__(self, dispatcher):
         """A Requests Endpoint
@@ -135,21 +148,22 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
                 dispatcher(RequestsDispatcher) : dispatcher object that gets `called` when a datagram arrives
         """
 
+        self.transport = None
         self.dispatcher = dispatcher
 
     def connection_made(self, transport):
         self.transport = transport
-        _logger.info(f"[REQUESTS] started requests endpoint at {transport.get_extra_info("socket")}")
+        _logger.info(f"started requests endpoint at {transport.get_extra_info("socket")}")
 
     def datagram_received(self, actual_data, addr):
         code, stripped_data = actual_data[:1], actual_data[1:]
         try:
             req_data = unpack_datagram(stripped_data)
         except InvalidPacket as ip:
-            _logger.info(f"[REQUESTS] error:", exc_info=ip)
+            _logger.info(f"error:", exc_info=ip)
             return
 
-        _logger.info(f"[REQUESTS] received: {code} from : {addr}, {req_data.dict=}")
+        _logger.info(f"received: {code} from : {addr}, {req_data.dict=}")
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 

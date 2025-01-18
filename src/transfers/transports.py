@@ -3,7 +3,7 @@ from asyncio import BaseTransport
 from typing import override
 
 from src.avails import WireData, connect, is_socket_connected
-from src.core.transfers import REQUESTS_HEADERS
+from src.transfers import REQUESTS_HEADERS
 
 
 class RequestsTransport(BaseTransport):  # just for type hinting

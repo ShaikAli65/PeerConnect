@@ -1,6 +1,7 @@
 """
 All the stuff related to kademlia goes here
 """
+
 import asyncio
 from typing import override
 
@@ -15,8 +16,8 @@ from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.peers import Storage
-from src.core.transfers import REQUESTS_HEADERS
-from src.core.transfers.transports import KademliaTransport
+from src.transfers import REQUESTS_HEADERS
+from src.transfers.transports import KademliaTransport
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -82,7 +83,7 @@ class RPCReceiver(RPCProtocol):
         return self.source_node.serialized
 
     def rpc_store(self, sender, sender_peer, key, value):
-        source = self._check_in(sender_peer)
+        self._check_in(sender_peer)
         log.debug("got a store request from %s, storing '%s'='%s'",
                   sender, key.hex(), value)
         self.storage[key] = value
@@ -159,23 +160,28 @@ class AnotherRoutingTable(routing.RoutingTable):
     @override
     def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
-        Dock.peer_list.add_peer(peer)
         peers.new_peer(peer)
 
     @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        # Dock.peer_list.remove_peer(peer.peer_id)
-        # peers.remove_peer(peer)
+        peers.remove_peer(peer)
 
 
 class PeerServer(network.Server):
     protocol_class = KadProtocol
 
-    def __init__(self, ksize=20, alpha=3, node=None, storage=None):
-        super().__init__(ksize, alpha, node, storage)
-        self.add_this_peer_future = None
+    def __init__(self, ksize=20, alpha=3, peer_id=None, storage=None):
+        super().__init__(ksize, alpha, peer_id, storage)
+        self.add_this_peer_task = None
         self._transport = None
+
+    @override
+    async def bootstrap(self, addrs):
+        r = await super().bootstrap(addrs)
+        if any(r):
+            self.add_this_peer_task = asyncio.create_task(self.add_this_peer_to_lists())
+        return r
 
     @override
     async def bootstrap_node(self, addr):
@@ -187,17 +193,19 @@ class PeerServer(network.Server):
         self.refresh_table()
 
     async def get_list_of_nodes(self, list_key):
-        node = RemotePeer(list_key)
-        nearest = self.protocol.router.find_neighbors(node)
+        peer = RemotePeer(list_key)
+        nearest = self.protocol.router.find_neighbors(peer)
         if not nearest:
             log.warning("There are no known neighbors to get key %s", list_key)
             return None
         peer_list_getter = peers.PeerListGetter(self.protocol, node, nearest,
                                                 self.ksize, self.alpha)
         results = await peer_list_getter.find()
-        if results is None:
-            return results
-        return [RemotePeer.load_from(peer) for peer_list in results for peer in peer_list]
+
+        return [
+            RemotePeer.load_from(peer)
+            for peer_list in results for peer in peer_list
+        ] if results is not None else results
 
     def _get_closest_list_id(self, node_list_ids: list[bytes]):
         nearest_list_id = 0
@@ -211,15 +219,18 @@ class PeerServer(network.Server):
 
     async def add_this_peer_to_lists(self):
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
-        if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
-            log.debug(f'added this peer object in list_id={closest_list_id}')  # debug
 
-        else:
-            log.error("failed adding this peer object to lists")
+        async for _ in use.async_timeouts():
+            if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
+                log.debug(f"added this peer object in list_id={closest_list_id}")  # debug
+                break
+
+        # entering passive mode
+        log.info("entering passive mode for adding this peer to lists")
+        while not Dock.finalizing.is_set():
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
-            f = use.wrap_with_tryexcept(self.add_this_peer_to_lists)
-            self.add_this_peer_future = asyncio.create_task(f())
-            log.debug("scheduled callback to add this object to lists")
+            if not await self.store_nodes_in_list(closest_list_id, [self.node, ]):
+                log.error("failed adding this peer object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -249,6 +260,9 @@ class PeerServer(network.Server):
         Every call to this function not only gathers remote_peer object corresponding to peer_id
         but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent
+
+        Args:
+            byte_id(bytes): peer id in bytes to perform search
         """
         peer = RemotePeer(byte_id=byte_id)
         nodes = self.protocol.router.find_neighbors(peer)
@@ -267,8 +281,22 @@ class PeerServer(network.Server):
     @transport.setter
     def transport(self, transport):
         self._transport = transport
+
+        # in the initial stages of bootstrapping this gets set lazily
+        # so a check is better
         if hasattr(self, 'protocol'):
             self.protocol.transport = transport
+
+    @property
+    def is_bootstrapped(self):
+        for bucket in self.protocol.router.buckets:
+            # if at least one of the bucket contains at least one node,
+            # we can assume that we are in network
+
+            if any(bucket):
+                return True
+
+        return False
 
 
 def _get_new_kademlia_server() -> PeerServer:
@@ -278,16 +306,15 @@ def _get_new_kademlia_server() -> PeerServer:
     return s
 
 
-def _register_into_dispatcher(server, dispatcher: BaseDispatcher):
+def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     handler = KademliaHandler(server)
     event_header = REQUESTS_HEADERS.KADEMLIA
     dispatcher.register_handler(event_header, handler)
 
 
-def prepare_kad_server(req_transport, dispatcher):
+def prepare_kad_server(req_transport):
     kad_server = _get_new_kademlia_server()
     kad_server.transport = KademliaTransport(req_transport)
-    _register_into_dispatcher(kad_server, dispatcher)
     return kad_server
 
 

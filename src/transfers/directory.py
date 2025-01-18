@@ -10,7 +10,7 @@ from src.avails import connect, const
 from src.avails.exceptions import TransferIncomplete
 from src.avails.status import StatusMixIn
 from src.avails.useables import LONG_INT, recv_int
-from src.core.transfers import FileItem, TransferState, recv_file_contents, send_actual_file
+from src.transfers._fileobject import FileItem, TransferState, recv_file_contents, send_actual_file
 
 _logger = logging.getLogger(__name__)
 

@@ -5,9 +5,10 @@ from sys import stderr
 from src.avails import DataWeaver, Wire, WireData, use
 from src.core import Dock, get_this_remote_peer, peers
 from src.core.connections import Connector
-from src.core.transfers import HANDLE, HEADERS
 from src.managers import directorymanager, filemanager
 from src.managers.directorymanager import send_directory
+from src.transfers import HEADERS
+from src.webpage_handlers.headers import HANDLE
 
 
 async def new_dir_transfer(command_data: DataWeaver):
@@ -25,7 +26,6 @@ async def new_dir_transfer(command_data: DataWeaver):
 
     async with send_directory(remote_peer, dir_path) as sender:
         async for message in sender:
-            continue
             print(message)
 
 
@@ -35,9 +35,8 @@ async def send_file(command_data: DataWeaver):
         return
 
     selected_files = [Path(x) for x in selected_files]
-    peer_id = command_data.peer_id
     try:
-        async with filemanager.send_files_to_peer(peer_id, selected_files) as files_sender:
+        async with filemanager.send_files_to_peer(command_data.peer_id, selected_files) as files_sender:
             async for status in files_sender:
                 print(status)
     except OSError as e:
@@ -63,13 +62,14 @@ async def send_text(command_data: DataWeaver):
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
-    peer_ids = command_data.content["peerList"]
-    peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = await filemanager.open_file_selector()
     if not selected_files:
         return
+    peer_ids = command_data.content["peerList"]
+    peer_objects = [Dock.peer_list.get_peer(peer_id) for peer_id in peer_ids]
     selected_files = [Path(x) for x in selected_files]
     file_sender = filemanager.start_new_otm_file_transfer(selected_files, peer_objects)
+
     async for update in file_sender.start():
         print(update)
         # :todo: feed updates to frontend

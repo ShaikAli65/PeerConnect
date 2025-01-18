@@ -4,12 +4,14 @@ import logging
 import socket
 import struct
 from contextlib import aclosing
+from pathlib import Path
 
 from src.avails import Wire, WireData, connect, const
 from src.avails.exceptions import TransferIncomplete
 from src.avails.status import StatusMixIn
-from src.core import get_this_remote_peer, transfers
-from src.core.transfers import FileItem, HEADERS, TransferState, recv_file_contents, \
+from src.core import get_this_remote_peer
+from src.transfers import HEADERS
+from src.transfers._fileobject import FileItem, TransferState, recv_file_contents, \
     send_actual_file, validatename
 
 _logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ class Sender(StatusMixIn):
     def __init__(self, file_list, peer_obj, transfer_id, *, status_yield_frequency=10):
         self.state = TransferState.PREPARING
         self.file_list = [
-            transfers.FileItem(x, seeked=0) for x in file_list
+            FileItem(x, seeked=0) for x in file_list
         ]
         self.socket = None
         self._file_id = transfer_id
@@ -154,8 +156,8 @@ class Sender(StatusMixIn):
             async for items in file_sender:
                 yield items
 
-    def attach_files(self, file_list):
-        self.file_list.extend(file_list)
+    def attach_files(self, paths_list):
+        self.file_list.extend(FileItem(Path(path), 0) for path in paths_list)
 
     @property
     def id(self):
@@ -241,7 +243,7 @@ class Receiver(StatusMixIn):
         validatename(file_item=self.current_file, root_path=self.download_path)
         receiver = recv_file_contents(self.recv_func, self.current_file, )
         initial = 0
-        self.status_setup(f"[FILE] {self.current_file}",self.current_file.seeked,self.current_file.size)
+        self.status_setup(f"[FILE] {self.current_file}", self.current_file.seeked, self.current_file.size)
         async with aclosing(receiver) as file_receiver:
             async for received_len in file_receiver:
                 self.update_status(received_len - initial)

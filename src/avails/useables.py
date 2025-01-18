@@ -9,10 +9,13 @@ import subprocess
 import sys
 import threading
 import traceback
-from sys import _getframe  # noqa
-from typing import Awaitable, Final
-from uuid import uuid4
 import typing
+from pathlib import Path
+from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
+from sys import _getframe  # noqa
+from typing import Annotated, Awaitable, Final
+from uuid import uuid4
+
 import select
 
 from src.avails import const
@@ -32,7 +35,18 @@ SHORT_INT = 4
 LONG_INT = 8
 
 
-async def recv_int(get_bytes:typing.Callable[[int],Awaitable[bytes]], type=SHORT_INT) -> int:
+def shorten_path(path: Path, max_length):
+    if len(str(path)) <= max_length:
+        return str(path)
+    selected_parts = list(path.parts)
+    part_ptr = 1
+    while len("".join(selected_parts)) >= max_length:
+        selected_parts.pop(part_ptr)
+    selected_parts.insert(1, '..')
+    return os.path.sep.join(selected_parts)
+
+
+async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHORT_INT):
     """Receives integer from get_bytes function
 
     awaits on ``get_bytes``, gets bytes based on ``type`` argument
@@ -62,23 +76,29 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
     """
     Generate exponential backoff timeout values.
 
-    Parameters:
-    initial (float): The initial timeout value in seconds. Defaults to 0.0001.
-    factor (int): The factor by which the timeout value is multiplied at each step. Defaults to 2.
-    max_retries (int): The maximum number of retries. Defaults to 5.
-    max_value (float): The maximum timeout value in seconds. Defaults to 5.0.
+    Args:
+        initial (float): The initial timeout value in seconds. Defaults to 0.001.
+        factor (int): The factor by which the timeout value is multiplied at each step. Defaults to 2.
+        max_retries (int): The maximum number of retries. Defaults to 5, if -1 is provided then yields infinitely
+        max_value (float): The maximum timeout value in seconds. Defaults to 5.0.
 
     Yields:
-    float: The next timeout value in the sequence, capped by max_value.
+        float: The next timeout value in the sequence, capped by max_value.
 
     Example:
-    >>> list(get_timeouts())
-    [0.001, 0.002, 0.004, 0.008, 0.016]
+        >>> list(get_timeouts())
+        [0.001, 0.002, 0.004, 0.008, 0.016]
 
-    >>> list(get_timeouts(initial=1, factor=3, max_retries=4, max_value=10))
-    [1, 3, 9, 10]
+        >>> list(get_timeouts(initial=1, factor=3, max_retries=4, max_value=10))
+        [1, 3, 9, 10]
     """
     current = initial
+
+    if max_retries == -1:
+        while True:
+            yield min(current, max_value)
+            current *= factor
+
     for _ in range(max_retries):
         yield min(current, max_value)
         current *= factor
@@ -87,16 +107,15 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
 async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     same as :func: `get_timeouts` but delays itself in yielding
-    possible use case:
+
     Example:
-    >>> async for _ in async_timeouts(initial=1, factor=2, max_retries=4, max_value=5):
-    >>>     # any working code that needs to be executed with delays
+        >>> async for _ in async_timeouts(initial=1, factor=2, max_retries=4, max_value=5):
+        >>>     # any working code that needs to be executed with delays
     """
-    current = initial
-    for _ in range(max_retries):
-        await asyncio.sleep(min(current, max_value))
+
+    for timeout in get_timeouts(initial,factor, max_retries, max_value):
+        await asyncio.sleep(timeout)
         yield
-        current *= factor
 
 
 def echo_print(*args, **kwargs):
@@ -317,6 +336,50 @@ def search_relevant_peers(peer_list, search_string) -> list:
             continue  # Skip removed peer
         if peer.is_relevant(search_string):
             yield peer
+
+
+_AddressFamily = Annotated[AddressFamily, 'v4 or v6 family']
+_SockType = Annotated[socket.SOCK_STREAM | socket.SOCK_DGRAM, 'STREAM OR UDP']
+_IpProto = Annotated[IPPROTO_TCP | IPPROTO_UDP, "tcp or udp protocol"]
+_CannonName = Annotated[str, 'cannonical name']
+_SockAddr = Annotated[tuple[str, int] | tuple[str, int, int, int], "address tuple[2] if v4 tuple[4] if v6"]
+
+
+async def get_addr_info(
+        host: bytes | str | None,
+        port: bytes | str | int | None,
+        *,
+        family: int = 0,
+        type: int = 0,  # noqa
+        proto: int = 0,
+        flags: int = 0
+):
+    """Just a convenience for asynchronous name resolving
+
+    Args:
+        host: passed into get addr info
+        port: passed into get addr info
+        family: passed into get addr info
+        type: passed into get addr info
+        proto: passed into get addr info
+        flags: passed into get addr info
+
+    Yields:
+        tuple[
+            _AddressFamily,
+            _SockType,
+            _IpProto,
+            _CannonName,
+            _SockAddr,
+        ]
+    """
+
+    loop = asyncio.get_running_loop()
+    addresses = await loop.getaddrinfo(host, port, family=family, type=type,
+                                       proto=proto, flags=flags)
+
+    for family, sock_type, proto, canonname, addr in addresses:
+        yield family, sock_type, proto, canonname, addr
 
 
 class NotInUse:

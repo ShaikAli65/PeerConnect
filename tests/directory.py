@@ -3,8 +3,8 @@ import os
 
 import _path  # noqa
 from src.avails import DataWeaver, const
-from src.core.webpage_handlers import handledata
 from src.managers.statemanager import State
+from src.webpage_handlers import handledata
 from test import get_a_peer, initiate, test_initial_states
 
 

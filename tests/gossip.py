@@ -6,8 +6,8 @@ import _path  # noqa
 from src.avails import GossipMessage, WireData, const
 from src.avails.useables import get_unique_id
 from src.core import get_gossip, peers
-from src.core.transfers import GOSSIP
 from src.managers.statemanager import State
+from src.transfers import GOSSIP
 from test import initiate, test_initial_states
 
 TEST_MESSAGE = "WHAT'S UP EVERYBODY"
