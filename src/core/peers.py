@@ -77,7 +77,7 @@ referring 1.3 :
     ask them to search for relevant peers that match the given search string,
     return the list of peer's matched
 
-    never do's:
+    never dos:
         - cache the owner peer for a respective bucket as they can change pretty fast,
           always use kademlia's search protocol to get latest peer data
         - permanently cache peer's data received
@@ -92,12 +92,15 @@ from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import DataWeaver, GossipMessage, RemotePeer, use
+from src.avails import DataWeaver, GossipMessage, RemotePeer, WireData, connect, const, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
-from src.core import Dock, get_gossip, get_this_remote_peer
-from src.transfers import GOSSIP, HANDLE
+from src.core import DISPATCHS, Dock, get_gossip, get_this_remote_peer
+from src.transfers import GOSSIP, HEADERS
 from src.webpage_handlers import pagehandle
+from src.webpage_handlers.headers import HANDLE
+
+_logger = logging.getLogger(__name__)
 
 # this list contains 20 evenly spread numbers in [0, 2**160]
 node_list_ids = [
@@ -122,72 +125,6 @@ node_list_ids = [
     b'\xe6ffffffffffffffffffX',
     b'\xf3333333333333333333$',
 ]
-
-_logger = logging.getLogger(__name__)
-
-
-class PeerListGetter(crawling.ValueSpiderCrawl):
-    peers_cache = {}
-    previously_fetched_index = 0
-    node_list_ids = node_list_ids
-
-    async def find(self):
-        return await self._find(self.protocol.call_find_peer_list)
-
-    @override
-    async def _handle_found_values(self, values):
-        peer = self.nearest_without_value.popleft()
-        if peer:
-            _logger.debug(f"found values {values}")
-            await self.protocol.call_store_peers_in_list(peer, self.node.id, values)
-        return values
-
-    @classmethod
-    async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
-        _logger.debug(f"previous index {cls.previously_fetched_index}")
-        if cls.previously_fetched_index >= len(cls.node_list_ids) - 1:
-            cls.previously_fetched_index = 0
-
-        find_list_id = cls.node_list_ids[cls.previously_fetched_index]
-        _logger.debug(f"looking into {find_list_id}")
-        list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
-        cls.previously_fetched_index += 1
-
-        if list_of_peers:
-            cls.peers_cache.update({x.peer_id: x for x in list_of_peers})
-
-            return list(set(list_of_peers))
-
-        return []
-
-
-class SearchCrawler:
-    node_list_ids = node_list_ids
-
-    @classmethod
-    async def get_relevant_peers_for_list_id(cls, kad_server, list_id):
-        peer = RemotePeer(list_id)
-        nearest = kad_server.protocol.router.find_neighbors(peer)
-        crawler = crawling.NodeSpiderCrawl(
-            kad_server.protocol,
-            peer,
-            nearest,
-            kad_server.ksize,
-            kad_server.alpha
-        )
-        responsible_nodes = await crawler.find()
-        return responsible_nodes
-
-    @classmethod
-    async def search_for_nodes(cls, node_server, search_string):
-        for peer in use.search_relevant_peers(Dock.peer_list, search_string):
-            yield peer
-
-        for list_id in cls.node_list_ids:
-            peers = await cls.get_relevant_peers_for_list_id(node_server, list_id)
-            for peer in peers:
-                _peers = await node_server.protocol.call_search_peers(peer, search_string)
-                yield _peers
 
 
 class Storage(storage.ForgetfulStorage):
@@ -216,6 +153,68 @@ class Storage(storage.ForgetfulStorage):
         self.peer_data_storage[list_key] |= filtered_peers
 
         return True
+
+
+class SearchCrawler:
+
+    @classmethod
+    async def get_relevant_peers_for_list_id(cls, kad_server, list_id):
+        peer = RemotePeer(list_id)
+        nearest = kad_server.protocol.router.find_neighbors(peer)
+        crawler = crawling.NodeSpiderCrawl(
+            kad_server.protocol,
+            peer,
+            nearest,
+            kad_server.ksize,
+            kad_server.alpha
+        )
+        responsible_nodes = await crawler.find()
+        return responsible_nodes
+
+    @classmethod
+    async def search_for_nodes(cls, node_server, search_string):
+        for peer in use.search_relevant_peers(Dock.peer_list, search_string):
+            yield peer
+
+        for list_id in node_list_ids:
+            peers = await cls.get_relevant_peers_for_list_id(node_server, list_id)
+            for peer in peers:
+                _peers = await node_server.protocol.call_search_peers(peer, search_string)
+                yield _peers
+
+
+class PeerListGetter(crawling.ValueSpiderCrawl):
+    peers_cache = {}
+    previously_fetched_index = 0
+
+    async def find(self):
+        return await self._find(self.protocol.call_find_peer_list)
+
+    @override
+    async def _handle_found_values(self, values):
+        peer = self.nearest_without_value.popleft()
+        if peer:
+            _logger.debug(f"found values {values}")
+            await self.protocol.call_store_peers_in_list(peer, self.node.id, values)
+        return values
+
+    @classmethod
+    async def get_more_peers(cls, peer_server) -> list[RemotePeer]:
+        _logger.debug(f"previous index {cls.previously_fetched_index}")
+        if cls.previously_fetched_index >= len(node_list_ids) - 1:
+            cls.previously_fetched_index = 0
+
+        find_list_id = node_list_ids[cls.previously_fetched_index]
+        _logger.debug(f"looking into {find_list_id}")
+        list_of_peers = await peer_server.get_list_of_nodes(find_list_id)
+        cls.previously_fetched_index += 1
+
+        if list_of_peers:
+            cls.peers_cache.update({x.peer_id: x for x in list_of_peers})
+
+            return list(set(list_of_peers))
+
+        return []
 
 
 class GossipSearch:
@@ -353,7 +352,10 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
     return peer_obj
 
 
+# Callbacks called by kademila's routing mechanisms
+
 def new_peer(peer):
+    Dock.peer_list.add_peer(peer)
     data = DataWeaver(
         header=HANDLE.NEW_PEER,
         content={
@@ -365,9 +367,29 @@ def new_peer(peer):
     pagehandle.dispatch_data(data)
 
 
-def remove_peer(peer):
-    data = DataWeaver(
-        header=HANDLE.REMOVE_PEER,
-        peer_id=peer.peer_id,
+async def check_and_remove(peer: RemotePeer):
+    req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
+    ping_data = WireData(
+        header=HEADERS.REMOVAL_PING,
+        msg_id=use.get_unique_id(str)
     )
-    pagehandle.dispatch_data(data)
+    fut = req_dispatcher.register_reply(ping_data.id)  # noqa
+    try:
+        await asyncio.wait_for(fut, const.PING_TIMEOUT)
+    except TimeoutError:
+        # try a tcp connection if network is terrible with UDP
+        try:
+            with await connect.connect_to_peer(peer):
+                pass
+        except (OSError, TimeoutError):
+            # okay this one is cooked
+            Dock.peer_list.remove_peer(peer.peer_id)
+            data = DataWeaver(
+                header=HANDLE.REMOVE_PEER,
+                peer_id=peer.peer_id,
+            )
+            pagehandle.dispatch_data(data)
+
+
+def remove_peer(peer):
+    asyncio.create_task(check_and_remove(peer))
