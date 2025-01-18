@@ -1,7 +1,8 @@
 from typing import Callable, Coroutine
 
-from src.avails import BaseDispatcher, GossipMessage, QueueMixIn
+from src.avails import BaseDispatcher, GossipMessage
 from src.avails.events import GossipEvent
+from src.avails.mixins import QueueMixIn
 from src.core import Dock, get_gossip
 from src.core.peers import get_search_handler
 from src.transfers import GOSSIP, GossipTransport, REQUESTS_HEADERS, \

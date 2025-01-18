@@ -1,6 +1,6 @@
 from typing import NamedTuple, TYPE_CHECKING
 
-from src.avails import GossipMessage, WireData
+from src.avails.wire import GossipMessage, WireData
 
 
 class RequestEvent(NamedTuple):

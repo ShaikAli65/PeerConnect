@@ -5,8 +5,8 @@ from src.managers import (
     get_profile_from_profile_file_name,
     refresh_profile_list, set_current_profile,
 )
-from src.transfers import HANDLE
 from src.webpage_handlers import logger
+from src.webpage_handlers.headers import HANDLE
 from src.webpage_handlers.pagehandle import PROFILE_WAIT, dispatch_data
 
 

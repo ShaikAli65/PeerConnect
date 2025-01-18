@@ -83,7 +83,7 @@ class ReplyRegistry:
     id_factory = itertools.count()
 
     @classmethod
-    def register_reply(cls, data: DataWeaver):
+    def register_reply(cls, data: DataWeaver) -> _asyncio.Future[DataWeaver]:
         loop = _asyncio.get_event_loop()
         data.msg_id = next(cls.id_factory)
         cls.messages_to_futures_mapping[data.msg_id] = fut = loop.create_future()
@@ -125,7 +125,7 @@ async def validate_connection(web_socket):
     logger.info("[PAGE HANDLE] waiting for data from websocket")
 
     if not handle_function:
-        logger.info("[PAGE HANDLE] Unknown connection type")
+        logger.info("[PAGE HANDLE] Unknown connection type, closing websocket")
         await web_socket.close()
         raise UnknownConnectionType()
     return handle_function
@@ -140,7 +140,6 @@ async def handle_client(web_socket: Connection):
 
         async for data in web_socket:
             logger.info(f"[PAGE HANDLE] data from page: {data=}")
-            logger.info(f"[PAGE HANDLE] forwarding to {use.func_str(handle_function)}")
             parsed_data = DataWeaver(serial_data=data)
 
             try:
@@ -177,14 +176,16 @@ async def initiate_page_handle():
 
 
 def dispatch_data(data, expect_reply=False):
-    """
-    Send data to frontend
-    Not actually sends data but queues the :param: data for sending
+    """Send data to frontend
+
+    Not actually sends data but queues the :param data: for sending
+
     Args:
         data (DataWeaver) : data to send
-        expect_reply (bool) : if this argument is true then a `asyncio.Future` is returned which can be awaited directly
+        expect_reply (bool) : if this argument is true then a `asyncio.Future` is returned which can be awaited
+            overrides any msg_id attached to data (DataWeaver)
     Returns:
-        bool | asyncio.Future
+        bool | asyncio.Future[DataWeaver]
     """
 
     def check_closing():
@@ -195,6 +196,7 @@ def dispatch_data(data, expect_reply=False):
 
     if check_closing():
         return False
+
     logger.info(f"[PAGE HANDLE] ::Sending data to page: {data!r}")
     WebSocketRegistry.send_data(data, data.type)
     if expect_reply:

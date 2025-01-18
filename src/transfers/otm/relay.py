@@ -1,16 +1,19 @@
 import asyncio
 import collections
-from typing import Optional, override
+from typing import Optional, TYPE_CHECKING, override
 
 from src.avails import WireData, constants as const, useables as use
 from src.core import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
-from src.transfers.otm.receiver import FilesReceiver
 
 
 class OTMFilesRelay(PalmTreeRelay):
     # :todo: try using temporary-spooled files
+    if TYPE_CHECKING:
+        from src.transfers.otm.receiver import FilesReceiver
+        file_receiver: FilesReceiver
+
     def __init__(
             self,
             session,
@@ -20,7 +23,7 @@ class OTMFilesRelay(PalmTreeRelay):
     ):
         super().__init__(session, passive_endpoint_addr, active_endpoint_addr)
         self._read_link = None
-        self.file_receiver: FilesReceiver = file_receiver
+        self.file_receiver = file_receiver
         # this is a generator `:method: OTMFilesReceiver.data_receiver` that takes byte-chunk inside it
         self.chunk_recv_gen = self.file_receiver.data_receiver()
         self._forward_limiter = asyncio.Semaphore(self.session.fanout)

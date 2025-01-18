@@ -8,8 +8,9 @@ from src.avails import DataWeaver, OTMInformResponse, OTMSession, RemotePeer, Tr
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete
 from src.core import Dock, get_this_remote_peer
-from src.transfers import HANDLE, TransferState, files, otm
+from src.transfers import TransferState, files, otm
 from src.webpage_handlers import pagehandle
+from src.webpage_handlers.headers import HANDLE
 
 transfers_book = TransfersBookKeeper()
 
