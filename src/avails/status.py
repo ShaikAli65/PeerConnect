@@ -1,5 +1,6 @@
 import asyncio
 from collections import abc
+
 from tqdm import tqdm
 
 from src.avails import useables
@@ -8,7 +9,7 @@ from src.avails import useables
 # design decision:
 # two things we can provide to transfer API
 # 1. A StatusIterator
-# 2. A StatusMixIn class that provides functionality to make yield desicions
+# 2. A StatusMixIn class that provides functionality to make yield decisions
 # 1.
 #
 #    class StatusIterator
@@ -26,19 +27,19 @@ from src.avails import useables
 #       * should_yield() -> bool
 #
 #   calls func: update every time some data is transferred
-#   calls func: should_yield to make a desicion whether to yield or not
+#   calls func: should_yield to make a decision whether to yield or not
 #
 #   this requires Transfer classes to work with mix in
 # --
 #   if (1) is used
 #       Then Transfer classes need not be too aware of status updates
 #       transfer classes are isolated from the status things and can focus on transferring contents
-#       preserving single responsibilty principle
+#       preserving single responsibility principle
 
 #       forcing blocking functions like `start sending or receiving` get spawned as an ``asyncio.Task``
 #       further breaking a critical exception control flow in high level handlers
 #       cause most of the internal functions are generators with ``async for`` working on them
-#       this require significant refactor
+#       this requires significant refactor
 # --
 #  if (2) is used
 #       Then Transfer classes should work with methods like ``should_yield`` to make a decision.
@@ -48,9 +49,13 @@ from src.avails import useables
 #  just for the control flow sake we are going with (2)
 
 class StatusMixIn:
-    __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
+
+    # __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
+    # mixin classes are not allowed to have slots as they are placed arbitrarily in class hierarchies and
+    # when multiple inheritance occurs only one parent class is allowed to have slots attribute
 
     def __init__(self, yield_freq):
+        self.next_yield_point = None
         self.yield_freq = yield_freq
         self.current_status = 0
         self._yield_iterator = None

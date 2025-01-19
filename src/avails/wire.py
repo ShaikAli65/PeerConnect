@@ -6,6 +6,8 @@ All classes provide serializing and de-serializing methods to make them ready to
 
 One special class of wire protocol :class: `RemotePeer` is available in :file: `remotepeer.py`
 
+Any Class that wraps data is immutable, once created not modifications are allowed, create another
+
 """
 
 import dataclasses
@@ -393,7 +395,7 @@ class RumorMessageItem:
         return self.message_id
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class PalmTreeInformResponse:
     """
     Args:

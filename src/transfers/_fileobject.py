@@ -228,7 +228,7 @@ async def send_actual_file(
         timeout(int): timeout in seconds used to wait upon send_function
 
     Yields:
-        number indicating the sent file size
+        number indicating the file size sent
     """
 
     chunk_size = chunk_len or calculate_chunk_size(file.size)
@@ -247,7 +247,7 @@ async def send_actual_file(
 async def recv_file_contents(recv_function, file_item, *, chunk_size=None):
     """Receive a file over a network connection and write it to disk.
 
-    if ``FileItem.seeked`` attribute is non zero then the file at ``file_item.path`` is checked for existence
+    if ``FileItem.seeked`` attribute is non-zero then the file at ``file_item.path`` is checked for existence
     if not found then FileNoFoundError is raised.
     if found then opened in **rb+** mode
 

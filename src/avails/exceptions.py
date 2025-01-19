@@ -20,3 +20,7 @@ class TransferIncomplete(Exception):
 
 class TransferRejected(Exception):
     """Data Transfer request was rejected"""
+
+
+class ConnectionClosed(OSError):
+    """Exsisting connection is closed"""

@@ -104,12 +104,12 @@ class DefaultRumorPolicy(RumorPolicy):
         if not (w := random.random() < gossip_chance):
             print("not gossiping probability check failed")
         return w
-
+    
 
 class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
-    Once a message is created then it's is not subject to any change at any peer
+    Once a message is created then it is not subject to any change at any peer
     """
 
     alpha = 3

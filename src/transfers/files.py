@@ -6,8 +6,8 @@ import struct
 from contextlib import aclosing
 from pathlib import Path
 
-from src.avails import Wire, WireData, connect, const
-from src.avails.exceptions import TransferIncomplete
+from src.avails import Wire, WireData, connect, const, use
+from src.avails.exceptions import ConnectionClosed, TransferIncomplete
 from src.avails.status import StatusMixIn
 from src.core import get_this_remote_peer
 from src.transfers import HEADERS
@@ -138,13 +138,13 @@ class Sender(StatusMixIn):
         self.to_stop = False
 
         # synchronizing last file sent
-        seeked_int = await self.socket.recv(8)
-        if not seeked_int:
-            _logger.debug(f'FILE[{self._file_id}] changing state to paused')
+        try:
+            start_file.seeked = use.recv_int(self.socket.arecv, use.LONG_INT)
+        except ConnectionClosed:
+            _logger.debug(f'FILE[{self._file_id}] changing state to paused', exc_info=True)
             self.state = TransferState.PAUSED
-            raise ConnectionResetError("Connection reset by other end while received file seek point")
+            raise
 
-        start_file.seeked = struct.unpack('!Q', seeked_int)[0]
         self.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
         async with aclosing(self._send_single_file(start_file)) as initial_file_sender:
             async for items in initial_file_sender:

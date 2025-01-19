@@ -19,6 +19,7 @@ from uuid import uuid4
 import select
 
 from src.avails import const
+from src.avails.exceptions import ConnectionClosed
 
 
 def func_str(func_name):
@@ -60,16 +61,16 @@ async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHO
         int: unpacked integer
 
     Raises:
-        ValueError : on ConnectionResetError or struct.error
+        ConnectionClosed : on ConnectionResetError or struct.error
     """
     try:
         byted_int = await get_bytes(type)
         integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
         return integer
     except struct.error as se:
-        raise ValueError(f"unable to unpack integer from: {byted_int}") from se
+        raise ConnectionClosed(f"unable to unpack integer from: {byted_int}") from se
     except ConnectionResetError as ce:
-        raise ValueError(f"unable to receive integer") from ce
+        raise ConnectionClosed(f"unable to receive integer") from ce
 
 
 def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):

@@ -92,7 +92,12 @@ async def file_receiver(file_req: WireData, connection):
 
 
 def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer]):
-    file_sender = otm.FilesSender(file_list=files_list, peers=peers, timeout=3)  # check regarding timeouts
+    file_sender = otm.FilesSender(
+        file_list=files_list,
+        peers=peers,
+        timeout=3,
+        yield_freq=const.TRANSFER_STATUS_FREQ
+    )
     transfers_book.add_to_scheduled(file_sender.id, file_sender)
     return file_sender
 
