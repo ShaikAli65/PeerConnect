@@ -20,13 +20,16 @@
 
 
 **peer update schema**
+
+```
 > data = DataWeaver(
 > header=HANDLE.REMOVE_PEER,
 > peer_id=peer.peer_id,
 > )
+```
 
 **adding peer schema**
-
+```
 > data = DataWeaver(
 >   header=[NEW_PEER](#NEW_PEER),
 >   content={
@@ -35,10 +38,10 @@
 >   },
 >   peer_id=peer.peer_id,
 > )
- 
+``` 
 
 **transfer completed**
-
+```
 > status_update = DataWeaver(
 >   header=[TRANSFER_UPDATE](#TRANSFER_UPDATE),
 >   content={
@@ -50,8 +53,10 @@
 >   },
 >   peer_id=file_req.peer_id,
 > )
+```
 
 **transfer update**
+```
 > status_update = DataWeaver(
 >    header=HANDLE.TRANSFER_UPDATE,
 >    content={
@@ -61,9 +66,11 @@
 >    },
 >    peer_id=file_req.peer_id,
 >)
-
+```
 
 **profiles list**
+
+```
 > header = [PROFILE_LIST](#PROFILE_LIST)
 > content = {
 >     file_name : {
@@ -78,8 +85,11 @@
 >     },
 >     ...
 > }
+```
 
 **search response**
+
+```
 > response_data = DataWeaver(
 >     header=HANDLE.SEARCH_RESPONSE,
 >     content=[
@@ -91,7 +101,7 @@
 >     ],
 >    searchId=TBD
 > )
-
+```
 
 
 ### HEADERS:
