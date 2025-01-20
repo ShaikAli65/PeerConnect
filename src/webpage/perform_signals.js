@@ -1,5 +1,5 @@
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const wss = new WebSocket("ws://localhost:56733");
+const wss = new WebSocket("ws://localhost:28345");
 const profileListDiv = document.getElementById('profileList');
 const addProfileBtn = document.getElementById('addProfileBtn');
 const delProfileBtn = document.getElementById('delProfileBtn');

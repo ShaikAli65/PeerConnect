@@ -45,11 +45,13 @@ async def handler(_websocket):
 def initiate_control():
     use.echo_print('::Initiate_control called at handle_signals.py :', const.PATH_PAGE, const.PORT_PAGE_SIGNALS)
     launch_web_page()
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_SIGNALS)
-    # start_server = websockets.serve(handler, "172.16.197.166", const.PORT_PAGE_SIGNALS)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
+
+    async def helper():
+        start_server = websockets.serve(handler, "localhost", const.PORT_PAGE_SIGNALS)
+        async with start_server:
+            await safe_end.wait()
+
+    asyncio.run(helper())
 
 
 def end():
