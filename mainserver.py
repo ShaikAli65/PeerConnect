@@ -11,7 +11,7 @@ from src.managers.thread_manager import thread_handler
 from src.configurations.configure_app import set_paths
 from src.avails.waiters import ThreadActuator
 from src.avails.connect import *
-SERVER_PORT = 45000  # standard
+SERVER_PORT = 4500  # standard
 
 
 class Server:
@@ -48,8 +48,9 @@ class Server:
             client.close() if client else None
 
     def start_server(self):
-        print(">> started")
+        print(">> starting",self.addr,const.IP_VERSION)
         server_sock = create_server(self.addr, family=const.IP_VERSION, backlog=10)
+        print(">> started")
         while True:
             reads, _, _ = select.select([self.controller, server_sock], [], [], 1)
             if self.controller.to_stop:
@@ -75,8 +76,8 @@ if __name__ == '__main__':
     set_paths()
     boot_up.initiate()
     print('server:', const.THIS_IP,SERVER_PORT)
-    const.IP_VERSION = socket.AF_INET6
-    server = Server(host=const.THIS_IP, port=SERVER_PORT)
+    # const.IP_VERSION = socket.AF_INET6
+    server = Server(const.THIS_IP, port=SERVER_PORT)
     signal.signal(signal.SIGINT, server.endserver)
     print('id    :', server.id)
     server.start_server()

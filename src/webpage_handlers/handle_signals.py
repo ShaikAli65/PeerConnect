@@ -42,7 +42,6 @@ async def handler(_websocket):
     await getdata()
     use.echo_print('::handler ended')
 
-
 def initiate_control():
     use.echo_print('::Initiate_control called at handle_signals.py :', const.PATH_PAGE, const.PORT_PAGE_SIGNALS)
     launch_web_page()

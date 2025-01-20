@@ -1,11 +1,12 @@
+from functools import wraps
 import sys
 
 import websockets.server
 
 import src.avails.textobject
 import src.core.senders
-import src.managers.endmanager
-
+from src.managers import endmanager
+import asyncio
 from src.core.senders import *
 from src.avails.remotepeer import RemotePeer
 from src.avails import useables as use
@@ -13,7 +14,7 @@ from src.avails.textobject import DataWeaver
 from src.core import requests_handler as req_handler
 from src import avails
 
-loop: asyncio.events = asyncio.new_event_loop()
+loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
 web_socket: websockets.WebSocketServerProtocol
 server_data_lock = threading.Lock()
 safe_end = asyncio.Event()
@@ -33,7 +34,7 @@ def handle_connection(addr_id):
 def command_flow_handler(data_in: DataWeaver):
     if data_in.match_content(const.HANDLE_END):
         safe_end.set()
-        src.managers.endmanager.end_session()
+        endmanager.end_session()
         exit(1)
     elif data_in.match_content(const.HANDLE_CONNECT_USER):
         handle_connection(addr_id=data_in.id)
@@ -144,7 +145,7 @@ async def feed_file_data_to_page(_data, _id):
     #     return
 
 
-async def feed_user_status_to_page(peer: avails.remotepeer.RemotePeer):
+async def feed_user_status_to_page(peer: RemotePeer):
     if safe_end.is_set():
         use.echo_print("Can't send data to page, safe_end is flip", safe_end)
         return
