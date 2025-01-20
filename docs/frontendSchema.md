@@ -79,6 +79,21 @@
 >     ...
 > }
 
+**search response**
+> response_data = DataWeaver(
+>     header=HANDLE.SEARCH_RESPONSE,
+>     content=[
+>         {
+>             "name": peer.username,
+>             "peerId": peer.peer_id,
+>             "ip": peer.ip,
+>         } for peer in peer_list
+>     ],
+>    searchId=TBD
+> )
+
+
+
 ### HEADERS:
 
 #### REMOVE_PEER
