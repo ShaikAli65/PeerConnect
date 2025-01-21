@@ -145,7 +145,10 @@ class Acceptor:
                     await asyncio.sleep(0)
 
     async def _start_socket(self):
-        addr_info, *_ = await use.get_addr_info(*self.address, family=const.IP_VERSION)
+
+        async for addr_info in use.get_addr_info(*self.address, family=const.IP_VERSION):
+            pass
+
         sock_family, sock_type, _, _, address = addr_info
         sock = const.PROTOCOL.create_async_server_sock(
             asyncio.get_running_loop(),
