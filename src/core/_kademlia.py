@@ -293,17 +293,10 @@ class PeerServer(network.Server):
             # if at least one of the bucket contains at least one node,
             # we can assume that we are in network
 
-            if any(bucket):
+            if any(bucket.nodes):
                 return True
 
         return False
-
-
-def _get_new_kademlia_server() -> PeerServer:
-    s = PeerServer(storage=Storage())
-    s.node = get_this_remote_peer()
-    s.start()
-    return s
 
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):
@@ -316,6 +309,13 @@ def prepare_kad_server(req_transport):
     kad_server = _get_new_kademlia_server()
     kad_server.transport = KademliaTransport(req_transport)
     return kad_server
+
+
+def _get_new_kademlia_server() -> PeerServer:
+    s = PeerServer(storage=Storage())
+    s.node = get_this_remote_peer()
+    s.start()
+    return s
 
 
 def KademliaHandler(kad_server):

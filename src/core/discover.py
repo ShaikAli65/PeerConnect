@@ -80,32 +80,39 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
                 transport.sendto(ping_data, broad_cast_addr)
                 # transport.transport._sock.sendto(ping_data,broad_cast_addr)
             _logger.debug(f"sent discovery request to broadcast {broad_cast_addr}", )
+
         async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
             transport.sendto(ping_data, multicast_addr)
+        _logger.debug(f"sent discovery request to multicast {multicast_addr}")
 
-    await send_discovery_packet()
-    _logger.debug(f"sent discovery request to multicast {multicast_addr}")
-
-    await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
-
-    # try requesting user a host name of peer that is already in network
-    if not Dock.kademlia_network_server.is_bootstrapped:
-        _logger.debug(f"requesting user for peer name after waiting for {const.DISCOVER_TIMEOUT}s")
-        await _try_asking_user(transport, ping_data)
-
-    await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
-
-    # check once more, if not yet bootstrapped then we need to stay in passive mode
-    # and keep sending discovery requests
-    if not Dock.kademlia_network_server.is_bootstrapped:
+    async def enter_passive_mode():
         _logger.debug(f"entering passive mode for discovery after waiting for {const.DISCOVER_TIMEOUT}s")
-        async for _ in use.async_timeouts(initial=0.1, max_retries=-1):
+        async for _ in use.async_timeouts(initial=0.1, max_retries=-1, max_value=const.DISCOVER_TIMEOUT):
             if Dock.kademlia_network_server.is_bootstrapped:
                 break
             if Dock.finalizing.is_set():
                 return
 
             await send_discovery_packet()
+
+    await send_discovery_packet()
+
+    await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
+    # check once more, if not yet bootstrapped then we need to stay in passive mode
+    # and keep sending discovery requests
+
+    if Dock.kademlia_network_server.is_bootstrapped:
+        return
+
+    task = asyncio.create_task(enter_passive_mode())
+
+    # try requesting user a host name of peer that is already in network
+    if not Dock.kademlia_network_server.is_bootstrapped:
+        _logger.debug(f"requesting user for peer name after waiting for {const.DISCOVER_TIMEOUT}s")
+        await _try_asking_user(transport, ping_data)
+
+    await task
+    # await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
 
 
 async def _try_asking_user(transport, discovery_packet):
