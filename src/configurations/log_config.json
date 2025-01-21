@@ -47,6 +47,12 @@
     "websockets": {
       "handlers": [],
       "propagate": false
+    },
+    "kademlia" : {
+      "level": "INFO"
+    },
+    "rpcudp" : {
+      "level": "INFO"
     }
   }
 }

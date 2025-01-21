@@ -374,6 +374,7 @@ async def check_and_remove(peer: RemotePeer):
         msg_id=use.get_unique_id(str)
     )
     fut = req_dispatcher.register_reply(ping_data.id)  # noqa
+    _logger.debug(f"connectivity check initiating for {peer}")
     try:
         await asyncio.wait_for(fut, const.PING_TIMEOUT)
     except TimeoutError:
@@ -389,6 +390,7 @@ async def check_and_remove(peer: RemotePeer):
                 peer_id=peer.peer_id,
             )
             pagehandle.dispatch_data(data)
+            _logger.info(f"connectivity check failed, removing peer {peer} from cache")
 
 
 def remove_peer(peer):

@@ -19,7 +19,7 @@ def DiscoveryReplyHandler(kad_server):
         if event.from_addr[0] == const.THIS_IP:
             return
         connect_address = tuple(event.request["connect_uri"])
-        _logger.debug("bootstrapping kademlia")
+        _logger.debug(f"bootstrapping kademlia {connect_address}")
         if any(await kad_server.bootstrap([connect_address])):
             _logger.debug("bootstrapping completed")
 
@@ -32,7 +32,7 @@ def DiscoveryRequestHandler(discovery_transport):
         if req_packet["reply_addr"][0] == const.THIS_IP:
             _logger.debug("ignoring echo")
             return
-        _logger.info(f"replying to req with addr: {req_packet.body}")
+        _logger.info(f"discovery replying to req: {req_packet.body}")
         this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
@@ -86,10 +86,11 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
         _logger.debug(f"sent discovery request to multicast {multicast_addr}")
 
     async def enter_passive_mode():
-        _logger.debug(f"entering passive mode for discovery after waiting for {const.DISCOVER_TIMEOUT}s")
+        _logger.info(f"entering passive mode for discovery after waiting for {const.DISCOVER_TIMEOUT}s")
         async for _ in use.async_timeouts(initial=0.1, max_retries=-1, max_value=const.DISCOVER_TIMEOUT):
             if Dock.kademlia_network_server.is_bootstrapped:
-                break
+                # _logger.info(f"{Dock.kademlia_network_server.is_bootstrapped=}")
+                continue
             if Dock.finalizing.is_set():
                 return
 
