@@ -20,6 +20,8 @@ _logger = logging.getLogger(__name__)
 async def open_file_selector():
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)  # noqa
+    if any(result) and result[0] == '.':
+        return []
     return result
 
 
