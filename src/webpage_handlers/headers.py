@@ -28,7 +28,7 @@ class HANDLE(enum.StrEnum):
     SEND_TEXT = "0send_text"
     SEND_FILE_TO_MULTIPLE_PEERS = "0send_file_to_multiple_peers"
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
-
+    REQ_FOR_FILE_TRANSFER = "0a file recv request has been arrived"
 
 if TYPE_CHECKING:
     COMMAND = "this is command "
@@ -54,3 +54,4 @@ if TYPE_CHECKING:
     SEND_TEXT = "0send_text"
     SEND_FILE_TO_MULTIPLE_PEERS = "0send_file_to_multiple_peers"
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
+    REQ_FOR_FILE_TRANSFER = "0a file recv request has been arrived"
