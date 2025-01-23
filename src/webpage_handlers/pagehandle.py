@@ -178,13 +178,13 @@ async def initiate_page_handle():
 
 def dispatch_data(data, expect_reply=False):
     """Send data to frontend
-
-    Not actually sends data but queues the :param data: for sending
+    Not actually sends data but queues the for sending
 
     Args:
         data (DataWeaver) : data to send
         expect_reply (bool) : if this argument is true then a `asyncio.Future` is returned which can be awaited
             overrides any msg_id attached to data (DataWeaver)
+
     Returns:
         bool | asyncio.Future[DataWeaver]
     """

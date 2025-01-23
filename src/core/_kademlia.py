@@ -243,8 +243,8 @@ class PeerServer(network.Server):
 
         nearest = self.protocol.router.find_neighbors(list_key)
         if not nearest:
-            log.info("There are no known neighbors to set key %s",
-                     list_key_id.hex())
+            # log.info("There are no known neighbors to set key %s",
+            #          list_key_id.hex())
             return False
         spider = crawling.NodeSpiderCrawl(self.protocol, list_key, nearest,
                                           self.ksize, self.alpha)
