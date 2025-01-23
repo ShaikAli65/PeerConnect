@@ -11,6 +11,7 @@ from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
 from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
+from src.managers.statemanager import State
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import RequestsTransport
 
@@ -29,7 +30,7 @@ async def initiate():
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
-    transport = await setup_transport(bind_address, multicast_address, req_dispatcher)
+    transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
 
     kad_server = _kademlia.prepare_kad_server(transport)
@@ -44,21 +45,38 @@ async def initiate():
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = kad_server
 
-    await discovery_initiate(
-        broad_cast_address,
-        kad_server,
-        multicast_address,
-        req_dispatcher,
-        transport
+    discovery_state = State(
+        "discovery",
+        functools.partial(
+            discovery_initiate,
+            broad_cast_address,
+            kad_server,
+            multicast_address,
+            req_dispatcher,
+            transport
+        ),
+        is_blocking=True,
     )
+
+    add_to_lists = State(
+        "adding this peer to lists",
+        kad_server.add_this_peer_to_lists,
+        is_blocking=True,
+    )
+
+    await Dock.state_manager_handle.put_state(discovery_state)
+    await Dock.state_manager_handle.put_state(add_to_lists)
+    # :todo: introduce context manager support into statemanager.State itself which reduces boilerplate
+
+    Dock.exit_stack.push_async_exit(kad_server)
 
     # await kad_server.add_this_peer_to_lists()
 
 
-async def setup_transport(bind_address, multicast_address, req_dispatcher):
+async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()
     base_socket = _create_listen_socket(bind_address, multicast_address)
-    transport, proto = await loop.create_datagram_endpoint(
+    transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher),
         sock=base_socket
     )
@@ -130,9 +148,11 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         # 2. Dispatcher objects that are not coupled with QueueMixIn (async)
         # 3. any type of handlers (async)
 
-        f = handler(req_event)
-        if inspect.isawaitable(f):
-            await f
+        try:
+            await f if inspect.isawaitable(f := handler(req_event)) else None
+        except Exception as e:
+            # we can't afford exceptions here as they move into QueueMixIn
+            _logger.warning(f"{handler}({req_event}) failed with \n", exc_info=e)
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
