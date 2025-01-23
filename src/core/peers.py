@@ -367,6 +367,8 @@ def new_peer(peer):
     pagehandle.dispatch_data(data)
 
 
+# :todo: improve all this peer aliveness mechanisms
+
 async def check_and_remove(peer: RemotePeer):
     req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
     ping_data = WireData(
@@ -374,24 +376,47 @@ async def check_and_remove(peer: RemotePeer):
         msg_id=use.get_unique_id(str)
     )
     fut = req_dispatcher.register_reply(ping_data.id)  # noqa
-    _logger.debug(f"connectivity check initiating for {peer}")
+    _logger.info(f"connectivity check initiating for {peer}")
+    suceeded = True
+
     try:
         await asyncio.wait_for(fut, const.PING_TIMEOUT)
     except TimeoutError:
         # try a tcp connection if network is terrible with UDP
+        # or another possibility that is observed
+        # windows simply ignors the UDP packets when the
+        # system is locked or sleeping
+        # what's that with QUIC then
         try:
-            with await connect.connect_to_peer(peer):
+            with await connect.connect_to_peer(peer, timeout=const.PING_TIMEOUT):
                 pass
-        except (OSError, TimeoutError):
+        except OSError:
             # okay this one is cooked
-            Dock.peer_list.remove_peer(peer.peer_id)
-            data = DataWeaver(
-                header=HANDLE.REMOVE_PEER,
-                peer_id=peer.peer_id,
-            )
-            pagehandle.dispatch_data(data)
-            _logger.info(f"connectivity check failed, removing peer {peer} from cache")
+            suceeded = False
+
+    if suceeded:
+        _logger.info(f"connectivity check succeeded, not removing peer {peer}")
+    else:
+        _logger.info(f"connectivity check failed, removing peer {peer} from cache")
+        Dock.peer_list.remove_peer(peer.peer_id)
+        data = DataWeaver(
+            header=HANDLE.REMOVE_PEER,
+            peer_id=peer.peer_id,
+        )
+        pagehandle.dispatch_data(data)
 
 
 def remove_peer(peer):
+    """
+    Does Not directly remove peer
+    Spawns a Task that tries to check connectivity status of peer
+    If peer is reachable then it is not removed
+
+    Args:
+        peer(RemotePeer): peer obj to remove
+
+    Returns:
+        None
+    """
+    _logger.warning(f"a request for removal of {peer}")
     asyncio.create_task(check_and_remove(peer))
