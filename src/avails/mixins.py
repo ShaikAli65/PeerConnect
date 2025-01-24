@@ -1,6 +1,8 @@
 import asyncio
 import sys
 
+from asyncio.futures import _chain_future  # noqa  # a little bit dirty to use internal APIs but it's needed
+
 if sys.version_info >= (3, 13):
     from asyncio import QueueShutDown
 else:
@@ -87,7 +89,9 @@ class QueueMixIn:
             self.listener_task = asyncio.create_task(self.listen_for_events())
 
     def __call__(self, *args, **kwargs):
-        return self._queue.put_nowait((args, kwargs))
+        fut = asyncio.get_running_loop().create_future()
+        self._queue.put_nowait((fut, args, kwargs))
+        return fut
 
     async def listen_for_events(self):
         stop_flag = self.stop_flag  # noqa
@@ -96,15 +100,17 @@ class QueueMixIn:
         async with self.task_group:
             while True:
                 try:
-                    args, kwargs = await que.get()
-                    if args == self._sentinel:
+                    fut, args, kwargs = await que.get()
+                    if fut == self._sentinel:
                         raise QueueShutDown()
+
                 except QueueShutDown:
                     break
 
                 if stop_flag():
                     break
-                self.task_group.create_task(self.submit(*args, **kwargs))  # noqa
+                t = self.task_group.create_task(self.submit(*args, **kwargs))  # noqa
+                _chain_future(t, fut)
 
     async def stop(self):
         async def bomb():
@@ -114,9 +120,24 @@ class QueueMixIn:
         if sys.version_info >= (3, 13):
             self._queue.shutdown()
         else:
-            await self._queue.put([self._sentinel] * 2)
+            await self._queue.put((self._sentinel,) * 3)
         self.__running = False
         if self.listener_task:
             self.listener_task.cancel()
             await asyncio.sleep(0)  # allowing all the things to happen before waiting on listener_task
             await self.listener_task
+
+    async def __aenter__(self):
+        if self.__running is True:
+            return
+
+        if self.listener_task is None:
+            self.listener_task = asyncio.create_task(self.listen_for_events())
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.__running is False:
+            return
+
+        await self.stop()
+        await self.task_group.__aexit__(exc_type, exc_val, exc_tb)
