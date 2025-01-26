@@ -3,7 +3,7 @@ import os
 
 from src.avails import const
 from src.configurations import bootup, configure
-from src.core import Dock, connections, requests
+from src.core import Dock, connections, connectivity, requests
 from src.managers import profilemanager
 from src.managers.statemanager import State, StateManager
 from src.webpage_handlers import pagehandle
@@ -19,6 +19,7 @@ def initial_states():
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("initiating comms", connections.initiate_connections, is_blocking=True)
     s9 = State("initiating requests", requests.initiate, is_blocking=True)
+    s10 = State("connectivity checker",connectivity.initiate)
     return tuple(locals().values())
 
 

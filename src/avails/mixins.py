@@ -31,7 +31,8 @@ class ReplyRegistryMixIn:
             return
 
         fut = self._reply_registry.pop(message.id)
-        return fut.set_result(message)
+        if not fut.done():
+            return fut.set_result(message)
 
     def register_reply(self, reply_id):
         fut = asyncio.get_running_loop().create_future()
@@ -49,7 +50,7 @@ class QueueMixIn:
     this allows to call ``:func BaseDispatcher.submit:`` directly if needed.
 
     Requires the ``stop_flag`` attribute as a callable that should return a boolean
-    signaling stopping of event listening loop
+    signaling stopping of event listening loop, raises RuntimeWarning if not found
 
     If used, this class should come early in mro
 
@@ -62,7 +63,7 @@ class QueueMixIn:
     A stop method is provided, which
         * cancels internal queue to end the processing
         * stops the **queue**, does not discard buffered events waits for completion
-        * cancels taskgroup(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
+        * cancels task group(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
         * if ``:func listener_task:`` is then it is also cancelled
 
 
@@ -86,7 +87,9 @@ class QueueMixIn:
         self.__running = False
         self.listener_task = None
         if start_listening:
-            self.listener_task = asyncio.create_task(self.listen_for_events())
+            self.listener_task = asyncio.create_task(
+                self.listen_for_events(),
+                name=f"{self.__class__}.QueueMixIn listener task")
 
     def __call__(self, *args, **kwargs):
         fut = asyncio.get_running_loop().create_future()
@@ -94,7 +97,12 @@ class QueueMixIn:
         return fut
 
     async def listen_for_events(self):
-        stop_flag = self.stop_flag  # noqa
+
+        if hasattr(self, 'stop_flag'):
+            stop_flag = self.stop_flag
+        else:
+            raise RuntimeWarning(f"stop_flag not found for {self}, QueueMixIn will not work as expected")
+
         que = self._queue
         self.__running = True
         async with self.task_group:
