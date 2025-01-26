@@ -58,7 +58,7 @@ def initiate_bootup():
         validate_ports(const.THIS_IP)
     except OSError as e:
         e.add_note(f"Addr   : {const.THIS_IP}")
-        raise e
+        raise RuntimeError from e
 
 
 def get_ip(ip_version) -> IPv4Address | IPv6Address:
