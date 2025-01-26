@@ -53,7 +53,8 @@ class Connectivity(QueueMixIn):
             if request.time_stamp - prev_request.time_stamp <= const.PING_TIME_CHECK_WINDOW:
                 return await fut
 
-        self.last_checked[request.peer] = request, asyncio.ensure_future(self._new_check(request))
+        self.last_checked[request.peer] = request, (fut := asyncio.ensure_future(self._new_check(request)))
+        return await fut
 
     @staticmethod
     async def _new_check(request):
