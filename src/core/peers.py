@@ -45,7 +45,7 @@ in a p2p network, working with kademila's routing protocol?
     *.2 Full brute force
         we have some details of our logically nearest peers,
         so we brute force that list and get whatever they have
-        again query the list of peers sent by them in loop
+        again queried the list of peers sent by them in loop
 
         cons - we have so much redundant peer objects passing here and there
 
