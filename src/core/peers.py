@@ -92,11 +92,11 @@ from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import DataWeaver, GossipMessage, RemotePeer, WireData, connect, const, use
+from src.avails import DataWeaver, GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
-from src.core import DISPATCHS, Dock, get_gossip, get_this_remote_peer
-from src.transfers import GOSSIP, HEADERS
+from src.core import Dock, connectivity, get_gossip, get_this_remote_peer
+from src.transfers import GOSSIP
 from src.webpage_handlers import pagehandle
 from src.webpage_handlers.headers import HANDLE
 
@@ -326,7 +326,7 @@ async def get_remote_peer(peer_id):
     with conversions related to ids
 
     This call is expensive as it performs a distributed search across the network
-    try using ``Dock.peer_list`` instead if possible
+    try using ``Dock.peer_list`` instead
 
     Args:
         peer_id(str): id to search for
@@ -367,45 +367,6 @@ def new_peer(peer):
     pagehandle.dispatch_data(data)
 
 
-# :todo: improve all this peer aliveness mechanisms
-
-async def check_and_remove(peer: RemotePeer):
-    req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
-    ping_data = WireData(
-        header=HEADERS.REMOVAL_PING,
-        msg_id=use.get_unique_id(str)
-    )
-    fut = req_dispatcher.register_reply(ping_data.id)  # noqa
-    _logger.info(f"connectivity check initiating for {peer}")
-    suceeded = True
-
-    try:
-        await asyncio.wait_for(fut, const.PING_TIMEOUT)
-    except TimeoutError:
-        # try a tcp connection if network is terrible with UDP
-        # or another possibility that is observed
-        # windows simply ignors the UDP packets when the
-        # system is locked or sleeping
-        # what's that with QUIC then
-        try:
-            with await connect.connect_to_peer(peer, timeout=const.PING_TIMEOUT):
-                pass
-        except OSError:
-            # okay this one is cooked
-            suceeded = False
-
-    if suceeded:
-        _logger.info(f"connectivity check succeeded, not removing peer {peer}")
-    else:
-        _logger.info(f"connectivity check failed, removing peer {peer} from cache")
-        Dock.peer_list.remove_peer(peer.peer_id)
-        data = DataWeaver(
-            header=HANDLE.REMOVE_PEER,
-            peer_id=peer.peer_id,
-        )
-        pagehandle.dispatch_data(data)
-
-
 def remove_peer(peer):
     """
     Does Not directly remove peer
@@ -414,9 +375,20 @@ def remove_peer(peer):
 
     Args:
         peer(RemotePeer): peer obj to remove
-
-    Returns:
-        None
     """
     _logger.warning(f"a request for removal of {peer}")
     asyncio.create_task(check_and_remove(peer))
+
+
+async def check_and_remove(peer: RemotePeer):
+    req, fut = connectivity.new_check(peer)
+    if not await fut:
+        _logger.info(f"connectivity check failed, removing peer {peer} from cache")
+        Dock.peer_list.remove_peer(peer.peer_id)
+        data = DataWeaver(
+            header=HANDLE.REMOVE_PEER,
+            peer_id=peer.peer_id,
+        )
+        pagehandle.dispatch_data(data)
+    else:
+        _logger.info(f"connectivity check succeeded, not removing peer {peer}")
