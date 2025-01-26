@@ -123,4 +123,4 @@ async def _try_asking_user(transport, discovery_packet):
 
     peer_name = reply.content['peername']
     async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
-        transport.sendto(discovery_packet)
+        transport.sendto(discovery_packet, addr)

@@ -214,7 +214,7 @@ class PeerServer(network.Server):
     async def add_this_peer_to_lists(self):
         if self.add_this_peer_task:
             log.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
-            # this function only gets called once in the entire appilcation lifetime
+            # this function only gets called once in the entire application lifetime
             return
 
         self.add_this_peer_task = asyncio.current_task()
@@ -261,7 +261,8 @@ class PeerServer(network.Server):
         return any(await asyncio.gather(*results))
 
     async def get_remote_peer(self, byte_id):
-        """
+        """Gets Remote Peer Object from network using byte id of that peer
+
         Every call to this function not only gathers remote_peer object corresponding to peer_id
         but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent

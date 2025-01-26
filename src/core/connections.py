@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import socket
 import textwrap
 import threading
 from asyncio import TaskGroup
@@ -8,9 +7,10 @@ from collections import defaultdict
 from contextlib import AsyncExitStack
 from inspect import isawaitable
 from types import ModuleType
-from typing import Optional
+from typing import Callable, Optional
 
-from src.avails import (BaseDispatcher, RemotePeer, SocketStore, Wire, WireData, connect, const, use)
+from src.avails import (BaseDispatcher, InvalidPacket, RemotePeer, SocketCache, SocketStore, Wire, WireData, connect,
+                        const, use)
 from src.avails.events import ConnectionEvent, StreamDataEvent
 from src.avails.mixins import QueueMixIn
 from src.core import DISPATCHS, Dock, get_this_remote_peer
@@ -22,11 +22,9 @@ from src.webpage_handlers import pagehandle
 
 _logger = logging.getLogger(__name__)
 
-# :todo: change the way ping connection works
-
 
 async def initiate_connections():
-    acceptor = Acceptor()
+    acceptor = Acceptor(Dock.finalizing.is_set, Dock.connected_peers)
     await Dock.exit_stack.enter_async_context(acceptor)
     acceptor.data_dispatcher.register_handler(
         HEADERS.CMD_TEXT,
@@ -39,7 +37,7 @@ async def initiate_connections():
 
     register_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
     register_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
-    register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
+    register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler(Dock.connected_peers))
     register_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
     # acceptor.connection_dispatcher.register_handler(HEADERS.GOSSIP_UPDATE_STREAM_LINK)
     await acceptor.initiate()
@@ -72,7 +70,17 @@ class StreamDataDispatcher(QueueMixIn, BaseDispatcher):
             await r
 
 
-def ProcessDataHandler(data_dispatcher: StreamDataDispatcher, finalizer):
+def ProcessDataHandler(data_dispatcher, finalizer: Callable[[], bool]):
+    """
+    Iterates over a tcp stream
+    if some data event occurs then calls data_dispatcher and submits that event
+
+    Args:
+        data_dispatcher(StreamDataDispatcher): any callable that reacts to event
+        finalizer(Callable[[], bool]): a flag to check while looping, should return False to stop loop
+
+    """
+
     async def handler(event: ConnectionEvent):
         with event.transport.socket:
             stream_socket = event.transport
@@ -88,10 +96,10 @@ def ProcessDataHandler(data_dispatcher: StreamDataDispatcher, finalizer):
     return handler
 
 
-def ConnectionCloseHandler():
+def ConnectionCloseHandler(connected_peers: SocketCache):
     async def handler(event: StreamDataEvent):
         event.transport.socket.close()
-        Dock.connected_peers.remove_and_close(event.data.peer_id)
+        connected_peers.remove_and_close(event.data.peer_id)
 
     return handler
 
@@ -113,24 +121,24 @@ class Acceptor:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(Acceptor, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super(Acceptor, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, ip=None, port=None):
+    def __init__(self, finalizer, connected_peers, ip=None, port=None):
         if self._initialized is True:
             return
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
-        self.stopping = Dock.finalizing.is_set
+        self.stopping = finalizer
         self.main_socket: Optional[connect.Socket] = None
         self.back_log = 4
         self.currently_in_connection = defaultdict(int)
         self.max_timeout = 90
         _logger.info(f"Initiating Acceptor {self.address}")
         self._initialized = True
-
-        self.connection_dispatcher = ConnectionDispatcher(None, Dock.finalizing.is_set)
-        self.data_dispatcher = StreamDataDispatcher(None, Dock.finalizing.is_set)
-        data_handler = ProcessDataHandler(self.data_dispatcher, Dock.finalizing.is_set)
+        self.connected_peers = connected_peers
+        self.connection_dispatcher = ConnectionDispatcher(None, finalizer)
+        self.data_dispatcher = StreamDataDispatcher(None, finalizer)
+        data_handler = ProcessDataHandler(self.data_dispatcher, finalizer)
         self.connection_dispatcher.register_handler(HEADERS.CMD_VERIFY_HEADER, data_handler)
         self._exit_stack = AsyncExitStack()
 
@@ -141,15 +149,19 @@ class Acceptor:
             async with TaskGroup() as tg:
                 while not self.stopping():
                     initial_conn, addr = await self.main_socket.aaccept()
-                    self._exit_stack.enter_context(initial_conn)
-                    _logger.info(f"New connection from {addr}")
                     tg.create_task(self.__accept_connection(initial_conn))
+                    _logger.info(f"New connection from {addr}")
                     await asyncio.sleep(0)
 
     async def _start_socket(self):
 
-        async for addr_info in use.get_addr_info(*self.address, family=const.IP_VERSION):
-            pass
+        try:
+            addr_info = await anext(use.get_addr_info(*self.address, family=const.IP_VERSION))
+        except StopAsyncIteration:
+            raise RuntimeError("No valid address found for the server")
+        except Exception as e:
+            _logger.error(f"Error resolving address: {e}", exc_info=True)
+            raise
 
         sock_family, sock_type, _, _, address = addr_info
         sock = const.PROTOCOL.create_async_server_sock(
@@ -162,19 +174,30 @@ class Acceptor:
 
     async def __accept_connection(self, initial_conn):
         transport = StreamTransport(initial_conn)
-
-        try:
-            raw_hand_shake = await transport.recv()
-        except (socket.error, OSError) as e:
-            # error_log(f"Socket error: at {use.func_str(self.__accept_connection)} exp:{e}")
-            _logger.error(f"[ACCEPTOR] Socket error", exc_info=e)
-            initial_conn.close()
+        handshake = await self._perform_handshake(initial_conn, transport)
+        if not handshake:
             return
 
-        hand_shake = WireData.load_from(raw_hand_shake)
-        con_event = ConnectionEvent(transport, hand_shake)
+        self._exit_stack.enter_context(initial_conn)
+        con_event = ConnectionEvent(transport, handshake)
         self.connection_dispatcher(con_event)
-        Dock.connected_peers.add_peer_sock(hand_shake.peer_id, initial_conn)
+        self.connected_peers.add_peer_sock(handshake.peer_id, initial_conn)
+
+    @classmethod
+    async def _perform_handshake(cls, initial_conn, transport):
+        try:
+            raw_hand_shake = await asyncio.wait_for(transport.recv(), const.SERVER_TIMEOUT)
+            return WireData.load_from(raw_hand_shake)
+        except TimeoutError:
+            _logger.error(f"new connection inactive for {const.SERVER_TIMEOUT}s, closing")
+            initial_conn.close()
+        except OSError:
+            _logger.error(f"Socket error", exc_info=True)
+            initial_conn.close()
+        except InvalidPacket:
+            _logger.error("Initial handshake packet is invalid, closing connection", exc_info=True)
+            initial_conn.close()
+        return None
 
     async def reset_socket(self):
         self.main_socket.close()
