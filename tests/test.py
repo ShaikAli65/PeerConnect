@@ -76,9 +76,9 @@ def mock_profile():
 
 
 def mock_multicast():
-    const.MULTICAST_IP_v4 = "172.16.210.0"
+    # const.MULTICAST_IP_v4 = "172.16.210.0"
     # const.MULTICAST_IP_v4 = '172.16.196.238'
-    const.PORT_NETWORK = 4000
+    # const.PORT_NETWORK = 4000
     requests._create_listen_socket = _create_listen_socket_mock
 
 

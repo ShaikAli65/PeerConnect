@@ -45,7 +45,7 @@ in a p2p network, working with kademila's routing protocol?
     *.2 Full brute force
         we have some details of our logically nearest peers,
         so we brute force that list and get whatever they have
-        again query the list of peers sent by them in loop
+        again queried the list of peers sent by them in loop
 
         cons - we have so much redundant peer objects passing here and there
 
@@ -377,10 +377,10 @@ def remove_peer(peer):
         peer(RemotePeer): peer obj to remove
     """
     _logger.warning(f"a request for removal of {peer}")
-    asyncio.create_task(check_and_remove(peer))
+    asyncio.create_task(check_and_remove_if_needed(peer))
 
 
-async def check_and_remove(peer: RemotePeer):
+async def check_and_remove_if_needed(peer: RemotePeer):
     req, fut = connectivity.new_check(peer)
     if not await fut:
         _logger.info(f"connectivity check failed, removing peer {peer} from cache")

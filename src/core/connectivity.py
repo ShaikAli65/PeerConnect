@@ -5,7 +5,7 @@ import time
 
 from src.avails import WireData, connect, const, use
 from src.avails.mixins import QueueMixIn
-from src.core import Dock
+from src.core import DISPATCHS, Dock
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -31,19 +31,20 @@ class CheckRequest:
 class Connectivity(QueueMixIn):
     _instance = None
     _initialized = False
-    __slots__ = 'peer_queue', 'finalizing'
+    __slots__ = 'last_checked', 'stop_flag'
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super().__new__(*args, **kwargs)
+            cls._instance = super().__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, stop_flag=None, *args, **kwargs):
         if self.__class__._initialized is True:
             return
-        super().__init__(*args, **kwargs)
         self.last_checked = {}
         self.__class__._initialized = True
+        self.stop_flag = stop_flag or Dock.finalizing.is_set
+        super().__init__(*args, **kwargs)
 
     async def submit(self, request: CheckRequest):
 
@@ -61,6 +62,8 @@ class Connectivity(QueueMixIn):
             header=HEADERS.REMOVAL_PING,
             msg_id=use.get_unique_id(str)
         )
+
+        req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
 
         fut = req_dispatcher.register_reply(ping_data.msg_id)  # noqa
 

@@ -434,6 +434,7 @@ def is_port_empty(port, addr=None):
 
 def ipv4_multicast_socket_helper(
         sock,
+        local_addr,
         multicast_addr,
         *,
         loop_back=0,
@@ -446,7 +447,12 @@ def ipv4_multicast_socket_helper(
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
     if add_membership:
         group = socket.inet_aton(f"{multicast_addr[0]}")
-        mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+
+        if not const.IS_WINDOWS:
+            mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+        else:
+            mreq = struct.pack('4s4s', group, socket.inet_aton(str(local_addr[0])))
+
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
     sock_options = {
         'membership': add_membership,
@@ -454,7 +460,7 @@ def ipv4_multicast_socket_helper(
         'ttl': ttl,
         'reuse_addr': reuse_addr
     }
-    _logger.debug(f"socket{sock} options for multicast {sock_options}")
+    _logger.debug(f"options for multicast {sock_options}, {sock}")
 
 
 def ipv6_multicast_socket_helper(

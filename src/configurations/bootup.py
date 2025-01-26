@@ -54,7 +54,11 @@ def initiate_bootup():
     const.THIS_IP = str(ip_addr)
     # const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{const.THIS_IP=}")
-    validate_ports(const.THIS_IP)
+    try:
+        validate_ports(const.THIS_IP)
+    except OSError as e:
+        e.add_note(f"Addr   : {const.THIS_IP}")
+        raise e
 
 
 def get_ip(ip_version) -> IPv4Address | IPv6Address:
