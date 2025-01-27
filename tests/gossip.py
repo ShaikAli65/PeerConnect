@@ -1,14 +1,13 @@
 import asyncio
-import os
 import time
 
 import _path  # noqa
-from src.avails import GossipMessage, WireData, const
+from src.avails import GossipMessage, WireData
 from src.avails.useables import get_unique_id
 from src.core import get_gossip, peers
 from src.managers.statemanager import State
 from src.transfers import GOSSIP
-from test import initiate, test_initial_states
+from tests.test import start_test
 
 TEST_MESSAGE = "WHAT'S UP EVERYBODY"
 TEST_USERNAME = 'test'
@@ -42,10 +41,6 @@ async def test_gossip_search_user(username=TEST_USERNAME):
         print("GOT SOME REPLY", peer)
 
 if __name__ == "__main__":
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    const.debug = False
-    i_states = test_initial_states()
     s7 = State("checking for gossip", test_gossip)
     s8 = State("checking for gossip search", test_gossip_search_user)
-    states = i_states + (s7, s8)
-    asyncio.run(initiate(states), debug=True)
+    start_test((s7,s8))

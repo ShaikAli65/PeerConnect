@@ -3,6 +3,7 @@ All the stuff related to kademlia goes here
 """
 
 import asyncio
+from asyncio import CancelledError
 from typing import override
 
 import kademlia.node
@@ -312,7 +313,11 @@ class PeerServer(network.Server):
         self.stopping = True
         if self.add_this_peer_task:
             self.add_this_peer_task.cancel()
-            await self.add_this_peer_task
+            try:
+                await self.add_this_peer_task
+            except CancelledError:
+                # no need reraise again
+                pass
 
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):

@@ -121,7 +121,7 @@ class Acceptor:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(Acceptor, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super(Acceptor, cls).__new__(cls)
         return cls._instance
 
     def __init__(self, finalizer, connected_peers, ip=None, port=None):

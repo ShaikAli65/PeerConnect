@@ -99,11 +99,17 @@ def test_initial_states():
 async def initiate(states):
     Dock.state_manager_handle = StateManager()
     await Dock.state_manager_handle.put_states(states)
-    await Dock.state_manager_handle.process_states()
+
+    async with Dock.exit_stack:
+        await Dock.state_manager_handle.process_states()
+
+
+def start_test(other_states):
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    const.debug = True
+    asyncio.run(initiate(test_initial_states() + tuple(other_states)), debug=True)
 
 
 if __name__ == '__main__':
     # print(isinstance(RequestsDispatcher, AbstractDispatcher))
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    const.debug = False
-    asyncio.run(initiate(test_initial_states()), debug=True)
+    start_test([])
