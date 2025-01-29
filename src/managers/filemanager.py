@@ -1,15 +1,16 @@
 import asyncio
 import logging
+import traceback
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
 from src.avails import DataWeaver, OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, WireData, connect, \
     const, get_dialog_handler
 from src.avails.events import ConnectionEvent
-from src.avails.exceptions import TransferIncomplete
+from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.transfers import TransferState, files, otm
-from src.webpage_handlers import pagehandle
+from src.webpage_handlers import headers, pagehandle
 from src.webpage_handlers.headers import HANDLE
 
 transfers_book = TransfersBookKeeper()
@@ -54,11 +55,20 @@ async def send_files_to_peer(peer_id, selected_files):
     transfers_book.add_to_current(peer_id=peer_id, transfer_handle=file_sender)
     try:
         async with AsyncExitStack() as stack:
-            await stack.enter_async_context(file_sender.prepare_connection())
+            try:
+                await stack.enter_async_context(file_sender.prepare_connection())
+            except OSError:
+                # unable to connect
+                traceback.print_exc()
+                return
+            except TransferRejected:
+                _send_confirmation_status_to_frontend(False, peer_id)
+
+            _send_confirmation_status_to_frontend(True, peer_id)
+
             sender = await stack.enter_async_context(aclosing(file_sender.send_files()))
             yield sender
-            # async for status in sender:
-            #     yield status
+
     finally:
         if file_sender.state == TransferState.PAUSED:
             transfers_book.add_to_continued(peer_id, file_sender)
@@ -67,11 +77,22 @@ async def send_files_to_peer(peer_id, selected_files):
             transfers_book.add_to_completed(peer_id, file_sender)
 
 
+def _send_confirmation_status_to_frontend(confirmation, peer_id):
+    pagehandle.dispatch_data(
+        DataWeaver(
+            header=headers.TRANSFER_UPDATE,
+            content={"confirmation": confirmation},
+            peer_id=peer_id,
+        )
+    )
+
+
 @asynccontextmanager
 async def file_receiver(file_req: WireData, connection):
     """
     Just a wrapper function which does bookkeeping for FileReceiver object
     """
+
     peer_id = file_req.id
     version = file_req.version
     file_transfer_id = file_req['file_id']
@@ -82,7 +103,11 @@ async def file_receiver(file_req: WireData, connection):
         const.PATH_DOWNLOAD,
         yield_freq=const.TRANSFER_STATUS_FREQ
     )
-    file_handle.connection_arrived(connection)
+    sender = connect.Sender(connection)
+    receiver = connect.Receiver(connection)
+
+    file_handle.connection_arrived((sender, receiver))
+
     transfers_book.add_to_current(file_req.id, file_handle)
 
     yield file_handle
@@ -134,6 +159,13 @@ def FileConnectionHandler():
         with event.transport.socket:
             file_req = event.handshake
             _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
+
+            if not await get_confirmation(file_req):
+                await event.transport.send(b'\x00')
+                return
+
+            await event.transport.send(b'\x01')
+
             _logger.debug(f"scheduling file transfer request {file_req!r}")
 
             try:
@@ -172,6 +204,17 @@ def FileConnectionHandler():
                 pagehandle.dispatch_data(status_update)
 
     return handler
+
+
+async def get_confirmation(request):
+    confirmation = await pagehandle.dispatch_data(
+        DataWeaver(
+            header=headers.REQ_FOR_FILE_TRANSFER,
+            peer_id=request.peer_id,
+        ),
+        expect_reply=True
+    )
+    return bool(confirmation.content['confirmed'])
 
 
 def OTMConnectionHandler():

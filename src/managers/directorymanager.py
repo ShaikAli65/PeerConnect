@@ -14,8 +14,7 @@ from src.avails.exceptions import TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.core.handles import TaskHandle
 from src.transfers import HEADERS
-from src.transfers.directory import Receiver, Sender, \
-    rename_directory_with_increment
+from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
 
 transfers_book = TransfersBookKeeper()
 _logger = logging.getLogger(__name__)
@@ -52,7 +51,7 @@ async def send_directory(remote_peer, dir_path):
         Wire.send(connection, bytes(dir_recv_signal_packet))
         await _get_confirmation(connection, timeout)
 
-        sender = Sender(
+        sender = DirSender(
             dir_path,
             transfer_id,
             connect.Sender(connection),
@@ -100,7 +99,7 @@ def DirConnectionHandler():
 
         sender = connect.Sender(connection)
         recv = connect.Receiver(connection)
-        receiver = Receiver(
+        receiver = DirReceiver(
             transfer_id,
             recv,
             sender,
