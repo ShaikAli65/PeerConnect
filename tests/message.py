@@ -1,12 +1,10 @@
-import asyncio
-import os
-
 import _path  # noqa
-from src.avails import DataWeaver, RemotePeer, const
+from src.avails import DataWeaver, RemotePeer
 from src.avails.useables import async_input
 from src.core import Dock
+from src.managers.statemanager import State
 from src.webpage_handlers.headers import HANDLE
-from test import initiate, test_initial_states
+from tests.test import start_test
 
 
 async def test_message():
@@ -21,9 +19,5 @@ async def test_message():
 
 
 if __name__ == '__main__':
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    const.debug = False
-    initial_states = test_initial_states()
-    states = initial_states + ()
-
-    asyncio.run(initiate(states), debug=True)
+    s = State("testing message",test_message)
+    start_test([s])

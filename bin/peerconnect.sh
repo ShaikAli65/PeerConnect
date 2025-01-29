@@ -1,6 +1,7 @@
 #!/bin/bash
 clear
 
+
 runner="py"
 if command -v python3 &>/dev/null; then
     runner="python3"
@@ -12,28 +13,34 @@ else
 fi
 
 install() {
-    $runner -m pip install --upgrade pip
-    $runner -m pip install -r requirements.txt
+    $runner -m pip install --upgrade pip > /dev/null
+    echo "Found pip"
+    echo "Installing missing dependencies"
+    $runner -m pip install -r $base_dir/bin/requirements.txt > /dev/null
+    echo "Installed dependencies sucessfully"
 }
+
+base_dir="$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")"
+venv_dir="$base_dir/venv"
 
 setup_environment() {
     echo "Setting up..."
-    $runner -m venv ../venv
-    source ../venv/bin/activate
+    $runner -m venv $venv_dir
+    source "$venv_dir/bin/activate"
 
 }
 
 re_setup() {
-  rm -rf venv/
+  rm -rf venv
   setup_environment
 }
 
-if [ ! -f "../venv/bin/activate" ]; then
+if [ ! -f "$venv_dir/bin/activate" ]; then
   setup_environment
 fi
 
 
-if source ./venv/bin/activate 2>/dev/null; then
+if source $venv_dir/bin/activate 2>/dev/null; then
     echo "Activated Virtual environment..."
 else
   re_setup
@@ -47,11 +54,11 @@ fi
 
 
 if [ "$lines" -ne 32 ]; then
-  echo "installing libs"
   install
 fi
 
-$runner ../main.py
+cd $base_dir
+$runner main.py
 
 deactivate
 

@@ -1,12 +1,10 @@
 import asyncio
-import os
 
 import _path  # noqa
-from src.avails import const
 from src.avails.useables import async_input
 from src.core import Dock, peers
 from src.managers.statemanager import State
-from test import initiate, test_initial_states
+from tests.test import start_test
 
 
 async def test_list_of_peers():
@@ -22,10 +20,6 @@ async def test_members():
 
 
 if __name__ == "__main__":
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    const.debug = False
-    i_states = test_initial_states()
     members_test = State("testing members", test_members)
     peer_gathers = State("checking for peer gathering", test_list_of_peers, is_blocking=True)
-
-    asyncio.run(initiate(i_states + (members_test, peer_gathers)), debug=True)
+    start_test((members_test, peer_gathers))
