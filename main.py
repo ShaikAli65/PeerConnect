@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import os
-import signal
 import traceback
 from asyncio import CancelledError
 
@@ -33,11 +31,6 @@ def initiate(states):
         Dock.state_manager_handle = StateManager()
         await Dock.state_manager_handle.put_states(states)
 
-        if not const.IS_WINDOWS:
-            loop = asyncio.get_running_loop()
-            loop.add_signal_handler(signal.SIGINT, Dock.finalizing.set)  # noqa
-            loop.add_signal_handler(signal.SIGTERM, Dock.finalizing.set)  # noqa
-
         cancelled = None
 
         async with Dock.exit_stack:
@@ -63,6 +56,6 @@ def initiate(states):
         exit(0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     initiate(initial_states())
