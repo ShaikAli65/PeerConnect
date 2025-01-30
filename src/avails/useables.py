@@ -166,19 +166,6 @@ def wait_for_sock_write(sock, actuator, timeout):
     return writes
 
 
-def send_data_with_retries(sock: socket.socket, data: bytes, chunk_size, retries):
-    b = sock.getblocking()
-    mm_data = memoryview(data)
-    stop = False
-    sock.setblocking(False)
-    send_func = sock.send
-    for _ in get_timeouts(max_retries=retries):
-        i = 0
-        while i < len(mm_data):
-            sent = send_func(mm_data[i: i + chunk_size])
-            i += sent
-
-
 _CO_NESTED = inspect.CO_NESTED
 _CO_FROM_COROUTINE = inspect.CO_COROUTINE | inspect.CO_ITERABLE_COROUTINE | inspect.CO_ASYNC_GENERATOR
 

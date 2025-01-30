@@ -79,7 +79,8 @@ class Connectivity(QueueMixIn):
 
             # or another possibility that is observed:
             # windows does not forward UDP packets to application level when system is locked or sleeping
-            # what's that with QUIC then, and vpn's too
+            # (interfaces shutdown)
+            # what's that with QUIC then, and vpn s too
 
             try:
                 request.status = ConnectivityCheckState.CON_CHECK
