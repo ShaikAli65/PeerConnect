@@ -34,6 +34,8 @@ async def initiate():
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(req_dispatcher)
+
     transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
 
@@ -42,6 +44,7 @@ async def initiate():
 
     # await gossip_initiate(req_dispatcher, transport)
     gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
+    await Dock.exit_stack.enter_async_context(gossip_dispatcher)
 
     Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
@@ -117,6 +120,7 @@ async def discovery_initiate(
         transport
 ):
     discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(discover_dispatcher)
     req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
     Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
 

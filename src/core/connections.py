@@ -127,6 +127,7 @@ class Acceptor:
     def __init__(self, finalizer, connected_peers, ip=None, port=None):
         if self._initialized is True:
             return
+        self._exit_stack = AsyncExitStack()
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
         self.stopping = finalizer
         self.main_socket: Optional[connect.Socket] = None
@@ -140,7 +141,6 @@ class Acceptor:
         self.data_dispatcher = StreamDataDispatcher(None, finalizer)
         data_handler = ProcessDataHandler(self.data_dispatcher, finalizer)
         self.connection_dispatcher.register_handler(HEADERS.CMD_VERIFY_HEADER, data_handler)
-        self._exit_stack = AsyncExitStack()
 
     async def initiate(self):
         self.connection_dispatcher.transport = self.main_socket
@@ -209,6 +209,9 @@ class Acceptor:
 
     async def __aenter__(self):
         await self._exit_stack.__aenter__()
+        await self._exit_stack.enter_async_context(self.data_dispatcher)
+        await self._exit_stack.enter_async_context(self.connection_dispatcher)
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

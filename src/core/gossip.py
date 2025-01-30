@@ -72,6 +72,7 @@ def initiate_gossip(data_transport, req_dispatcher):
     Dock.global_gossip = GlobalRumorMonger(gossip_transport)
 
     g_dispatcher = GossipDispatcher(gossip_transport, Dock.finalizing.is_set)
+
     gossip_searcher = get_search_handler()
 
     gossip_message_handler = GlobalGossipMessageHandler(Dock.global_gossip)
