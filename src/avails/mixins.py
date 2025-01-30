@@ -58,7 +58,7 @@ class QueueMixIn:
             raise ValueError("submit method not found")
 
     def __call__(self, *args, **kwargs):
-        return self._task_group.create_task(self.submit(*args, **kwargs))
+        return self._task_group.create_task(self.submit(*args, **kwargs))  # noqa
 
     async def __aenter__(self):
         await self._task_group.__aenter__()

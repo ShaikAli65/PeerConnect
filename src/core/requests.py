@@ -73,7 +73,7 @@ async def initiate():
 
     await Dock.state_manager_handle.put_state(discovery_state)
     await Dock.state_manager_handle.put_state(add_to_lists)
-    # :todo: introduce context manager support into statemanager.State itself which reduces boilerplate
+    # :todo: introduce context manager support into state-manager.State itself which reduces boilerplate
 
     Dock.exit_stack.push_async_exit(kad_server)
 

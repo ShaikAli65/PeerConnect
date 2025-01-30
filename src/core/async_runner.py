@@ -14,4 +14,5 @@ if const.IS_WINDOWS:
 
     asyncio.Runner = AnotherRunner
 
-AnotherRunner = asyncio.Runner
+else:
+    AnotherRunner = asyncio.Runner

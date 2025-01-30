@@ -118,9 +118,9 @@ async def _try_asking_user(transport, discovery_packet):
         expect_reply=True,
     )
 
-    if not reply.content['peername']:
+    if not reply.content['peerName']:
         return
 
-    peer_name = reply.content['peername']
+    peer_name = reply.content['peerName']
     async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
         transport.sendto(discovery_packet, addr)
