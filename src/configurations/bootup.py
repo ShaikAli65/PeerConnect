@@ -119,8 +119,6 @@ def get_v6():
             ip, _, _, _ = sock_tuple[4]
             ipaddr = IPv6Address(ip)
             if ipaddr.is_link_local:
-                back_up = ipaddr
-            elif not ipaddr.is_link_local:
                 return ipaddr
         return back_up
     elif const.IS_DARWIN or const.IS_LINUX:
@@ -134,12 +132,12 @@ def get_v6_from_shell():
 
         ip_v6 = []
         for line in output_lines:
-            if 'inet6' in line and 'fe80' not in line and '::1' not in line:
+            if 'inet6' in line and '::1' not in line:  # and 'fe80' not in line 
                 ip_v6.append(line.split()[1].split('/')[0])
     except Exception as exp:
         _logger.critical(f"Error occurred at ip lookup", exc_info=exp)
         return
-    return ip_v6[0]
+    return IPv6Address(ip_v6[0])
 
 
 def get_v6_from_api64():
@@ -154,7 +152,7 @@ def get_v6_from_api64():
         # error_log(f"Error getting local ip: {e} from get_local_ip() at line inspect.currentframe().f_lineno in core/constants.py")
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
-    return config_ip
+    return IPv6Address(config_ip)
 
 
 def clear_logs():

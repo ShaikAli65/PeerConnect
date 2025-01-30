@@ -148,7 +148,7 @@ class Acceptor:
             _logger.info("Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
-                    initial_conn, addr = await self.main_socket.aaccept()
+                    initial_conn, addr = await self.main_socket.aaccept()  # :todo: handle OSError while exiting
                     tg.create_task(self.__accept_connection(initial_conn))
                     _logger.info(f"New connection from {addr}")
                     await asyncio.sleep(0)
