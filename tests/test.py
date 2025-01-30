@@ -85,7 +85,7 @@ def mock_multicast():
 def test_initial_states():
     s1 = State("setpaths", configure.set_paths)
     s2 = State("boot_up initiating", bootup.initiate_bootup)
-    s3 = State("mocking up multicast", mock_multicast)
+    # s3 = State("mocking up multicast", mock_multicast)
     # s3 = State("adding shit", test)
     s4 = State("loading profiles", profilemanager.load_profiles_to_program)
     s5 = State("mocking profile", mock_profile)

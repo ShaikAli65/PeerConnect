@@ -1,29 +1,24 @@
 import asyncio
 import contextlib
-import logging
+import mmap
 import socket
 import struct
 from contextlib import aclosing
 from pathlib import Path
 
 from src.avails import Wire, WireData, connect, const
-from src.avails.exceptions import TransferIncomplete
 from src.avails.status import StatusMixIn
 from src.core import get_this_remote_peer
-from src.transfers import HEADERS
-from src.transfers._fileobject import FileItem, TransferState, recv_file_contents, \
-    send_actual_file, validatename
-
-_logger = logging.getLogger(__name__)
-
-# :todo: move all the status mixin mechanisms to manager level API,
+from src.transfers import HEADERS, TransferState
+from src.transfers.files._fileobject import FileItem, calculate_chunk_size
+from src.transfers.files._logger import logger as _logger
 
 
 class Sender(StatusMixIn):
     version = const.VERSIONS['FO']
     """
         stopping_flag(Callable[[],bool]): this gets called to check whether to stop or not, while sending chunks
-    
+
         yield_freq(int): number of times this function should yield while sending chunks
 
     """
@@ -166,123 +161,38 @@ class Sender(StatusMixIn):
         return self._file_id
 
 
-class Receiver(StatusMixIn):
-    version = const.VERSIONS['FO']
+async def send_actual_file(
+        send_function,
+        file,
+        *,
+        chunk_len=None,
+        timeout=5
+):
+    """Sends file to other end using ``send_function``
 
-    def __init__(self, peer_id, file_id, download_path, *, yield_freq=10):
-        self.state = TransferState.PREPARING
-        self.peer_id = peer_id
-        self._file_id = file_id
-        self.connection_wait = asyncio.get_event_loop().create_future()
-        self.connection = None
-        self._log_prefix = f'FILE[{self.peer_id}]'
-        self.download_path = download_path
-        self.current_file = None
-        self.to_stop = False
-        self.file_items = []
-        super().__init__(yield_freq)
-        self.send_func = None
-        self.recv_func = None
+    Opens file in **rb** mode from the ``path`` attribute from ``file item``
+    reads ``seeked`` attribute of ``file item`` to start the transfer from
+    calls ``send_function`` and awaits on it every time this function tries to send a chunk
+    if chunk_size parameter is not provided then calculates chunk size by calling ``calculate_chunk_size``
 
-    async def recv_files(self):
-        self.state = TransferState.CONNECTING
-        self.connection = await self.get_connection()
-        _logger.debug(f"{self._log_prefix} changing state to RECEIVING")
-        self.state = TransferState.RECEIVING
+    Args:
+        send_function(Callable): function to call when a chunk is ready
+        file(FileItem): file to send
+        chunk_len(int): length of each chunk passed into ``send_function`` for each call
+        timeout(int): timeout in seconds used to wait upon send_function
 
-        while True:
-            if not await self._should_proceed():
-                break
+    Yields:
+        number indicating the sent file size
+    """
 
-            self.current_file = await self._recv_file_item()
-            self.file_items.append(self.current_file)
-            async with aclosing(self._receive_single_file()) as file_receiver:
-                try:
-                    async for received_size in file_receiver:
-                        if self.should_yield():
-                            yield self.current_file, received_size
-                except TransferIncomplete:
-                    _logger.error(f"{self._log_prefix} paused receiving, changing state to PAUSED", exc_info=True)
-                    self.state = TransferState.PAUSED
-                    raise
+    chunk_size = chunk_len or calculate_chunk_size(file.size)
 
-        self.state = TransferState.COMPLETED
-        _logger.info(f'completed receiving: {self.file_items}')
-
-    async def _should_proceed(self):
-
-        if self.to_stop:
-            return False
-
-        what = await self.recv_func(1)
-
-        # check again, what if context switch happened
-        if self.to_stop:
-            _logger.debug(f"{self._log_prefix} found self.to_stop true, finalizing file recv loop")
-            _logger.debug(f"{self._log_prefix} changing state to ABORTING")
-            self.state = TransferState.ABORTING
-            return False
-
-        if not what:
-            return False
-
-        if not struct.unpack('?', what)[0]:
-            _logger.info(
-                f"{self._log_prefix} received end of transfer signal, finalizing file recv loop, changing state to COMPLETED")
-            self.state = TransferState.COMPLETED
-            return False
-
-        return True
-
-    async def _recv_file_item(self):
-        raw_int = await self.recv_func(4)
-        file_item_size = struct.unpack('!I', raw_int)[0]
-        raw_file_item = await self.recv_func(file_item_size)
-        file_item = FileItem.load_from(raw_file_item, self.download_path)
-        return file_item
-
-    async def _receive_single_file(self):
-        validatename(file_item=self.current_file, root_path=self.download_path)
-        receiver = recv_file_contents(self.recv_func, self.current_file, )
-        initial = 0
-        self.status_setup(f"[FILE] {self.current_file}", self.current_file.seeked, self.current_file.size)
-        async with aclosing(receiver) as file_receiver:
-            async for received_len in file_receiver:
-                self.update_status(received_len - initial)
-                initial = received_len
-                if self.to_stop:
-                    break
-                yield
-
-    async def get_connection(self):
-        r = await self.connection_wait
-        self.recv_func = connect.Receiver(r)
-        self.send_func = connect.Sender(r)
-        _logger.debug(f"got connection {self._file_id=}")
-        return r
-
-    async def continue_file_transfer(self):
-        _logger.debug(f'FILE[{self._file_id}] changing state to receiving')
-        self.state = TransferState.RECEIVING
-        self.connection = await self.get_connection()
-        seeked_ptr = struct.pack('!Q', self.current_file.seeked)
-
-        # synchronizing last received file seek
-        self.send_func(seeked_ptr)
-
-        # receiving broken transfer file contents
-        async with aclosing(self._receive_single_file()) as fr:
-            async for received_len in fr:
-                yield self.current_file, received_len
-
-        # getting remaining files
-        async with aclosing(self.recv_files()) as file_receiver:
-            async for items in file_receiver:
-                yield items
-
-    def connection_arrived(self, connection):
-        self.connection_wait.set_result(connection)
-
-    @property
-    def id(self):
-        return self._file_id
+    with open(file.path, 'rb') as f:
+        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as f_mapped:
+            seek = file.seeked
+            for offset in range(seek, file.size, chunk_size):
+                chunk = f_mapped[offset: offset + chunk_size]
+                await asyncio.wait_for(send_function(chunk), timeout)
+                seek += len(chunk)
+                file.seeked = seek
+                yield seek
