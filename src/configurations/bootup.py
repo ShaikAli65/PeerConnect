@@ -12,6 +12,7 @@ from pathlib import Path
 
 from kademlia.utils import digest
 
+import src.core.async_runner  # noqa
 import src.core.eventloop  # noqa
 import src.managers.logmanager as log_manager
 from src.avails import RemotePeer, const, use
@@ -38,7 +39,7 @@ def initiate_bootup():
         config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
     with open(const.PATH_CONFIG, 'w+') as fp:
-        config_map.write(fp)
+        config_map.write(fp)  # noqa
 
     set_constants(config_map)
 
@@ -94,9 +95,7 @@ def get_v4():
         try:
             config_socket.connect(('1.1.1.1', 80))
             config_ip = config_socket.getsockname()[0]
-        except (OSError, socket.error) as e:
-            # error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
-
+        except OSError:
             config_ip = socket.gethostbyname(socket.gethostname())
             if const.IS_DARWIN or const.IS_LINUX:
                 config_ip = subprocess.getoutput("hostname -I")
@@ -148,8 +147,7 @@ def get_v6_from_api64():
             data = response.read().decode('utf-8')
             data_dict = json.loads(data)
             config_ip = data_dict.get('ip', config_ip)
-    except (urllib.request.HTTPError, json.JSONDecodeError) as e:
-        # error_log(f"Error getting local ip: {e} from get_local_ip() at line inspect.currentframe().f_lineno in core/constants.py")
+    except (urllib.request.HTTPError, json.JSONDecodeError):
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
     return IPv6Address(config_ip)
@@ -196,7 +194,7 @@ def write_default_profile():
     parser.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
     with open(const.PATH_CONFIG, 'w+') as fp:
-        parser.write(fp)
+        parser.write(fp)  # noqa
 
 
 def configure_this_remote_peer():

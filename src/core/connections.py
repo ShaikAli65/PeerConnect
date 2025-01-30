@@ -24,7 +24,7 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate_connections():
-    acceptor = Acceptor(Dock.finalizing.is_set, Dock.connected_peers)
+    acceptor = Acceptor(finalizer=Dock.finalizing.is_set, connected_peers=Dock.connected_peers)
     await Dock.exit_stack.enter_async_context(acceptor)
     acceptor.data_dispatcher.register_handler(
         HEADERS.CMD_TEXT,
@@ -148,8 +148,37 @@ class Acceptor:
             _logger.info("Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
-                    initial_conn, addr = await self.main_socket.aaccept()  # :todo: handle OSError while exiting
-                    tg.create_task(self.__accept_connection(initial_conn))
+                    try:
+                        initial_conn, addr = await self.main_socket.aaccept()
+                    except OSError:
+                        if self.stopping():
+                            # if we are finalizing then
+                            # it's mostly a case for asyncio cancelling this task
+
+                            # but,
+                            # async def accept_coro(future, conn):
+                            #   Coroutine closing the accept socket if the future is cancelled
+                            #   try:
+                            #       await future
+                            #   except exceptions.CancelledError:
+                            #       conn.close()
+                            #       raise
+                            #
+                            # this part of asyncio internals does not handle OSError,
+                            # causing a dirty log
+                            #
+                            # Task exception was never retrieved
+                            # future: < Task finished name = 'Task-6' coro = accept_coro() done,.. >
+                            # OSError: [WinError 995] The I/O operation has been aborted ...
+
+                            # try dealing with this
+                            return
+                        raise
+
+                    tg.create_task(
+                        self.__accept_connection(initial_conn),
+                        name=f"acceptor task for socket address: {addr}"
+                    )
                     _logger.info(f"New connection from {addr}")
                     await asyncio.sleep(0)
 
@@ -205,7 +234,6 @@ class Acceptor:
 
     def end(self):
         self.main_socket.close()
-        self.stopping = True
 
     async def __aenter__(self):
         await self._exit_stack.__aenter__()
