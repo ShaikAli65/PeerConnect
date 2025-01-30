@@ -4,13 +4,12 @@ import sys
 from asyncio.futures import _chain_future  # noqa  # a little bit dirty to use internal APIs but it's needed
 
 if sys.version_info >= (3, 13):
-    from asyncio import QueueShutDown
+    from asyncio import CancelledError
 else:
     class QueueShutDown(Exception):
         ...
 
 from src.avails import HasID, HasIdProperty
-from src.avails.exceptions import DispatcherFinalizing
 
 
 class ReplyRegistryMixIn:
@@ -41,111 +40,51 @@ class ReplyRegistryMixIn:
 
 
 class QueueMixIn:
-    """Provides a CSP(`Communicating Sequential Processes`) way to submit event to the Dispatcher classes
-
-    Adds an extra function ``listen_for_events`` that needs to get started as a task to start listening
-    for events.
-
-    Overrides __call__ method of ``dispatcher`` object and submits that event to queue,
-    this allows to call ``:func BaseDispatcher.submit:`` directly if needed.
-
-    Requires the ``stop_flag`` attribute as a callable that should return a boolean
-    signaling stopping of event listening loop, raises RuntimeWarning if not found
-
-    If used, this class should come early in mro
-
-    If an event is submitted then a call to function ``submit`` is made, and it is spawned as an ``asyncio.Task``
-    using an internal ``asyncio.TaskGroup``, submit function should return without any exception
-    Internal queue does not have any limits,
-
-    if ``:param start_listening:`` is true then stop method takes care of cancelling it
-
-    A stop method is provided, which
-        * cancels internal queue to end the processing
-        * stops the **queue**, does not discard buffered events waits for completion
-        * cancels task group(as mentioned in python docs) by raising a `DispatcherFinalizing` exception
-        * if ``:func listener_task:`` is then it is also cancelled
-
-
-    Attributes:
-        queue (asyncio.Queue): internal queue that is used to receive events
-        task_group (asyncio.TaskGroup): used to spawn tasks
-        running(bool): gets set to true when ``:func listen_for_events:`` is called
     """
-    _sentinel = object()
+        Requires submit method to exist which should return an awaitable
 
-    def __init__(self, *args, start_listening=True, **kwargs):
-        """
-        Args:
-            start_listening (bool):
-                an optional argument which specifies : should it start the `listen_for_events` as
-                a task or not, default is true
-        """
+        Overrides `__call__` method and,
+        spawns self.submit as a ``asyncio.Task`` and owns that task lifetime
+
+        Provides context manager that throws a cancelled error into all the remaining tasks
+        and waits for completion on those tasks
+
+    """
+
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._queue = asyncio.Queue()
-        self.task_group = asyncio.TaskGroup()
-        self.__running = False
-        self.listener_task = None
-        if start_listening:
-            self.listener_task = asyncio.create_task(
-                self.listen_for_events(),
-                name=f"{self.__class__}.QueueMixIn listener task")
+        self.task_group = set()
 
     def __call__(self, *args, **kwargs):
-        fut = asyncio.get_running_loop().create_future()
-        self._queue.put_nowait((fut, args, kwargs))
-        return fut
 
-    async def listen_for_events(self):
-
-        if hasattr(self, 'stop_flag'):
-            stop_flag = self.stop_flag
+        if hasattr(self, 'submit'):
+            f = asyncio.create_task(self.submit(*args, **kwargs))
+            f.set_name(f"{self.__class__}, task at {QueueMixIn}")
+            self.task_group.add(f)
+            f.add_done_callback(lambda _fut: self.task_group.remove(_fut))
+            return f
         else:
-            raise RuntimeWarning(f"stop_flag not found for {self}, QueueMixIn will not work as expected")
-
-        que = self._queue
-        self.__running = True
-        async with self.task_group:
-            while True:
-                try:
-                    fut, args, kwargs = await que.get()
-                    if fut == self._sentinel:
-                        raise QueueShutDown()
-
-                except QueueShutDown:
-                    break
-
-                if stop_flag():
-                    break
-                t = self.task_group.create_task(self.submit(*args, **kwargs))  # noqa
-                _chain_future(t, fut)
+            raise ValueError("submit method not found")
 
     async def stop(self):
-        async def bomb():
-            raise DispatcherFinalizing('stop method is called for dispatcher')
+        for task in self.task_group:
+            task.cancel()
 
-        self.task_group.create_task(bomb())
-        if sys.version_info >= (3, 13):
-            self._queue.shutdown()
-        else:
-            await self._queue.put((self._sentinel,) * 3)
-        self.__running = False
-        if self.listener_task:
-            self.listener_task.cancel()
-            await asyncio.sleep(0)  # allowing all the things to happen before waiting on listener_task
-            await self.listener_task
+        await asyncio.sleep(0)
+
+        exceptions = []
+        for task in asyncio.as_completed(self.task_group):
+            try:
+                await task
+            except CancelledError:
+                pass
+            except Exception as e:
+                exceptions.append(e)
+
+        raise ExceptionGroup(f"exceptions at {QueueMixIn}({self.__class__})", exceptions)
 
     async def __aenter__(self):
-        if self.__running is True:
-            return
-
-        if self.listener_task is None:
-            self.listener_task = asyncio.create_task(self.listen_for_events())
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.__running is False:
-            return
-
         await self.stop()
-        await self.task_group.__aexit__(exc_type, exc_val, exc_tb)
