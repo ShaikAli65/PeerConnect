@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from src.avails import (BaseDispatcher, InvalidPacket, RemotePeer, SocketCache, SocketStore, Wire, WireData, connect,
                         const, use)
 from src.avails.events import ConnectionEvent, StreamDataEvent
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core import DISPATCHS, Dock, get_this_remote_peer
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
@@ -104,6 +104,7 @@ def ConnectionCloseHandler(connected_peers: SocketCache):
     return handler
 
 
+@singleton_mixin
 class Acceptor:
     __annotations__ = {
         'address': tuple,
@@ -115,18 +116,9 @@ class Acceptor:
         '__loop': asyncio.AbstractEventLoop,
     }
 
-    _instance = None
-    _initialized = False
     current_socks = SocketStore()
 
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(Acceptor, cls).__new__(cls)
-        return cls._instance
-
     def __init__(self, finalizer, connected_peers, ip=None, port=None):
-        if self._initialized is True:
-            return
         self._exit_stack = AsyncExitStack()
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
         self.stopping = finalizer
@@ -135,7 +127,6 @@ class Acceptor:
         self.currently_in_connection = defaultdict(int)
         self.max_timeout = 90
         _logger.info(f"Initiating Acceptor {self.address}")
-        self._initialized = True
         self.connected_peers = connected_peers
         self.connection_dispatcher = ConnectionDispatcher(None, finalizer)
         self.data_dispatcher = StreamDataDispatcher(None, finalizer)
