@@ -4,7 +4,7 @@ import logging
 import time
 
 from src.avails import WireData, connect, const, use
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core import DISPATCHS, Dock
 from src.transfers import HEADERS
 
@@ -28,6 +28,7 @@ class CheckRequest:
         self.status = ConnectivityCheckState.INITIATED
 
 
+@singleton_mixin
 class Connectivity(QueueMixIn):
     _instance = None
     _initialized = False

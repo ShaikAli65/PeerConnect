@@ -14,7 +14,7 @@ from src.avails.wire import GossipMessage
 from src.avails.events import RequestEvent
 
 
-class HasID(Protocol):
+class _HasID(Protocol):
     id: int | str  # Specify the type of the `id` attribute (e.g., int)
 
 
@@ -25,6 +25,9 @@ class HasPeerId(Protocol):
 class HasIdProperty(Protocol):
     @property
     def id(self): ...
+
+
+HasID = _HasID | HasIdProperty
 
 
 class AbstractHandler(ABC):

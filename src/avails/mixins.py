@@ -1,19 +1,16 @@
 import asyncio
-import sys
+import itertools
+from asyncio import TaskGroup
+from functools import wraps
+from typing import Dict, Type, TypeVar
 
-from asyncio.futures import _chain_future  # noqa  # a little bit dirty to use internal APIs but it's needed
-
-if sys.version_info >= (3, 13):
-    from asyncio import TaskGroup
-else:
-    class QueueShutDown(Exception):
-        ...
-
-from src.avails import HasID, HasIdProperty
+from src.avails import HasID
 
 
 class ReplyRegistryMixIn:
     """Provides reply functionality
+
+    an id_factory is provided that can be used to set a unique id to messages
 
     Methods:
         msg_arrived: sets the registered future corresponding to expected reply
@@ -21,11 +18,13 @@ class ReplyRegistryMixIn:
 
     """
 
+    _id_factory = itertools.count()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._reply_registry = {}
 
-    def msg_arrived(self, message: HasID | HasIdProperty):
+    def msg_arrived(self, message: HasID):
         if message.id not in self._reply_registry:
             return
 
@@ -37,6 +36,13 @@ class ReplyRegistryMixIn:
         fut = asyncio.get_running_loop().create_future()
         self._reply_registry[reply_id] = fut
         return fut
+
+    def is_registered(self, message: HasID):
+        return message.id in self._reply_registry
+
+    @property
+    def id_factory(self):
+        return str(next(self._id_factory))
 
 
 class QueueMixIn:
@@ -66,3 +72,24 @@ class QueueMixIn:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
+
+
+T = TypeVar('T')
+
+
+def singleton_mixin(cls: Type[T]) -> Type[T]:
+    """Singleton decorator
+
+        Note:
+            Not thread safe
+    """
+
+    instances: Dict[Type[T], T] = {}
+
+    @wraps(cls)
+    def get_instance(*args, **kwargs) -> T:
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+
+    return get_instance
