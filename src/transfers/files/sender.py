@@ -35,7 +35,7 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         self._expected_errors = set()
 
     async def send_files(self):
-        _logger.debug(f'{self._log_prefix} changing state to sending')
+        _logger.debug(f"{self._log_prefix} changing state to sending")
         self.state = TransferState.SENDING
         self.send_files_task = asyncio.current_task()
 
@@ -104,7 +104,9 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         except ValueError as ve:
             self._raise_transfer_incomplete_and_change_state(ve)
         else:
-            self.status_updater.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
+            self.status_updater.status_setup(
+                f"resuming file:{start_file}", start_file.seeked, start_file.size
+            )
 
         # continuing with remaining transfer
         async with aclosing(self.send_files()) as file_sender:
@@ -173,13 +175,13 @@ async def send_actual_file(
     """
 
     chunk_size = chunk_len or calculate_chunk_size(file.size)
-    with open(file.path, 'rb') as f:
+    with open(file.path, "rb") as f:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as f_mapped:
             seek = file.seeked
             asyncify = functools.partial(
                 asyncio.get_running_loop().run_in_executor,
                 th_pool,
-                f_mapped.__getitem__
+                f_mapped.__getitem__,
             )
 
             for offset in range(seek, file.size, chunk_size):

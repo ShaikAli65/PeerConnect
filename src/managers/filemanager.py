@@ -76,7 +76,6 @@ async def _handle_sending(file_sender, peer_id):
             may_be_confirmed = True
             await stack.enter_async_context(prepare_connection(file_sender))
             accepted = await asyncio.wait_for(file_sender.recv_func(1), const.DEFAULT_TRANSFER_TIMEOUT)
-            print(f"{accepted=}")
             if accepted == b'\x00':
                 may_be_confirmed = False
         except OSError as oe:  # unable to connect
@@ -176,13 +175,13 @@ def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer])
 def new_otm_request_arrived(req_data: WireData, addr):
     session = OTMSession(
         originate_id=req_data.id,
-        session_id=req_data['session_id'],
-        key=req_data['key'],
-        fanout=req_data['fanout'],
-        link_wait_timeout=req_data['link_wait_timeout'],
-        adjacent_peers=req_data['adjacent_peers'],
-        file_count=req_data['file_count'],
-        chunk_size=req_data['chunk_size'],
+        session_id=req_data["session_id"],
+        key=req_data["key"],
+        fanout=req_data["fanout"],
+        link_wait_timeout=req_data["link_wait_timeout"],
+        adjacent_peers=req_data["adjacent_peers"],
+        file_count=req_data["file_count"],
+        chunk_size=req_data["chunk_size"],
     )
     this_peer = get_this_remote_peer()
     passive_endpoint_address = (this_peer.ip, connect.get_free_port())
@@ -254,8 +253,10 @@ def OTMConnectionHandler():
         """
         connection = event.connection.socket
         link_data = event.handshake
-        _logger.info("updating otm connection", extra={'addr': connection.getpeername()})
-        session_id = link_data['session_id']
+        _logger.info(
+            "updating otm connection", extra={"addr": connection.getpeername()}
+        )
+        session_id = link_data["session_id"]
         otm_relay = transfers_book.get_scheduled(session_id)
         if otm_relay:
             await otm_relay.otm_add_stream_link(connection, link_data)

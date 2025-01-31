@@ -49,19 +49,15 @@
     },
 
     "discovery_handler": {
-      "class" : "logging.handlers.QueueHandler",
+      "class": "logging.handlers.QueueHandler",
       "handlers": ["discovery_sub_handler"]
     }
-
   },
   "queue_handlers": ["queue_handler", "discovery_handler"],
 
   "loggers": {
     "": {
-      "handlers": [
-        "console",
-        "queue_handler"
-      ],
+      "handlers": ["console", "queue_handler"],
       "level": "DEBUG"
     },
     "websockets": {
@@ -71,8 +67,9 @@
       "level": "INFO",
       "propagate": false
     },
-    "rpcudp" : {
-      "level": "INFO"
+    "rpcudp": {
+      "level": "INFO",
+      "propagate": false
     },
     "src.core.requests": {
       "propagate": false

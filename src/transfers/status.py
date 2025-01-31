@@ -3,7 +3,6 @@ from collections import abc
 
 from tqdm import tqdm
 
-
 # design decision:
 # two things we can provide to transfer API
 # 1. A StatusIterator
@@ -49,7 +48,13 @@ from tqdm import tqdm
 
 
 class StatusMixIn:
-    __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
+    __slots__ = (
+        "yield_freq",
+        "current_status",
+        "_yield_iterator",
+        "progress_bar",
+        "next_yield_point",
+    )
 
     def __init__(self, yield_freq):
         self.next_yield_point = -1
@@ -75,7 +80,7 @@ class StatusMixIn:
         self.progress_bar = tqdm(
             range(final_limit),
             desc=prefix,
-            unit='B',
+            unit="B",
             unit_scale=True,
             unit_divisor=1024,
             # total=initial_limit
@@ -87,7 +92,10 @@ class StatusMixIn:
             self._yield_iterator = None
         else:
             spacing = (final_limit - initial_limit) / (self.yield_freq - 1)
-            self._yield_iterator = (min(final_limit, int(initial_limit + i * spacing)) for i in range(self.yield_freq))
+            self._yield_iterator = (
+                min(final_limit, int(initial_limit + i * spacing))
+                for i in range(self.yield_freq)
+            )
             self.next_yield_point = next(self._yield_iterator)
 
     def close(self):
