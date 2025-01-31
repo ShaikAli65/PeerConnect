@@ -10,6 +10,7 @@ from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.transfers import TransferState, files, otm
+from src.transfers.status import StatusMixIn
 from src.webpage_handlers import headers, pagehandle
 from src.webpage_handlers.headers import HANDLE
 
@@ -26,7 +27,6 @@ async def open_file_selector():
     return result
 
 
-@asynccontextmanager
 async def send_files_to_peer(peer_id, selected_files):
     """Sends provided files to peer with ``peer_id``
     Gets peer information from peers module
@@ -44,56 +44,71 @@ async def send_files_to_peer(peer_id, selected_files):
         file_sender_handle.attach_files(selected_files)
         return
 
+    status_updater = StatusMixIn(const.TRANSFER_STATUS_FREQ)
     # create a new file sender
     file_sender = files.Sender(
         selected_files,
         Dock.peer_list.get_peer(peer_id),
         transfers_book.get_new_id() + str(peer_id),
-        status_yield_frequency=const.TRANSFER_STATUS_FREQ
+        status_updater,
     )
 
     transfers_book.add_to_current(peer_id=peer_id, transfer_handle=file_sender)
     try:
-        async with AsyncExitStack() as stack:
-            try:
-                await stack.enter_async_context(file_sender.prepare_connection())
-            except OSError:
-                # unable to connect
-                traceback.print_exc()
-                return
-            except TransferRejected:
-                _send_confirmation_status_to_frontend(False, peer_id)
-
-            _send_confirmation_status_to_frontend(True, peer_id)
-
-            sender = await stack.enter_async_context(aclosing(file_sender.send_files()))
-            yield sender
-
+        async with _handle_sending(file_sender, peer_id) as sender:
+            async for status in sender:
+                if status_updater.should_yield():
+                    yield DataWeaver(
+                        header=headers.TRANSFER_UPDATE,
+                        content={'status': status, 'file_id': file_sender.id},
+                        peer_id=peer_id,
+                    )
     finally:
-        if file_sender.state == TransferState.PAUSED:
-            transfers_book.add_to_continued(peer_id, file_sender)
-
         if file_sender.state in (TransferState.COMPLETED, TransferState.ABORTING):
             transfers_book.add_to_completed(peer_id, file_sender)
+            return
 
-
-def _send_confirmation_status_to_frontend(confirmation, peer_id):
-    pagehandle.dispatch_data(
-        DataWeaver(
-            header=headers.TRANSFER_UPDATE,
-            content={"confirmation": confirmation},
-            peer_id=peer_id,
-        )
-    )
+        if file_sender.state in (TransferState.PAUSED, TransferState.CONNECTING):
+            transfers_book.add_to_continued(peer_id, file_sender)
 
 
 @asynccontextmanager
-async def file_receiver(file_req: WireData, connection):
+async def _handle_sending(file_sender, peer_id):
+    def _send_confirmation_status_to_frontend(confirmation):
+        pagehandle.dispatch_data(
+            DataWeaver(
+                header=headers.TRANSFER_UPDATE,
+                content={"confirmation": confirmation},
+                peer_id=peer_id,
+            )
+        )
+
+    async with AsyncExitStack() as stack:
+        try:
+            may_be_confirmed = True
+            await stack.enter_async_context(file_sender.prepare_connection())
+            accepted = await asyncio.wait_for(file_sender.recv_func(1), const.DEFAULT_TRANSFER_TIMEOUT)
+            if accepted == b'\x00':
+                may_be_confirmed = False
+        except OSError:  # unable to connect
+            if const.debug:
+                traceback.print_exc()
+            _send_confirmation_status_to_frontend(False)
+            raise
+
+        _send_confirmation_status_to_frontend(may_be_confirmed)
+        if may_be_confirmed is False:
+            raise TransferRejected
+        yield await stack.enter_async_context(aclosing(file_sender.send_files()))
+
+
+@asynccontextmanager
+async def file_receiver(file_req: WireData, connection, status_updater):
     """
     Just a wrapper function which does bookkeeping for FileReceiver object
     """
 
-    peer_id = file_req.id
+    peer_id = file_req.peer_id
     version = file_req.version
     file_transfer_id = file_req['file_id']
 
@@ -101,7 +116,7 @@ async def file_receiver(file_req: WireData, connection):
         peer_id,
         file_transfer_id,
         const.PATH_DOWNLOAD,
-        yield_freq=const.TRANSFER_STATUS_FREQ
+        status_updater
     )
     sender = connect.Sender(connection)
     receiver = connect.Receiver(connection)
@@ -170,13 +185,13 @@ def FileConnectionHandler():
 
             try:
                 async with AsyncExitStack() as exit_stack:
-                    receiver_handle = await exit_stack.enter_async_context(
-                        file_receiver(file_req, event.transport.socket)
-                    )
-                    receiver = await exit_stack.enter_async_context(
-                        aclosing(receiver_handle.recv_files())
-                    )
-
+                    status_updater = StatusMixIn(const.TRANSFER_STATUS_FREQ)
+                    receiver_handle = await exit_stack.enter_async_context(file_receiver(
+                        file_req,
+                        event.transport.socket,
+                        status_updater,
+                    ))
+                    receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
                     async for file_item, received in receiver:
                         status_update = DataWeaver(
                             header=HANDLE.TRANSFER_UPDATE,
