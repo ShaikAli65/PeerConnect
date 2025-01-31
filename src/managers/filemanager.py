@@ -5,8 +5,17 @@ import traceback
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
-from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, Wire, WireData, connect, \
-    const
+from src.avails import (
+    DataWeaver,
+    OTMInformResponse,
+    OTMSession,
+    RemotePeer,
+    TransfersBookKeeper,
+    WireData,
+    connect,
+    const,
+    get_dialog_handler,
+)
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer, peers
@@ -19,7 +28,16 @@ transfers_book = TransfersBookKeeper()
 _logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
+async def open_file_selector():
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, get_dialog_handler().open_file_dialog_window
+    )  # noqa
+    if any(result) and result[0] == ".":
+        return []
+    return result
+
+
 async def send_files_to_peer(peer_id, selected_files):
     """Sends provided files to peer with ``peer_id``
     Gets peer information from peers module
@@ -177,21 +195,17 @@ def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer])
 def new_otm_request_arrived(req_data: WireData, addr):
     session = OTMSession(
         originate_id=req_data.id,
-        session_id=req_data['session_id'],
-        key=req_data['key'],
-        fanout=req_data['fanout'],
-        link_wait_timeout=req_data['link_wait_timeout'],
-        adjacent_peers=req_data['adjacent_peers'],
-        file_count=req_data['file_count'],
-        chunk_size=req_data['chunk_size'],
+        session_id=req_data["session_id"],
+        key=req_data["key"],
+        fanout=req_data["fanout"],
+        link_wait_timeout=req_data["link_wait_timeout"],
+        adjacent_peers=req_data["adjacent_peers"],
+        file_count=req_data["file_count"],
+        chunk_size=req_data["chunk_size"],
     )
     this_peer = get_this_remote_peer()
     passive_endpoint_address = (this_peer.ip, connect.get_free_port())
-    receiver = otm.FilesReceiver(
-        session,
-        passive_endpoint_address,
-        this_peer.uri
-    )
+    receiver = otm.FilesReceiver(session, passive_endpoint_address, this_peer.uri)
     transfers_book.add_to_scheduled(receiver.id, receiver)
     _logger.info(f"adding otm session to registry id={session.session_id}")
     reply = OTMInformResponse(
@@ -200,7 +214,9 @@ def new_otm_request_arrived(req_data: WireData, addr):
         active_addr=this_peer.uri,
         session_key=session.key,
     )
-    _logger.info(f"replying otm req with passive={reply.passive_addr} active={reply.active_addr}")
+    _logger.info(
+        f"replying otm req with passive={reply.passive_addr} active={reply.active_addr}"
+    )
     return bytes(reply)
 
 
@@ -208,7 +224,9 @@ def FileConnectionHandler():
     async def handler(event: ConnectionEvent):
         with event.transport.socket:
             file_req = event.handshake
-            _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
+            _logger.info(
+                "new file connection arrived", extra={"id": file_req["file_id"]}
+            )
 
             # if not await webpage.get_transfer_ok(event.handshake.peer_id):  # :todo: ask webpage
             #     await event.transport.send(b'\x00')
@@ -255,8 +273,10 @@ def OTMConnectionHandler():
         """
         connection = event.transport.socket
         link_data = event.handshake
-        _logger.info("updating otm connection", extra={'addr': connection.getpeername()})
-        session_id = link_data['session_id']
+        _logger.info(
+            "updating otm connection", extra={"addr": connection.getpeername()}
+        )
+        session_id = link_data["session_id"]
         otm_relay = transfers_book.get_scheduled(session_id)
         if otm_relay:
             await otm_relay.otm_add_stream_link(connection, link_data)
