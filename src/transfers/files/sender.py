@@ -1,20 +1,21 @@
 import asyncio
 import contextlib
+import functools
 import mmap
 import socket
 import struct
 from contextlib import aclosing
 from pathlib import Path
 
-from src.avails import Wire, WireData, connect, const
-from src.avails.status import StatusMixIn
+from src.avails import Wire, WireData, connect, const, use
+from src.avails.exceptions import TransferIncomplete
 from src.core import get_this_remote_peer
-from src.transfers import HEADERS, TransferState
+from src.transfers import HEADERS, TransferState, thread_pool_for_disk_io
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
 from src.transfers.files._logger import logger as _logger
 
 
-class Sender(StatusMixIn):
+class Sender:
     version = const.VERSIONS['FO']
     """
         stopping_flag(Callable[[],bool]): this gets called to check whether to stop or not, while sending chunks
@@ -22,45 +23,49 @@ class Sender(StatusMixIn):
         yield_freq(int): number of times this function should yield while sending chunks
 
     """
+    timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
-    def __init__(self, file_list, peer_obj, transfer_id, *, status_yield_frequency=10):
+    def __init__(self, file_list, peer_obj, transfer_id, status_updater):
         self.state = TransferState.PREPARING
         self.file_list = [
             FileItem(x, seeked=0) for x in file_list
         ]
-        self.socket = None
         self._file_id = transfer_id
         self.peer_obj = peer_obj
-        super().__init__(status_yield_frequency)
-        self.to_stop = False
-        self._current_index = 0
         self._log_prefix = f"FILE[{self._file_id}]"
+        self.status_updater = status_updater
+        self.to_stop = False
+        self.socket = None
+        self._current_file_index = 0
         self.send_func = None
         self.recv_func = None
+        self._expected_error = None
 
     async def send_files(self):
         _logger.debug(f'{self._log_prefix} changing state to sending')
         self.state = TransferState.SENDING
 
-        for index in range(self._current_index, len(self.file_list)):
+        true = struct.pack('?', True)
+
+        for index in range(self._current_file_index, len(self.file_list)):
             # there is another file incoming
             if self.to_stop:
                 break
             file_item = self.file_list[index]
-            self.current_file = index
+            self._current_file_index = index
 
             try:
                 # a signal that says there is more to receive
-                await self.send_func(struct.pack('?', True))
+                await self.send_func(true)
                 await self._send_file_item(file_item)
-                self.status_setup(
+                self.status_updater.status_setup(
                     prefix=f"sending: {file_item}",
                     initial_limit=file_item.seeked,
                     final_limit=file_item.size
                 )
                 async with aclosing(self._send_single_file(file_item)) as sender:
-                    async for items in sender:
-                        yield items
+                    async for seeked in sender:
+                        yield seeked
             except OSError:
                 _logger.error(f"{self._log_prefix} got os error, pausing transfer", exc_info=True)
                 self.state = TransferState.PAUSED
@@ -83,12 +88,12 @@ class Sender(StatusMixIn):
                     file_item,
                 )
         ) as send_file:
+            updater = self.status_updater.update_status
             async for seeked in send_file:
-                self.update_status(seeked)
+                updater(seeked)
                 if self.to_stop:
                     break
-                if self.should_yield():
-                    yield file_item, seeked
+                yield seeked
 
         print("file sent", file_item)
 
@@ -105,9 +110,9 @@ class Sender(StatusMixIn):
             ) as connection:
                 connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
                 await self._authorize_connection(connection)
-                self.socket = connection
-                self.send_func = connect.Sender(self.socket)
-                self.recv_func = connect.Receiver(self.socket)
+
+                self.send_func = connect.Sender(connection)
+                self.recv_func = connect.Receiver(connection)
 
                 _logger.debug(f"{self._log_prefix} connection established")
                 yield
@@ -131,22 +136,23 @@ class Sender(StatusMixIn):
     async def continue_file_transfer(self):
         _logger.debug(f'FILE[{self._file_id}] changing state to sending')
         self.state = TransferState.SENDING
-        start_file = self.file_list[self.current_file]
+        start_file = self.file_list[self._current_file_index]
         self.to_stop = False
 
         # synchronizing last file sent
-        seeked_int = await self.socket.recv(8)
-        if not seeked_int:
+        try:
+            start_file.seeked = await use.recv_int(self.recv_func, use.LONG_INT)
+        except ValueError as ve:
             _logger.debug(f'FILE[{self._file_id}] changing state to paused')
             self.state = TransferState.PAUSED
-            raise ConnectionResetError("Connection reset by other end while received file seek point")
+            raise TransferIncomplete("failed to receive seeked_int") from ve
+        else:
+            self.status_updater.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
 
-        start_file.seeked = struct.unpack('!Q', seeked_int)[0]
-        self.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
-        async with aclosing(self._send_single_file(start_file)) as initial_file_sender:
-            async for items in initial_file_sender:
-                yield items
-        # end of broken file transfer
+            async with aclosing(self._send_single_file(start_file)) as initial_file_sender:
+                async for items in initial_file_sender:
+                    yield items
+            # end of broken file transfer
 
         # continuing with remaining transfer
         async with aclosing(self.send_files()) as file_sender:
@@ -160,13 +166,18 @@ class Sender(StatusMixIn):
     def id(self):
         return self._file_id
 
+    @property
+    def current_file(self):
+        return self.file_list[self._current_file_index]
+
 
 async def send_actual_file(
         send_function,
         file,
         *,
         chunk_len=None,
-        timeout=5
+        timeout=5,
+        th_pool=thread_pool_for_disk_io,
 ):
     """Sends file to other end using ``send_function``
 
@@ -180,18 +191,25 @@ async def send_actual_file(
         file(FileItem): file to send
         chunk_len(int): length of each chunk passed into ``send_function`` for each call
         timeout(int): timeout in seconds used to wait upon send_function
+        th_pool(ThreadPoolExecutor): thread pool executor to use while reading the file
 
     Yields:
-        number indicating the sent file size
+        number indicating the file size sent
     """
 
     chunk_size = chunk_len or calculate_chunk_size(file.size)
-
     with open(file.path, 'rb') as f:
         with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as f_mapped:
             seek = file.seeked
+            asyncify = functools.partial(
+                asyncio.get_running_loop().run_in_executor,
+                th_pool,
+                f_mapped.__getitem__
+            )
+
             for offset in range(seek, file.size, chunk_size):
-                chunk = f_mapped[offset: offset + chunk_size]
+                chunk = await asyncify(slice(offset, offset + chunk_size))
+
                 await asyncio.wait_for(send_function(chunk), timeout)
                 seek += len(chunk)
                 file.seeked = seek

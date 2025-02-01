@@ -4,7 +4,7 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, const, unpack_datagram
+from src.avails import InvalidPacket, const, unpack_datagram, use
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
@@ -19,7 +19,6 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate():
-
     # a discovery request packet is observed in wire shark but that packet is
     # not getting delivered to application socket in linux when we bind to specific interface address
 
@@ -34,6 +33,8 @@ async def initiate():
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(req_dispatcher)
+
     transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
 
@@ -42,6 +43,7 @@ async def initiate():
 
     # await gossip_initiate(req_dispatcher, transport)
     gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
+    await Dock.exit_stack.enter_async_context(gossip_dispatcher)
 
     Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
@@ -70,7 +72,7 @@ async def initiate():
 
     await Dock.state_manager_handle.put_state(discovery_state)
     await Dock.state_manager_handle.put_state(add_to_lists)
-    # :todo: introduce context manager support into statemanager.State itself which reduces boilerplate
+    # :todo: introduce context manager support into state-manager.State itself which reduces boilerplate
 
     Dock.exit_stack.push_async_exit(kad_server)
 
@@ -79,7 +81,7 @@ async def initiate():
 
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()
-    base_socket = _create_listen_socket(bind_address, multicast_address)
+    base_socket = await _create_listen_socket(bind_address, multicast_address)
     transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher),
         sock=base_socket
@@ -87,10 +89,11 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     return transport
 
 
-def _create_listen_socket(bind_address, multicast_addr):
+async def _create_listen_socket(bind_address, multicast_addr):
     loop = asyncio.get_running_loop()
+    family, _, _, _, resolved_bind_address = await anext(use.get_addr_info(*bind_address))
     sock = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
+        loop, resolved_bind_address, family=family
     )
 
     if const.USING_IP_V4:
@@ -101,7 +104,7 @@ def _create_listen_socket(bind_address, multicast_addr):
             log = "not " + log
         _logger.debug(log)
 
-        ipv4_multicast_socket_helper(sock,bind_address, multicast_addr)
+        ipv4_multicast_socket_helper(sock, bind_address, multicast_addr)
         _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
@@ -117,6 +120,7 @@ async def discovery_initiate(
         transport
 ):
     discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(discover_dispatcher)
     req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
     Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
 

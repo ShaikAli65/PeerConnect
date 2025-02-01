@@ -1,4 +1,5 @@
 import traceback
+from contextlib import aclosing
 from pathlib import Path
 from sys import stderr
 
@@ -35,10 +36,12 @@ async def send_file(command_data: DataWeaver):
         return
 
     selected_files = [Path(x) for x in selected_files]
+    send_files = filemanager.send_files_to_peer(command_data.peer_id, selected_files)
     try:
-        async with filemanager.send_files_to_peer(command_data.peer_id, selected_files) as files_sender:
-            async for status in files_sender:
+        async with aclosing(send_files):
+            async for status in send_files:
                 print(status)
+
     except OSError as e:
         traceback.print_exc()
         print("{eror}", e)

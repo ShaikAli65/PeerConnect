@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from src.avails import (BaseDispatcher, InvalidPacket, RemotePeer, SocketCache, SocketStore, Wire, WireData, connect,
                         const, use)
 from src.avails.events import ConnectionEvent, StreamDataEvent
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core import DISPATCHS, Dock, get_this_remote_peer
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
@@ -24,7 +24,7 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate_connections():
-    acceptor = Acceptor(Dock.finalizing.is_set, Dock.connected_peers)
+    acceptor = Acceptor(finalizer=Dock.finalizing.is_set, connected_peers=Dock.connected_peers)
     await Dock.exit_stack.enter_async_context(acceptor)
     acceptor.data_dispatcher.register_handler(
         HEADERS.CMD_TEXT,
@@ -104,6 +104,7 @@ def ConnectionCloseHandler(connected_peers: SocketCache):
     return handler
 
 
+@singleton_mixin
 class Acceptor:
     __annotations__ = {
         'address': tuple,
@@ -115,18 +116,10 @@ class Acceptor:
         '__loop': asyncio.AbstractEventLoop,
     }
 
-    _instance = None
-    _initialized = False
     current_socks = SocketStore()
 
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(Acceptor, cls).__new__(cls)
-        return cls._instance
-
     def __init__(self, finalizer, connected_peers, ip=None, port=None):
-        if self._initialized is True:
-            return
+        self._exit_stack = AsyncExitStack()
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
         self.stopping = finalizer
         self.main_socket: Optional[connect.Socket] = None
@@ -134,13 +127,11 @@ class Acceptor:
         self.currently_in_connection = defaultdict(int)
         self.max_timeout = 90
         _logger.info(f"Initiating Acceptor {self.address}")
-        self._initialized = True
         self.connected_peers = connected_peers
         self.connection_dispatcher = ConnectionDispatcher(None, finalizer)
         self.data_dispatcher = StreamDataDispatcher(None, finalizer)
         data_handler = ProcessDataHandler(self.data_dispatcher, finalizer)
         self.connection_dispatcher.register_handler(HEADERS.CMD_VERIFY_HEADER, data_handler)
-        self._exit_stack = AsyncExitStack()
 
     async def initiate(self):
         self.connection_dispatcher.transport = self.main_socket
@@ -148,8 +139,37 @@ class Acceptor:
             _logger.info("Listening for connections")
             async with TaskGroup() as tg:
                 while not self.stopping():
-                    initial_conn, addr = await self.main_socket.aaccept()  # :todo: handle OSError while exiting
-                    tg.create_task(self.__accept_connection(initial_conn))
+                    try:
+                        initial_conn, addr = await self.main_socket.aaccept()
+                    except OSError:
+                        if self.stopping():
+                            # if we are finalizing then
+                            # it's mostly a case for asyncio cancelling this task
+
+                            # but,
+                            # async def accept_coro(future, conn):
+                            #   Coroutine closing the accept socket if the future is cancelled
+                            #   try:
+                            #       await future
+                            #   except exceptions.CancelledError:
+                            #       conn.close()
+                            #       raise
+                            #
+                            # this part of asyncio internals does not handle OSError,
+                            # causing a dirty log
+                            #
+                            # Task exception was never retrieved
+                            # future: < Task finished name = 'Task-6' coro = accept_coro() done,.. >
+                            # OSError: [WinError 995] The I/O operation has been aborted ...
+
+                            # try dealing with this
+                            return
+                        raise
+
+                    tg.create_task(
+                        self.__accept_connection(initial_conn),
+                        name=f"acceptor task for socket address: {addr}"
+                    )
                     _logger.info(f"New connection from {addr}")
                     await asyncio.sleep(0)
 
@@ -205,10 +225,12 @@ class Acceptor:
 
     def end(self):
         self.main_socket.close()
-        self.stopping = True
 
     async def __aenter__(self):
         await self._exit_stack.__aenter__()
+        await self._exit_stack.enter_async_context(self.data_dispatcher)
+        await self._exit_stack.enter_async_context(self.connection_dispatcher)
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

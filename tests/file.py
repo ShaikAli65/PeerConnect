@@ -4,10 +4,16 @@ import _path  # noqa
 import src.webpage_handlers
 import src.webpage_handlers.headers
 from src.avails import DataWeaver
+from src.managers import filemanager
 from src.managers.statemanager import State
 from src.webpage_handlers import handledata
 from test import test_initial_states
 from tests.test import get_a_peer, start_test
+
+
+async def mock_confirmation(*_):
+    filemanager.get_confirmation = mock_confirmation
+    return True
 
 
 async def test_file_transfer():

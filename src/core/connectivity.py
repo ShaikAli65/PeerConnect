@@ -4,7 +4,7 @@ import logging
 import time
 
 from src.avails import WireData, connect, const, use
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core import DISPATCHS, Dock
 from src.transfers import HEADERS
 
@@ -28,21 +28,13 @@ class CheckRequest:
         self.status = ConnectivityCheckState.INITIATED
 
 
+@singleton_mixin
 class Connectivity(QueueMixIn):
-    _instance = None
-    _initialized = False
+
     __slots__ = 'last_checked', 'stop_flag'
 
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls, *args, **kwargs)
-        return cls._instance
-
     def __init__(self, stop_flag=None, *args, **kwargs):
-        if self.__class__._initialized is True:
-            return
         self.last_checked = {}
-        self.__class__._initialized = True
         self.stop_flag = stop_flag or Dock.finalizing.is_set
         super().__init__(*args, **kwargs)
 
@@ -79,7 +71,8 @@ class Connectivity(QueueMixIn):
 
             # or another possibility that is observed:
             # windows does not forward UDP packets to application level when system is locked or sleeping
-            # what's that with QUIC then, and vpn's too
+            # (interfaces shutdown)
+            # what's that with QUIC then, and vpn s too
 
             try:
                 request.status = ConnectivityCheckState.CON_CHECK
