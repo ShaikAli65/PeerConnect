@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from typing import TYPE_CHECKING
 
 from src.avails import DataWeaver, WireData, const, use
@@ -61,7 +62,14 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         self.msg_arrived(wire_data)
         handle = self.registry[wire_data.header]
         _logger.debug(f"dispatching request {handle}")
-        await handle(event)
+        try:
+            await handle(event)
+        except RuntimeError:
+            # error from internal task_group if it is exited
+            if const.debug:
+                traceback.print_exc()
+            if self.stop_flag():
+                return
 
 
 async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):

@@ -1,7 +1,10 @@
 import enum
+from concurrent.futures.thread import ThreadPoolExecutor
 
 from src.transfers._headers import *
 from src.transfers.rumor import *
+
+thread_pool_for_disk_io = ThreadPoolExecutor()
 
 
 class TransferState(enum.Enum):

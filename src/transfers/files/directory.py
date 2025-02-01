@@ -7,13 +7,13 @@ import umsgpack
 
 from src.avails import connect, const
 from src.avails.exceptions import TransferIncomplete
-from src.avails.status import StatusMixIn
 from src.avails.useables import LONG_INT, recv_int
 from src.transfers import TransferState
 from src.transfers.files._fileobject import FileItem
 from src.transfers.files._logger import logger as _logger
 from src.transfers.files.receiver import recv_file_contents
 from src.transfers.files.sender import send_actual_file
+from src.transfers.status import StatusMixIn
 
 _FILE_CODE = b'\x00'
 _PATH_CODE = b'\x01'

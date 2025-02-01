@@ -1,52 +1,51 @@
 import asyncio
+import functools
 import os
 import struct
 from asyncio import CancelledError
 from contextlib import aclosing, contextmanager
 
-from src.avails import connect, const
+from src.avails import const, use
 from src.avails.exceptions import TransferIncomplete
-from src.avails.status import StatusMixIn
-from src.transfers import TransferState
+from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size, validatename
 from src.transfers.files._logger import logger as _logger
 
 
-class Receiver(StatusMixIn):
+class Receiver:
     version = const.VERSIONS['FO']
 
-    def __init__(self, peer_id, file_id, download_path, *, yield_freq=10):
+    def __init__(self, peer_id, file_id, download_path, status_updater):
         self.state = TransferState.PREPARING
         self.peer_id = peer_id
         self._file_id = file_id
         self.connection_wait = asyncio.get_event_loop().create_future()
-        self.connection = None
         self._log_prefix = f'FILE[{self.peer_id}]'
         self.download_path = download_path
         self.current_file = None
         self.to_stop = False
         self.file_items = []
-        super().__init__(yield_freq)
         self.send_func = None
         self.recv_func = None
+        self.status_updater = status_updater
 
     async def recv_files(self):
         self.state = TransferState.CONNECTING
-        self.connection = await self.get_connection()
+        await self.get_connection()
         _logger.debug(f"{self._log_prefix} changing state to RECEIVING")
         self.state = TransferState.RECEIVING
 
-        while True:
-            if not await self._should_proceed():
-                break
+        while await self._should_proceed():
 
             self.current_file = await self._recv_file_item()
             self.file_items.append(self.current_file)
             async with aclosing(self._receive_single_file()) as file_receiver:
                 try:
                     async for received_size in file_receiver:
-                        if self.should_yield():
-                            yield self.current_file, received_size
+                        yield received_size
+
+                        if self.to_stop:
+                            break
                 except TransferIncomplete:
                     _logger.error(f"{self._log_prefix} paused receiving, changing state to PAUSED", exc_info=True)
                     self.state = TransferState.PAUSED
@@ -81,36 +80,36 @@ class Receiver(StatusMixIn):
         return True
 
     async def _recv_file_item(self):
-        raw_int = await self.recv_func(4)
-        file_item_size = struct.unpack('!I', raw_int)[0]
-        raw_file_item = await self.recv_func(file_item_size)
-        file_item = FileItem.load_from(raw_file_item, self.download_path)
-        return file_item
+        try:
+            file_item_size = await use.recv_int(self.recv_func)
+            raw_file_item = await self.recv_func(file_item_size)
+        except ValueError as ve:
+            raise TransferIncomplete from ve
+        except OSError as oe:
+            raise TransferIncomplete from oe
+        else:
+            file_item = FileItem.load_from(raw_file_item, self.download_path)
+            return file_item
 
     async def _receive_single_file(self):
         validatename(file_item=self.current_file, root_path=self.download_path)
         receiver = recv_file_contents(self.recv_func, self.current_file, )
-        initial = 0
-        self.status_setup(f"[FILE] {self.current_file}", self.current_file.seeked, self.current_file.size)
+        self.status_updater.status_setup(self._status_string_prefix, self.current_file.seeked, self.current_file.size)
+
+        status_updater = self.status_updater.update_status
         async with aclosing(receiver) as file_receiver:
             async for received_len in file_receiver:
-                self.update_status(received_len - initial)
-                initial = received_len
-                if self.to_stop:
-                    break
+                status_updater(received_len)
                 yield
 
     async def get_connection(self):
-        r = await self.connection_wait
-        self.recv_func = connect.Receiver(r)
-        self.send_func = connect.Sender(r)
+        self.send_func, self.recv_func = await self.connection_wait
         _logger.debug(f"got connection {self._file_id=}")
-        return r
 
     async def continue_file_transfer(self):
         _logger.debug(f'FILE[{self._file_id}] changing state to receiving')
         self.state = TransferState.RECEIVING
-        self.connection = await self.get_connection()
+        await self.get_connection()
         seeked_ptr = struct.pack('!Q', self.current_file.seeked)
 
         # synchronizing last received file seek
@@ -128,6 +127,10 @@ class Receiver(StatusMixIn):
 
     def connection_arrived(self, connection):
         self.connection_wait.set_result(connection)
+
+    @property
+    def _status_string_prefix(self):
+        return f"[FILE] {self.current_file}"
 
     @property
     def id(self):
@@ -156,7 +159,7 @@ async def recv_file_contents(recv_function, file_item, *, chunk_size=None):
         int: updated remaining file size to be received
     """
 
-    with _setup_transfer(chunk_size, file_item) as t:
+    with _setup_transfer(chunk_size, file_item) as t:  # noqa
         chunk_size, file_size, f_writer, remaining_bytes = t
 
         while remaining_bytes > 0:
@@ -164,16 +167,15 @@ async def recv_file_contents(recv_function, file_item, *, chunk_size=None):
             if not data:
                 break
 
-            f_writer(data)  # Attempt to write data to file
+            await f_writer(data)  # Attempt to write data to file
 
             remaining_bytes -= len(data)
             file_item.seeked += len(data)
-            # :TODO deal with blocking nature of file i/o
             yield file_size - remaining_bytes
 
 
 @contextmanager
-def _setup_transfer(chunk_size, file_item):
+def _setup_transfer(chunk_size, file_item, *, th_pool=thread_pool_for_disk_io):
     mode = 'xb' if file_item.seeked == 0 else 'rb+'  # Create a new file or open for reading and writing
     # Check for the existence of the file for resuming
 
@@ -183,11 +185,14 @@ def _setup_transfer(chunk_size, file_item):
 
     chunk_size = chunk_size or calculate_chunk_size(file_item.size)
     remaining_bytes = file_item.size
+    loop = asyncio.get_running_loop()
+
     with open(file_item.path, mode) as fd:
         fd.seek(file_item.seeked)
+        async_writer = functools.partial(loop.run_in_executor, th_pool, fd.write)
         remaining_bytes -= file_item.seeked
         try:
-            yield chunk_size, file_item.size, fd.write, remaining_bytes
+            yield chunk_size, file_item.size, async_writer, remaining_bytes
         except Exception as e:
             _finalize_transfer(e, file_item)
             raise
