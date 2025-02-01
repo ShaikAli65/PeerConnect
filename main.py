@@ -1,4 +1,3 @@
-import logging
 import os
 import traceback
 from asyncio import CancelledError
@@ -44,15 +43,15 @@ def initiate(states):
         if cancelled:
             raise cancelled
 
-    const.debug = logging.getLogger().level == logging.DEBUG
-
     try:
         with AnotherRunner(debug=const.debug) as runner:
             runner.run(_initiate())
     except KeyboardInterrupt:
         if const.debug:
-            print(f"PRINTING TRACEBACK CAUSE {const.debug=}")
             traceback.print_exc()
+            print("-"*80)
+            print(f"## PRINTING TRACEBACK, {const.debug=}")
+            print("-"*80)
         exit(0)
 
 

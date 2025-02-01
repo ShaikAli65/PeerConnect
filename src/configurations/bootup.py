@@ -14,11 +14,10 @@ from kademlia.utils import digest
 
 import src.core.async_runner  # noqa
 import src.core.eventloop  # noqa
-import src.managers.logmanager as log_manager
 from src.avails import RemotePeer, const, use
 from src.configurations.configure import set_constants, validate_ports
 from src.core import Dock, set_current_remote_peer_object
-from src.managers import get_current_profile
+from src.managers import get_current_profile, logmanager
 
 _logger = logging.getLogger(__name__)
 
@@ -43,7 +42,9 @@ def initiate_bootup():
 
     set_constants(config_map)
 
-    Dock.exit_stack.enter_context(log_manager.initiate())
+    Dock.exit_stack.enter_context(logmanager.initiate())
+    const.debug = logging.getLogger().level == logging.DEBUG
+
     ip_addr = get_ip(const.IP_VERSION)
 
     if ip_addr.version == 6:

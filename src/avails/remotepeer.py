@@ -4,6 +4,8 @@ from src.avails import const
 
 
 class RemotePeer:
+    ONLINE = 1
+    OFFLINE = 0
     """Used to represent a peer details in network
 
     There are some attributes that are kept to keep this class compatible with kademlia package
@@ -39,7 +41,7 @@ class RemotePeer:
                  ip=None,
                  conn_port=const.PORT_THIS,
                  req_port=const.PORT_REQ,
-                 status=0):
+                 status=OFFLINE):
         self.username = username
         self.ip = str(ip)
         self._conn_port = conn_port

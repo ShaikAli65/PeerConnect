@@ -383,8 +383,8 @@ def remove_peer(peer):
 async def check_and_remove_if_needed(peer: RemotePeer):
     req, fut = connectivity.new_check(peer)
     if not await fut:
-        _logger.info(f"connectivity check failed, removing peer {peer} from cache")
-        Dock.peer_list.remove_peer(peer.peer_id)
+        _logger.info(f"connectivity check failed, changing status of {peer} to offline")
+        peer.status = RemotePeer.OFFLINE
         data = DataWeaver(
             header=HANDLE.REMOVE_PEER,
             peer_id=peer.peer_id,
