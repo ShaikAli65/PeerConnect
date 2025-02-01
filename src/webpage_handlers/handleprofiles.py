@@ -5,26 +5,19 @@ from src.managers import (
     get_profile_from_profile_file_name,
     refresh_profile_list, set_current_profile,
 )
-from src.webpage_handlers import logger
-from src.webpage_handlers.headers import HANDLE
-from src.webpage_handlers.pagehandle import PROFILE_WAIT, dispatch_data
+from src.webpage_handlers import logger, webpage
+from src.webpage_handlers.pagehandle import PROFILE_WAIT
 
 
-async def align_profiles(signal_data: DataWeaver):
-    further_data = await send_profiles()
-    await configure_further_profile_data(further_data)
+async def align_profiles(_: DataWeaver):
+    logger.info("::[PROFILES] sending profiles")
+    updated_profiles = await webpage.send_profiles_and_get_updated_profiles(all_profiles())
+    await configure_further_profile_data(updated_profiles)
     refresh_profile_list()
     PROFILE_WAIT.set()
 
 
-def send_profiles():
-    userdata = DataWeaver(header=HANDLE.PEER_LIST, content=all_profiles())
-    logger.info("::[PROFILES] sending profiles")
-    return dispatch_data(userdata, expect_reply=True)
-
-
 async def configure_further_profile_data(profiles_data):
-    profiles_data = profiles_data.content
     """
     profiles_data structure
     {

@@ -31,7 +31,7 @@
 **adding peer schema**
 ```
 > data = DataWeaver(
->   header=[NEW_PEER](#NEW_PEER),
+>   header= [NEW_PEER](#NEW_PEER),
 >   content={
 >       "name": peer.username,
 >       "ip": peer.ip,
@@ -71,7 +71,7 @@
 **profiles list**
 
 ```
-> header = [PROFILE_LIST](#PROFILE_LIST)
+> header = [HANDLE.PROFILE_LIST](#PROFILE_LIST)
 > content = {
 >     file_name : {
 >         'USER' : {
@@ -91,7 +91,7 @@
 
 ```
 > response_data = DataWeaver(
->     header=HANDLE.SEARCH_RESPONSE,
+>     header= HANDLE.SEARCH_RESPONSE,
 >     content=[
 >         {
 >             "name": peer.username,

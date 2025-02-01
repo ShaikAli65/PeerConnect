@@ -145,6 +145,10 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
     async def submit(self, req_event: RequestEvent):
         self.msg_arrived(req_event.request)
+
+        # reply registry and dispatcher's registry are most often mutually exclusive
+        # going with try except because the hit rate to the self.registry will be high
+        # when compared to reply registry
         try:
             handler = self.registry[req_event.root_code]
         except KeyError:

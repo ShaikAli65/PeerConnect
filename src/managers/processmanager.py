@@ -1,5 +1,5 @@
 """
-This code is designed to handle process spawning mechanisms
+This code is designed to handle process spawning mechanisms,
 but it is no longer in use
 """
 

@@ -104,7 +104,7 @@ def DirConnectionHandler():
             recv,
             sender,
             dir_path,
-            const.TRANSFER_STATUS_FREQ
+            const.TRANSFER_STATUS_UPDATE_FREQ
         )
         try:
             with connection:

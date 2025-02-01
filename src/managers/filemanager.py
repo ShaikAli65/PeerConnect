@@ -4,29 +4,21 @@ import traceback
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
-from src.avails import DataWeaver, OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, WireData, connect, \
-    const, get_dialog_handler
+from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, WireData, connect, \
+    const
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer
 from src.transfers import TransferState, files, otm
 from src.transfers.status import StatusMixIn
-from src.webpage_handlers import headers, pagehandle
-from src.webpage_handlers.headers import HANDLE
+from src.webpage_handlers import webpage
 
 transfers_book = TransfersBookKeeper()
 
 _logger = logging.getLogger(__name__)
 
 
-async def open_file_selector():
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)  # noqa
-    if any(result) and result[0] == '.':
-        return []
-    return result
-
-
+@asynccontextmanager
 async def send_files_to_peer(peer_id, selected_files):
     """Sends provided files to peer with ``peer_id``
     Gets peer information from peers module
@@ -36,7 +28,7 @@ async def send_files_to_peer(peer_id, selected_files):
         selected_files(list[str | Path]): list of file paths
 
     Yields:
-        An async generator that yields ``(FileItem, int)`` tuple, second element contains number saying how much file was transferred
+        files.Sender object
     """
 
     if file_sender_handle := transfers_book.check_running(peer_id):
@@ -44,45 +36,39 @@ async def send_files_to_peer(peer_id, selected_files):
         file_sender_handle.attach_files(selected_files)
         return
 
-    status_updater = StatusMixIn(const.TRANSFER_STATUS_FREQ)
-    # create a new file sender
+    file_sender, status_updater = await _send_setup(peer_id, selected_files)
+    yield_decision = status_updater.should_yield
+
+    try:
+        async with _handle_sending(file_sender, peer_id) as sender:
+            yield file_sender
+
+            async for _ in sender:
+                if yield_decision():
+                    await webpage.transfer_update(
+                        peer_id,
+                        file_sender.id,
+                        file_sender.current_file
+                    )
+
+    finally:
+        await _send_finalize(file_sender, peer_id)
+
+
+async def _send_setup(peer_id, selected_files):
+    status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
     file_sender = files.Sender(
         selected_files,
         Dock.peer_list.get_peer(peer_id),
         transfers_book.get_new_id() + str(peer_id),
         status_updater,
     )
-
     transfers_book.add_to_current(peer_id=peer_id, transfer_handle=file_sender)
-    try:
-        async with _handle_sending(file_sender, peer_id) as sender:
-            async for status in sender:
-                if status_updater.should_yield():
-                    yield DataWeaver(
-                        header=headers.TRANSFER_UPDATE,
-                        content={'status': status, 'file_id': file_sender.id},
-                        peer_id=peer_id,
-                    )
-    finally:
-        if file_sender.state in (TransferState.COMPLETED, TransferState.ABORTING):
-            transfers_book.add_to_completed(peer_id, file_sender)
-            return
-
-        if file_sender.state in (TransferState.PAUSED, TransferState.CONNECTING):
-            transfers_book.add_to_continued(peer_id, file_sender)
+    return file_sender, status_updater
 
 
 @asynccontextmanager
 async def _handle_sending(file_sender, peer_id):
-    def _send_confirmation_status_to_frontend(confirmation):
-        pagehandle.dispatch_data(
-            DataWeaver(
-                header=headers.TRANSFER_UPDATE,
-                content={"confirmation": confirmation},
-                peer_id=peer_id,
-            )
-        )
-
     async with AsyncExitStack() as stack:
         try:
             may_be_confirmed = True
@@ -90,16 +76,25 @@ async def _handle_sending(file_sender, peer_id):
             accepted = await asyncio.wait_for(file_sender.recv_func(1), const.DEFAULT_TRANSFER_TIMEOUT)
             if accepted == b'\x00':
                 may_be_confirmed = False
-        except OSError:  # unable to connect
+        except OSError as oe:  # unable to connect
             if const.debug:
                 traceback.print_exc()
-            _send_confirmation_status_to_frontend(False)
-            raise
+            await webpage.transfer_confirmation(peer_id, file_sender.id, False)
+            raise TransferIncomplete from oe
 
-        _send_confirmation_status_to_frontend(may_be_confirmed)
+        await webpage.transfer_confirmation(peer_id, file_sender.id, may_be_confirmed)
+
         if may_be_confirmed is False:
             raise TransferRejected
+
         yield await stack.enter_async_context(aclosing(file_sender.send_files()))
+
+
+async def _send_finalize(file_sender, peer_id):
+    if file_sender.state in (TransferState.COMPLETED, TransferState.ABORTING):
+        transfers_book.add_to_completed(peer_id, file_sender)
+    elif file_sender.state in (TransferState.PAUSED, TransferState.CONNECTING):
+        transfers_book.add_to_continued(peer_id, file_sender)
 
 
 @asynccontextmanager
@@ -175,7 +170,7 @@ def FileConnectionHandler():
             file_req = event.handshake
             _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
 
-            if not await get_confirmation(file_req):
+            if not await webpage.get_transfer_ok(event.handshake.peer_id):
                 await event.transport.send(b'\x00')
                 return
 
@@ -185,7 +180,7 @@ def FileConnectionHandler():
 
             try:
                 async with AsyncExitStack() as exit_stack:
-                    status_updater = StatusMixIn(const.TRANSFER_STATUS_FREQ)
+                    status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
                     receiver_handle = await exit_stack.enter_async_context(file_receiver(
                         file_req,
                         event.transport.socket,
@@ -193,43 +188,17 @@ def FileConnectionHandler():
                     ))
                     receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
                     async for file_item, received in receiver:
-                        status_update = DataWeaver(
-                            header=HANDLE.TRANSFER_UPDATE,
-                            content={
-                                'item_path': str(file_item.path),
-                                'received': received,
-                                'transfer_id': receiver_handle.id,
-                            },
-                            peer_id=file_req.peer_id,
-                        )
-                        pagehandle.dispatch_data(status_update)
+                        await webpage.transfer_update(file_req.peer_id, receiver_handle.id, file_item)
 
             except TransferIncomplete as e:
-                status_update = DataWeaver(
-                    header=HANDLE.TRANSFER_UPDATE,
-                    content={
-                        'item_path': str(file_item.path),
-                        'received': received,
-                        'transfer_id': receiver_handle.id,
-                        'cancelled': True,
-                        'error': str(e),
-                    },
-                    peer_id=file_req.peer_id,
+                await webpage.tranfer_incomplete(
+                    file_req.peer_id,
+                    receiver_handle.id,
+                    file_item,
+                    detail=e
                 )
-                pagehandle.dispatch_data(status_update)
 
     return handler
-
-
-async def get_confirmation(request):
-    confirmation = await pagehandle.dispatch_data(
-        DataWeaver(
-            header=headers.REQ_FOR_FILE_TRANSFER,
-            peer_id=request.peer_id,
-        ),
-        expect_reply=True
-    )
-    return bool(confirmation.content['confirmed'])
 
 
 def OTMConnectionHandler():

@@ -91,7 +91,7 @@ class StatusMixIn:
             self.next_yield_point = next(self._yield_iterator)
 
 
-class StatusIterator(StatusMixIn, abc.AsyncIterable, abc.AsyncIterator):
+class StatusIterator(StatusMixIn, abc.AsyncIterable):
 
     def __aiter__(self):
         return self

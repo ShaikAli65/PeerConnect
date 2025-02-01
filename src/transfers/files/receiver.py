@@ -178,6 +178,9 @@ async def recv_file_contents(recv_function, file_item, *, chunk_size=None):
 def _setup_transfer(chunk_size, file_item, *, th_pool=thread_pool_for_disk_io):
     mode = 'xb' if file_item.seeked == 0 else 'rb+'  # Create a new file or open for reading and writing
     # Check for the existence of the file for resuming
+    # A reason for going with more specific modes like xb or rb+ rather than using "w" modes
+    # by any chance if the file_item is misconfigured and the file held by file_item is important
+    # all the contents are cleared
 
     if file_item.seeked > 0 and not os.path.exists(file_item.path):
         print(f"File {file_item.path} not found for resuming transfer.")  # debug

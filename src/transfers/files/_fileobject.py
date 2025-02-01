@@ -157,10 +157,14 @@ def validatename(file_item: FileItem, root_path) -> str:
     """
     Ensures a unique filename if a file with the same name already exists
     in the `root_path`
+    Note:
+        Mutates `name` attribute of parameter `file_item`
+        and `path` attribute is updated accordingly
 
     Args:
         file_item (FileItem): The original filename.
         root_path(Path): Directory path to validate with
+
     Returns:
         str: The validated filename, ensuring uniqueness.
     """
@@ -198,4 +202,3 @@ def calculate_chunk_size(
                 max_file_size - min_file_size)
 
     return int(buffer_size - (buffer_size % 1024))
-
