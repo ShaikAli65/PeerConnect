@@ -10,11 +10,11 @@ from kademlia import utils
 import _path  # noqa
 import main
 import src
-from src.core import connectivity
+from src import managers
 from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
-from src.core import Dock, connections, requests, set_current_remote_peer_object
+from src.core import Dock, connections, connectivity, requests, set_current_remote_peer_object
 from src.managers import profilemanager
 from src.managers.statemanager import State
 
@@ -41,9 +41,9 @@ def _create_listen_socket_mock(bind_address, _):
 
 def test():
     requests._create_listen_socket = _create_listen_socket_mock
-    const.THIS_IP = "127.0.0." + sys.argv[1]
+    const.THIS_IP = '127.0.0.' + sys.argv[1]
     const.SERVER_IP = const.THIS_IP
-    const.MULTICAST_IP_v4 = "127.0.0.1"
+    const.MULTICAST_IP_v4 = '127.0.0.1'
     const.PORT_NETWORK = 4000
     const.DISCOVER_RETRIES = 1
     set_current_remote_peer_object(

@@ -1,4 +1,5 @@
 import json
+import logging
 import logging.config
 import queue
 from contextlib import contextmanager
@@ -36,9 +37,9 @@ def initiate():
     try:
         yield
     finally:
+        logging.getLogger().info("closing logging")
         for q_handler in queue_handlers:
             queue_listener = getattr(q_handler, 'listener')
             queue_listener.stop()
             for handler in queue_listener.handlers:
                 handler.close()
-        print("closing logging")
