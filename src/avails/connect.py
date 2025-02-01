@@ -62,7 +62,7 @@ class Socket(_socket.socket):
     def arecv(self, bufsize):
         return self.__loop.sock_recv(self, bufsize)
 
-    async def aconnect(self, __address) -> Self:
+    async def aconnect(self, __address):
         return await self.__loop.sock_connect(self, __address)
 
     async def asendall(self, data):
@@ -183,11 +183,7 @@ class TCPProtocol(NetworkProtocol):
             _logger.error(f"something wrong with the given address: {address}", exc_info=tpe)
             raise
         sock = cls.create_async_sock(loop, addr_family)
-
-        if timeout:
-            return await _asyncio.wait_for(sock.aconnect(address), timeout)
-
-        await sock.aconnect(address)
+        await (_asyncio.wait_for(sock.aconnect(address), timeout) if timeout else sock.aconnect(address))
         return sock
 
     def __repr__(self):
@@ -363,7 +359,7 @@ async def resolve_address(_peer_obj, to_which):
 
 
 @useables.awaitable(connect_to_peer)
-async def connect_to_peer(_peer_obj=None, to_which: int = CONN_URI, timeout=None, retries: int = 1) -> Socket:
+async def connect_to_peer(_peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
@@ -438,49 +434,57 @@ def is_port_empty(port, addr=None):
 
 def ipv4_multicast_socket_helper(
         sock,
+        local_addr,
         multicast_addr,
         *,
         loop_back=0,
-        reuse_addr=1,
         ttl=1,
         add_membership=True
 ):
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, loop_back)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
     if add_membership:
         group = socket.inet_aton(f"{multicast_addr[0]}")
-        mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+
+        if not const.IS_WINDOWS:
+            mreq = struct.pack('4sl', group, socket.INADDR_ANY)
+        else:
+            mreq = struct.pack('4s4s', group, socket.inet_aton(str(local_addr[0])))
+
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
     sock_options = {
         'membership': add_membership,
         'loop_back': loop_back,
         'ttl': ttl,
-        'reuse_addr': reuse_addr
     }
-    _logger.debug(f"socket{sock} options for multicast {sock_options}")
+    _logger.debug(f"options for multicast {sock_options}, {sock}")
 
 
 def ipv6_multicast_socket_helper(
         sock, multicast_addr,
         *,
-        loop_back=1,
-        reuse_addr=1,
+        loop_back=0,
         add_membership=True,
         hops=1
 ):
     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_LOOP, loop_back)
-    # this function makes socket to go with default interface
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, reuse_addr)
     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, hops)
-    group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
+
+    ip, port, _flow, interface_id = sock.getsockname()
+    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, interface_id)
+
     if add_membership:
-        mreq = group + struct.pack('@I', 0)  # default interface
+        group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
+        mreq = group + struct.pack('@I', interface_id)
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+
     sock_options = {
+        'ip': ip,
+        'port': port,
+        'multicast addr': multicast_addr,
+        'interface': interface_id,
         'membership': add_membership,
         'loop_back': loop_back,
         'hops': hops,
-        'reuse_addr': reuse_addr
     }
-    _logger.debug(f"socket={sock} options for multicast {sock_options}")
+    _logger.debug(f"options for multicast:{sock_options}")

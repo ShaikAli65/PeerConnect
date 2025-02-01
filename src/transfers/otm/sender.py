@@ -1,20 +1,19 @@
 import asyncio
-from contextlib import aclosing
+import mmap
 from pathlib import Path
 
 import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, constants as const, useables as use
-from src.avails.status import StatusMixIn
 from src.core import get_this_remote_peer
 from src.transfers import HEADERS
-from src.transfers._fileobject import FileItem, calculate_chunk_size, send_actual_file
-from src.transfers.otm.relay import OTMPalmTreeProtocol
+from src.transfers.files._fileobject import FileItem, calculate_chunk_size
+from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
 
 
-class FilesSender(StatusMixIn):
+class FilesSender:
 
-    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], timeout, yield_freq):
+    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], timeout):
         self.peer_list = peers
         self.file_items = [FileItem(file_path, 0) for file_path in file_list]
         self.timeout = timeout
@@ -26,8 +25,7 @@ class FilesSender(StatusMixIn):
             peers,
         )
 
-        self.relay = self.palm_tree.relay
-        super().__init__(yield_freq)
+        self.relay: OTMFilesRelay = self.palm_tree.relay
 
     def _make_session(self):
         return OTMSession(
@@ -51,7 +49,7 @@ class FilesSender(StatusMixIn):
         #
         inform_req = self._create_inform_packet()
         yield await self.palm_tree.inform_peers(inform_req)
-        yield await self.relay.session_init()
+        await self.relay.session_init()
         yield await self.palm_tree.update_states()
 
         # setting this future, as we are the actual sender
@@ -69,30 +67,25 @@ class FilesSender(StatusMixIn):
         # ========> debug
 
         yield await self.relay.send_file_metadata(self._make_file_metadata())
-        total_files_size = 0
+
         for file_item in self.file_items:
-            self.status_setup(f"OTM: sending {file_item}:", file_item.seeked, file_item.size)
-            async with aclosing(
-                    send_actual_file(
-                        self.relay.send_file_chunk,
-                        file_item
-                    )
-            ) as sender:
-                async for seeked in sender:
-                    self.update_status(seeked)
-                    if self.should_yield():
-                        yield
-            total_files_size += file_item.size
-
-        await self.relay.send_file_chunk(
-            b'\x00' * (-(total_files_size % self.session.chunk_size) % self.session.chunk_size)
-        )
-
+            yield await self.send_file(file_item)
         """
         References:
         https://en.wikipedia.org/wiki/Leaky_bucket
-        https://en.wikipedia.org/wiki/Token_bucket                
+        https://en.wikipedia.org/wiki/Token_bucket        
+        https://en.wikipedia.org/wiki/Generic_cell_rate_algorithm
+        
         """
+
+    async def send_file(self, file_item):
+        chunk_size = self.session.chunk_size
+        with open(file_item.path, 'rb') as f:
+            seek = file_item.seeked
+            f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            for offset in range(seek, file_item.size, chunk_size):
+                chunk = f_mapped[offset: offset + chunk_size]
+            await self.relay.send_file_chunk(chunk)
 
     def _create_inform_packet(self):
         return WireData(

@@ -12,12 +12,12 @@ from pathlib import Path
 
 from kademlia.utils import digest
 
+import src.core.async_runner  # noqa
 import src.core.eventloop  # noqa
-import src.managers.logmanager as log_manager
 from src.avails import RemotePeer, const, use
 from src.configurations.configure import set_constants, validate_ports
 from src.core import Dock, set_current_remote_peer_object
-from src.managers import get_current_profile
+from src.managers import get_current_profile, logmanager
 
 _logger = logging.getLogger(__name__)
 
@@ -38,11 +38,13 @@ def initiate_bootup():
         config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
     with open(const.PATH_CONFIG, 'w+') as fp:
-        config_map.write(fp)
+        config_map.write(fp)  # noqa
 
     set_constants(config_map)
 
-    Dock.exit_stack.enter_context(log_manager.initiate())
+    Dock.exit_stack.enter_context(logmanager.initiate())
+    const.debug = logging.getLogger().level == logging.DEBUG
+
     ip_addr = get_ip(const.IP_VERSION)
 
     if ip_addr.version == 6:
@@ -54,7 +56,11 @@ def initiate_bootup():
     const.THIS_IP = str(ip_addr)
     # const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{const.THIS_IP=}")
-    validate_ports(const.THIS_IP)
+    try:
+        validate_ports(const.THIS_IP)
+    except OSError as e:
+        e.add_note(f"Addr   : {const.THIS_IP}")
+        raise RuntimeError from e
 
 
 def get_ip(ip_version) -> IPv4Address | IPv6Address:
@@ -90,9 +96,7 @@ def get_v4():
         try:
             config_socket.connect(('1.1.1.1', 80))
             config_ip = config_socket.getsockname()[0]
-        except (OSError, socket.error) as e:
-            # error_log(f"Error getting local ip: {e} from get_local_ip() at line 40 in core/constants.py")
-
+        except OSError:
             config_ip = socket.gethostbyname(socket.gethostname())
             if const.IS_DARWIN or const.IS_LINUX:
                 config_ip = subprocess.getoutput("hostname -I")
@@ -115,8 +119,6 @@ def get_v6():
             ip, _, _, _ = sock_tuple[4]
             ipaddr = IPv6Address(ip)
             if ipaddr.is_link_local:
-                back_up = ipaddr
-            elif not ipaddr.is_link_local:
                 return ipaddr
         return back_up
     elif const.IS_DARWIN or const.IS_LINUX:
@@ -130,12 +132,12 @@ def get_v6_from_shell():
 
         ip_v6 = []
         for line in output_lines:
-            if 'inet6' in line and 'fe80' not in line and '::1' not in line:
+            if 'inet6' in line and '::1' not in line:  # and 'fe80' not in line 
                 ip_v6.append(line.split()[1].split('/')[0])
     except Exception as exp:
         _logger.critical(f"Error occurred at ip lookup", exc_info=exp)
         return
-    return ip_v6[0]
+    return IPv6Address(ip_v6[0])
 
 
 def get_v6_from_api64():
@@ -146,11 +148,10 @@ def get_v6_from_api64():
             data = response.read().decode('utf-8')
             data_dict = json.loads(data)
             config_ip = data_dict.get('ip', config_ip)
-    except (urllib.request.HTTPError, json.JSONDecodeError) as e:
-        # error_log(f"Error getting local ip: {e} from get_local_ip() at line inspect.currentframe().f_lineno in core/constants.py")
+    except (urllib.request.HTTPError, json.JSONDecodeError):
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
-    return config_ip
+    return IPv6Address(config_ip)
 
 
 def clear_logs():
@@ -194,7 +195,7 @@ def write_default_profile():
     parser.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
     with open(const.PATH_CONFIG, 'w+') as fp:
-        parser.write(fp)
+        parser.write(fp)  # noqa
 
 
 def configure_this_remote_peer():

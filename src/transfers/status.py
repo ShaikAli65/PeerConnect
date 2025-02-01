@@ -3,13 +3,11 @@ from collections import abc
 
 from tqdm import tqdm
 
-from src.avails import useables
-
 
 # design decision:
 # two things we can provide to transfer API
 # 1. A StatusIterator
-# 2. A StatusMixIn class that provides functionality to make yield decisions
+# 2. A StatusMixIn class that provides functionality to make yield desicions
 # 1.
 #
 #    class StatusIterator
@@ -27,14 +25,14 @@ from src.avails import useables
 #       * should_yield() -> bool
 #
 #   calls func: update every time some data is transferred
-#   calls func: should_yield to make a decision whether to yield or not
+#   calls func: should_yield to make a desicion whether to yield or not
 #
 #   this requires Transfer classes to work with mix in
 # --
 #   if (1) is used
 #       Then Transfer classes need not be too aware of status updates
 #       transfer classes are isolated from the status things and can focus on transferring contents
-#       preserving single responsibility principle
+#       preserving single responsibilty principle
 
 #       forcing blocking functions like `start sending or receiving` get spawned as an ``asyncio.Task``
 #       further breaking a critical exception control flow in high level handlers
@@ -47,12 +45,11 @@ from src.avails import useables
 #       but exception flow is preserved and code can be read in one go
 #       helps in making debugging simpler
 #  just for the control flow sake we are going with (2)
+#  but (1) is still used when multiple generators update a transfer status concurrently
+
 
 class StatusMixIn:
-
-    # __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
-    # mixin classes are not allowed to have slots as they are placed arbitrarily in class hierarchies and
-    # when multiple inheritance occurs only one parent class is allowed to have slots attribute
+    __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
 
     def __init__(self, yield_freq):
         self.next_yield_point = None
@@ -94,30 +91,41 @@ class StatusMixIn:
             self.next_yield_point = next(self._yield_iterator)
 
 
-@useables.NotInUse
-class _StatusIterator(abc.AsyncIterator):
-    def __init__(self, status, yield_freq, std_out=True):
-        self.status = status
-        self.yield_freq = yield_freq
-        self.progress_bar = None
+class StatusIterator(StatusMixIn, abc.AsyncIterable):
+
+    def __aiter__(self):
+        return self
+
+    __slots__ = "_queue", "exp"
+    _sentinel = object()
+
+    def __init__(self, yield_freq):
+        super().__init__(yield_freq)
         self._queue = asyncio.Queue()
-        self.std_out = std_out
-        self.current_status = None
+        self.exp = self._sentinel
 
-    def setup(self, prefix, initial, final):
-        self.progress_bar = tqdm(
-            range(final),
-            prefix=prefix,
-            unit='B',
-            unit_scale=True,
-            unit_divisor=1024,
-            total=initial
-        )
-        self.progress_bar.update(initial)
+    def update_status(self, status):
+        super().update_status(status)
+        if self.should_yield():
+            self._queue.put(self.current_status)
 
-    def update(self, status):
-        self.progress_bar.update(status)
-        self.current_status = status
+    async def __anext__(self):
+        item = await self._queue.get()
 
-    def __anext__(self):
-        return self._queue.get()
+        if item == self._sentinel:
+            raise StopAsyncIteration
+        elif item == self.exp:
+            raise item
+
+        return item
+
+    async def stop(self, any_exp=None):
+        """
+
+        Args:
+            any_exp: Exception to raise inside async iterator part
+                if not provided then *StopAsyncIteration* is raised inside iterator
+
+        """
+        self.exp = any_exp or self._sentinel
+        await self._queue.put(self.exp)

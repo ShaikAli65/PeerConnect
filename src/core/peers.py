@@ -20,7 +20,7 @@ in a p2p network, working with kademila's routing protocol?
 ### 1.4 perform a gossip-based search
     - send a search request packet to the network
     - maintain a state for that request in the memory
-    - if a peer relates to that string, it replies to that search request by sending a datagram containing it's peer object
+    - if a peer relates to that string, it replies to that search request by sending a datagram containing its peer object
     - gather all the replies and cache them in `Storage`
 
     pros :
@@ -45,7 +45,7 @@ in a p2p network, working with kademila's routing protocol?
     *.2 Full brute force
         we have some details of our logically nearest peers,
         so we brute force that list and get whatever they have
-        again query the list of peers sent by them in loop
+        again queried the list of peers sent by them in loop
 
         cons - we have so much redundant peer objects passing here and there
 
@@ -55,7 +55,7 @@ in a p2p network, working with kademila's routing protocol?
     - each peer's adds themselves to that bucket when they join the network
         - peer's even ping the bucket and re-enter themselves within a time window
 
-    - if a peer owns the bucket, another peer joins the network with more closest id to the bucket
+    - if a peer owns the bucket, another peer joins the network with the closest id to the bucket
       then a redistribution of bucket to that nearest peer will happen and all the authority over that bucket is
       transferred
     - problem, what if someone is querying that bucket in the meanwhile?
@@ -92,13 +92,12 @@ from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import DataWeaver, GossipMessage, RemotePeer, WireData, connect, const, use
+from src.avails import GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
-from src.core import DISPATCHS, Dock, get_gossip, get_this_remote_peer
-from src.transfers import GOSSIP, HEADERS
-from src.webpage_handlers import pagehandle
-from src.webpage_handlers.headers import HANDLE
+from src.core import Dock, connectivity, get_gossip, get_this_remote_peer
+from src.transfers import GOSSIP
+from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
 
@@ -326,7 +325,7 @@ async def get_remote_peer(peer_id):
     with conversions related to ids
 
     This call is expensive as it performs a distributed search across the network
-    try using ``Dock.peer_list`` instead if possible
+    try using ``Dock.peer_list`` instead
 
     Args:
         peer_id(str): id to search for
@@ -356,40 +355,30 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
 
 def new_peer(peer):
     Dock.peer_list.add_peer(peer)
-    data = DataWeaver(
-        header=HANDLE.NEW_PEER,
-        content={
-            "name": peer.username,
-            "ip": peer.ip,
-        },
-        peer_id=peer.peer_id,
-    )
-    pagehandle.dispatch_data(data)
-
-
-async def check_and_remove(peer: RemotePeer):
-    req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
-    ping_data = WireData(
-        header=HEADERS.REMOVAL_PING,
-        msg_id=use.get_unique_id(str)
-    )
-    fut = req_dispatcher.register_reply(ping_data.id)  # noqa
     try:
-        await asyncio.wait_for(fut, const.PING_TIMEOUT)
-    except TimeoutError:
-        # try a tcp connection if network is terrible with UDP
-        try:
-            with await connect.connect_to_peer(peer):
-                pass
-        except (OSError, TimeoutError):
-            # okay this one is cooked
-            Dock.peer_list.remove_peer(peer.peer_id)
-            data = DataWeaver(
-                header=HANDLE.REMOVE_PEER,
-                peer_id=peer.peer_id,
-            )
-            pagehandle.dispatch_data(data)
+        webpage.update_peer(peer).send(None)
+    except StopIteration:
+        pass
 
 
 def remove_peer(peer):
-    asyncio.create_task(check_and_remove(peer))
+    """
+    Does Not directly remove peer
+    Spawns a Task that tries to check connectivity status of peer
+    If peer is reachable then it is not removed
+
+    Args:
+        peer(RemotePeer): peer obj to remove
+    """
+    _logger.warning(f"a request for removal of {peer}")
+    asyncio.create_task(check_and_remove_if_needed(peer))
+
+
+async def check_and_remove_if_needed(peer: RemotePeer):
+    req, fut = connectivity.new_check(peer)
+    if not await fut:
+        _logger.info(f"connectivity check failed, changing status of {peer} to offline")
+        peer.status = RemotePeer.OFFLINE
+        await webpage.update_peer(peer)
+    else:
+        _logger.info(f"connectivity check succeeded for {peer}")

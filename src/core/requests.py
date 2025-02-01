@@ -4,13 +4,14 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, const, unpack_datagram
+from src.avails import InvalidPacket, const, unpack_datagram, use
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
 from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
+from src.managers.statemanager import State
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import RequestsTransport
 
@@ -18,18 +19,23 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate():
-    # const.BIND_IP = const.THIS_IP
     # a discovery request packet is observed in wire shark but that packet is
     # not getting delivered to application socket in linux when we bind to specific interface address
 
     # TL;DR: causing some unknown behaviour in linux system
 
+    if const.IS_WINDOWS:
+        const.BIND_IP = const.THIS_IP
+
     bind_address = (const.BIND_IP, const.PORT_REQ)
+
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
     broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
-    transport = await setup_transport(bind_address, multicast_address, req_dispatcher)
+    await Dock.exit_stack.enter_async_context(req_dispatcher)
+
+    transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
 
     kad_server = _kademlia.prepare_kad_server(transport)
@@ -37,6 +43,7 @@ async def initiate():
 
     # await gossip_initiate(req_dispatcher, transport)
     gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
+    await Dock.exit_stack.enter_async_context(gossip_dispatcher)
 
     Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
@@ -44,31 +51,49 @@ async def initiate():
     Dock.requests_endpoint = transport
     Dock.kademlia_network_server = kad_server
 
-    await discovery_initiate(
-        broad_cast_address,
-        kad_server,
-        multicast_address,
-        req_dispatcher,
-        transport
+    discovery_state = State(
+        "discovery",
+        functools.partial(
+            discovery_initiate,
+            broad_cast_address,
+            kad_server,
+            multicast_address,
+            req_dispatcher,
+            transport
+        ),
+        is_blocking=True,
     )
+
+    add_to_lists = State(
+        "adding this peer to lists",
+        kad_server.add_this_peer_to_lists,
+        is_blocking=True,
+    )
+
+    await Dock.state_manager_handle.put_state(discovery_state)
+    await Dock.state_manager_handle.put_state(add_to_lists)
+    # :todo: introduce context manager support into state-manager.State itself which reduces boilerplate
+
+    Dock.exit_stack.push_async_exit(kad_server)
 
     # await kad_server.add_this_peer_to_lists()
 
 
-async def setup_transport(bind_address, multicast_address, req_dispatcher):
+async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()
-    base_socket = _create_listen_socket(bind_address, multicast_address)
-    transport, proto = await loop.create_datagram_endpoint(
+    base_socket = await _create_listen_socket(bind_address, multicast_address)
+    transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher),
         sock=base_socket
     )
     return transport
 
 
-def _create_listen_socket(bind_address, multicast_addr):
+async def _create_listen_socket(bind_address, multicast_addr):
     loop = asyncio.get_running_loop()
+    family, _, _, _, resolved_bind_address = await anext(use.get_addr_info(*bind_address))
     sock = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
+        loop, resolved_bind_address, family=family
     )
 
     if const.USING_IP_V4:
@@ -79,7 +104,7 @@ def _create_listen_socket(bind_address, multicast_addr):
             log = "not " + log
         _logger.debug(log)
 
-        ipv4_multicast_socket_helper(sock, multicast_addr)
+        ipv4_multicast_socket_helper(sock, bind_address, multicast_addr)
         _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
@@ -95,6 +120,7 @@ async def discovery_initiate(
         transport
 ):
     discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(discover_dispatcher)
     req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
     Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
 
@@ -119,6 +145,10 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
     async def submit(self, req_event: RequestEvent):
         self.msg_arrived(req_event.request)
+
+        # reply registry and dispatcher's registry are most often mutually exclusive
+        # going with try except because the hit rate to the self.registry will be high
+        # when compared to reply registry
         try:
             handler = self.registry[req_event.root_code]
         except KeyError:
@@ -130,9 +160,11 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         # 2. Dispatcher objects that are not coupled with QueueMixIn (async)
         # 3. any type of handlers (async)
 
-        f = handler(req_event)
-        if inspect.isawaitable(f):
-            await f
+        try:
+            await f if inspect.isawaitable(f := handler(req_event)) else None
+        except Exception as e:
+            # we can't afford exceptions here as they move into QueueMixIn
+            _logger.warning(f"{handler}({req_event}) failed with \n", exc_info=e)
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):

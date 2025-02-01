@@ -8,17 +8,18 @@ from typing import NamedTuple
 from kademlia import utils
 
 import _path  # noqa
+import main
 import src
 from src import managers
 from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
-from src.core import Dock, connections, requests, set_current_remote_peer_object
+from src.core import Dock, connections, connectivity, requests, set_current_remote_peer_object
 from src.managers import profilemanager
-from src.managers.statemanager import State, StateManager
+from src.managers.statemanager import State
 
 
-def _create_listen_socket_mock(bind_address, multicast_addr):
+def _create_listen_socket_mock(bind_address, _):
     loop = asyncio.get_running_loop()
     sock = UDPProtocol.create_async_server_sock(
         loop, bind_address, family=const.IP_VERSION
@@ -68,39 +69,42 @@ def get_a_peer() -> RemotePeer | None:
 
 
 def profile_getter():
-    return NamedTuple('MockProfile', (('id', int), ('username', str)))(random.getrandbits(255), getpass.getuser())
+    return NamedTuple("MockProfile", (("id", int), ("username", str)))(
+        random.getrandbits(255), getpass.getuser()
+    )
 
 
 def mock_profile():
-    # const.MULTICAST_IP_v4 = '172.16.196.238'
-    # const.PORT_NETWORK = 4000
-    # requests._create_listen_socket = _create_listen_socket_mock
-    # const.THIS_IP = '172.16.196.238'
-
     src.managers.profilemanager._current_profile = profile_getter()
 
 
+def mock_multicast():
+    const.MULTICAST_IP_v4 = "172.16.210.0"
+    # const.MULTICAST_IP_v4 = '172.16.196.238'
+    const.PORT_NETWORK = 4000
+    requests._create_listen_socket = _create_listen_socket_mock
+
+
 def test_initial_states():
-    s1 = State("setpaths", configure.set_paths)
+    s1 = State("set paths", configure.set_paths)
     s2 = State("boot_up initiating", bootup.initiate_bootup)
+    # s3 = State("mocking up multicast", mock_multicast)
     # s3 = State("adding shit", test)
     s4 = State("loading profiles", profilemanager.load_profiles_to_program)
     s5 = State("mocking profile", mock_profile)
     s6 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s7 = State("printing configurations", configure.print_constants)
-    s8 = State("intitating requests", requests.initiate)
+    s8 = State("initiating requests", requests.initiate)
     s9 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s10 = State("connectivity checker", connectivity.initiate)
     return tuple(locals().values())
 
 
-async def initiate(states):
-    Dock.state_manager_handle = StateManager()
-    await Dock.state_manager_handle.put_states(states)
-    await Dock.state_manager_handle.process_states()
+def start_test(other_states):
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    main.initiate(test_initial_states() + tuple(other_states))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # print(isinstance(RequestsDispatcher, AbstractDispatcher))
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    const.debug = False
-    asyncio.run(initiate(test_initial_states()), debug=True)
+    start_test([])

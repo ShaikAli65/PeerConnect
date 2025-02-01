@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import struct
 from contextlib import aclosing
 from pathlib import Path
@@ -7,12 +6,14 @@ from pathlib import Path
 import umsgpack
 
 from src.avails import connect, const
-from src.avails.exceptions import ConnectionClosed, TransferIncomplete
-from src.avails.status import StatusMixIn
+from src.avails.exceptions import TransferIncomplete
 from src.avails.useables import LONG_INT, recv_int
-from src.transfers._fileobject import FileItem, TransferState, recv_file_contents, send_actual_file
-
-_logger = logging.getLogger(__name__)
+from src.transfers import TransferState
+from src.transfers.files._fileobject import FileItem
+from src.transfers.files._logger import logger as _logger
+from src.transfers.files.receiver import recv_file_contents
+from src.transfers.files.sender import send_actual_file
+from src.transfers.status import StatusMixIn
 
 _FILE_CODE = b'\x00'
 _PATH_CODE = b'\x01'
@@ -180,7 +181,7 @@ class Receiver(StatusMixIn):
             code_len = await recv_int(self.get_bytes)
             parent, item, code = umsgpack.loads(await self.get_bytes(code_len))
             return parent, item, code
-        except (OSError, umsgpack.UnpackException) as exp:
+        except (struct.error, umsgpack.UnpackException) as exp:
             self.state = TransferState.PAUSED
             _logger.error(f"{self.logger_prefix} failed to receive item code, changed state to {self.state}",
                           exc_info=True)
@@ -189,11 +190,11 @@ class Receiver(StatusMixIn):
     async def _recv_file_item(self, file_path: Path):
         try:
             size = await recv_int(self.get_bytes, type=LONG_INT)
-        except ConnectionClosed as cc:
+        except ValueError as ve:
             self.state = TransferState.PAUSED
             _logger.error(f"{self.logger_prefix} failed to receive file size, changed state to {self.state}",
                           exc_info=True)
-            raise TransferIncomplete("failed to receive file size") from cc
+            raise TransferIncomplete("failed to receive file size") from ve
 
         file_item = FileItem(file_path, 0)
         file_item.size = size

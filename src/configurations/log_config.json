@@ -1,7 +1,6 @@
 {
   "version": 1,
   "disable_existing_loggers": false,
-  "log_file_name": "logs.log",
   "formatters": {
     "default": {
       "format": "%(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s"
@@ -15,27 +14,48 @@
       "class": "logging.handlers.RotatingFileHandler",
       "level": "DEBUG",
       "formatter": "detailed",
-      "filename": "this gets set at runtime",
+      "filename": "logs.log",
       "maxBytes": 5242880,
       "backupCount": 3,
       "encoding": "utf8"
     },
+
     "console": {
       "class": "logging.StreamHandler",
       "formatter": "default",
       "level": "DEBUG"
     },
+
     "file": {
       "class": "logging.FileHandler",
-      "filename": ".",
+      "filename": "default.log",
       "formatter": "detailed",
       "level": "DEBUG"
     },
+
     "queue_handler": {
       "class": "logging.handlers.QueueHandler",
       "handlers": ["rfile_handler"]
+    },
+
+    "discovery_sub_handler": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "DEBUG",
+      "formatter": "detailed",
+      "filename": "discovery.log",
+      "maxBytes": 102400,
+      "backupCount": 3,
+      "encoding": "utf8"
+    },
+
+    "discovery_handler": {
+      "class" : "logging.handlers.QueueHandler",
+      "handlers": ["discovery_sub_handler"]
     }
+
   },
+  "queue_handlers": ["queue_handler", "discovery_handler"],
+
   "loggers": {
     "": {
       "handlers": [
@@ -45,7 +65,20 @@
       "level": "DEBUG"
     },
     "websockets": {
-      "handlers": [],
+      "level": "INFO"
+    },
+    "kademlia" : {
+      "level": "INFO"
+    },
+    "rpcudp" : {
+      "level": "INFO"
+    },
+
+    "src.core.discover": {
+      "handlers": [
+        "discovery_handler",
+        "console"
+      ],
       "propagate": false
     }
   }

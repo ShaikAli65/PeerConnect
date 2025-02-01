@@ -3,6 +3,7 @@ All the stuff related to kademlia goes here
 """
 
 import asyncio
+from asyncio import CancelledError
 from typing import override
 
 import kademlia.node
@@ -175,13 +176,7 @@ class PeerServer(network.Server):
         super().__init__(ksize, alpha, peer_id, storage)
         self.add_this_peer_task = None
         self._transport = None
-
-    @override
-    async def bootstrap(self, addrs):
-        r = await super().bootstrap(addrs)
-        if any(r):
-            self.add_this_peer_task = asyncio.create_task(self.add_this_peer_to_lists())
-        return r
+        self.stopping = False
 
     @override
     async def bootstrap_node(self, addr):
@@ -218,18 +213,29 @@ class PeerServer(network.Server):
         return nearest_list_id
 
     async def add_this_peer_to_lists(self):
+        if self.add_this_peer_task:
+            log.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
+            # this function only gets called once in the entire application lifetime
+            return
+
+        self.add_this_peer_task = asyncio.current_task()
+
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
+        await asyncio.sleep(const.DISCOVER_TIMEOUT)
 
         async for _ in use.async_timeouts():
-            if await self.store_nodes_in_list(closest_list_id, [self.node, ]):
+            if self.stopping:
+                break
+            if await self.store_nodes_in_list(closest_list_id, [self.node]):
                 log.debug(f"added this peer object in list_id={closest_list_id}")  # debug
                 break
 
         # entering passive mode
         log.info("entering passive mode for adding this peer to lists")
-        while not Dock.finalizing.is_set():
+
+        while not self.stopping:
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
-            if not await self.store_nodes_in_list(closest_list_id, [self.node, ]):
+            if not await self.store_nodes_in_list(closest_list_id, [self.node]):
                 log.error("failed adding this peer object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
@@ -238,8 +244,8 @@ class PeerServer(network.Server):
 
         nearest = self.protocol.router.find_neighbors(list_key)
         if not nearest:
-            log.info("There are no known neighbors to set key %s",
-                     list_key_id.hex())
+            # log.info("There are no known neighbors to set key %s",
+            #          list_key_id.hex())
             return False
         spider = crawling.NodeSpiderCrawl(self.protocol, list_key, nearest,
                                           self.ksize, self.alpha)
@@ -256,7 +262,8 @@ class PeerServer(network.Server):
         return any(await asyncio.gather(*results))
 
     async def get_remote_peer(self, byte_id):
-        """
+        """Gets Remote Peer Object from network using byte id of that peer
+
         Every call to this function not only gathers remote_peer object corresponding to peer_id
         but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent
@@ -293,27 +300,35 @@ class PeerServer(network.Server):
             # if at least one of the bucket contains at least one node,
             # we can assume that we are in network
 
-            if any(bucket):
+            if any(bucket.nodes):
                 return True
 
         return False
 
+    async def __aenter__(self):
+        self.stopping = False
+        return self
 
-def _get_new_kademlia_server() -> PeerServer:
-    s = PeerServer(storage=Storage())
-    s.node = get_this_remote_peer()
-    s.start()
-    return s
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.stopping = True
+        if self.add_this_peer_task:
+            self.add_this_peer_task.cancel()
+            try:
+                await self.add_this_peer_task
+            except CancelledError:
+                # no need reraise again
+                pass
 
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     handler = KademliaHandler(server)
-    event_header = REQUESTS_HEADERS.KADEMLIA
-    dispatcher.register_handler(event_header, handler)
+    dispatcher.register_handler(REQUESTS_HEADERS.KADEMLIA, handler)
 
 
 def prepare_kad_server(req_transport):
-    kad_server = _get_new_kademlia_server()
+    kad_server = PeerServer(storage=Storage())
+    kad_server.node = get_this_remote_peer()
+    kad_server.start()
     kad_server.transport = KademliaTransport(req_transport)
     return kad_server
 
@@ -325,7 +340,7 @@ def KademliaHandler(kad_server):
     return handle
 
 
-# monkey-patching to custom RPCFindResponse
+# monkey-patching
 crawling.RPCFindResponse = RPCFindResponse
 network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer

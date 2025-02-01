@@ -8,7 +8,7 @@ from typing import BinaryIO, Generator
 import umsgpack
 
 from src.avails import OTMSession, const
-from src.transfers._fileobject import FileItem
+from src.transfers.files._fileobject import FileItem
 from src.transfers.otm.relay import OTMFilesRelay
 
 

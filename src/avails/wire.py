@@ -4,7 +4,7 @@ This module contains all the classes related to how data appears in wire transfe
 
 All classes provide serializing and de-serializing methods to make them ready to transfer over wire.
 
-One special class of wire protocol :class: `RemotePeer` is available in :file: `remotepeer.py`
+One special class of wire protocol ``:class RemotePeer:`` is available in ``:module avails/remotepeer:``
 
 Any Class that wraps data is immutable, once created not modifications are allowed, create another
 
@@ -129,8 +129,12 @@ class WireData:
 
     @classmethod
     def load_from(cls, data: bytes):
-        list_of_attributes = umsgpack.loads(data)
-        header, _id, version, body, peer_id = list_of_attributes
+        try:
+            list_of_attributes = umsgpack.loads(data)
+            header, _id, version, body, peer_id = list_of_attributes
+        except (ValueError, umsgpack.UnpackException) as exp:
+            raise InvalidPacket from exp
+
         return cls(header, _id, peer_id, version=version, **body)
 
     def match_header(self, data):
@@ -192,8 +196,10 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
 
 
 class DataWeaver:
-    """
-    A wrapper class purposely designed to handle data (as {header, content, msg_id, peer_id} format)
+    """A wrapper purposely designed to handle data (as {header, content, msg_id, peer_id} format)
+
+    Only to be used by `webpage_handlers` package, and is completely hidden from core API
+
     """
 
     __annotations__ = {
@@ -274,12 +280,12 @@ class DataWeaver:
         self.__data["msgId"] = message_id
 
     @property
-    def id(self):  # just for compatibilty with registry mix in class
+    def id(self):  # just for compatibility with registry mix in class
         return self.msg_id
 
     @property
     def type(self):
-        return int(self.header[0])
+        return str(self.header[0])
 
     def __str__(self):
         return _json.dumps(self.__data)
@@ -299,10 +305,6 @@ class DataWeaver:
             case _:
                 missing_fields = [field for field in ['msgId', 'content', 'header'] if field not in self.__data]
                 raise InvalidPacket(f"fields missing: {missing_fields}")
-
-
-class StatusMessage:
-    ...
 
 
 class GossipMessage:
