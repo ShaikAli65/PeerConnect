@@ -123,7 +123,7 @@ class StatusIterator(StatusMixIn, abc.AsyncIterable):
     def update_status(self, status):
         super().update_status(status)
         if self.should_yield():
-            self._queue.put(self.current_status)
+            self._queue.put_nowait(self.current_status)
 
     async def __anext__(self):
         item = await self._queue.get()
