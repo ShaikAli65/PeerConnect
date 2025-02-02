@@ -19,7 +19,6 @@ from uuid import uuid4
 import select
 
 from src.avails import const
-from src.avails.exceptions import ConnectionClosed
 
 
 def func_str(func_name):
@@ -42,7 +41,10 @@ def shorten_path(path: Path, max_length):
     selected_parts = list(path.parts)
     part_ptr = 1
     while len("".join(selected_parts)) >= max_length:
+        if len(selected_parts) <= 2:
+            break
         selected_parts.pop(part_ptr)
+
     selected_parts.insert(1, '..')
     return os.path.sep.join(selected_parts)
 
@@ -61,16 +63,16 @@ async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHO
         int: unpacked integer
 
     Raises:
-        ConnectionClosed : on ConnectionResetError or struct.error
+        ValueError : on ConnectionResetError or struct.error
     """
     try:
         byted_int = await get_bytes(type)
         integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
         return integer
     except struct.error as se:
-        raise ConnectionClosed(f"unable to unpack integer from: {byted_int}") from se
+        raise ValueError(f"unable to unpack integer from: {byted_int}") from se
     except ConnectionResetError as ce:
-        raise ConnectionClosed(f"unable to receive integer") from ce
+        raise ValueError(f"unable to receive integer") from ce
 
 
 def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
@@ -299,7 +301,7 @@ def spawn_task(func, *args, bookeep=None, done_callback=None, **kwargs):
         return t
 
 
-def search_relevant_peers(peer_list, search_string) -> list:
+def search_relevant_peers(peer_list, search_string):
     """
     Searches for relevant peers based on the search string,
 
@@ -310,8 +312,8 @@ def search_relevant_peers(peer_list, search_string) -> list:
     Args:
         search_string (str): The string to search for relevance.
         peer_list(PeerDict): The dictionary of id to peer object mapping
-    Returns:
-        yields peers
+    Yields:
+        list: peers
     """
     if not hasattr(peer_list, '_gil_safe'):  # Check if GIL safety has been determined
         peer_list._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL

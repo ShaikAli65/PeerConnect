@@ -5,7 +5,7 @@ import os
 import pathlib
 import struct
 import traceback
-from contextlib import aclosing, asynccontextmanager
+from contextlib import aclosing
 from pathlib import Path
 
 from src.avails import TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
@@ -15,6 +15,8 @@ from src.core import Dock, get_this_remote_peer
 from src.core.handles import TaskHandle
 from src.transfers import HEADERS
 from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
+from src.transfers.status import StatusMixIn
+from src.webpage_handlers import webpage
 
 transfers_book = TransfersBookKeeper()
 _logger = logging.getLogger(__name__)
@@ -26,7 +28,6 @@ async def open_dir_selector():
     return await result
 
 
-@asynccontextmanager
 async def send_directory(remote_peer, dir_path):
     dir_path = Path(dir_path)
     transfer_id = transfers_book.get_new_id()
@@ -46,28 +47,35 @@ async def send_directory(remote_peer, dir_path):
         retries=3
     )
 
-    timeout = 5
     with connection:
-        Wire.send(connection, bytes(dir_recv_signal_packet))
-        await _get_confirmation(connection, timeout)
+        await Wire.send_async(connection, bytes(dir_recv_signal_packet))
+        await _get_confirmation(connection)
 
+        status_mixin = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
         sender = DirSender(
-            dir_path,
+            remote_peer,
             transfer_id,
-            connect.Sender(connection),
-            connect.Receiver(connection),
+            dir_path,
+            status_mixin,
         )
-
+        sender.connection_made(connect.Sender(connection),connect.Receiver(connection))
         _logger.info(f"sending directory: {dir_path} to {remote_peer}")
-        async with aclosing(sender.start()) as s:
-            yield s
-
+        yield_decision = status_mixin.should_yield
+        async with aclosing(sender.send_files()) as s:
+            async for _ in s:
+                if yield_decision():
+                    await webpage.transfer_update(
+                        remote_peer.peer_id,
+                        transfer_id,
+                        sender.current_file,
+                    )
+        status_mixin.close()
         _logger.info(f"completed sending directory {dir_path} to {remote_peer}")
 
 
-async def _get_confirmation(connection, timeout):
+async def _get_confirmation(connection):
     try:
-        confirmation = await asyncio.wait_for(connection.arecv(1), timeout=timeout)
+        confirmation = await connection.arecv(1)
         if confirmation == b'\x00':
             _logger.info("not sending directory, other end rejected")
             raise TransferRejected()
@@ -91,7 +99,8 @@ def pause_transfer(peer_id, transfer_id):
 def DirConnectionHandler():
     async def handler(event: ConnectionEvent):
         transfer_id = event.handshake.body['transfer_id']
-        transfer_id = event.handshake.peer_id + transfer_id
+        peer = Dock.peer_list.get_peer(event.handshake.peer_id)
+        transfer_id = peer.peer_id + transfer_id
 
         connection = event.transport.socket
         dir_name = event.handshake.body['dir_name']
@@ -99,29 +108,36 @@ def DirConnectionHandler():
 
         sender = connect.Sender(connection)
         recv = connect.Receiver(connection)
+        status_iter = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
         receiver = DirReceiver(
+            peer,
             transfer_id,
-            recv,
-            sender,
             dir_path,
-            const.TRANSFER_STATUS_UPDATE_FREQ
+            status_iter,
         )
+        receiver.connection_made(sender, recv)
         try:
             with connection:
-                await sender(b'\x01')
+                await sender(b'\x01')  # :todo: get confirmation from user
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(
-                    f"receiving directory from {Dock.peer_list.get_peer(event.handshake.peer_id)}, saving at {use.shorten_path(dir_path, 20)}"
+                    f"receiving directory from {peer}, saving at {use.shorten_path(dir_path, 40)}"
                 )
-                async with aclosing(receiver.start()) as receiver:
-                    async for item in receiver:
-                        print(item)
-
-                _logger.info(f"directory received from {Dock.peer_list.get_peer(event.handshake.peer_id)}")
+                async with aclosing(receiver.recv_files()) as loop:
+                    yield_decision = status_iter.should_yield
+                    async for _ in loop:
+                        if yield_decision():
+                            await webpage.transfer_update(
+                                peer.peer_id,
+                                transfer_id,
+                                receiver.current_file
+                            )
+                _logger.info(f"directory received from {peer}")
                 transfers_book.add_to_completed(transfer_id, receiver)
         except Exception as e:
+            if const.debug:
+                traceback.print_exc()
             print("*" * 80, e)
-            traceback.print_exc()
 
     return handler
 

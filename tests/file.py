@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 
 import _path  # noqa
 import src.webpage_handlers
@@ -20,7 +21,7 @@ async def test_file_transfer():
         try:
             await handledata.send_file(data)
         except Exception as e:
-            print(e)
+            traceback.print_exc()
 
 
 if __name__ == '__main__':

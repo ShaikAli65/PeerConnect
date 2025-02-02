@@ -3,7 +3,7 @@ import asyncio
 from bisect import bisect_left
 from contextlib import ExitStack, asynccontextmanager
 from itertools import islice
-from typing import BinaryIO, Generator
+from typing import AsyncGenerator, BinaryIO
 
 import umsgpack
 
@@ -12,7 +12,7 @@ from src.transfers.files._fileobject import FileItem
 from src.transfers.otm.relay import OTMFilesRelay
 
 
-class FilesReceiver(asyncio.BufferedProtocol):
+class FilesReceiver:
 
     def __init__(self, session, passive_endpoint, active_endpoint):
         self.file_items = []
@@ -67,7 +67,7 @@ class FilesReceiver(asyncio.BufferedProtocol):
             # we got a chunk that belong to two different files
             await self._write_chunk(chunk[len(chunked_chunk):])
 
-    async def data_receiver(self) -> Generator[None, tuple[int, bytes], None]:
+    async def data_receiver(self) -> AsyncGenerator[None, tuple[int, bytes]]:
 
         with self._open_files():
             while self.current_file_index <= len(self.file_items):

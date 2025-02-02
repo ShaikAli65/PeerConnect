@@ -68,17 +68,19 @@
       "level": "INFO"
     },
     "kademlia" : {
-      "level": "INFO"
+      "level": "INFO",
+      "propagate": false
     },
     "rpcudp" : {
       "level": "INFO"
     },
-
+    "src.core.requests": {
+      "propagate": false
+    },
+    "kademlia.protocol": {
+      "propagate": false
+    },
     "src.core.discover": {
-      "handlers": [
-        "discovery_handler",
-        "console"
-      ],
       "propagate": false
     }
   }

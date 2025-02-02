@@ -4,7 +4,7 @@ from pathlib import Path
 
 import umsgpack
 
-from src.avails import OTMSession, RemotePeer, WireData, constants as const, useables as use
+from src.avails import OTMSession, RemotePeer, WireData, const, use
 from src.core import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
