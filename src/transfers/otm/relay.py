@@ -4,7 +4,6 @@ from contextlib import aclosing
 from typing import TYPE_CHECKING, override
 
 from src.avails import WireData, constants as const
-from src.avails.exceptions import ConnectionClosed
 from src.avails.useables import LONG_INT, recv_int
 from src.core import get_this_remote_peer
 from src.transfers import HEADERS
@@ -118,7 +117,7 @@ class OTMFilesRelay(PalmTreeRelay):
         self._read_link = await self._parent_link_fut
         try:
             current_counter = await recv_int(self._read_link.recv, LONG_INT)
-        except ConnectionClosed:  # again broken
+        except ConnectionResetError:  # again broken
             return await self._handle_read_link_broken()
 
         if current_counter == self.chunk_counter:

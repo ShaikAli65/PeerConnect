@@ -1,9 +1,10 @@
 import asyncio
 import enum
 import logging
+import struct
 import time
 
-from src.avails import WireData, connect, const, use
+from src.avails import RemotePeer, WireData, connect, const, use
 from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core import DISPATCHS, Dock
 from src.transfers import HEADERS
@@ -23,14 +24,13 @@ class CheckRequest:
 
     def __init__(self, peer, serious):
         self.time_stamp = time.monotonic()
-        self.peer = peer
+        self.peer: RemotePeer = peer
         self.serious = serious
         self.status = ConnectivityCheckState.INITIATED
 
 
 @singleton_mixin
 class Connectivity(QueueMixIn):
-
     __slots__ = 'last_checked', 'stop_flag'
 
     def __init__(self, stop_flag=None, *args, **kwargs):
@@ -58,12 +58,13 @@ class Connectivity(QueueMixIn):
 
         req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
 
-        fut = req_dispatcher.register_reply(ping_data.msg_id)  # noqa
+        fut = req_dispatcher.register_reply(ping_data.msg_id)
 
         _logger.info(f"connectivity check initiating for {request}")
         request.status = ConnectivityCheckState.REQ_CHECK
         succeeded = True
 
+        req_dispatcher.transport.sendto(ping_data, request.peer.req_uri)
         try:
             await asyncio.wait_for(fut, const.PING_TIMEOUT)
         except TimeoutError:
@@ -76,7 +77,8 @@ class Connectivity(QueueMixIn):
 
             try:
                 request.status = ConnectivityCheckState.CON_CHECK
-                with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT):
+                with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
+                    await sock.asendall(struct.pack("!I", 0))
                     pass
             except OSError:
                 # okay this one is cooked

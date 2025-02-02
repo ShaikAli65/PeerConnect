@@ -52,10 +52,10 @@ class StatusMixIn:
     __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
 
     def __init__(self, yield_freq):
-        self.next_yield_point = None
+        self.next_yield_point = -1
         self.yield_freq = yield_freq
         self.current_status = 0
-        self._yield_iterator = None
+        self._yield_iterator = iter(range(yield_freq))
         self.progress_bar = None
 
     def update_status(self, status):
@@ -89,6 +89,14 @@ class StatusMixIn:
             spacing = (final_limit - initial_limit) / (self.yield_freq - 1)
             self._yield_iterator = (min(final_limit, int(initial_limit + i * spacing)) for i in range(self.yield_freq))
             self.next_yield_point = next(self._yield_iterator)
+
+    def close(self):
+        if self.progress_bar:
+            self.progress_bar.clear()
+            self.progress_bar.close()
+
+    def __del__(self):
+        self.close()
 
 
 class StatusIterator(StatusMixIn, abc.AsyncIterable):

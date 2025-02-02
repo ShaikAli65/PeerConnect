@@ -104,7 +104,7 @@ class DefaultRumorPolicy(RumorPolicy):
         if not (w := random.random() < gossip_chance):
             print("not gossiping probability check failed")
         return w
-    
+
 
 class RumorMongerProtocol:
     """

@@ -2,21 +2,21 @@ import asyncio
 import struct
 from contextlib import aclosing
 from pathlib import Path
+from typing import override
 
 import umsgpack
 
-from src.avails import connect, const
+from src.avails import const, use
 from src.avails.exceptions import TransferIncomplete
-from src.avails.useables import LONG_INT, recv_int
+from src.avails.useables import recv_int
 from src.transfers import TransferState
 from src.transfers.files._fileobject import FileItem
-from src.transfers.files._logger import logger as _logger
-from src.transfers.files.receiver import recv_file_contents
-from src.transfers.files.sender import send_actual_file
+from src.transfers.files.receiver import Receiver
+from src.transfers.files.sender import Sender
 from src.transfers.status import StatusMixIn
 
-_FILE_CODE = b'\x00'
-_PATH_CODE = b'\x01'
+_FILE_CODE = b'\x01'
+_PATH_CODE = b'\x02'
 
 
 def rename_directory_with_increment(root_path: Path, relative_path: Path):
@@ -50,70 +50,60 @@ def rename_directory_with_increment(root_path: Path, relative_path: Path):
     return new_path
 
 
-class Sender(StatusMixIn):
-    timeout = 5
+class DirSender(Sender):
+    """
+                |  DIR -> INT(4) | PARENT | NAME | goto `code`
+                |
+    (1B) | code |
+                |
+                |  FILE -> INT(4) | PARENT | NAME | FILE_SIZE(8) | FILE CONTENTS | goto `code`
+    """
 
-    def __init__(self, root_path, transfer_id, send_func, recv_func, yield_freq=10):
+    timeout = const.DEFAULT_TRANSFER_TIMEOUT
+
+    def __init__(self, peer_obj, transfer_id, root_path, status_updater):
         """
         Args:
             root_path(Path): root path to read from and start the transfer
             transfer_id(str): transfer id that synchronized both sides
-            send_func(connect.Sender): function to call upon to send file data when ready
-            recv_func(connect.Receiver) : function to call upon to receive file data when ready
-            yield_freq(int): status yield frequency
+            status_updater(StatusMixIn): StatusMixIn object to update status of transfer
         """
-        self.state = TransferState.PREPARING
+        super().__init__(peer_obj, transfer_id, [], status_updater)
         self.root_path = root_path
-        self.current_file = None
-        self.id = transfer_id
-        self.send_bytes = send_func
-        self.recv_bytes = recv_func
-        self.proceed_flag = asyncio.Event()
         self.dir_iterator = self.root_path.rglob('*')
-        self.current_dir_sending_state_info = None
-        super().__init__(yield_freq)
+        self._current_file = None
 
-    async def start(self):
+    async def send_files(self):
+        self.send_files_task = asyncio.current_task()
+
         for item in self.dir_iterator:
-            if self.proceed_flag.is_set():
+            if self.to_stop:
                 break
-            await self.send_bytes(b'\x01')  # code to inform that there are more files to get
 
-            await self._send_code(item)
-            yield item
+            if item.is_dir():
+                await self.__send_code_parts(_PATH_CODE, item)
+                self._current_file = FileItem(item, 0)
+                continue
+
             if item.is_file():
-                file_item = FileItem(path=item, seeked=0)
+                self._current_file = await self._send_file_item(item)
+                if self.current_file.size > 0:
+                    async with aclosing(self.send_one_file(self.current_file)) as sender:
+                        async for i in sender:
+                            yield i
 
-                await self.send_bytes(struct.pack('!Q', file_item.size))
+                # print("OK" if await self.recv_func(1) == _FILE_CODE else "NOT OK")
 
-                if file_item.size <= 0:
-                    continue
+        await self.send_func(b'\x00')  # code to inform end of transfer
 
-                async with aclosing(
-                        self._send_file(file_item)
-                ) as sender:
-                    async for i in sender:
-                        yield i
+    @override
+    async def _send_file_item(self, file_path):
+        await self.__send_code_parts(_FILE_CODE, file_path)
+        file_item = FileItem(file_path, 0)
+        await self.send_func(struct.pack('!Q', file_item.size))
+        return file_item
 
-        await self.send_bytes(b'\x00')  # code to inform end of transfer
-
-    async def _send_file(self, file_item):
-
-        self.status_setup(f"[DIR] sending : {file_item}", file_item.seeked, file_item.size)
-        async with aclosing(
-                send_actual_file(self.send_bytes, file_item)
-        ) as file_sender:
-            async for seeked in file_sender:
-                self.update_status(seeked)
-                if self.should_yield():
-                    yield file_item, seeked
-
-    async def _send_code(self, path: Path):
-        code = None
-        if path.is_dir():
-            code = _PATH_CODE
-        elif path.is_file():
-            code = _FILE_CODE
+    async def __send_code_parts(self, code, path: Path):
 
         rel_path = path.relative_to(self.root_path)
         parent = rel_path.parent
@@ -124,13 +114,16 @@ class Sender(StatusMixIn):
         if const.IS_LINUX:
             name = name.replace('\\', '_')
 
-        dumped_code = umsgpack.dumps((parent, name, code))
-        await self.send_bytes(struct.pack('!I', len(dumped_code)))
-        await self.send_bytes(dumped_code)
-        return parent, name, code
+        dumped_code = umsgpack.dumps((parent, name))
+        try:
+            await self.send_func(code)  # code to inform that there are more files to get
+            await self.send_func(struct.pack('!I', len(dumped_code)) + dumped_code)
+            print(f"code_len={len(dumped_code)}")
 
-    def stop(self):
-        pass
+        except Exception as exp:
+            self.handle_exception(exp)
+
+        return parent, name
 
     def pause(self):
         pass
@@ -138,129 +131,86 @@ class Sender(StatusMixIn):
     def continue_transfer(self):
         pass
 
+    async def cancel(self):
+        pass
 
-class Receiver(StatusMixIn):
-    def __init__(self, transfer_id, recv_func, send_func, download_path, status_yield_freq):
-        self.id = transfer_id
-        self.get_bytes = recv_func
-        self.send_bytes = send_func
-        self.stop_flag = asyncio.Event()
-        self.download_path = download_path
-        self.state = TransferState.PREPARING
-        self.logger_prefix = f"DIR[{self.id}]"
-        self._current_item = None
-        super().__init__(status_yield_freq)
+    @property
+    def current_file(self):
+        return self._current_file
 
-    async def start(self):
+
+class DirReceiver(Receiver):
+    """
+                                     ------------------------------------------------
+                              (FILE) INT(4) | parents | name | FILE SIZE(8) | FILE_CONTENTS
+                              |      -------------------------------------------------
+                              |
+        (1 byte) STOP or FILE
+                              |
+                              |
+                              |      ----------------------
+                              (PATH) INT(4) | parents | name
+                                     ----------------------
+
+    """
+
+    def __init__(self, peer_obj, transfer_id, download_path, status_iter):
+        super().__init__(peer_obj, transfer_id, download_path, status_iter)
+
+    async def recv_files(self):
         self.state = TransferState.RECEIVING
-        stopper = self.stop_flag.is_set
-        while not stopper():
-            what = await self.get_bytes(1)
-            if what == b'\x00':  # no more files to get
+        self.recv_files_task = asyncio.current_task()
+
+        while True:
+            if not (code := await self._should_proceed()):
                 break
 
-            parent, item_name, code = await self._recv_code()
-            print('received code', (parent, item_name, code))  # debug
-            full_path = Path(self.download_path, parent, item_name)
-
             if code == _FILE_CODE:
-                file_item = await self._recv_file_item(full_path)
-                async with aclosing(self._handle_file(file_item)) as f:
-                    async for t in f:
-                        yield t
+                async with aclosing(self._recv_file_once()) as loop:
+                    print(self.current_file)  # debug
+                    async for _ in loop:
+                        yield _
+                # await self.send_func(code)
 
             elif code == _PATH_CODE:
+                parent, item_name = await self._recv_parts()
+                full_path = Path(self.download_path, parent, item_name)
                 full_path.mkdir(parents=True)
-                print("creating directory", full_path)  # debug
+                print("creating directory", use.shorten_path(full_path, 40))  # debug
+                self._current_file = FileItem(full_path, 0)
                 yield full_path, None
 
-            # await self._echo_code(code)
-
-    async def _recv_code(self):
+    @override
+    async def _recv_file_item(self):
+        parent, item_name = await self._recv_parts()
         try:
-            code_len = await recv_int(self.get_bytes)
-            parent, item, code = umsgpack.loads(await self.get_bytes(code_len))
-            return parent, item, code
-        except (struct.error, umsgpack.UnpackException) as exp:
-            self.state = TransferState.PAUSED
-            _logger.error(f"{self.logger_prefix} failed to receive item code, changed state to {self.state}",
-                          exc_info=True)
-            raise TransferIncomplete("failed to receive item code") from exp
-
-    async def _recv_file_item(self, file_path: Path):
-        try:
-            size = await recv_int(self.get_bytes, type=LONG_INT)
+            size = await use.recv_int(self.recv_func, use.LONG_INT)
         except ValueError as ve:
-            self.state = TransferState.PAUSED
-            _logger.error(f"{self.logger_prefix} failed to receive file size, changed state to {self.state}",
-                          exc_info=True)
-            raise TransferIncomplete("failed to receive file size") from ve
+            raise TransferIncomplete from ve
+        file = FileItem(Path(self.download_path, parent, item_name), 0)
+        file.size = size
+        return file
 
-        file_item = FileItem(file_path, 0)
-        file_item.size = size
-        return file_item
-
-    async def _handle_file(self, file_item):
-
-        if file_item.size <= 0:
-            print("[DIR] empty file, creating", file_item)
-            file_item.path.touch()
-            return
-
-        self.status_setup(f"[DIR] receiving file: {file_item}", file_item.seeked, file_item.size)
-
-        receiver = recv_file_contents(self.get_bytes, file_item)
+    async def _recv_parts(self):
         try:
-            async with aclosing(receiver) as receiver:
-                async for received_size in receiver:
-                    self.update_status(received_size)
-                    if self.should_yield():
-                        yield file_item, received_size
-
-        except TransferIncomplete:
-            self.state = TransferState.PAUSED
-            self._reraise_error_and_log(f"file contents, {file_item}")
-
-    async def _echo_code(self, code):
-        try:
-            await self.send_bytes(code)  # echo back code to confirm
-        except OSError as oe:
-            self.state = TransferState.PAUSED
-            _logger.error(f"{self.logger_prefix} failed to send confirmation code, changed state to {self.state}")
-            raise TransferIncomplete("failed to send confirmation code") from oe
+            code_len = await recv_int(self.recv_func)
+            print(f"{code_len=}")
+            parent, item_name = umsgpack.loads(await self.recv_func(code_len))
+            if const.IS_WINDOWS:
+                item_name = item_name.replace("\\", "_")
+            return parent, item_name
+        except (struct.error, umsgpack.UnpackException) as exp:
+            raise TransferIncomplete("failed to receive item code") from exp
 
     def pause(self):
         self.state = TransferState.PAUSED
-        self.send_bytes.pause()
-        self.get_bytes.pause()
+        self.send_func.pause()
+        self.recv_func.pause()
 
     def resume(self):
         self.state = TransferState.RECEIVING
-        self.send_bytes.resume()
-        self.get_bytes.resume()
+        self.send_func.resume()
+        self.recv_func.resume()
 
     async def continue_transfer(self):
         self.state = TransferState.RECEIVING
-        self.stop_flag.clear()
-
-        if self._current_item:
-            await self.send_bytes(b'\x01')
-            packed_seeked = struct.pack('!Q', self._current_item.seeked)
-            await self.send_bytes(packed_seeked)
-            # synchronizing file state
-
-        await self.send_bytes(b'\x00')
-        # resuming transfer
-        async with aclosing(self.start()) as recv:
-            async for status in recv:
-                yield status
-
-    def _reraise_error_and_log(self, msg):
-        _logger.error(
-            f"{self.logger_prefix} failed to receive {msg}, changed state to {self.state}",
-            exc_info=True
-        )
-        raise
-
-    async def stop(self):
-        pass

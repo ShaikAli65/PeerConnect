@@ -47,9 +47,7 @@ async def new_dir_transfer(command_data: DataWeaver):
     if not remote_peer:
         raise Exception(f"cannot find remote peer object for given id{peer_id}")
 
-    async with send_directory(remote_peer, dir_path) as sender:
-        async for message in sender:
-            print(message)
+    await send_directory(remote_peer, dir_path)
 
 
 async def send_file(command_data: DataWeaver):

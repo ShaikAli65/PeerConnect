@@ -2,7 +2,7 @@ from pathlib import Path
 
 import umsgpack
 
-from src.avails import use
+from src.avails import const, use
 
 
 def stringify_size(size):
@@ -60,6 +60,10 @@ class FileItem:
     @staticmethod
     def load_from(data: bytes, file_parent_path):
         name, size, seeked = umsgpack.loads(data)
+
+        if const.IS_WINDOWS:
+            name = name.replace('\\', '_')
+
         file = FileItem(Path(file_parent_path, name), seeked)
         file._name = name
         file.size = size

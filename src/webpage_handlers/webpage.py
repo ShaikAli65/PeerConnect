@@ -59,13 +59,16 @@ async def transfer_update(peer_id, transfer_id, file_item):
     front_end_data_dispatcher(status_update)
 
 
-async def tranfer_incomplete(peer_id, transfer_id, file_item, detail=None):
+async def transfer_incomplete(peer_id, transfer_id, file_item, detail=None):
     content = {
-        'item_path': str(file_item.path),
-        'received': file_item.seeked,
         'transfer_id': transfer_id,
         'cancelled': True,
     }
+    if file_item is not None:
+        content.update({'item_path': str(file_item.path),
+                        'received': file_item.seeked,
+                        })
+
     content.update({'error': str(detail)} if detail else {})
 
     status_update = DataWeaver(

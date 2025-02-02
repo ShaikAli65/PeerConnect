@@ -30,7 +30,10 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
         super().__init__(transport=transport, stop_flag=None, *args, **kwargs)
         self.max_buffer_size = buffer_size
         self.buffer = deque(maxlen=buffer_size)
-        self._is_transport_connected = True
+        if transport:
+            self._is_transport_connected = True
+        else:
+            self._is_transport_connected = False
 
     def update_transport(self, transport):
         self._is_transport_connected = True
@@ -69,14 +72,10 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
 
-        if self._is_transport_connected:
-            # try to flush all the buffer
-            await self.submit(DataWeaver())
-
         if len(self.buffer) > 0:
-            logger.warning(f"websocket buffer not empty {self.buffer}")
-
-        await self.transport.close()
+            logger.warning(f"websocket buffer not empty len={len(self.buffer)}")
+        if self.transport:
+            await self.transport.close()
 
 
 @singleton_mixin
@@ -116,10 +115,12 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
 
     async def __aenter__(self):
         await self.dispatchers_exit_stack.__aenter__()
+        await super().__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        return await self.dispatchers_exit_stack.__aexit__(exc_type, exc_val, exc_tb)
+        await self.dispatchers_exit_stack.__aexit__(exc_type, exc_val, exc_tb)
+        return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
 class ReplyRegistry(ReplyRegistryMixIn):
@@ -203,7 +204,7 @@ async def start_websocket_server():
 
 
 async def initiate_page_handle():
-    front_end = FrontEndDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
+    front_end = FrontEndDispatcher(stop_flag=Dock.finalizing.is_set)
     front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher(None))
     front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher(None))
 
@@ -213,15 +214,19 @@ async def initiate_page_handle():
     data_disp = FrontEndDataDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
 
     msg_disp = MessageFromFrontEndDispatcher(ReplyRegistry())
+
     msg_disp.register_handler(headers.DATA, data_disp.submit)
     msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
 
-    async with AsyncExitStack() as exit_s:
-        await exit_s.enter_async_context(front_end)
-        await exit_s.enter_async_context(msg_disp)
-        await exit_s.enter_async_context(start_websocket_server())
-        await Dock.finalizing.wait()
+    await Dock.exit_stack.enter_async_context(front_end)
+    await Dock.exit_stack.enter_async_context(msg_disp)
+    await Dock.exit_stack.enter_async_context(start_websocket_server())
 
+    # async with AsyncExitStack() as exit_s:
+    #     await exit_s.enter_async_context(front_end)
+    #     await exit_s.enter_async_context(msg_disp)
+    #     await exit_s.enter_async_context(start_websocket_server())
+    #     await Dock.finalizing.wait()
 
 @overload
 def front_end_data_dispatcher(data, expect_reply=False): ...

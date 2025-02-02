@@ -73,6 +73,6 @@ class StreamTransport:
         return await self.socket.asendall(data_size + data)
 
     async def recv(self):
-        data_size = use.recv_int(self.socket.arecv)
+        data_size = await use.recv_int(self.socket.arecv)
         data = await self.socket.arecv(data_size)
         return data
