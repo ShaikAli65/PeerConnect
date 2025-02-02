@@ -6,7 +6,7 @@ from src.avails import const, use
 
 
 def stringify_size(size):
-    sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    sizes = ["B", "KB", "MB", "GB", "TB"]
     index = 0
     while size >= 1024 and index < len(sizes) - 1:
         size /= 1024
@@ -33,7 +33,8 @@ class FileItem:
         Both methods handle edge cases, such as ensuring the original extension exists before attempting to restore it.
 
     """
-    __slots__ = '_name', 'size', 'path', 'seeked', 'original_ext'
+
+    __slots__ = "_name", "size", "path", "seeked", "original_ext"
 
     def __init__(self, path, seeked):
         """Initializes the file object, fetching its size and name from the filesystem.
@@ -82,7 +83,9 @@ class FileItem:
         return str_str
 
     def __repr__(self):
-        return f"FileItem(name={self.name[:10]}, size={self.size}, seeked={self.seeked})"
+        return (
+            f"FileItem(name={self.name[:10]}, size={self.size}, seeked={self.seeked})"
+        )
 
     def add_error_ext(self, error_ext):
         """
@@ -107,8 +110,10 @@ class FileItem:
 
         If the original extension is not available, raises a ValueError.
         """
-        if not hasattr(self, 'original_ext'):
-            raise ValueError("Original extension is not set; cannot remove_and_close error extension.")
+        if not hasattr(self, "original_ext"):
+            raise ValueError(
+                "Original extension is not set; cannot remove_and_close error extension."
+            )
 
         # Restore the original name by replacing the current suffix with the original suffix
         original_path = self.path.with_suffix(self.original_ext)
@@ -126,12 +131,12 @@ class FileItem:
 
 def add_error_ext(file_item: FileItem, root_path, error_ext):
     """
-        Handles file error by renaming the file with an error extension.
+    Handles file error by renaming the file with an error extension.
 
-        Arguments:
-            file_item(FileItem): file item to operate on
-            root_path(Path): directory to validate new name with
-            error_ext(str): dotted extension to add to file item
+    Arguments:
+        file_item(FileItem): file item to operate on
+        root_path(Path): directory to validate new name with
+        error_ext(str): dotted extension to add to file item
     """
     try:
         file_item.add_error_ext(error_ext)
@@ -141,15 +146,15 @@ def add_error_ext(file_item: FileItem, root_path, error_ext):
 
 def remove_error_ext(file_item, root_path):
     """
-        Removes file error ext by renaming the file with its actual file extension.
+    Removes file error ext by renaming the file with its actual file extension.
 
-        Note:
-            the parameter ``file_item`` should have gone through add_error_ext function call which
-            preserves the actual extension
+    Note:
+        the parameter ``file_item`` should have gone through add_error_ext function call which
+        preserves the actual extension
 
-        Args:
-            file_item(FileItem): file item to operate on
-            root_path(Path): directory to validate new name with
+    Args:
+        file_item(FileItem): file item to operate on
+        root_path(Path): directory to validate new name with
     """
     try:
         file_item.remove_error_ext()
@@ -188,13 +193,13 @@ def validatename(file_item: FileItem, root_path) -> str:
 
 
 def calculate_chunk_size(
-        file_size: int,
-        *,
-        min_size=64 * 1024,  # 64 KB
-        max_size=(2 ** 20) * 2,  # 2 MB
+    file_size: int,
+    *,
+    min_size=64 * 1024,  # 64 KB
+    max_size=(2**20) * 2,  # 2 MB
 ):
-    min_file_size = 2 ** 10
-    max_file_size = (2 ** 30) * 10  # 10 GB
+    min_file_size = 2**10
+    max_file_size = (2**30) * 10  # 10 GB
 
     if file_size <= min_file_size:
         return min_size
@@ -203,6 +208,7 @@ def calculate_chunk_size(
     else:
         # Linear scaling between min and max buffer sizes
         buffer_size = min_size + (max_size - min_size) * (file_size - min_file_size) / (
-                max_file_size - min_file_size)
+            max_file_size - min_file_size
+        )
 
     return int(buffer_size - (buffer_size % 1024))
