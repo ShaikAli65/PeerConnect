@@ -1,16 +1,16 @@
 from src.avails import const
 
 if const.IS_WINDOWS:
-    from ._interfaces_windows import get_interfaces
+    from ._interfaces_windows import get_interfaces as _get_interfaces
 else:
-    from ._interfaces_linux import get_interfaces
+    from ._interfaces_linux import get_interfaces as _get_interfaces
 
-_if_info = get_interfaces(const.IP_VERSION)
+_if_info: list | None = None
 
 
 def reset():
     global _if_info
-    _if_info = get_interfaces(const.IP_VERSION)
+    _if_info = _get_interfaces(const.IP_VERSION)
 
 
 def get_ip_with_ifname(if_name: str):
@@ -27,5 +27,8 @@ def get_ip_with_ip(ip_addr: str):
     raise ValueError("No interface with given ip")
 
 
-if __name__ == "__main__":
-    print(_if_info)
+def get_interfaces():
+    if _if_info is None:
+        reset()
+
+    return _if_info
