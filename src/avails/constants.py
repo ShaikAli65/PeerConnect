@@ -5,17 +5,17 @@ from threading import Lock
 from typing import Optional, TYPE_CHECKING
 
 CLEAR_LOGS = 1
-USERNAME = 'admin'
-SERVER_IP = '127.0.0.1'
-THIS_IP = '127.0.0.1'
+USERNAME = "admin"
+SERVER_IP = "127.0.0.1"
+THIS_IP = "127.0.0.1"
 
 MULTICAST_IP_v4 = "239.1.11.11"
 MULTICAST_IP_v6 = "ff02::1:6"
 BROADCAST_IP = "255.255.255.255"
-_BIND_IP_V4 = '0.0.0.0'
-_BIND_IP_V6 = '::'
+_BIND_IP_V4 = "0.0.0.0"
+_BIND_IP_V6 = "::"
 BIND_IP = _BIND_IP_V4
-WEBSOCKET_BIND_IP = 'localhost'
+WEBSOCKET_BIND_IP = "localhost"
 
 
 IS_WINDOWS = platform == "win32"
@@ -23,10 +23,10 @@ IS_DARWIN = platform == "darwin"
 IS_LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
-DEFAULT_CONFIG_FILE = 'default_config.ini'
-DEFAULT_PROFILE_NAME = 'default_profile.ini'
+DEFAULT_CONFIG_FILE = "default_config.ini"
+DEFAULT_PROFILE_NAME = "default_profile.ini"
 
-FORMAT = 'utf-8'
+FORMAT = "utf-8"
 
 DATA = 0x00
 SIGNAL = 0x01
@@ -38,25 +38,26 @@ PORT_SERVER = 3487
 PORT_PAGE = 12260
 PORT_PAGE_SERVE = 40000
 
-PATH_CURRENT = '../..'
-PATH_LOG = '../../logs'
-PATH_PROFILES = '../../profiles'
-PATH_PAGE = '../webpage'
-PATH_DOWNLOAD = path.join(path.expanduser('~'), 'Downloads')
-PATH_CONFIG = f'..\\configurations\\{DEFAULT_CONFIG_FILE}'
-PATH_LOG_CONFIG = f'..\\configurations\\log_config.json'
+PATH_CURRENT = "../.."
+PATH_LOG = "../../logs"
+PATH_PROFILES = "../../profiles"
+PATH_PAGE = "../webpage"
+PATH_DOWNLOAD = path.join(path.expanduser("~"), "Downloads")
+PATH_CONFIG = f"..\\configurations\\{DEFAULT_CONFIG_FILE}"
+PATH_LOG_CONFIG = "..\\configurations\\log_config.json"
 
-IP_VERSION = socket.AF_INET
+IP_VERSION = socket.AF_INET6
 USING_IP_V4 = True
 USING_IP_V6 = False
 
-FILE_ERROR_EXT = '.pc-unconfirmedownload'
+FILE_ERROR_EXT = ".pc-unconfirmedownload"
 debug = False
 
 PROTOCOL = None
 
 if TYPE_CHECKING:
     from src.avails.connect import TCPProtocol
+
     PROTOCOL: Optional[TCPProtocol]
 
 LOCK_PRINT = Lock()
@@ -76,11 +77,11 @@ PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS = 7
 TRANSFER_STATUS_FREQ = 10
 
 VERSIONS = {
-    'GLOBAL': 1.1,
-    'RP': 1.0,
-    'FO': 1.0,
-    'DO': 1.0,
-    'WIRE':1.0,
+    "GLOBAL": 1.1,
+    "RP": 1.0,
+    "FO": 1.0,
+    "DO": 1.0,
+    "WIRE": 1.0,
 }
 DISCOVER_RETRIES = 1
 DISCOVER_TIMEOUT = 3
