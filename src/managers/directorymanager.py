@@ -74,6 +74,7 @@ async def send_directory(remote_peer, dir_path):
 
 
 async def _get_confirmation(connection):
+    timeout = 100000  # :todo: structure better
     try:
         confirmation = await connection.arecv(1)
         if confirmation == b'\x00':
@@ -98,16 +99,15 @@ def pause_transfer(peer_id, transfer_id):
 
 def DirConnectionHandler():
     async def handler(event: ConnectionEvent):
+        connection = event.connection
+
         transfer_id = event.handshake.body['transfer_id']
         peer = Dock.peer_list.get_peer(event.handshake.peer_id)
         transfer_id = peer.peer_id + transfer_id
 
-        connection = event.transport.socket
         dir_name = event.handshake.body['dir_name']
         dir_path = rename_directory_with_increment(const.PATH_DOWNLOAD, Path(dir_name))
 
-        sender = connect.Sender(connection)
-        recv = connect.Receiver(connection)
         status_iter = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
         receiver = DirReceiver(
             peer,
@@ -115,10 +115,10 @@ def DirConnectionHandler():
             dir_path,
             status_iter,
         )
-        receiver.connection_made(sender, recv)
+        receiver.connection_made(connection.send, connection.recv)
         try:
             with connection:
-                await sender(b'\x01')  # :todo: get confirmation from user
+                await connection.send(b'\x01')  # :todo: get confirmation from user
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(
                     f"receiving directory from {peer}, saving at {use.shorten_path(dir_path, 40)}"

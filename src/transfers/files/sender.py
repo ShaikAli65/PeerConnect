@@ -9,11 +9,12 @@ from src.avails import const, use
 from src.avails.exceptions import CancelTransfer, InvalidStateError
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
-from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonExceptionHandlersMixIn
+from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonExceptionHandlersMixIn, PauseMixIn
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
 
 
-class Sender(CommonAExitMixIn, CommonExceptionHandlersMixIn, AbstractSender):
+class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, AbstractSender):
+
     version = const.VERSIONS['FO']
     timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
@@ -111,11 +112,21 @@ class Sender(CommonAExitMixIn, CommonExceptionHandlersMixIn, AbstractSender):
                 yield items
 
     def attach_files(self, paths_list):
+        if self.state not in (TransferState.PAUSED, TransferState.SENDING):
+            raise InvalidStateError(f"expected state to be {(TransferState.PAUSED, TransferState.SENDING)}, found {self.state=}")
+
         self.file_list.extend(FileItem(Path(path), 0) for path in paths_list)
 
+    def resume(self):
+        if self.state is not TransferState.PAUSED:
+            return
+        self.state = TransferState.SENDING
+        self.recv_func.resume()
+        self.send_func.resume()
+
     async def cancel(self):
-        if self.state is not TransferState.RECEIVING:
-            raise InvalidStateError(f"{self.state}")
+        if self.state not in (TransferState.SENDING, TransferState.PAUSED):
+            raise InvalidStateError(f"{self.state=}")
 
         self.to_stop = True
         self._expected_errors.add(ct := CancelTransfer())

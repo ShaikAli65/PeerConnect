@@ -1,12 +1,10 @@
-import asyncio
 import traceback
 from pathlib import Path
 
-from src.avails import BaseDispatcher, DataWeaver, Wire, WireData, get_dialog_handler
+from src.avails import BaseDispatcher, DataWeaver, Wire, WireData
 from src.core import Dock, get_this_remote_peer, peers
-from src.core.connections import Connector
+from src.core.connector import Connector
 from src.managers import directorymanager, filemanager
-from src.managers.directorymanager import send_directory
 from src.transfers import HEADERS
 from src.webpage_handlers import logger
 from src.webpage_handlers.headers import HANDLE
@@ -47,11 +45,11 @@ async def new_dir_transfer(command_data: DataWeaver):
     if not remote_peer:
         raise Exception(f"cannot find remote peer object for given id{peer_id}")
 
-    await send_directory(remote_peer, dir_path)
+    await directorymanager.send_directory(remote_peer, dir_path)
 
 
 async def send_file(command_data: DataWeaver):
-    selected_files = await open_file_selector()
+    selected_files = await filemanager.open_file_selector()
     if not selected_files:
         return
 
@@ -62,8 +60,8 @@ async def send_file(command_data: DataWeaver):
             print(sender)
     except OSError as e:
         traceback.print_exc()
-        print("{eror}", e)
-        # pagehandle.dispatch_data(DataWeaver)
+        print("{error}", e)
+        # page_handle.dispatch_data(DataWeaver)
 
 
 async def send_text(command_data: DataWeaver):
@@ -83,7 +81,7 @@ async def send_text(command_data: DataWeaver):
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
-    selected_files = await open_file_selector()
+    selected_files = await filemanager.open_file_selector()
     if not selected_files:
         return
     peer_ids = command_data.content["peerList"]
@@ -96,12 +94,4 @@ async def send_files_to_multiple_peers(command_data: DataWeaver):
         # :todo: feed updates to frontend
 
 
-async def send_dir_to_multiple_peers(command_data: DataWeaver): ...
-
-
-async def open_file_selector():
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)  # noqa
-    if any(result) and result[0] == '.':
-        return []
-    return result
+async def send_dir_to_multiple_peers(_: DataWeaver): ...

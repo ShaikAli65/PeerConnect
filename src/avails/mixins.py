@@ -4,7 +4,7 @@ from asyncio import TaskGroup
 from functools import wraps
 from typing import Dict, Type, TypeVar
 
-from src.avails import HasID
+from src.avails import HasID, use
 
 
 class ReplyRegistryMixIn:
@@ -69,6 +69,10 @@ class QueueMixIn:
     async def __aenter__(self):
         await self._task_group.__aenter__()
         return self
+
+    def start(self):
+        """A handy way to enter task group context synchronously, Useful in constructors """
+        use.sync(self._task_group.__aenter__())
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return await self._task_group.__aexit__(exc_type, exc_val, exc_tb)

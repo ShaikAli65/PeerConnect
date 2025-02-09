@@ -24,6 +24,8 @@ class HANDLE(enum.StrEnum):
     VERIFICATION = "1han verification"
     SET_PROFILE = "1set selected profile"
     TRANSFER_UPDATE = "1transfer update"
+    FAILED_TO_REACH = "1failed to reach"
+
     REQ_PEER_NAME_FOR_DISCOVERY = '1get a peer name for discovery'
     SEND_DIR = "0send_a_directory"
     SEND_FILE = "0send_file_to_peer"
@@ -61,3 +63,4 @@ if TYPE_CHECKING:
     SEND_FILE_TO_MULTIPLE_PEERS = "0send_file_to_multiple_peers"
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
     REQ_FOR_FILE_TRANSFER = "0a file recv request has been arrived"
+    FAILED_TO_REACH = "1failed to reach"

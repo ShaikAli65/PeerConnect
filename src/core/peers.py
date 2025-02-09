@@ -355,10 +355,7 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
 
 def new_peer(peer):
     Dock.peer_list.add_peer(peer)
-    try:
-        webpage.update_peer(peer).send(None)
-    except StopIteration:
-        pass
+    use.sync(webpage.update_peer(peer))
 
 
 def remove_peer(peer):
@@ -371,14 +368,24 @@ def remove_peer(peer):
         peer(RemotePeer): peer obj to remove
     """
     _logger.warning(f"a request for removal of {peer}")
+    req, fut = connectivity.new_check(peer)
+
+    if fut.done():
+        # fast complete without spawning a Task if result is available
+        return may_be_remove(peer, fut.result())
+
     asyncio.create_task(check_and_remove_if_needed(peer))
 
 
 async def check_and_remove_if_needed(peer: RemotePeer):
     req, fut = connectivity.new_check(peer)
-    if not await fut:
+    may_be_remove(peer, await fut)
+
+
+def may_be_remove(peer, what):
+    if not what:
         _logger.info(f"connectivity check failed, changing status of {peer} to offline")
         peer.status = RemotePeer.OFFLINE
-        await webpage.update_peer(peer)
+        use.sync(webpage.update_peer(peer))
     else:
         _logger.info(f"connectivity check succeeded for {peer}")

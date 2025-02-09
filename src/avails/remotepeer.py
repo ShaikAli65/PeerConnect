@@ -4,8 +4,6 @@ from src.avails import const
 
 
 class RemotePeer:
-    ONLINE = 1
-    OFFLINE = 0
     """Used to represent a peer details in network
 
     There are some attributes that are kept to keep this class compatible with kademlia package
@@ -22,8 +20,11 @@ class RemotePeer:
 
         * If any attributes are added then they should be added to __iter__ method
     """
-    version = const.VERSIONS['RP']
 
+    ONLINE = 1
+    OFFLINE = 0
+
+    version = const.VERSIONS['RP']
     __annotations__ = {
         'username': str,
         'uri': tuple[str, int],

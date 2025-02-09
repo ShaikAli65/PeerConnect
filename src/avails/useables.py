@@ -3,6 +3,7 @@ import functools
 import inspect
 import os
 import platform
+import select
 import socket
 import struct
 import subprocess
@@ -15,8 +16,6 @@ from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from sys import _getframe  # noqa
 from typing import Annotated, Awaitable, Final
 from uuid import uuid4
-
-import select
 
 from src.avails import const
 
@@ -117,7 +116,7 @@ async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIR
         >>>     # any working code that needs to be executed with delays
     """
 
-    for timeout in get_timeouts(initial,factor, max_retries, max_value):
+    for timeout in get_timeouts(initial, factor, max_retries, max_value):
         await asyncio.sleep(timeout)
         yield
 
@@ -186,6 +185,23 @@ def from_coroutine(level=2, _cache={}):  # noqa
         else:
             _cache[f_code] = False
             return False
+
+
+def sync(coro):
+    """Sync hack to coro
+    As coroutines are iterators internally so it's fine
+
+    Note:
+        works only if there is not much awaiting happening within coro
+        Don't pass asyncio.Future, it is clever ;)
+
+    Args:
+        coro: coroutine that needs to be completed on
+    """
+    try:
+        return coro.send(None)
+    except StopIteration as si:
+        return si.value
 
 
 def awaitable(syncfunc):
@@ -332,7 +348,7 @@ def search_relevant_peers(peer_list, search_string):
 _AddressFamily = Annotated[AddressFamily, 'v4 or v6 family']
 _SockType = Annotated[socket.SOCK_STREAM | socket.SOCK_DGRAM, 'STREAM OR UDP']
 _IpProto = Annotated[IPPROTO_TCP | IPPROTO_UDP, "tcp or udp protocol"]
-_CannonName = Annotated[str, 'cannonical name']
+_CannonName = Annotated[str, 'canonical name']
 _SockAddr = Annotated[tuple[str, int] | tuple[str, int, int, int], "address tuple[2] if v4 tuple[4] if v6"]
 
 

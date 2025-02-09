@@ -27,6 +27,14 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         """
 
     @abstractmethod
+    def pause(self):
+        """Pause send/recv for a moment, usually until resume is called"""
+
+    @abstractmethod
+    def resume(self):
+        """Resume send/recv"""
+
+    @abstractmethod
     async def cancel(self):
         """Cancel the transfer"""
 
@@ -134,3 +142,12 @@ class CommonExceptionHandlersMixIn:
             self._handle_os_error(exp)
 
         raise exp
+
+
+class PauseMixIn:
+    __slots__ = ()
+
+    def pause(self):
+        self.state = TransferState.PAUSED
+        self.send_func.pause()
+        self.recv_func.pause()

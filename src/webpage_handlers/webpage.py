@@ -13,6 +13,12 @@ async def ask_user_for_a_peer():
     return reply.content.get('peerName', None)
 
 
+async def failed_to_reach(peer):
+    front_end_data_dispatcher(
+        DataWeaver(header=headers.FAILED_TO_REACH, content={"peer": peer})
+    )
+
+
 async def update_peer(peer):
     data = DataWeaver(
         header=headers.NEW_PEER if peer.status == RemotePeer.ONLINE else headers.REMOVE_PEER,

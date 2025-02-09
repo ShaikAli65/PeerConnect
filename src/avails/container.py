@@ -220,7 +220,6 @@ class SocketCache:
             return False
 
     def remove_and_close(self, peer_id):
-        # with self.__thread_lock:
         try:
             sock = self.socket_cache[peer_id]
             del self.socket_cache[peer_id]

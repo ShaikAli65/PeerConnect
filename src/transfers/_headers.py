@@ -5,12 +5,14 @@ class HEADERS:
     REMOVAL_PING = b"pinging peer for removal"
     CMD_RECV_FILE_AGAIN = b"recv file again "
     CMD_VERIFY_HEADER = b"verify header   "
+    CMD_BASIC_CONN = b"basic connection"
     CMD_RECV_FILE = b"receive file    "
     CMD_CLOSING_HEADER = b"close connection"
     CMD_TEXT = b"this is message "
     CMD_RECV_DIR = b"cmd to recv dir "
     CMD_FILE_CONN = b"connection for file transfer"
     CMD_DIR_CONN = b'connection for dir transfer'
+
     GOSSIP_CREATE_SESSION = b"gossip_session_activate"
     GOSSIP_DOWNGRADE_CONN = "gossip_downgrade_connection"
     GOSSIP_UPGRADE_CONN = "gossip_upgrade_connection"
@@ -50,3 +52,9 @@ class GOSSIP:
     SEARCH_REQ = "\x01"
     SEARCH_REPLY = "\x02"
     CREATE_SESSION = "\x03"
+
+
+class BANDWIDTH:
+    __slots__ = ()
+    CHECK_INITIATE = "\x00"
+    REJECTED = "\x01"

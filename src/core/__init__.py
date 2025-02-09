@@ -5,7 +5,7 @@ from typing import Optional, TYPE_CHECKING
 
 from src.avails import (
     BaseDispatcher, PeerDict as _PeerDict,
-    RemotePeer as _RemotePeer, SocketCache as _SocketCache
+    RemotePeer as _RemotePeer
 )
 
 
@@ -18,7 +18,6 @@ class DISPATCHS(IntEnum):
 
 
 class Dock:
-    connected_peers = _SocketCache()
     peer_list = _PeerDict()
     state_manager_handle = None
     global_gossip = None

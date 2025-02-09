@@ -9,10 +9,9 @@ from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, _kademlia, discover, gossip
-from src.core.discover import DiscoveryReplyHandler, DiscoveryRequestHandler
+from src.core import DISPATCHS, Dock, _kademlia, gossip
+from src.core.discover import discovery_initiate
 from src.managers.statemanager import State
-from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import RequestsTransport
 
 _logger = logging.getLogger(__name__)
@@ -55,7 +54,6 @@ async def initiate():
         "discovery",
         functools.partial(
             discovery_initiate,
-            broad_cast_address,
             kad_server,
             multicast_address,
             req_dispatcher,
@@ -110,31 +108,6 @@ async def _create_listen_socket(bind_address, multicast_addr):
         ipv6_multicast_socket_helper(sock, multicast_addr)
         _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
     return sock
-
-
-async def discovery_initiate(
-        broad_cast_address,
-        kad_server,
-        multicast_address,
-        req_dispatcher,
-        transport
-):
-    discover_dispatcher = discover.DiscoveryDispatcher(transport, Dock.finalizing.is_set)
-    await Dock.exit_stack.enter_async_context(discover_dispatcher)
-    req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
-    Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
-
-    discovery_reply_handler = DiscoveryReplyHandler(kad_server)
-    discovery_req_handler = DiscoveryRequestHandler(discover_dispatcher.transport)
-
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
-
-    await discover.send_discovery_requests(
-        discover_dispatcher.transport,
-        broad_cast_address,
-        multicast_address
-    )
 
 
 class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):

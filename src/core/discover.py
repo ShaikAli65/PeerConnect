@@ -1,3 +1,38 @@
+"""
+Discovery State Machine
+-----------------------
+
+  [ initiate ]
+       │
+       ▼
+  [ Register Handlers ]
+       │
+       ▼
+  [ Send Discovery Requests ]
+      (up to const.DISCOVERY_RETRIES, with exponential backoff)
+       │
+       ▼
+  ┌──────────────────────────────────────────────┐
+  │  Is server bootstrapped?                     │
+  ├──────────────────────────┬───────────────────┤
+  │ Yes                      │ No
+  │ (return quick to passive)│
+  │                          ▼
+  │            Enter Passive Mode
+  │          (send periodic requests)
+  │                 │
+  │                 │
+  │          Server Bootstrapped? <───────────┐
+  ├                ─┬─                        │
+  │                 │                         │
+  │ Yes             │ No                      │
+  │ (continue)      │                         │
+  ▼                 ▼                         │
+    [ Passive Mode ]                          │
+  (Wait DISCOVERY_TIMEOUT seconds) ───────────┘
+
+"""
+
 import asyncio
 import logging
 import traceback
@@ -7,12 +42,35 @@ from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import Dock, get_this_remote_peer
-from src.transfers import DISCOVERY
+from src.core import DISPATCHS, Dock, get_this_remote_peer
+from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import DiscoveryTransport
 from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
+
+
+async def discovery_initiate(
+        kad_server,
+        multicast_address,
+        req_dispatcher,
+        transport
+):
+    discover_dispatcher = DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    await Dock.exit_stack.enter_async_context(discover_dispatcher)
+    req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
+    Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
+
+    discovery_reply_handler = DiscoveryReplyHandler(kad_server)
+    discovery_req_handler = DiscoveryRequestHandler(discover_dispatcher.transport)
+
+    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
+    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
+
+    await send_discovery_requests(
+        discover_dispatcher.transport,
+        multicast_address
+    )
 
 
 def DiscoveryReplyHandler(kad_server):
@@ -72,7 +130,7 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
                 return
 
 
-async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
+async def send_discovery_requests(transport, multicast_addr):
     this_rp = get_this_remote_peer()
     ping_data = bytes(
         WireData(
@@ -83,14 +141,12 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
     )
 
     async def send_discovery_packet():
-        if const.USING_IP_V4:
-            async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
-                transport.sendto(ping_data, broad_cast_addr)
-                # transport.transport._sock.sendto(ping_data,broad_cast_addr)
-            _logger.debug(f"sent discovery request to broadcast {broad_cast_addr}", )
 
         async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
             transport.sendto(ping_data, multicast_addr)
+            if Dock.kademlia_network_server.is_bootstrapped:
+                break
+
         _logger.debug(f"sent discovery request to multicast {multicast_addr}")
 
     async def enter_passive_mode():
@@ -120,5 +176,8 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
 
 async def _try_asking_user(transport, discovery_packet):
     if peer_name := await webpage.ask_user_for_a_peer():
-        async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
-            transport.sendto(discovery_packet, addr)
+        try:
+            async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
+                transport.sendto(discovery_packet, addr)
+        except OSError:
+            await webpage.failed_to_reach(peer_name)
