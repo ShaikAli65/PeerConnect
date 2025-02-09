@@ -39,14 +39,14 @@ class Connectivity(QueueMixIn):
         super().__init__(*args, **kwargs)
 
     async def submit(self, request: CheckRequest):
+        self.last_checked[request.peer] = request, (fut := asyncio.ensure_future(self._new_check(request)))
+        return await fut
 
+    def check_for_recent(self, request):
         if request.peer in self.last_checked:
             prev_request, fut = self.last_checked[request.peer]
             if request.time_stamp - prev_request.time_stamp <= const.PING_TIME_CHECK_WINDOW:
-                return await fut
-
-        self.last_checked[request.peer] = request, (fut := asyncio.ensure_future(self._new_check(request)))
-        return await fut
+                return fut
 
     @staticmethod
     async def _new_check(request):
@@ -100,9 +100,13 @@ class Connectivity(QueueMixIn):
         await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
-def new_check(peer):
+def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
     connector = Connectivity()
     req = CheckRequest(peer, False)
+    if fut := connector.check_for_recent(req):
+        # return fast without spawning a task
+        return req, fut
+
     return req, connector(req)
 
 

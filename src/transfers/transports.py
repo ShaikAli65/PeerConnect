@@ -2,7 +2,7 @@ import struct
 from asyncio import BaseTransport
 from typing import override
 
-from src.avails import WireData, connect, use
+from src.avails import WireData
 from src.transfers import REQUESTS_HEADERS
 
 
@@ -20,7 +20,7 @@ class RequestsTransport(BaseTransport):  # just for type hinting
         >>> class Subclass(RequestsTransport):
         >>>     _trigger = b'\x11'  # some code of one byte
     or:
-        >>> RequestsTransport(transport, _event_trigger_header=b'\x23')
+        >>> RequestsTransport(transport, _event_trigger_header=b'\x23')  # noqa
 
     """
 
@@ -59,20 +59,3 @@ class DiscoveryTransport(RequestsTransport):
 class GossipTransport(RequestsTransport):
     __slots__ = ()
     _trigger = REQUESTS_HEADERS.GOSSIP
-
-
-class StreamTransport:
-    __slots__ = 'socket',
-
-    def __init__(self, socket_transport: connect.Socket):
-        super().__init__()
-        self.socket = socket_transport
-
-    async def send(self, data: bytes):
-        data_size = struct.pack("!I", len(data))
-        return await self.socket.asendall(data_size + data)
-
-    async def recv(self):
-        data_size = await use.recv_int(self.socket.arecv)
-        data = await self.socket.arecv(data_size)
-        return data
