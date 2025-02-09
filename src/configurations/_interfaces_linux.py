@@ -1,24 +1,20 @@
 import ctypes
 import socket
 import struct
-from collections import namedtuple
 from typing import Literal
-
-from src.avails import constants
+from src.avails.connect import IPAddress
 
 
 AF_INET = socket.AF_INET
 AF_INET6 = socket.AF_INET6
 IFF_LOOPBACK = 0x8
-IPAddress = namedtuple("IPAddress", ["ip", "scope_id", "if_name"])
+IFF_UP = 0x1  # Interface is up.
+IFF_RUNNING = 0x40
 
 
-def __get_interfaces(
-    address_falmily: Literal[AF_INET, AF_INET6], __result=[]
+def get_interfaces(
+    address_family: Literal[AF_INET, AF_INET6],
 ) -> list[IPAddress]:
-    if __result:
-        return __result[0]
-
     # Load the C library (adjust the name if needed on your system)
     libc = ctypes.CDLL("libc.so.6")
 
@@ -83,17 +79,19 @@ def __get_interfaces(
     p = ifap
     while p:
         iface = p.contents
+        flags = iface.ifa_flags
         if iface.ifa_addr:
             family = iface.ifa_addr.contents.sa_family
             iface_name = iface.ifa_name.decode("utf-8") if iface.ifa_name else None
-
-            if not (family == AF_INET or family == AF_INET6) or bool(
-                iface.ifa_flags & IFF_LOOPBACK
+            if (
+                not (family == AF_INET or family == AF_INET6)
+                or bool(flags & IFF_LOOPBACK)
+                or not bool(flags & IFF_RUNNING)
             ):
                 p = iface.ifa_next
                 continue
 
-            if family == address_falmily == AF_INET:
+            if family == address_family == AF_INET:
                 addr_in = ctypes.cast(
                     iface.ifa_addr, ctypes.POINTER(sockaddr_in)
                 ).contents
@@ -101,7 +99,7 @@ def __get_interfaces(
 
                 # -1 is just to fill the field but ipv4 donot have any scope_ids
                 scope_id = -1
-            elif family == address_falmily == AF_INET6:  # for ip v6
+            elif family == address_family == AF_INET6:  # for ip v6
                 addr_in = ctypes.cast(
                     iface.ifa_addr, ctypes.POINTER(sockaddr_in6)
                 ).contents
@@ -114,24 +112,16 @@ def __get_interfaces(
             else:
                 p = iface.ifa_next
                 continue
-            interfaces.append(
-                IPAddress(ip=ip_addr, scope_id=scope_id, if_name=iface_name)
+
+            res = IPAddress(
+                ip=ip_addr,
+                scope_id=scope_id,
+                if_name=iface_name,
+                friendly_name=iface_name,
             )
+            interfaces.append(res)
+
         p = iface.ifa_next
 
     freeifaddrs(ifap)
     return interfaces
-
-
-def get_ip_with_ifname(if_name: str):
-    for ip in __get_interfaces(constants.IP_VERSION):
-        if ip.if_name == if_name:
-            return ip
-    raise ValueError("No interface found with given name")
-
-
-def get_ip_with_ip(ip_addr: str):
-    for ip in __get_interfaces(constants.IP_VERSION):
-        if ip.ip == ip_addr:
-            return ip
-    raise ValueError("No interface with given ip")
