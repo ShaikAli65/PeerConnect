@@ -1,45 +1,67 @@
+"""
+Closely coupled with core.connector
+Works with accepting incoming connections
+lazy loading is used to avoid circular import through initiate_acceptor function
+"""
+
 import asyncio
 import logging
-import textwrap
 import threading
 from asyncio import TaskGroup
 from collections import defaultdict
 from contextlib import AsyncExitStack
 from inspect import isawaitable
 from types import ModuleType
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 
-from src.avails import (BaseDispatcher, InvalidPacket, RemotePeer, SocketCache, SocketStore, Wire, WireData, connect,
+from src.avails import (BaseDispatcher, InvalidPacket, Wire, WireData, connect,
                         const, use)
+from src.avails.connect import Connection
+from src.avails.constants import MAX_CONCURRENT_MSG_PROCESSING
 from src.avails.events import ConnectionEvent, StreamDataEvent
 from src.avails.mixins import QueueMixIn, singleton_mixin
-from src.core import DISPATCHS, Dock, get_this_remote_peer
+from src.core import DISPATCHS, Dock, peers
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
 from src.transfers import HEADERS
-from src.transfers.transports import StreamTransport
 from src.webpage_handlers import pagehandle
+
+connector = None  # this is a global reference to lazy imported core.connector to avoid circular imports
+
+if TYPE_CHECKING:
+    pass
 
 _logger = logging.getLogger(__name__)
 
 
-async def initiate_connections():
-    acceptor = Acceptor(finalizer=Dock.finalizing.is_set, connected_peers=Dock.connected_peers)
+async def initiate_acceptor():
+    connection_dispatcher = ConnectionDispatcher(None, Dock.finalizing.is_set)
+    data_dispatcher = StreamDataDispatcher(None, Dock.finalizing.is_set)
+
+    data_handler = ProcessDataHandler(data_dispatcher, Dock.finalizing.is_set)
+
+    data_dispatcher.register_handler(HEADERS.CMD_TEXT, pagehandle.MessageHandler())
+    data_dispatcher.register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
+
+    c_reg_handler = connection_dispatcher.register_handler
+    c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
+    c_reg_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
+    c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
+    c_reg_handler(HEADERS.CMD_BASIC_CONN, data_handler)
+
+    Dock.dispatchers[DISPATCHS.CONNECTIONS] = connection_dispatcher
+    Dock.dispatchers[DISPATCHS.STREAM_DATA] = data_dispatcher
+
+    global connector
+    import src.core.connector
+    connector = src.core.connector
+    acceptor = Acceptor(connection_disp=connection_dispatcher, finalizer=Dock.finalizing.is_set)
+
+    # warning, careful with order
+    await Dock.exit_stack.enter_async_context(data_dispatcher)
+    await Dock.exit_stack.enter_async_context(connection_dispatcher)
     await Dock.exit_stack.enter_async_context(acceptor)
-    acceptor.data_dispatcher.register_handler(
-        HEADERS.CMD_TEXT,
-        pagehandle.MessageHandler()
-    )
 
-    Dock.dispatchers[DISPATCHS.CONNECTIONS] = acceptor.connection_dispatcher
-    Dock.dispatchers[DISPATCHS.STREAM_DATA] = acceptor.data_dispatcher
-    register_handler = acceptor.connection_dispatcher.register_handler
-
-    register_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler())
-    register_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
-    register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler(Dock.connected_peers))
-    register_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
-    # acceptor.connection_dispatcher.register_handler(HEADERS.GOSSIP_UPDATE_STREAM_LINK)
     await acceptor.initiate()
 
 
@@ -56,6 +78,11 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
 
 
 class StreamDataDispatcher(QueueMixIn, BaseDispatcher):
+    """
+    Works with ProcessDataHandler that sends any events into StreamDataDispatcher
+    which dispatches event into respective handlers
+
+    """
     __slots__ = ()
 
     async def submit(self, event: StreamDataEvent):
@@ -80,26 +107,31 @@ def ProcessDataHandler(data_dispatcher, finalizer: Callable[[], bool]):
         finalizer(Callable[[], bool]): a flag to check while looping, should return False to stop loop
 
     """
+    limiter = asyncio.Semaphore(MAX_CONCURRENT_MSG_PROCESSING)
+
+    async def process_once(event):
+        async with limiter:
+            raw_data_len = await use.recv_int(event.connection.recv)
+            if raw_data_len <= 0:
+                return
+
+            raw_data = await event.connection.recv(raw_data_len)
+            data = WireData.load_from(raw_data)
+            print(f"[STREAM DATA] new data {data}")  # debug
+            data_event = StreamDataEvent(data, event.connection)
+            await asyncio.wait_for(data_dispatcher(data_event), const.TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
 
     async def handler(event: ConnectionEvent):
-        with event.transport.socket:
-            stream_socket = event.transport
+        with event.connection:
             while finalizer():
-                raw_data = await stream_socket.recv()
-
-                data = WireData.load_from(raw_data)
-
-                _logger.info(f"[STREAM DATA] new data {data}")  # debug
-                data_event = StreamDataEvent(data, stream_socket)
-                data_dispatcher(data_event)
+                await process_once(event)
 
     return handler
 
 
-def ConnectionCloseHandler(connected_peers: SocketCache):
+def ConnectionCloseHandler():
     async def handler(event: StreamDataEvent):
-        event.transport.socket.close()
-        connected_peers.remove_and_close(event.data.peer_id)
+        event.connection.socket.close()
 
     return handler
 
@@ -116,9 +148,9 @@ class Acceptor:
         '__loop': asyncio.AbstractEventLoop,
     }
 
-    current_socks = SocketStore()
+    current_connections = {}
 
-    def __init__(self, finalizer, connected_peers, ip=None, port=None):
+    def __init__(self, connection_disp, finalizer, ip=None, port=None):
         self._exit_stack = AsyncExitStack()
         self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
         self.stopping = finalizer
@@ -127,14 +159,10 @@ class Acceptor:
         self.currently_in_connection = defaultdict(int)
         self.max_timeout = 90
         _logger.info(f"Initiating Acceptor {self.address}")
-        self.connected_peers = connected_peers
-        self.connection_dispatcher = ConnectionDispatcher(None, finalizer)
-        self.data_dispatcher = StreamDataDispatcher(None, finalizer)
-        data_handler = ProcessDataHandler(self.data_dispatcher, finalizer)
-        self.connection_dispatcher.register_handler(HEADERS.CMD_VERIFY_HEADER, data_handler)
+        self.connection_dispatcher = connection_disp
 
     async def initiate(self):
-        self.connection_dispatcher.transport = self.main_socket
+
         with await self._start_socket() as self.main_socket:
             _logger.info("Listening for connections")
             async with TaskGroup() as tg:
@@ -196,12 +224,11 @@ class Acceptor:
         handshake = await self._perform_handshake(initial_conn)
         if not handshake:
             return
-
-        transport = StreamTransport(initial_conn)
+        peer = await peers.get_remote_peer_at_every_cost(handshake.peer_id)
+        conn = Connection.create_from(initial_conn, peer)
         self._exit_stack.enter_context(initial_conn)
-        con_event = ConnectionEvent(transport, handshake)
+        con_event = ConnectionEvent(conn, handshake)
         self.connection_dispatcher(con_event)
-        self.connected_peers.add_peer_sock(handshake.peer_id, initial_conn)
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
@@ -218,7 +245,7 @@ class Acceptor:
             _logger.error(f"Socket error", exc_info=True)
             initial_conn.close()
         except InvalidPacket:
-            _logger.error("Initial handshake packet is invalid, closing connection", exc_info=True)
+            _logger.error(f"Initial handshake packet is invalid, closing connection {raw_hand_shake=}", exc_info=True)
             initial_conn.close()
         return None
 
@@ -231,9 +258,6 @@ class Acceptor:
 
     async def __aenter__(self):
         await self._exit_stack.__aenter__()
-        await self._exit_stack.enter_async_context(self.data_dispatcher)
-        await self._exit_stack.enter_async_context(self.connection_dispatcher)
-
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -245,49 +269,3 @@ class Acceptor:
 
     def __repr__(self):
         return f'Nomad({self.address[0]}, {self.address[1]})'
-
-
-class Connector:
-    _current_connected = connect.Socket()
-
-    # :todo: make this more advanced such that it can handle multiple requests related to same socket
-
-    @classmethod
-    async def get_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
-        use.echo_print('a connection request made to :', peer_obj.uri)  # debug
-        if sock := Dock.connected_peers.is_connected(peer_obj.peer_id):
-            pr_str = (f"[CONNECTIONS] cache hit !{textwrap.fill(peer_obj.username, width=10)}"
-                      f" and socket is connected"
-                      f"{sock.getpeername()}")
-            _logger.info(pr_str)
-            cls._current_connected = sock
-            return sock
-        del sock
-        peer_sock = await cls._add_connection(peer_obj)
-        await cls._verifier(peer_sock)
-        _logger.debug(
-            ("cache miss --current :",
-             f"{textwrap.fill(peer_obj.username, width=10)}",
-             f"{peer_sock.getpeername()[:2]}",
-             f"{peer_sock.getsockname()[:2]}")
-        )
-        Dock.connected_peers.add_peer_sock(peer_obj.peer_id, peer_sock)
-        cls._current_connected = peer_sock
-        # use.echo_print(f"handle signal to page, that we can't reach {peer_obj.username}, or he is offline")
-        return peer_sock
-
-    @classmethod
-    async def _add_connection(cls, peer_obj: RemotePeer) -> connect.Socket:
-        connection_socket = await connect.connect_to_peer(peer_obj, timeout=1, retries=3)
-        Dock.connected_peers.add_peer_sock(peer_obj.id, connection_socket)
-        return connection_socket
-
-    @classmethod
-    async def _verifier(cls, connection_socket):
-        verification_data = WireData(
-            header=HEADERS.CMD_VERIFY_HEADER,
-            msg_id=get_this_remote_peer().peer_id,
-        )
-        await Wire.send_async(connection_socket, bytes(verification_data))
-        _logger.info(f"Sent verification to {connection_socket.getpeername()}")  # debug
-        return True

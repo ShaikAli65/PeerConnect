@@ -1,5 +1,6 @@
-from typing import NamedTuple, TYPE_CHECKING
+from typing import NamedTuple
 
+from src.avails.connect import Connection
 from src.avails.wire import GossipMessage, WireData
 
 
@@ -15,18 +16,10 @@ class GossipEvent(NamedTuple):
 
 
 class ConnectionEvent(NamedTuple):
-    if TYPE_CHECKING:
-        from src.transfers.transports import StreamTransport
-        transport: StreamTransport
-    else:
-        transport: None
+    connection: Connection
     handshake: WireData
 
 
 class StreamDataEvent(NamedTuple):
     data: WireData
-    if TYPE_CHECKING:
-        from src.transfers.transports import StreamTransport
-        transport: StreamTransport
-    else:
-        transport: None
+    connection: Connection
