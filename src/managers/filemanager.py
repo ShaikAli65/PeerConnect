@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
 from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, Wire, WireData, connect, \
-    const
+    const, get_dialog_handler
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer, peers
@@ -76,6 +76,7 @@ async def _handle_sending(file_sender, peer_id):
             may_be_confirmed = True
             await stack.enter_async_context(prepare_connection(file_sender))
             accepted = await asyncio.wait_for(file_sender.recv_func(1), const.DEFAULT_TRANSFER_TIMEOUT)
+            print(f"{accepted=}")
             if accepted == b'\x00':
                 may_be_confirmed = False
         except OSError as oe:  # unable to connect
@@ -135,7 +136,7 @@ async def _send_finalize(file_sender, peer_id):
 
 
 @asynccontextmanager
-async def file_receiver(file_req: WireData, connection, status_updater):
+async def file_receiver(file_req: WireData, connection: connect.Connection, status_updater):
     """
     Just a wrapper which does bookkeeping for FileReceiver object
     """
@@ -149,19 +150,17 @@ async def file_receiver(file_req: WireData, connection, status_updater):
         const.PATH_DOWNLOAD,
         status_updater
     )
-    sender = connect.Sender(connection)
-    receiver = connect.Receiver(connection)
 
-    file_handle.connection_made(sender, receiver)
+    file_handle.connection_made(connection.send, connection.recv)
 
     transfers_book.add_to_current(file_req.id, file_handle)
-
-    yield file_handle
-
-    if file_handle.state == TransferState.COMPLETED:
-        transfers_book.add_to_completed(file_req.id, file_handle)
-    if file_handle.state == TransferState.PAUSED:
-        transfers_book.add_to_continued(file_req.id, file_handle)
+    try:
+        yield file_handle
+    finally:
+        if file_handle.state == TransferState.COMPLETED:
+            transfers_book.add_to_completed(file_req.id, file_handle)
+        if file_handle.state == TransferState.PAUSED:
+            transfers_book.add_to_continued(file_req.id, file_handle)
 
 
 def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer]):
@@ -206,7 +205,7 @@ def new_otm_request_arrived(req_data: WireData, addr):
 
 def FileConnectionHandler():
     async def handler(event: ConnectionEvent):
-        with event.transport.socket:
+        with event.connection:
             file_req = event.handshake
             _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
 
@@ -214,7 +213,7 @@ def FileConnectionHandler():
             #     await event.transport.send(b'\x00')
             #     return
 
-            await event.transport.socket.asendall(b'\x01')
+            await event.connection.send(b'\x01')
 
             _logger.debug(f"scheduling file transfer request {file_req!r}")
 
@@ -223,7 +222,7 @@ def FileConnectionHandler():
                     status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
                     receiver_handle = await exit_stack.enter_async_context(file_receiver(
                         file_req,
-                        event.transport.socket,
+                        event.connection,
                         status_updater,
                     ))
                     receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
@@ -253,7 +252,7 @@ def OTMConnectionHandler():
         This is the final function call related to an otm session, all other rpc' s from now are made
         internally from/to otm session relay
         """
-        connection = event.transport.socket
+        connection = event.connection.socket
         link_data = event.handshake
         _logger.info("updating otm connection", extra={'addr': connection.getpeername()})
         session_id = link_data['session_id']
@@ -265,3 +264,11 @@ def OTMConnectionHandler():
             _logger.error(f"ignoring request from {connection.getpeername()}")
 
     return handler
+
+
+async def open_file_selector():
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)  # noqa
+    if any(result) and result[0] == '.':
+        return []
+    return result
