@@ -10,6 +10,7 @@ from src.avails import const, use
 from src.avails.exceptions import TransferIncomplete
 from src.avails.useables import recv_int
 from src.transfers import TransferState
+from src.transfers._logger import logger
 from src.transfers.files._fileobject import FileItem
 from src.transfers.files.receiver import Receiver
 from src.transfers.files.sender import Sender
@@ -31,7 +32,7 @@ def rename_directory_with_increment(root_path: Path, relative_path: Path):
     abs_path = root_path / relative_path
 
     if not root_path.exists() or not root_path.is_dir():
-        print(f"The directory {abs_path} does not exist or is not a directory.")
+        logger.error(f"The directory {abs_path} does not exist or is not a directory.")
         return
 
     parent_dir = abs_path.parent
@@ -52,6 +53,8 @@ def rename_directory_with_increment(root_path: Path, relative_path: Path):
 
 class DirSender(Sender):
     """
+    Data Layout:
+
                 |  DIR -> INT(4) | PARENT | NAME | goto `code`
                 |
     (1B) | code |
@@ -91,8 +94,8 @@ class DirSender(Sender):
                     async with aclosing(self.send_one_file(self.current_file)) as sender:
                         async for i in sender:
                             yield i
-
-                print("OK" if await self.recv_func(1) == _FILE_CODE else "NOT OK")
+                assert (await self.recv_func(1)) == _FILE_CODE
+                # print("OK" if await self.recv_func(1) == _FILE_CODE else "NOT OK")
 
         await self.send_func(b'\x00')  # code to inform end of transfer
 
@@ -118,20 +121,14 @@ class DirSender(Sender):
         try:
             await self.send_func(code)  # code to inform that there are more files to get
             await self.send_func(struct.pack('!I', len(dumped_code)) + dumped_code)
-            print(f"code_len={len(dumped_code)}")
+            # print(f"code_len={len(dumped_code)}")
 
         except Exception as exp:
             self.handle_exception(exp)
 
         return parent, name
 
-    def pause(self):
-        pass
-
     def continue_transfer(self):
-        pass
-
-    async def cancel(self):
         pass
 
     @property
@@ -141,6 +138,8 @@ class DirSender(Sender):
 
 class DirReceiver(Receiver):
     """
+    Data Layout:
+
                                      ------------------------------------------------
                               (FILE) INT(4) | parents | name | FILE SIZE(8) | FILE_CONTENTS
                               |      -------------------------------------------------
@@ -167,7 +166,7 @@ class DirReceiver(Receiver):
 
             if code == _FILE_CODE:
                 async with aclosing(self._recv_file_once()) as loop:
-                    print(self.current_file)  # debug
+                    # print(self.current_file)  # debug
                     async for _ in loop:
                         yield _
                 await self.send_func(code)
@@ -176,7 +175,7 @@ class DirReceiver(Receiver):
                 parent, item_name = await self._recv_parts()
                 full_path = Path(self.download_path, parent, item_name)
                 full_path.mkdir(parents=True)
-                print("creating directory", use.shorten_path(full_path, 40))  # debug
+                # print("creating directory", use.shorten_path(full_path, 40))  # debug
                 self._current_file = FileItem(full_path, 0)
                 yield full_path, None
 
@@ -194,23 +193,13 @@ class DirReceiver(Receiver):
     async def _recv_parts(self):
         try:
             code_len = await recv_int(self.recv_func)
-            print(f"{code_len=}")
+            # print(f"{code_len=}")
             parent, item_name = umsgpack.loads(await self.recv_func(code_len))
             if const.IS_WINDOWS:
                 item_name = item_name.replace("\\", "_")
             return parent, item_name
         except (struct.error, umsgpack.UnpackException) as exp:
             raise TransferIncomplete("failed to receive item code") from exp
-
-    def pause(self):
-        self.state = TransferState.PAUSED
-        self.send_func.pause()
-        self.recv_func.pause()
-
-    def resume(self):
-        self.state = TransferState.RECEIVING
-        self.send_func.resume()
-        self.recv_func.resume()
 
     async def continue_transfer(self):
         self.state = TransferState.RECEIVING

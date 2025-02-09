@@ -5,14 +5,15 @@ import struct
 from contextlib import aclosing, contextmanager
 
 from src.avails import const, use
+from src.avails.connect import Sender
 from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
-from src.transfers.abc import AbstractReceiver, CommonAExitMixIn, CommonExceptionHandlersMixIn
+from src.transfers.abc import AbstractReceiver, CommonAExitMixIn, CommonExceptionHandlersMixIn, PauseMixIn
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size, validatename
 
 
-class Receiver(CommonAExitMixIn, CommonExceptionHandlersMixIn, AbstractReceiver):
+class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, AbstractReceiver):
     version = const.VERSIONS['FO']
 
     def __init__(self, peer_obj, file_id, download_path, status_updater):
@@ -154,18 +155,29 @@ class Receiver(CommonAExitMixIn, CommonExceptionHandlersMixIn, AbstractReceiver)
                     yield items
 
     def connection_made(self, sender, receiver):
+        assert isinstance(sender, Sender), f"Expected Sender instance found {sender=}"
+        assert isinstance(receiver, Receiver), f"Expected Receiver instance found {receiver=}"
+
         self.connection_wait.set_result((sender, receiver))
         self.send_func = sender
         self.recv_func = receiver
 
     async def cancel(self):
-        if self.state is not TransferState.RECEIVING:
-            raise InvalidStateError(f"{self.state}")
+        if self.state not in (TransferState.RECEIVING, TransferState.PAUSED):
+            raise InvalidStateError(f"{self.state=}")
 
         self.to_stop = True
         self._expected_errors.add(ct := CancelTransfer())
         self.recv_files_task.set_exception(ct)
         await self.recv_files_task
+
+    def resume(self):
+        if self.state is not TransferState.PAUSED:
+            return
+
+        self.state = TransferState.RECEIVING
+        self.send_func.resume()
+        self.recv_func.resume()
 
     @property
     def _status_string_prefix(self):
