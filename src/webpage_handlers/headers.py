@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 @enum.global_enum
 class HANDLE(enum.StrEnum):
     __slots__ = ()
+    SIGNALS = "1"
+    DATA = "0"
     COMMAND = "this is command "
     SEARCH_RESPONSE = "0result for search name"
     SEND_PEER_LIST_RESPONSE = "0result for send peer list"
@@ -30,7 +32,11 @@ class HANDLE(enum.StrEnum):
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
     REQ_FOR_FILE_TRANSFER = "0a file recv request has been arrived"
 
+
 if TYPE_CHECKING:
+    SIGNALS = "1"
+    DATA = "0"
+
     COMMAND = "this is command "
     SEARCH_RESPONSE = "0result for search name"
     SEND_PEER_LIST_RESPONSE = "0result for send peer list"

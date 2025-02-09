@@ -17,6 +17,7 @@ from src.configurations import bootup, configure
 from src.core import Dock, connections, connectivity, requests, set_current_remote_peer_object
 from src.managers import profilemanager
 from src.managers.statemanager import State
+from src.webpage_handlers import pagehandle
 
 
 def _create_listen_socket_mock(bind_address, _):
@@ -88,6 +89,8 @@ def mock_multicast():
 def test_initial_states():
     s1 = State("set paths", configure.set_paths)
     s2 = State("boot_up initiating", bootup.initiate_bootup)
+    # s3 = State("webpage", pagehandle.initiate_page_handle, is_blocking=True)
+    s3 = State("webpage", pagehandle.initiate_page_handle)
     # s3 = State("mocking up multicast", mock_multicast)
     # s3 = State("adding shit", test)
     s4 = State("loading profiles", profilemanager.load_profiles_to_program)

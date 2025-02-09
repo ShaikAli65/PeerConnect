@@ -51,10 +51,10 @@ The dev branch is a complete rewrite using Python’s asynchronous features, aim
 
 ## Future Plans
 
-- **Lightweight File Picker**: Replace PyQt with a more lightweight alternative for file selection in the UI.
 - **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
-- **Multicast/Anycast Support**: Explore implementing multicast or anycast support for even more efficient local network utilization.
-
+- **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
+  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream, 
+  should respect backpressure, utilizing maximum bandwidth 
 ## Usage
 
 PeerConnect is designed for local networks. Clone the repository and follow the instructions to get started with either the **Main** (stable) or **Dev** (development) branch.

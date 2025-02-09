@@ -2,7 +2,7 @@ from pathlib import Path
 
 import umsgpack
 
-from src.avails import use
+from src.avails import const, use
 
 
 def stringify_size(size):
@@ -60,6 +60,10 @@ class FileItem:
     @staticmethod
     def load_from(data: bytes, file_parent_path):
         name, size, seeked = umsgpack.loads(data)
+
+        if const.IS_WINDOWS:
+            name = name.replace('\\', '_')
+
         file = FileItem(Path(file_parent_path, name), seeked)
         file._name = name
         file.size = size
@@ -157,10 +161,14 @@ def validatename(file_item: FileItem, root_path) -> str:
     """
     Ensures a unique filename if a file with the same name already exists
     in the `root_path`
+    Note:
+        Mutates `name` attribute of parameter `file_item`
+        and `path` attribute is updated accordingly
 
     Args:
         file_item (FileItem): The original filename.
         root_path(Path): Directory path to validate with
+
     Returns:
         str: The validated filename, ensuring uniqueness.
     """
@@ -198,4 +206,3 @@ def calculate_chunk_size(
                 max_file_size - min_file_size)
 
     return int(buffer_size - (buffer_size % 1024))
-

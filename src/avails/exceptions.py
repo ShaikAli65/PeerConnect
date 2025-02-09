@@ -20,3 +20,11 @@ class TransferIncomplete(Exception):
 
 class TransferRejected(Exception):
     """Data Transfer request was rejected"""
+
+
+class CancelTransfer(Exception):
+    """Request to Cancel the transfer"""
+
+
+class InvalidStateError(Exception):
+    """The operation is not allowed in this state."""

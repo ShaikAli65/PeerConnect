@@ -20,7 +20,7 @@ in a p2p network, working with kademila's routing protocol?
 ### 1.4 perform a gossip-based search
     - send a search request packet to the network
     - maintain a state for that request in the memory
-    - if a peer relates to that string, it replies to that search request by sending a datagram containing it's peer object
+    - if a peer relates to that string, it replies to that search request by sending a datagram containing its peer object
     - gather all the replies and cache them in `Storage`
 
     pros :
@@ -55,7 +55,7 @@ in a p2p network, working with kademila's routing protocol?
     - each peer's adds themselves to that bucket when they join the network
         - peer's even ping the bucket and re-enter themselves within a time window
 
-    - if a peer owns the bucket, another peer joins the network with more closest id to the bucket
+    - if a peer owns the bucket, another peer joins the network with the closest id to the bucket
       then a redistribution of bucket to that nearest peer will happen and all the authority over that bucket is
       transferred
     - problem, what if someone is querying that bucket in the meanwhile?
@@ -92,13 +92,12 @@ from typing import Optional, override
 
 from kademlia import crawling, storage
 
-from src.avails import DataWeaver, GossipMessage, RemotePeer, use
+from src.avails import GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
 from src.core import Dock, connectivity, get_gossip, get_this_remote_peer
 from src.transfers import GOSSIP
-from src.webpage_handlers import pagehandle
-from src.webpage_handlers.headers import HANDLE
+from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
 
@@ -356,15 +355,10 @@ async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
 
 def new_peer(peer):
     Dock.peer_list.add_peer(peer)
-    data = DataWeaver(
-        header=HANDLE.NEW_PEER,
-        content={
-            "name": peer.username,
-            "ip": peer.ip,
-        },
-        peer_id=peer.peer_id,
-    )
-    pagehandle.dispatch_data(data)
+    try:
+        webpage.update_peer(peer).send(None)
+    except StopIteration:
+        pass
 
 
 def remove_peer(peer):
@@ -385,10 +379,6 @@ async def check_and_remove_if_needed(peer: RemotePeer):
     if not await fut:
         _logger.info(f"connectivity check failed, changing status of {peer} to offline")
         peer.status = RemotePeer.OFFLINE
-        data = DataWeaver(
-            header=HANDLE.REMOVE_PEER,
-            peer_id=peer.peer_id,
-        )
-        pagehandle.dispatch_data(data)
+        await webpage.update_peer(peer)
     else:
-        _logger.info(f"connectivity check succeeded, not removing peer {peer}")
+        _logger.info(f"connectivity check succeeded for {peer}")

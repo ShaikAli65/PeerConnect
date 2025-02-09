@@ -109,7 +109,7 @@ class DefaultRumorPolicy(RumorPolicy):
 class RumorMongerProtocol:
     """
     Rumor-Mongering implementation of gossip protocol
-    Once a message is created then it's is not subject to any change at any peer
+    Once a message is created then it is not subject to any change at any peer
     """
 
     alpha = 3

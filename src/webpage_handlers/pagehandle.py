@@ -1,116 +1,151 @@
 import asyncio as _asyncio
-import importlib
-import itertools
-from typing import TYPE_CHECKING, Union
+import contextlib
+import functools
+from asyncio import Future
+from collections import deque
+from contextlib import AsyncExitStack
+from typing import TYPE_CHECKING, overload
 
 import websockets
 
-from src.avails import DataWeaver, InvalidPacket, StatusMessage, const, use
+from src.avails import DataWeaver, InvalidPacket, const
+from src.avails.bases import BaseDispatcher
 from src.avails.events import StreamDataEvent
-from src.avails.exceptions import UnknownConnectionType, WebSocketRegistryReStarted
-from src.avails.useables import wrap_with_tryexcept
+from src.avails.exceptions import TransferIncomplete
+from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.core import Dock
 from src.transfers import HEADERS
-from src.webpage_handlers import logger
+from src.webpage_handlers import headers, logger
+
+PROFILE_WAIT = _asyncio.Event()
 
 if TYPE_CHECKING:
     from websockets.asyncio.connection import Connection
 else:
     Connection = None
 
-safe_end = Dock.finalizing
-PROFILE_WAIT = _asyncio.Event()
+
+class FrontEndWebSocketDispatcher(BaseDispatcher):
+    def __init__(self, transport, *args, buffer_size=const.MAX_FRONTEND_MESSAGE_BUFFER_LEN, **kwargs):
+        super().__init__(transport=transport, stop_flag=None, *args, **kwargs)
+        self.max_buffer_size = buffer_size
+        self.buffer = deque(maxlen=buffer_size)
+        if transport:
+            self._is_transport_connected = True
+        else:
+            self._is_transport_connected = False
+
+    def update_transport(self, transport):
+        self._is_transport_connected = True
+        self.transport = transport
+
+    async def submit(self, data: DataWeaver):
+
+        if not self._is_transport_connected:
+            self.buffer.append(data)
+            return
+
+        try:
+            await self.transport.send(str(data))
+        except websockets.WebSocketException as wse:
+            self._is_transport_connected = False
+            self._handle_buffer_and_log()
+            self.buffer.append(data)
+            raise TransferIncomplete from wse
+
+        await self._send_buffer()
+
+    async def _send_buffer(self):
+        while len(self.buffer) > 0:
+            msg = self.buffer.popleft()
+            try:
+                await self.transport.send(str(msg))
+            except websockets.WebSocketException as wse:
+                self._is_transport_connected = False
+                self._handle_buffer_and_log()
+                self.buffer.appendleft(msg)
+                raise TransferIncomplete from wse
+
+    def _handle_buffer_and_log(self):
+        if len(self.buffer) >= self.max_buffer_size:
+            logger.warning(f"discarding websocket message {self.buffer.popleft()}, buffer full", exc_info=True)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+
+        if len(self.buffer) > 0:
+            logger.warning(f"websocket buffer not empty len={len(self.buffer)}")
+        if self.transport:
+            await self.transport.close()
 
 
-class WebSocketRegistry:
-    # :todo: make WebSocketRegistry compatible with QueueMixIn and attach with it
-    connections: dict[int, Connection] = {}
-    message_queue = _asyncio.Queue()
-    connections_completed = _asyncio.Event()
-    _start_data_sender_task_reference = None
-    _started = False
+@singleton_mixin
+class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
+    """
+    Dispatcher that SENDS packets to frontend
+    """
 
-    @classmethod
-    def get_websocket(cls, type_id: Union[const.DATA, const.SIGNAL]):
-        return cls.connections[type_id]
+    __slots__ = 'stop_flag', 'dispatchers'
 
-    @classmethod
-    def set_websocket(cls, type_id: Union[const.DATA, const.SIGNAL], websocket):
-        cls.connections[type_id] = websocket
+    def __init__(self, stop_flag=None):
+        super().__init__(transport=None, stop_flag=stop_flag)
 
-    @classmethod
-    def send_data(cls, data, type_of_data):
-        """
-        does not actually send data, adds to a message queue
-        """
-        cls.message_queue.put_nowait((data, type_of_data))
+        self.stop_flag = stop_flag or Dock.finalizing.is_set
+        self.dispatchers = {}
+        self.dispatchers_exit_stack = AsyncExitStack()
 
-    @classmethod
-    async def start_data_sender(cls):
-        if cls._started:
-            raise WebSocketRegistryReStarted("reentered registry")
-        cls._started = True
-        while True:
-            data_packet, data_type = await cls.message_queue.get()
-            if safe_end.is_set():
-                break
-            web_socket = cls.get_websocket(data_type)
-            await web_socket.send(
-                str(data_packet)  # make sure that data is a string
-            )
-        cls._started = False
+    def add_dispatcher(self, type_code, *dispatchers):
+        for dispatcher in dispatchers:
+            self.dispatchers[type_code] = dispatcher
+            self.dispatchers_exit_stack.push_async_exit(dispatcher)
 
-    @classmethod
-    async def _clear(cls):
-        cls.message_queue.put_nowait((None, None))
-        for i in cls.connections.values():
-            await i.close()
-        del cls.connections
+    def update_dispatcher(self, type_code, *dispatchers):
+        for dispatcher in dispatchers:
+            self.dispatchers[type_code] = dispatcher
+            self.dispatchers_exit_stack.push_async_exit(dispatcher)
 
-    @classmethod
-    async def __aenter__(cls):
-        f = wrap_with_tryexcept(cls.start_data_sender)
-        cls._start_data_sender_task_reference = _asyncio.create_task(f())
-        return cls
+    def get_dispatcher(self, type_code):
+        return self.dispatchers.get(type_code, None)
 
-    @classmethod
-    async def __aexit__(cls, exc_type, exc_val, exc_tb):
-        await cls._clear()
-        cls._start_data_sender_task_reference.cancel()
+    async def submit(self, msg_packet: DataWeaver):
+        """Outgoing"""
+        try:
+            return await self.dispatchers[msg_packet.type](msg_packet)
+        except TransferIncomplete as ti:
+            logger.error(f"cannot send msg to frontend {msg_packet}, exp={ti}")
+
+    async def __aenter__(self):
+        await self.dispatchers_exit_stack.__aenter__()
+        await super().__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.dispatchers_exit_stack.__aexit__(exc_type, exc_val, exc_tb)
+        return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
-class ReplyRegistry:
-    messages_to_futures_mapping: dict[str, _asyncio.Future] = {}
-    id_factory = itertools.count()
-
-    @classmethod
-    def register_reply(cls, data: DataWeaver) -> _asyncio.Future[DataWeaver]:
-        loop = _asyncio.get_event_loop()
-        data.msg_id = next(cls.id_factory)
-        cls.messages_to_futures_mapping[data.msg_id] = fut = loop.create_future()
-        return fut
-
-    @classmethod
-    def reply_arrived(cls, data: DataWeaver):
-        if data.msg_id in cls.messages_to_futures_mapping:
-            fut = cls.messages_to_futures_mapping[data.msg_id]
-            fut.set_result(data)
-
-    @classmethod
-    def is_registered(cls, data: DataWeaver):
-        return data.msg_id in cls.messages_to_futures_mapping
+class ReplyRegistry(ReplyRegistryMixIn):
+    def register_reply(self, data_weaver):
+        data_weaver.msg_id = self.id_factory
+        return super().register_reply(data_weaver.msg_id)
 
 
-def _get_verified_type(data: DataWeaver, web_socket):
-    WebSocketRegistry.set_websocket(data.header, web_socket)
-    if data.match_header(const.DATA):
-        logger.debug("[PAGE HANDLE] page data connected")  # debug
-        return importlib.import_module("src.core.webpage_handlers.handledata").handler
-    if data.match_header(const.SIGNAL):
-        logger.debug("[PAGE HANDLE] page signals connected")  # debug
-        return importlib.import_module(
-            "src.core.webpage_handlers.handlesignals"
-        ).handler
+@singleton_mixin
+class MessageFromFrontEndDispatcher(QueueMixIn, BaseDispatcher):
+    __slots__ = ()
+
+    def __init__(self, reply_registry, *args, **kwargs):
+        super().__init__(transport=None, stop_flag=None, *args, **kwargs)
+        self.reply_registry = reply_registry
+
+    async def submit(self, data_weaver):
+        if self.reply_registry.is_registered(data_weaver.msg_id):
+            return self.reply_registry.msg_arrived(data_weaver)
+
+        await self.registry[data_weaver.type](data_weaver)
+
+    @functools.wraps(ReplyRegistry.register_reply)
+    def register_reply(self, msg):
+        return self.reply_registry.register_reply(msg)
 
 
 async def validate_connection(web_socket):
@@ -122,21 +157,21 @@ async def validate_connection(web_socket):
         raise ConnectionError() from None
 
     verification = DataWeaver(serial_data=wire_data)
-    handle_function = _get_verified_type(verification, web_socket)
-    logger.info("[PAGE HANDLE] waiting for data from websocket")
 
-    if not handle_function:
-        logger.info("[PAGE HANDLE] Unknown connection type, closing websocket")
-        await web_socket.close()
-        raise UnknownConnectionType()
-    return handle_function
+    if disp := FrontEndDispatcher().get_dispatcher(verification.type):
+        disp.update_transport(web_socket)
+    else:
+        web_socket_disp = FrontEndWebSocketDispatcher(transport=web_socket)
+        FrontEndDispatcher().add_dispatcher(verification.type, web_socket_disp)
+
+    logger.info("[PAGE HANDLE] waiting for data from websocket")
 
 
 async def handle_client(web_socket: Connection):
     try:
         try:
-            handle_function = await validate_connection(web_socket)
-        except (ConnectionError, UnknownConnectionType):
+            await validate_connection(web_socket)
+        except ConnectionError:
             return
 
         async for data in web_socket:
@@ -147,77 +182,67 @@ async def handle_client(web_socket: Connection):
                 parsed_data.field_check()
             except InvalidPacket as ip:
                 logger.debug("[PAGE HANDLE]", exc_info=ip)
-                return
-
-            if ReplyRegistry.is_registered(parsed_data):
-                ReplyRegistry.reply_arrived(parsed_data)
                 continue
 
-            f = use.wrap_with_tryexcept(handle_function, parsed_data)
-            _asyncio.create_task(f())
-            if safe_end.is_set():
-                return
+            MessageFromFrontEndDispatcher()(parsed_data)
 
     except websockets.exceptions.ConnectionClosed:
         logger.info("[PAGE HANDLE] Websocket Connection closed")
 
 
+@contextlib.asynccontextmanager
 async def start_websocket_server():
     start_server = await websockets.serve(handle_client, const.WEBSOCKET_BIND_IP, const.PORT_PAGE)
     logger.info(f"[PAGE HANDLE] websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")
-    async with start_server:
-        await Dock.finalizing.wait()
 
-    logger.info("[PAGE HANDLE] ending websocket server")
+    try:
+        async with start_server:
+            yield
+    except Exception:
+        logger.info("[PAGE HANDLE] ending websocket server")
+        raise
 
 
 async def initiate_page_handle():
-    async with WebSocketRegistry():
-        await start_websocket_server()
+    front_end = FrontEndDispatcher(stop_flag=Dock.finalizing.is_set)
+    front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher(None))
+    front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher(None))
+
+    from src.webpage_handlers.handlesignals import FrontEndSignalDispatcher
+    from src.webpage_handlers.handledata import FrontEndDataDispatcher
+    signal_disp = FrontEndSignalDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
+    data_disp = FrontEndDataDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
+
+    msg_disp = MessageFromFrontEndDispatcher(ReplyRegistry())
+
+    msg_disp.register_handler(headers.DATA, data_disp.submit)
+    msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
+
+    await Dock.exit_stack.enter_async_context(front_end)
+    await Dock.exit_stack.enter_async_context(msg_disp)
+    await Dock.exit_stack.enter_async_context(start_websocket_server())
+
+    # async with AsyncExitStack() as exit_s:
+    #     await exit_s.enter_async_context(front_end)
+    #     await exit_s.enter_async_context(msg_disp)
+    #     await exit_s.enter_async_context(start_websocket_server())
+    #     await Dock.finalizing.wait()
+
+@overload
+def front_end_data_dispatcher(data, expect_reply=False): ...
 
 
-def dispatch_data(data, expect_reply=False):
-    """Send data to frontend
-    Not actually sends data but queues the for sending
-
-    Args:
-        data (DataWeaver) : data to send
-        expect_reply (bool) : if this argument is true then a `asyncio.Future` is returned which can be awaited
-            overrides any msg_id attached to data (DataWeaver)
-
-    Returns:
-        bool | asyncio.Future[DataWeaver]
-    """
-
-    def check_closing():
-        if safe_end.is_set():
-            logger.debug("[PAGE HANDLE] Can't send data to page, safe_end is flip")
-            return True
-        return False
-
-    if check_closing():
-        return False
-
-    logger.info(f"[PAGE HANDLE] ::Sending data to page: {data!r}")
-    WebSocketRegistry.send_data(data, data.type)
-    if expect_reply:
-        return ReplyRegistry.register_reply(data)
-    return True
-
-
-def send_status_data(data: StatusMessage):
-    logger.info(f"[PAGE HANDLE] ::Status update to page: {data!r}")
-    WebSocketRegistry.send_data(data, const.SIGNAL)
+@overload
+def front_end_data_dispatcher(data, expect_reply=True) -> _asyncio.Future[DataWeaver]: ...
 
 
 def MessageHandler():
     async def handler(event: StreamDataEvent):
-        d = DataWeaver(
+        front_end_data_dispatcher(DataWeaver(
             header=event.data.header,
             content=event.data["message"],
             peer_id=event.data.peer_id,
-        )
-        WebSocketRegistry.send_data(d, const.DATA)
+        ))
 
     return handler
 
@@ -227,3 +252,11 @@ def register_handler_to_acceptor(acceptor_disp):
         HEADERS.CMD_TEXT,
         MessageHandler()
     )
+
+
+def front_end_data_dispatcher(data, expect_reply=False) -> Future[DataWeaver | None]:
+    disp = FrontEndDispatcher()
+    msg_disp = MessageFromFrontEndDispatcher()
+    if expect_reply:
+        return msg_disp.register_reply(data)
+    return disp(data)

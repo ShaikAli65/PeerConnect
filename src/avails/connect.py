@@ -388,6 +388,8 @@ def connect_to_peer(
             if retry_count >= retries:
                 raise
 
+    raise OSError
+
 
 def resolve_address(_peer_obj, to_which):
     addr = getattr(_peer_obj, to_which)
@@ -442,6 +444,7 @@ async def connect_to_peer(
             retry_count += 1
             if retry_count >= retries:
                 raise
+    raise OSError
 
 
 def is_socket_connected(sock: Socket):
@@ -469,10 +472,7 @@ def is_socket_connected(sock: Socket):
 def get_free_port(ip=None) -> int:
     """Gets a free port from the system."""
     ip = ip or str(const.THIS_IP)
-
-    with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
-        s.bind((ip, 0))  # Bind to port 0 to get a free port
-        return s.getsockname()[1]  # Return the chosen port
+    return is_port_empty(0, ip)[1]
 
 
 def is_port_empty(port, addr=None):
@@ -482,9 +482,9 @@ def is_port_empty(port, addr=None):
         try:
             # Try to bind the socket to the specified port
             s.bind(sock_addr)
-            return True  # Port is empty
+            return s.getsockname()  # Port is empty
         except OSError:
-            return False  # Port is not empty or some other error occurred
+            return ()  # Port is not empty or some other error occurred
 
 
 def ipv4_multicast_socket_helper(

@@ -1,15 +1,16 @@
 import asyncio
 import logging
+import traceback
 from typing import TYPE_CHECKING
 
-from src.avails import DataWeaver, WireData, const, use
+from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import Dock, get_this_remote_peer
 from src.transfers import DISCOVERY
 from src.transfers.transports import DiscoveryTransport
-from src.webpage_handlers import headers, pagehandle
+from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
 
@@ -61,7 +62,14 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         self.msg_arrived(wire_data)
         handle = self.registry[wire_data.header]
         _logger.debug(f"dispatching request {handle}")
-        await handle(event)
+        try:
+            await handle(event)
+        except RuntimeError:
+            # error from internal task_group if it is exited
+            if const.debug:
+                traceback.print_exc()
+            if self.stop_flag():
+                return
 
 
 async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
@@ -111,16 +119,6 @@ async def send_discovery_requests(transport, broad_cast_addr, multicast_addr):
 
 
 async def _try_asking_user(transport, discovery_packet):
-    reply = await pagehandle.dispatch_data(
-        DataWeaver(
-            header=headers.REQ_PEER_NAME_FOR_DISCOVERY,
-        ),
-        expect_reply=True,
-    )
-
-    if not reply.content['peerName']:
-        return
-
-    peer_name = reply.content['peerName']
-    async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
-        transport.sendto(discovery_packet, addr)
+    if peer_name := await webpage.ask_user_for_a_peer():
+        async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
+            transport.sendto(discovery_packet, addr)

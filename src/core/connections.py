@@ -193,21 +193,24 @@ class Acceptor:
         return sock
 
     async def __accept_connection(self, initial_conn):
-        transport = StreamTransport(initial_conn)
-        handshake = await self._perform_handshake(initial_conn, transport)
+        handshake = await self._perform_handshake(initial_conn)
         if not handshake:
             return
 
+        transport = StreamTransport(initial_conn)
         self._exit_stack.enter_context(initial_conn)
         con_event = ConnectionEvent(transport, handshake)
         self.connection_dispatcher(con_event)
         self.connected_peers.add_peer_sock(handshake.peer_id, initial_conn)
 
     @classmethod
-    async def _perform_handshake(cls, initial_conn, transport):
+    async def _perform_handshake(cls, initial_conn):
         try:
-            raw_hand_shake = await asyncio.wait_for(transport.recv(), const.SERVER_TIMEOUT)
-            return WireData.load_from(raw_hand_shake)
+            raw_hand_shake = await asyncio.wait_for(
+                Wire.receive_async(initial_conn), const.SERVER_TIMEOUT
+            )
+            if raw_hand_shake:
+                return WireData.load_from(raw_hand_shake)
         except TimeoutError:
             _logger.error(f"new connection inactive for {const.SERVER_TIMEOUT}s, closing")
             initial_conn.close()

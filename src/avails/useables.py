@@ -41,7 +41,10 @@ def shorten_path(path: Path, max_length):
     selected_parts = list(path.parts)
     part_ptr = 1
     while len("".join(selected_parts)) >= max_length:
+        if len(selected_parts) <= 2:
+            break
         selected_parts.pop(part_ptr)
+
     selected_parts.insert(1, '..')
     return os.path.sep.join(selected_parts)
 
@@ -298,7 +301,7 @@ def spawn_task(func, *args, bookeep=None, done_callback=None, **kwargs):
         return t
 
 
-def search_relevant_peers(peer_list, search_string) -> list:
+def search_relevant_peers(peer_list, search_string):
     """
     Searches for relevant peers based on the search string,
 
@@ -309,8 +312,8 @@ def search_relevant_peers(peer_list, search_string) -> list:
     Args:
         search_string (str): The string to search for relevance.
         peer_list(PeerDict): The dictionary of id to peer object mapping
-    Returns:
-        yields peers
+    Yields:
+        list: peers
     """
     if not hasattr(peer_list, '_gil_safe'):  # Check if GIL safety has been determined
         peer_list._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL
