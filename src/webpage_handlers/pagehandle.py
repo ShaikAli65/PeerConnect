@@ -228,12 +228,21 @@ async def initiate_page_handle():
     #     await exit_s.enter_async_context(start_websocket_server())
     #     await Dock.finalizing.wait()
 
+
 @overload
 def front_end_data_dispatcher(data, expect_reply=False): ...
 
 
 @overload
 def front_end_data_dispatcher(data, expect_reply=True) -> _asyncio.Future[DataWeaver]: ...
+
+
+def front_end_data_dispatcher(data, expect_reply=False) -> Future[DataWeaver | None]:
+    disp = FrontEndDispatcher()
+    msg_disp = MessageFromFrontEndDispatcher()
+    if expect_reply:
+        return msg_disp.register_reply(data)
+    return disp(data)
 
 
 def MessageHandler():
@@ -252,11 +261,3 @@ def register_handler_to_acceptor(acceptor_disp):
         HEADERS.CMD_TEXT,
         MessageHandler()
     )
-
-
-def front_end_data_dispatcher(data, expect_reply=False) -> Future[DataWeaver | None]:
-    disp = FrontEndDispatcher()
-    msg_disp = MessageFromFrontEndDispatcher()
-    if expect_reply:
-        return msg_disp.register_reply(data)
-    return disp(data)

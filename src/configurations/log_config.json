@@ -15,7 +15,7 @@
       "level": "DEBUG",
       "formatter": "detailed",
       "filename": "logs.log",
-      "maxBytes": 5242880,
+      "maxBytes": 2621440,
       "backupCount": 3,
       "encoding": "utf8"
     },

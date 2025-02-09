@@ -14,7 +14,7 @@ from src import managers
 from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
-from src.core import Dock, connections, connectivity, requests, set_current_remote_peer_object
+from src.core import Dock, acceptor, connectivity, requests, set_current_remote_peer_object
 from src.managers import profilemanager
 from src.managers.statemanager import State
 from src.webpage_handlers import pagehandle
@@ -98,7 +98,7 @@ def test_initial_states():
     s6 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s7 = State("printing configurations", configure.print_constants)
     s8 = State("initiating requests", requests.initiate)
-    s9 = State("initiating comms", connections.initiate_connections, is_blocking=True)
+    s9 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
     s10 = State("connectivity checker", connectivity.initiate)
     return tuple(locals().values())
 
