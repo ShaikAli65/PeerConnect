@@ -118,7 +118,7 @@ class TCPProtocol(NetworkProtocol):
         addr_family, sock_type, _, _, resolved_address = addr_info[0]
 
         if addr_family == _socket.AF_INET6:
-            resolved_address = resolved_address[:3], address[3]
+            resolved_address = *resolved_address[:3], address[3]
             # persist scope_id from address, in linux getaddrinfo
             # betrays by sending 0 as the scope id after resolving
             # which simply does not work, cause linux needs exact scope_id to make connection from

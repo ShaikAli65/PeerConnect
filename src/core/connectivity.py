@@ -63,23 +63,21 @@ class Connectivity(QueueMixIn):
         _logger.info(f"connectivity check initiating for {request}")
         request.status = ConnectivityCheckState.REQ_CHECK
         succeeded = True
+        req_dispatcher.transport.sendto(bytes(ping_data), request.peer.req_uri)
 
-        req_dispatcher.transport.sendto(ping_data, request.peer.req_uri)
         try:
             await asyncio.wait_for(fut, const.PING_TIMEOUT)
         except TimeoutError:
             # try a tcp connection if network is terrible with UDP
 
             # or another possibility that is observed:
-            # windows does not forward UDP packets to application level when system is locked or sleeping
+            # windows does not forward packets to application level when system is locked or sleeping
             # (interfaces shutdown)
-            # what's that with QUIC then, and vpn s too
 
             try:
                 request.status = ConnectivityCheckState.CON_CHECK
                 with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
                     await sock.asendall(struct.pack("!I", 0))
-                    pass
             except OSError:
                 # okay this one is cooked
                 succeeded = False
