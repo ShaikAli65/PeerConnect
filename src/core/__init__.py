@@ -5,7 +5,8 @@ from typing import Optional, TYPE_CHECKING
 
 from src.avails import (
     BaseDispatcher, PeerDict as _PeerDict,
-    RemotePeer as _RemotePeer
+    RemotePeer as _RemotePeer,
+    const as _const
 )
 
 
@@ -35,6 +36,10 @@ class Dock:
         global_gossip: RumorMongerProtocol
         kademlia_network_server: PeerServer
         state_manager_handle: StateManager
+
+
+def addr_tuple(ip, port):
+    return _const.THIS_IP.addr_tuple(port=port, ip=ip)
 
 
 def get_this_remote_peer():

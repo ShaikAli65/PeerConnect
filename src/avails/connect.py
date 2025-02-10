@@ -4,6 +4,7 @@ import logging
 import socket
 import socket as _socket
 import struct
+
 from src.avails import useables
 from src.avails._asocket import *  # noqa
 from src.avails._conn import *  # noqa
@@ -52,6 +53,9 @@ class IPAddress(NamedTuple):
             flow_info = 0
             scope_id = 0 if self.scope_id < 0 else self.scope_id
             return ipaddr, port, flow_info, scope_id
+
+
+Addr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
 
 
 def create_connection_sync(

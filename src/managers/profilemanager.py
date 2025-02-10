@@ -103,7 +103,6 @@ class ProfileManager:
 
         await write_config(config, self.profile_file_path)
 
-
     def __raise_error(self):
         raise LookupError(
             f"something wrong in profile data\n:\tprofile at {self.profile_file_path}\ndata:"

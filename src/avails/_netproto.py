@@ -1,6 +1,6 @@
-from abc import ABC, abstractmethod
 import asyncio as _asyncio
 import socket as _socket
+from abc import ABC, abstractmethod
 from typing import Optional
 
 from src.avails._asocket import Socket
@@ -114,7 +114,7 @@ class TCPProtocol(NetworkProtocol):
     async def create_connection_async(
             cls, loop: _asyncio.AbstractEventLoop, address, timeout=None
     ) -> Socket:
-        addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
+        addr_info = await loop.getaddrinfo(*address[:2], type=_socket.SOCK_STREAM)
         addr_family, sock_type, _, _, resolved_address = addr_info[0]
 
         if addr_family == _socket.AF_INET6:

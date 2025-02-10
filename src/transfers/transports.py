@@ -3,6 +3,7 @@ from asyncio import BaseTransport
 from typing import override
 
 from src.avails import WireData
+from src.core import addr_tuple
 from src.transfers import REQUESTS_HEADERS
 
 
@@ -46,9 +47,9 @@ class KademliaTransport(RequestsTransport):
     _trigger = REQUESTS_HEADERS.KADEMLIA
 
     @override
-    def sendto(self, data: bytes, addr: tuple[str, int] = None):
+    def sendto(self, data: bytes, addr: tuple[str, int] | tuple[str, int, int, int] = None):
         formatted = bytes(WireData(data=data))
-        return super().sendto(formatted, addr)
+        return super().sendto(formatted, addr_tuple(*addr))
 
 
 class DiscoveryTransport(RequestsTransport):

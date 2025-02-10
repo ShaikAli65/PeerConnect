@@ -29,6 +29,12 @@ def _create_listen_socket_mock(bind_address, _):
 
 
 async def _mock_interface_selector(interfaces):
+
+    for i,inter in interfaces.items():
+        if 'wi' in inter.friendly_name.lower():
+            print(inter)
+            return i
+
     print("not asking for", (i := next(iter(interfaces))))
     return i
 
@@ -133,5 +139,4 @@ def start_test(other_states):
 
 
 if __name__ == "__main__":
-    # print(isinstance(RequestsDispatcher, AbstractDispatcher))
     start_test([])
