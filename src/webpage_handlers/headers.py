@@ -27,6 +27,7 @@ class HANDLE(enum.StrEnum):
     FAILED_TO_REACH = "1failed to reach"
 
     REQ_PEER_NAME_FOR_DISCOVERY = '1get a peer name for discovery'
+    GET_INTERFACE_CHOICE = "0select interface"
     SEND_DIR = "0send_a_directory"
     SEND_FILE = "0send_file_to_peer"
     SEND_TEXT = "0send_text"
@@ -64,3 +65,4 @@ if TYPE_CHECKING:
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
     REQ_FOR_FILE_TRANSFER = "0a file recv request has been arrived"
     FAILED_TO_REACH = "1failed to reach"
+    GET_INTERFACE_CHOICE = "0select interface"

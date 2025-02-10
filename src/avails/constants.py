@@ -7,7 +7,12 @@ from typing import Optional, TYPE_CHECKING
 CLEAR_LOGS = 1
 USERNAME = "admin"
 SERVER_IP = "127.0.0.1"
-THIS_IP = "127.0.0.1"
+
+THIS_IP = None
+
+if TYPE_CHECKING:
+    from src.avails import connect
+    THIS_IP: connect.IPAddress
 
 MULTICAST_IP_v4 = "239.1.11.11"
 MULTICAST_IP_v6 = "ff02::1:6"

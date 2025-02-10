@@ -3,6 +3,17 @@ from src.webpage_handlers import headers
 from src.webpage_handlers.pagehandle import front_end_data_dispatcher
 
 
+async def ask_for_interface_choice(interfaces):
+    reply = await front_end_data_dispatcher(
+        DataWeaver(
+            header=headers.GET_INTERFACE_CHOICE,
+            content={k:v._asdict() for k,v in interfaces}
+        ),
+        expect_reply=True
+    )
+    return reply.content.get("interface_id", None)
+
+
 async def ask_user_for_a_peer():
     reply = await front_end_data_dispatcher(
         DataWeaver(

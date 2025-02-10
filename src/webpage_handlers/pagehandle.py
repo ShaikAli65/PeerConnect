@@ -2,7 +2,6 @@ import asyncio as _asyncio
 import contextlib
 import functools
 from asyncio import Future
-from collections import deque
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, overload
 
@@ -24,58 +23,94 @@ if TYPE_CHECKING:
 else:
     Connection = None
 
+# maintain separate exit stack, so that we can maintain nested exits in a better way
+# without filling up Dock.exit_stack which has more critical exit ordering
+_exit_stack = AsyncExitStack()
+
 
 class FrontEndWebSocketDispatcher(BaseDispatcher):
     def __init__(self, transport, *args, buffer_size=const.MAX_FRONTEND_MESSAGE_BUFFER_LEN, **kwargs):
-        super().__init__(transport=transport, stop_flag=None, *args, **kwargs)
+        self.stopping_event = _asyncio.Event()
+        super().__init__(transport=transport, stop_flag=self.stopping_event.is_set, *args, **kwargs)
+        self.ping_sender = _asyncio.Condition()
         self.max_buffer_size = buffer_size
-        self.buffer = deque(maxlen=buffer_size)
+        self.buffer = _asyncio.Queue(buffer_size)
         if transport:
             self._is_transport_connected = True
         else:
             self._is_transport_connected = False
+        self._finalized = False
 
-    def update_transport(self, transport):
+    async def update_transport(self, transport):
         self._is_transport_connected = True
         self.transport = transport
+        async with self.ping_sender:
+            self.ping_sender.notify_all()
 
     async def submit(self, data: DataWeaver):
 
         if not self._is_transport_connected:
-            self.buffer.append(data)
+            await self._add_to_buffer(data)
             return
 
         try:
             await self.transport.send(str(data))
         except websockets.WebSocketException as wse:
             self._is_transport_connected = False
-            self._handle_buffer_and_log()
-            self.buffer.append(data)
+            await self._add_to_buffer(data)
             raise TransferIncomplete from wse
 
-        await self._send_buffer()
-
     async def _send_buffer(self):
-        while len(self.buffer) > 0:
-            msg = self.buffer.popleft()
-            try:
-                await self.transport.send(str(msg))
-            except websockets.WebSocketException as wse:
-                self._is_transport_connected = False
-                self._handle_buffer_and_log()
-                self.buffer.appendleft(msg)
-                raise TransferIncomplete from wse
+        while True:
+            async with self.ping_sender:
+                await self.ping_sender.wait()
+            if self.stop_flag():
+                break
+            while True:
+                msg = await self.buffer.get()
+                if self.stop_flag():
+                    break
+                try:
+                    await self.transport.send(str(msg))
+                except websockets.WebSocketException:
+                    await self._add_to_buffer(msg)
+                    self._is_transport_connected = False
+                    break
+                except AttributeError:
+                    # transport is None, and we got "None does not have .send" thing
+                    break
+
+    async def _add_to_buffer(self, msg):
+        self._handle_buffer_and_log()
+        return await self.buffer.put(msg)
 
     def _handle_buffer_and_log(self):
-        if len(self.buffer) >= self.max_buffer_size:
-            logger.warning(f"discarding websocket message {self.buffer.popleft()}, buffer full", exc_info=True)
+        if self.buffer.qsize() >= self.max_buffer_size:
+            return logger.warning(f"discarding websocket message {self.buffer.get_nowait()}, buffer full",
+                                  exc_info=True)
+
+    async def __aenter__(self):
+        self._buffer_sender_task = _asyncio.create_task(self._send_buffer())
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._finalized is True:
+            return
 
-        if len(self.buffer) > 0:
-            logger.warning(f"websocket buffer not empty len={len(self.buffer)}")
+        if not self.buffer.empty():
+            logger.warning(f"websocket buffer not empty len={self.buffer.qsize()}")
+
+        self.stopping_event.set()
+
+        async with self.ping_sender:
+            self.ping_sender.notify_all()
+
+        await self.buffer.put(None)  # wake up if it's waiting for any message
         if self.transport:
             await self.transport.close()
+
+        await self._buffer_sender_task
+        self._finalized = True
 
 
 @singleton_mixin
@@ -93,17 +128,22 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
         self.dispatchers = {}
         self.dispatchers_exit_stack = AsyncExitStack()
 
-    def add_dispatcher(self, type_code, *dispatchers):
+    async def add_dispatcher(self, type_code, *dispatchers):
+        """Adds dispatcher to watch list
+
+        Enters context of dispatchers passed in,
+        owns lifetime of those dispatchers
+
+        Args:
+            type_code(int):
+            *dispatchers:
+
+        """
         for dispatcher in dispatchers:
             self.dispatchers[type_code] = dispatcher
-            self.dispatchers_exit_stack.push_async_exit(dispatcher)
+            await self.dispatchers_exit_stack.enter_async_context(dispatcher)
 
-    def update_dispatcher(self, type_code, *dispatchers):
-        for dispatcher in dispatchers:
-            self.dispatchers[type_code] = dispatcher
-            self.dispatchers_exit_stack.push_async_exit(dispatcher)
-
-    def get_dispatcher(self, type_code):
+    def get_dispatcher(self, type_code) -> FrontEndWebSocketDispatcher:
         return self.dispatchers.get(type_code, None)
 
     async def submit(self, msg_packet: DataWeaver):
@@ -159,10 +199,11 @@ async def validate_connection(web_socket):
     verification = DataWeaver(serial_data=wire_data)
 
     if disp := FrontEndDispatcher().get_dispatcher(verification.type):
-        disp.update_transport(web_socket)
+        await disp.update_transport(web_socket)
     else:
         web_socket_disp = FrontEndWebSocketDispatcher(transport=web_socket)
-        FrontEndDispatcher().add_dispatcher(verification.type, web_socket_disp)
+        await (fd := FrontEndDispatcher()).add_dispatcher(verification.type, web_socket_disp)
+        await _exit_stack.enter_async_context(fd)
 
     logger.info("[PAGE HANDLE] waiting for data from websocket")
 
@@ -194,7 +235,6 @@ async def handle_client(web_socket: Connection):
 async def start_websocket_server():
     start_server = await websockets.serve(handle_client, const.WEBSOCKET_BIND_IP, const.PORT_PAGE)
     logger.info(f"[PAGE HANDLE] websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")
-
     try:
         async with start_server:
             yield
@@ -205,11 +245,15 @@ async def start_websocket_server():
 
 async def initiate_page_handle():
     front_end = FrontEndDispatcher(stop_flag=Dock.finalizing.is_set)
-    front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher(None))
-    front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher(None))
+
+    # these transports will get, set later when websocket connection from frontend arrives
+    await front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher(transport=None))
+
+    await front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher(transport=None))
 
     from src.webpage_handlers.handlesignals import FrontEndSignalDispatcher
     from src.webpage_handlers.handledata import FrontEndDataDispatcher
+
     signal_disp = FrontEndSignalDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
     data_disp = FrontEndDataDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
 
@@ -218,15 +262,12 @@ async def initiate_page_handle():
     msg_disp.register_handler(headers.DATA, data_disp.submit)
     msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
 
-    await Dock.exit_stack.enter_async_context(front_end)
-    await Dock.exit_stack.enter_async_context(msg_disp)
-    await Dock.exit_stack.enter_async_context(start_websocket_server())
+    await Dock.exit_stack.enter_async_context(_exit_stack)
+    # enter early, cause these contexts are mostly last one to exit
 
-    # async with AsyncExitStack() as exit_s:
-    #     await exit_s.enter_async_context(front_end)
-    #     await exit_s.enter_async_context(msg_disp)
-    #     await exit_s.enter_async_context(start_websocket_server())
-    #     await Dock.finalizing.wait()
+    await _exit_stack.enter_async_context(front_end)
+    await _exit_stack.enter_async_context(msg_disp)
+    await _exit_stack.enter_async_context(start_websocket_server())
 
 
 @overload

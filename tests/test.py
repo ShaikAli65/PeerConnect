@@ -3,7 +3,6 @@ import getpass
 import os
 import random
 import sys
-from typing import NamedTuple
 
 from kademlia import utils
 
@@ -15,9 +14,9 @@ from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
 from src.core import Dock, acceptor, connectivity, requests, set_current_remote_peer_object
-from src.managers import profilemanager
+from src.managers import ProfileManager, profilemanager
 from src.managers.statemanager import State
-from src.webpage_handlers import pagehandle
+from src.webpage_handlers import pagehandle, webpage
 
 
 def _create_listen_socket_mock(bind_address, _):
@@ -27,6 +26,14 @@ def _create_listen_socket_mock(bind_address, _):
     )
     print("mocked socket creation")
     return sock
+
+
+async def _mock_interface_selector(interfaces):
+    print("not asking for", (i := next(iter(interfaces))))
+    return i
+
+
+webpage.ask_for_interface_choice = _mock_interface_selector
 
 
 # async def setup_request_transport(bind_address, multicast_address, req_dispatcher):
@@ -69,14 +76,32 @@ def get_a_peer() -> RemotePeer | None:
     return p
 
 
-def profile_getter():
-    return NamedTuple("MockProfile", (("id", int), ("username", str)))(
-        random.getrandbits(255), getpass.getuser()
+async def profile_getter():
+    p = await ProfileManager.add_profile(
+        getpass.getuser(),
+        {
+            "USER": {
+                "name": getpass.getuser(),
+                "id": random.getrandbits(255),
+            },
+            "SERVER": {
+                "port": 45000,
+                "ip": "0.0.0.0",
+                "id": 0,
+            },
+            "INTERFACE": {}
+        }
     )
 
+    async def delete(*_):
+        await ProfileManager.delete_profile(p.file_name)
 
-def mock_profile():
-    src.managers.profilemanager._current_profile = profile_getter()
+    Dock.exit_stack.push_async_exit(delete)
+    return p
+
+
+async def mock_profile():
+    src.managers.profilemanager._current_profile = await profile_getter()
 
 
 def mock_multicast():
@@ -87,19 +112,18 @@ def mock_multicast():
 
 
 def test_initial_states():
+    # :todo: look into states once again
     s1 = State("set paths", configure.set_paths)
-    s2 = State("boot_up initiating", bootup.initiate_bootup)
-    # s3 = State("webpage", pagehandle.initiate_page_handle, is_blocking=True)
-    s3 = State("webpage", pagehandle.initiate_page_handle)
-    # s3 = State("mocking up multicast", mock_multicast)
-    # s3 = State("adding shit", test)
-    s4 = State("loading profiles", profilemanager.load_profiles_to_program)
+    s2 = State("loading configurations", configure.load_configs)
+    s3 = State("loading profiles", profilemanager.load_profiles_to_program)
+    s4 = State("launching webpage", pagehandle.initiate_page_handle)
     s5 = State("mocking profile", mock_profile)
-    s6 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    s7 = State("printing configurations", configure.print_constants)
-    s8 = State("initiating requests", requests.initiate)
-    s9 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
-    s10 = State("connectivity checker", connectivity.initiate)
+    s6 = State("boot up", bootup.initiate_bootup)
+    s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
+    s8 = State("printing configurations", configure.print_constants)
+    s9 = State("initiating requests", requests.initiate)
+    s10 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
+    s11 = State("connectivity checker", connectivity.initiate)
     return tuple(locals().values())
 
 

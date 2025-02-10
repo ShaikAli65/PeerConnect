@@ -1,4 +1,5 @@
 from src.avails import const
+from ..avails.connect import IPAddress
 
 if const.IS_WINDOWS:
     from ._interfaces_windows import get_interfaces as _get_interfaces
@@ -27,7 +28,7 @@ def get_ip_with_ip(ip_addr: str):
     raise ValueError("No interface with given ip")
 
 
-def get_interfaces():
+def get_interfaces() -> list[IPAddress]:
     if _if_info is None:
         reset()
 
