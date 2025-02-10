@@ -69,19 +69,19 @@
     },
     "kademlia" : {
       "level": "INFO",
-      "propagate": false
+      "propagate": true
     },
     "rpcudp" : {
       "level": "INFO"
     },
     "src.core.requests": {
-      "propagate": false
+      "propagate": true
     },
     "kademlia.protocol": {
-      "propagate": false
+      "propagate": true
     },
     "src.core.discover": {
-      "propagate": false
+      "propagate": true
     }
   }
 }

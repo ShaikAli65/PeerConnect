@@ -1,11 +1,8 @@
 import ctypes
 import socket
 
-from typing import Literal
 from src.avails.connect import IPAddress
 
-AF_INET = socket.AF_INET
-AF_INET6 = socket.AF_INET6
 AF_UNSPEC = 0
 GAA_FLAG_INCLUDE_PREFIX = 0x10
 ERROR_BUFFER_OVERFLOW = 111
@@ -13,7 +10,7 @@ ERROR_SUCCESS = 0
 LOOP_BACK_TYPE = 24
 
 
-def get_interfaces(address_family: Literal[AF_INET, AF_INET6]):
+def get_interfaces(address_family: socket.AF_INET | socket.AF_INET6):
     if_info = []
 
     # The basic SOCKADDR structure.
@@ -91,7 +88,7 @@ def get_interfaces(address_family: Literal[AF_INET, AF_INET6]):
         ("OperStatus", ctypes.c_int),
         ("Ipv6IfIndex", ctypes.c_ulong),
         ("ZoneIndices", ctypes.c_ulong * 16),
-        # Many more fields follow but we don'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢'t use them.
+        # Many more fields follow, but we don't use them.
     ]
 
     def get_adapters():
@@ -115,7 +112,7 @@ def get_interfaces(address_family: Literal[AF_INET, AF_INET6]):
             if ret_val == ERROR_SUCCESS:
                 break
             elif ret_val == ERROR_BUFFER_OVERFLOW:
-                # Buffer too small ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ try again with the new size.
+                # Buffer too small try again with the new size.
                 continue
             else:
                 raise ctypes.WinError(ret_val)
@@ -159,10 +156,10 @@ def get_interfaces(address_family: Literal[AF_INET, AF_INET6]):
                 scope_id = addr_in6.sin6_scope_id
             ua = ua.contents.Next
         res = IPAddress(
-            if_name=adapter.AdapterName,
-            friendly_name=adapter.FriendlyName,
             ip=ip,
             scope_id=scope_id,
+            if_name=adapter.AdapterName,
+            friendly_name=adapter.FriendlyName,
         )
         if_info.append(res)
     return if_info

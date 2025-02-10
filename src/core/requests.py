@@ -24,12 +24,11 @@ async def initiate():
     # TL;DR: causing some unknown behaviour in linux system
 
     if const.IS_WINDOWS:
-        const.BIND_IP = const.THIS_IP
+        const.BIND_IP = const.THIS_IP.ip
 
-    bind_address = (const.BIND_IP, const.PORT_REQ)
+    bind_address = const.THIS_IP.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
 
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
-    broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
     await Dock.exit_stack.enter_async_context(req_dispatcher)
@@ -89,9 +88,8 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
 
 async def _create_listen_socket(bind_address, multicast_addr):
     loop = asyncio.get_running_loop()
-    family, _, _, _, resolved_bind_address = await anext(use.get_addr_info(*bind_address))
     sock = UDPProtocol.create_async_server_sock(
-        loop, resolved_bind_address, family=family
+        loop, bind_address, family=const.IP_VERSION
     )
 
     if const.USING_IP_V4:

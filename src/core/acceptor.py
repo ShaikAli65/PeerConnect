@@ -150,9 +150,9 @@ class Acceptor:
 
     current_connections = {}
 
-    def __init__(self, connection_disp, finalizer, ip=None, port=None):
+    def __init__(self, connection_disp, finalizer, listen_addr=None):
         self._exit_stack = AsyncExitStack()
-        self.address = (ip or const.THIS_IP, port or const.PORT_THIS)
+        self.address = listen_addr or const.THIS_IP.addr_tuple(port=const.PORT_THIS)
         self.stopping = finalizer
         self.main_socket: Optional[connect.Socket] = None
         self.back_log = 4
@@ -202,19 +202,9 @@ class Acceptor:
                     await asyncio.sleep(0)
 
     async def _start_socket(self):
-
-        try:
-            addr_info = await anext(use.get_addr_info(*self.address, family=const.IP_VERSION))
-        except StopAsyncIteration:
-            raise RuntimeError("No valid address found for the server")
-        except Exception as e:
-            _logger.error(f"Error resolving address: {e}", exc_info=True)
-            raise
-
-        sock_family, sock_type, _, _, address = addr_info
         sock = const.PROTOCOL.create_async_server_sock(
             asyncio.get_running_loop(),
-            address,
+            self.address,
             family=const.IP_VERSION,
             backlog=self.back_log
         )

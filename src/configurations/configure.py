@@ -1,3 +1,4 @@
+import asyncio
 import configparser
 import ipaddress
 import os
@@ -5,40 +6,12 @@ import socket
 from pathlib import Path
 
 import src.avails.constants as const
-from src.avails import connect, use
-
-
-def set_constants(config_map: configparser.ConfigParser) -> bool:
-    """Sets global constants from values in the configuration file and directories.
-
-    Reads configuration values from default_config.ini and sets global variables accordingly.
-    Also sets directory paths for logs and the webpage.
-
-    Returns:
-        bool: True if configuration values were flip successfully, False otherwise.
-    """
-
-    const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
-    const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
-    const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
-    const.PAGE_SERVE_PORT = config_map.getint('NERD_OPTIONS', 'page_serve_port')
-
-    const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
-    const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
-
-    const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
-
-    if const.IP_VERSION == socket.AF_INET6 and not socket.has_ipv6:
-        const.IP_VERSION = socket.AF_INET
-        print(
-            f"Error reading default_config.ini from {use.func_str(set_constants)}"
-        )
-        return False
-    return True
+from src.avails import connect
+from src.configurations import logger as _logger
 
 
 def print_constants():
-    ip_version = ipaddress.ip_address(const.THIS_IP).version
+    ip_version = ipaddress.ip_address(const.THIS_IP.ip).version
     print_string = (
         f'\n:configuration choices{"=" * 32}\n'
         f'{"USERNAME": <15} : {const.USERNAME: <10}\n'
@@ -73,6 +46,7 @@ def set_paths():
     const.PATH_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE)
     const.PATH_LOG_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', 'log_config.json')
     downloads_path = Path(os.path.expanduser('~'), 'Downloads')
+
     # check if the directory exists
     if not os.path.exists(downloads_path):
         downloads_path = Path(os.path.expanduser('~'), 'Desktop')
@@ -85,10 +59,98 @@ def set_paths():
         const.PATH_DOWNLOAD = os.path.join(const.PATH_CURRENT, 'fallbacks')
 
 
-def validate_ports(ip):
-    ports_list = [const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ, ]
-    for i, port in enumerate(ports_list):
-        if not connect.is_port_empty(port, ip):
-            ports_list[i] = connect.get_free_port(ip)
-            use.echo_print(f"Port is not empty. choosing another port: {ports_list[i]}")
-    const.PORT_THIS, const.PORT_PAGE, const.PORT_REQ = ports_list
+async def load_configs():
+    config_map = configparser.ConfigParser(allow_no_value=True)
+
+    def _helper():
+        try:
+            config_map.read(const.PATH_CONFIG)
+        except KeyError:
+            write_default_configurations(const.PATH_CONFIG)
+            config_map.read(const.PATH_CONFIG)
+
+        if not Path(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME).exists():
+            write_default_profile()
+
+        if const.DEFAULT_PROFILE_NAME not in config_map['USER_PROFILES']:
+            config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
+
+        with open(const.PATH_CONFIG, 'w+') as fp:
+            config_map.write(fp)  # noqa
+
+    # _helper()
+    await asyncio.to_thread(_helper)
+
+    set_constants(config_map)
+
+
+def write_default_configurations(path):
+    default_config_file = (
+        '[NERD_OPTIONS]\n'
+        'this_port = 48221\n'
+        'page_port = 12260\n'
+        'ip_version = 4\n'
+        'protocol = tcp\n'
+        'req_port = 35623\n'
+        'page_serve_port = 40000\n'
+        '\n'
+        '[USER_PROFILES]\n'
+        'admin\n'
+        '[SELECTED_PROFILE]\n'
+        'default_profile.ini\n'
+    )
+    with open(path, 'w+') as config_file:
+        config_file.write(default_config_file)
+
+
+def write_default_profile():
+    default_profile_file = (
+        '[USER]\n'
+        'name = new user\n'
+        'id = 1234'
+        '\n'
+        '[SERVER]\n'
+        'port = 45000\n'
+        'ip = 0.0.0.0\n'
+        'id = 0\n'
+        '[INTERFACE]'
+    )
+    with open(os.path.join(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME), 'w+') as profile_file:
+        profile_file.write(default_profile_file)
+    parser = configparser.ConfigParser(allow_no_value=True)
+    parser.read(const.PATH_CONFIG)
+    parser.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
+
+    with open(const.PATH_CONFIG, 'w+') as fp:
+        parser.write(fp)  # noqa
+
+
+def set_constants(config_map: configparser.ConfigParser) -> bool:
+    """Sets global constants from values in the configuration file and directories.
+
+    Reads configuration values from default_config.ini and sets global variables accordingly.
+    Also sets directory paths for logs and the webpage.
+
+    Returns:
+        bool: True if configuration values were flip successfully, False otherwise.
+    """
+
+    const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
+    const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
+    const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
+    const.PAGE_SERVE_PORT = config_map.getint('NERD_OPTIONS', 'page_serve_port')
+
+    const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
+    const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
+
+    const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
+
+    if const.IP_VERSION == socket.AF_INET6 and not socket.has_ipv6:
+        _logger.warning(f"system does not support ipv6 ({socket.has_ipv6=}), using ipv4")
+        const.IP_VERSION = socket.AF_INET
+
+    if const.IP_VERSION == socket.AF_INET6:
+        const.USING_IP_V6 = True
+        const.USING_IP_V4 = False
+
+    return True

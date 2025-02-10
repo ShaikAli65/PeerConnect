@@ -1,3 +1,4 @@
+import asyncio
 import configparser
 import os
 import time
@@ -5,6 +6,15 @@ from pathlib import Path
 from typing import Optional, Union
 
 from src.avails import const
+from src.avails.connect import IPAddress
+
+
+async def write_config(config_parser, file_path):
+    def _helper():
+        with open(file_path, "w") as file:
+            config_parser.write(file)
+    # return _helper()
+    return await asyncio.to_thread(_helper)
 
 
 class ProfileManager:
@@ -21,17 +31,15 @@ class ProfileManager:
         self.profile_file_path = Path(const.PATH_PROFILES, profiles_file)
         if profile_data:
             self.profile_data: dict[str, dict] = profile_data
-        else:
-            self.profile_data: dict[str, dict] = self.get_profile_data()
 
-    def get_profile_data(self) -> dict:
+    async def get_profile_data(self) -> dict:
         """
         Performs a structural pattern matching
         :raises ValueError: if required keys were not found
         :return profiles_data: if all required keys were found
         """
 
-        profile_data = self.__load_profile_data()
+        profile_data = await self.__load_profile_data()
         self.match_pattern(profile_data)
         return profile_data
 
@@ -46,29 +54,29 @@ class ProfileManager:
                     "name": _,
                     "id": _,
                 },
+                "INTERFACE": _
             }:
                 return profile_data
             case _:
                 self.__raise_error()
 
-    def __load_profile_data(self) -> dict:
+    async def __load_profile_data(self) -> dict:
         try:
             config = configparser.ConfigParser()
-            config.read(self.profile_file_path)
+            # config.read(self.profile_file_path)
+            await asyncio.to_thread(config.read, self.profile_file_path, encoding=None)
             return {
                 section: dict(config.items(section)) for section in config.sections()
             }
         except FileNotFoundError:
             return {}
 
-    def edit_profile(self, config_header, new_settings: dict):
+    async def edit_profile(self, config_header, new_settings: dict):
         """
-        Accepts a dictionary of new settings and updates the profile with the new settings
-        mapped to respective config_header
-        :param config_header:
-        :param new_settings:
-        :return:
+            Accepts a dictionary of new settings and updates the profile with the new settings
+            mapped to respective config_header
         """
+
         prev_username = self.username
         self.profile_data.setdefault(config_header, {}).update(new_settings)
         if not prev_username == self.username:
@@ -76,21 +84,25 @@ class ProfileManager:
                 const.PATH_PROFILES, self.__uniquify(self.username) + ".ini"
             )
             os.rename(self.profile_file_path, new_profile_path)
-            self.__remove_from_main_config(self.profile_file_path.name)
-            self.__write_to_main_config(new_profile_path.name)
+            await self.__remove_from_main_config(self.profile_file_path.name)
+            await self.__write_to_main_config(new_profile_path.name)
             self.profile_file_path = new_profile_path
-        self.save_profiles()
+        await self._write_profile()
 
-    def set_profile_data_from_file(self):
-        self.profile_data = self.__load_profile_data()
+    async def set_profile_data_from_file(self):
+        self.profile_data = await self.get_profile_data()
 
-    def save_profiles(self):
+    async def write_interface(self, interface: IPAddress):
+        return await self.edit_profile("INTERFACES", interface._asdict())
+
+    async def _write_profile(self):
         config = configparser.ConfigParser()
         config.update(
             {profile: settings for profile, settings in self.profile_data.items()}
         )
-        with open(self.profile_file_path, "w") as file:
-            config.write(file)
+
+        await write_config(config, self.profile_file_path)
+
 
     def __raise_error(self):
         raise LookupError(
@@ -98,7 +110,7 @@ class ProfileManager:
         )
 
     @classmethod
-    def add_profile(cls, profile_name, settings: dict):
+    async def add_profile(cls, profile_name, settings: dict):
         """
          Adds profile into application with settings provided as a dictionary mapped to respective headers
         :param profile_name:
@@ -109,36 +121,39 @@ class ProfileManager:
         config = configparser.ConfigParser()
         for section, setting in settings.items():
             config[section] = setting
-        with open(profile_path, "w") as file:
-            config.write(file)
-        cls.__write_to_main_config(profile_path.name)
-        cls.PROFILE_LIST.append(cls(profile_path))
+        await write_config(config, profile_path)
+        await cls.__write_to_main_config(profile_path.name)
+        cls.PROFILE_LIST.append(p := cls(profile_path, profile_data=settings))
+        # await p.set_profile_data_from_file()
+        return p
 
     @classmethod
-    def __write_to_main_config(cls, file_name):
+    async def __write_to_main_config(cls, file_name):
         cls._main_config.set("USER_PROFILES", file_name)
-        with open(const.PATH_CONFIG, "w") as file:
-            cls._main_config.write(file)
+        await write_config(cls._main_config, const.PATH_CONFIG)
 
     @classmethod
-    def __remove_from_main_config(cls, profile_key):
+    async def __remove_from_main_config(cls, profile_key):
         cls._main_config.remove_option("USER_PROFILES", profile_key)  # debug
-        with open(const.PATH_CONFIG, "w") as file:
-            cls._main_config.write(file)
+        await write_config(cls._main_config, const.PATH_CONFIG)
 
     @classmethod
-    def write_selected_profile(cls, profile):
+    async def _clear_selected_profile(cls):
+        """writes default profile as the last selected one"""
+        default = ProfileManager(Path(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME))
+        await cls.write_selected_profile(default)
+
+    @classmethod
+    async def write_selected_profile(cls, profile):
         cls._main_config.remove_section("SELECTED_PROFILE")
-        with open(const.PATH_CONFIG, "w") as file:
-            cls._main_config.write(file)
+        await write_config(cls._main_config, const.PATH_CONFIG)
 
         cls._main_config.add_section("SELECTED_PROFILE")
         cls._main_config.set("SELECTED_PROFILE", profile.file_name)
-        with open(const.PATH_CONFIG, "w") as file:
-            cls._main_config.write(file)
+        await write_config(cls._main_config, const.PATH_CONFIG)
 
     @classmethod
-    def delete_profile(cls, profile_file_name):
+    async def delete_profile(cls, profile_file_name):
         profile_path = Path(
             const.PATH_PROFILES, profile_file_name
         )
@@ -148,7 +163,10 @@ class ProfileManager:
             except os.error as e:
                 # error_log(f"deletion error for profile {profile_file_name} exp:{e}")
                 ...
-        cls.__remove_from_main_config(profile_path.name)
+        await cls.__remove_from_main_config(profile_path.name)
+
+        if profile_file_name == cls.prev_selected_profile_file_name():
+            await cls._clear_selected_profile()
 
     def __repr__(self):
         return f"<Profile name={self.username} file_path={self.profile_file_path}>"
@@ -162,6 +180,19 @@ class ProfileManager:
         return self.profile_data["USER"]["id"]
 
     @property
+    def interface(self):
+        interface = self.profile_data["INTERFACE"]
+        try:
+            ip = interface["ip"]
+            scope_id = interface["scope_id"]
+            if_name = interface["if_name"]
+            friendly_name = interface["friendly_name"]
+        except KeyError:
+            return None  # if any of these fail, it means not configured properly
+
+        return IPAddress(ip, scope_id, if_name, friendly_name)
+
+    @property
     def file_name(self):
         return self.profile_file_path.name
 
@@ -169,16 +200,13 @@ class ProfileManager:
     def server_ip(self):
         return self.profile_data["SERVER"]["ip"]
 
-    @property
-    def server_port(self):
-        return int(self.profile_data["SERVER"]["port"])
-
     @staticmethod
     def __uniquify(username):
         return f"{username}{int(time.time() * 10)}"
 
     @classmethod
     def prev_selected_profile_file_name(cls):
+        """profile that user selected in the previous session"""
         return next(iter(cls._main_config["SELECTED_PROFILE"]))
 
     def __eq__(self, other):
@@ -198,7 +226,7 @@ class ProfileManager:
             f"\tserver_ip={self.server_ip},\n"
             f"\tusername={self.username},\n"
             f"\tfile_name={self.file_name},\n"
-            f"\tserver_port={self.server_port}\n"
+            f"\tinterface={self.interface}\n"
             f")>"
         )
 
@@ -224,26 +252,31 @@ def all_profiles():
     return profiles
 
 
-def load_profiles_to_program():
+async def load_profiles_to_program():
     if not os.path.exists(const.PATH_PROFILES):
-        raise EnvironmentError("profiles path not found")
+        print("profiles path not found")
+        exit(-1)
 
     main_config = configparser.ConfigParser(allow_no_value=True)
-    main_config.read(const.PATH_CONFIG)
+    await asyncio.to_thread(main_config.read, filenames=const.PATH_CONFIG, encoding=None)
 
     ProfileManager._main_config = main_config
     for profile_id in main_config["USER_PROFILES"]:
         try:
+            # this is the only place where profile objects are created
             profile = ProfileManager(profile_id)
+            await profile.set_profile_data_from_file()
             ProfileManager.PROFILE_LIST.append(profile)
         except LookupError:
-            ProfileManager.delete_profile(profile_id)
-    return True
+            await ProfileManager.delete_profile(profile_id)
+
+    if const.debug:
+        print(f"loaded profiles: \n {"\n".join(str(x) for x in ProfileManager.PROFILE_LIST)}")
 
 
-def refresh_profile_list():
+async def refresh_profile_list():
     ProfileManager.PROFILE_LIST.clear()
-    load_profiles_to_program()
+    await load_profiles_to_program()
 
 
 def get_profile_from_profile_file_name(
@@ -266,10 +299,10 @@ def get_profile_from_profile_file_name(
 _current_profile: Optional[ProfileManager] = None
 
 
-def set_current_profile(profile):
+async def set_current_profile(profile):
     global _current_profile
     _current_profile = profile
-    ProfileManager.write_selected_profile(profile)
+    await ProfileManager.write_selected_profile(profile)
 
 
 def get_current_profile() -> ProfileManager:

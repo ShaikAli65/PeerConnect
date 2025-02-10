@@ -1,8 +1,9 @@
+import asyncio
 import json
 import logging
 import logging.config
 import queue
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 from src.avails import const
@@ -10,10 +11,16 @@ from src.avails import const
 log_queue = queue.SimpleQueue()
 
 
-@contextmanager
-def initiate():
-    with open(const.PATH_LOG_CONFIG) as fp:
-        log_config = json.load(fp)
+@asynccontextmanager
+async def initiate():
+    log_config = {}
+
+    def _loader():
+        nonlocal log_config
+        with open(const.PATH_LOG_CONFIG) as fp:
+            log_config = json.load(fp)
+    # _loader()
+    await asyncio.to_thread(_loader)
 
     for handler in log_config["handlers"]:
         if "filename" in log_config["handlers"][handler]:

@@ -1,19 +1,16 @@
 import ctypes
 import socket
 import struct
-from typing import Literal
+
 from src.avails.connect import IPAddress
 
-
-AF_INET = socket.AF_INET
-AF_INET6 = socket.AF_INET6
 IFF_LOOPBACK = 0x8
 IFF_UP = 0x1  # Interface is up.
 IFF_RUNNING = 0x40
 
 
 def get_interfaces(
-    address_family: Literal[AF_INET, AF_INET6],
+    address_family: socket.AF_INET | socket.AF_INET6,
 ) -> list[IPAddress]:
     # Load the C library (adjust the name if needed on your system)
     libc = ctypes.CDLL("libc.so.6")
@@ -84,14 +81,14 @@ def get_interfaces(
             family = iface.ifa_addr.contents.sa_family
             iface_name = iface.ifa_name.decode("utf-8") if iface.ifa_name else None
             if (
-                not (family == AF_INET or family == AF_INET6)
+                not (family == socket.AF_INET or family == socket.AF_INET6)
                 or bool(flags & IFF_LOOPBACK)
                 or not bool(flags & IFF_RUNNING)
             ):
                 p = iface.ifa_next
                 continue
 
-            if family == address_family == AF_INET:
+            if family == address_family == socket.AF_INET:
                 addr_in = ctypes.cast(
                     iface.ifa_addr, ctypes.POINTER(sockaddr_in)
                 ).contents
@@ -99,13 +96,13 @@ def get_interfaces(
 
                 # -1 is just to fill the field but ipv4 donot have any scope_ids
                 scope_id = -1
-            elif family == address_family == AF_INET6:  # for ip v6
+            elif family == address_family == socket.AF_INET6:  # for ip v6
                 addr_in = ctypes.cast(
                     iface.ifa_addr, ctypes.POINTER(sockaddr_in6)
                 ).contents
 
                 ip_addr = socket.inet_ntop(
-                    AF_INET6, bytes(bytearray(addr_in.sin6_addr.s6_addr))
+                    socket.AF_INET6, bytes(bytearray(addr_in.sin6_addr.s6_addr))
                 )
 
                 scope_id = addr_in.sin6_scope_id
