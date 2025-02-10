@@ -42,7 +42,7 @@ from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, get_this_remote_peer
+from src.core import DISPATCHS, Dock, addr_tuple, get_this_remote_peer
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import DiscoveryTransport
 from src.webpage_handlers import webpage
@@ -96,10 +96,10 @@ def DiscoveryRequestHandler(discovery_transport):
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
             msg_id=this_rp.peer_id,
-            connect_uri=this_rp.req_uri,
+            connect_uri=this_rp.req_uri[:2],
         )
         discovery_transport.sendto(
-            bytes(data_payload), tuple(req_packet["reply_addr"])
+            bytes(data_payload), addr_tuple(*req_packet["reply_addr"][:2])
         )
 
     return handle
@@ -136,7 +136,7 @@ async def send_discovery_requests(transport, multicast_addr):
         WireData(
             DISCOVERY.NETWORK_FIND,
             this_rp.peer_id,
-            reply_addr=this_rp.req_uri
+            reply_addr=this_rp.req_uri[:2]
         )
     )
 

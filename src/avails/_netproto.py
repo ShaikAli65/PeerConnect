@@ -1,6 +1,6 @@
-from abc import ABC, abstractmethod
 import asyncio as _asyncio
 import socket as _socket
+from abc import ABC, abstractmethod
 from typing import Optional
 
 from src.avails._asocket import Socket
@@ -114,11 +114,11 @@ class TCPProtocol(NetworkProtocol):
     async def create_connection_async(
             cls, loop: _asyncio.AbstractEventLoop, address, timeout=None
     ) -> Socket:
-        addr_info = await loop.getaddrinfo(*address, type=_socket.SOCK_STREAM)
+        addr_info = await loop.getaddrinfo(*address[:2], type=_socket.SOCK_STREAM)
         addr_family, sock_type, _, _, resolved_address = addr_info[0]
 
         if addr_family == _socket.AF_INET6:
-            resolved_address = resolved_address[:3], address[3]
+            resolved_address = *resolved_address[:3], address[3]
             # persist scope_id from address, in linux getaddrinfo
             # betrays by sending 0 as the scope id after resolving
             # which simply does not work, cause linux needs exact scope_id to make connection from

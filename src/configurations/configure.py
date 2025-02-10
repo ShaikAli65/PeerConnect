@@ -152,5 +152,6 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     if const.IP_VERSION == socket.AF_INET6:
         const.USING_IP_V6 = True
         const.USING_IP_V4 = False
+        const.BIND_IP = const._BIND_IP_V6
 
     return True

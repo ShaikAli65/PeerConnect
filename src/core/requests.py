@@ -4,7 +4,7 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, const, unpack_datagram, use
+from src.avails import InvalidPacket, const, unpack_datagram
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
@@ -78,7 +78,12 @@ async def initiate():
 
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()
-    base_socket = await _create_listen_socket(bind_address, multicast_address)
+
+    base_socket = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
+
+    _subscribe_to_multicast(base_socket, multicast_address)
     transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher),
         sock=base_socket
@@ -86,12 +91,7 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     return transport
 
 
-async def _create_listen_socket(bind_address, multicast_addr):
-    loop = asyncio.get_running_loop()
-    sock = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
-    )
-
+def _subscribe_to_multicast(sock, multicast_addr):
     if const.USING_IP_V4:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
@@ -100,7 +100,7 @@ async def _create_listen_socket(bind_address, multicast_addr):
             log = "not " + log
         _logger.debug(log)
 
-        ipv4_multicast_socket_helper(sock, bind_address, multicast_addr)
+        ipv4_multicast_socket_helper(sock, sock.getsockname(), multicast_addr)
         _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)

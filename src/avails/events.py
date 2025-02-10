@@ -1,18 +1,18 @@
 from typing import NamedTuple
 
-from src.avails.connect import Connection
+from src.avails.connect import Addr, Connection
 from src.avails.wire import GossipMessage, WireData
 
 
 class RequestEvent(NamedTuple):
     root_code: bytes
     request: WireData
-    from_addr: tuple[str, int]
+    from_addr: Addr
 
 
 class GossipEvent(NamedTuple):
     message: GossipMessage
-    from_addr: tuple[str, int]
+    from_addr: Addr
 
 
 class ConnectionEvent(NamedTuple):

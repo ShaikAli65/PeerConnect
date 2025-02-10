@@ -4,6 +4,7 @@ import logging
 import socket
 import socket as _socket
 import struct
+
 from src.avails import useables
 from src.avails._asocket import *  # noqa
 from src.avails._conn import *  # noqa
@@ -54,19 +55,26 @@ class IPAddress(NamedTuple):
             return ipaddr, port, flow_info, scope_id
 
 
+Addr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
+
+
 def create_connection_sync(
         address, timeout=None
 ) -> Socket:
     addr_family = _socket.AF_INET if ipaddress.ip_address(address[0]).version == 4 else _socket.AF_INET6
     sock = Socket(addr_family, _socket.SOCK_STREAM)
     sock.settimeout(timeout)
+
+    if const.USING_IP_V6 and len(address) != 4:
+        address = const.THIS_IP.addr_tuple(port=address[1], ip=address[0])
+
     sock.connect(address)
     return sock
 
 
 async def create_connection_async(address, timeout=None) -> Socket:
     loop = _asyncio.get_running_loop()
-    if const.USING_IP_V6:
+    if const.USING_IP_V6 and len(address) != 4:
         address = const.THIS_IP.addr_tuple(port=address[1], ip=address[0])
     sock = await const.PROTOCOL.create_connection_async(loop, address, timeout)
     return sock
@@ -91,7 +99,7 @@ def connect_to_peer(
 
     """
 
-    address, sock_family, sock_type = resolve_address(_peer_obj, to_which)
+    address = getattr(_peer_obj, to_which)
 
     if timeout is None:
         return create_connection_sync(address)
@@ -108,29 +116,6 @@ def connect_to_peer(
                 raise
 
     raise OSError
-
-
-def resolve_address(_peer_obj, to_which):
-    addr = getattr(_peer_obj, to_which)
-    address_info, *_ = _socket.getaddrinfo(addr[0], addr[1], type=_socket.SOCK_STREAM)
-    return _address_common(address_info)
-
-
-@useables.awaitable(resolve_address)
-async def resolve_address(_peer_obj, to_which):
-    addr = getattr(_peer_obj, to_which)
-    loop = _asyncio.get_running_loop()
-    address_info, *_ = await loop.getaddrinfo(addr[0], addr[1], type=_socket.SOCK_STREAM)
-    return _address_common(address_info)
-
-
-def _address_common(address_info):
-    address = address_info[4]
-    sock_family = address_info[0]
-    sock_type = address_info[1]
-    if sock_family == _socket.AF_INET6:
-        address = const.THIS_IP.addr_tuple(port=address[1], ip=address[0])
-    return address, sock_family, sock_type
 
 
 @useables.awaitable(connect_to_peer)
@@ -150,8 +135,8 @@ async def connect_to_peer(
     :raises: OSError
     """
 
-    address, sock_family, sock_type = await resolve_address(_peer_obj, to_which)
-    address = address[:2]
+    address = getattr(_peer_obj, to_which)
+
     retry_count = 0
 
     if timeout is None:

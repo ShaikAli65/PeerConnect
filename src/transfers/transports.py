@@ -46,7 +46,7 @@ class KademliaTransport(RequestsTransport):
     _trigger = REQUESTS_HEADERS.KADEMLIA
 
     @override
-    def sendto(self, data: bytes, addr: tuple[str, int] = None):
+    def sendto(self, data: bytes, addr: tuple[str, int] | tuple[str, int, int, int] = None):
         formatted = bytes(WireData(data=data))
         return super().sendto(formatted, addr)
 

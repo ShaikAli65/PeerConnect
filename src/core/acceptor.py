@@ -222,6 +222,7 @@ class Acceptor:
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
+        raw_hand_shake = None
         try:
             raw_hand_shake = await asyncio.wait_for(
                 Wire.receive_async(initial_conn), const.SERVER_TIMEOUT
@@ -252,9 +253,6 @@ class Acceptor:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self._exit_stack.__aexit__(exc_tb, exc_type, exc_tb)
-        self.end()
-
-    def __del__(self):
         self.end()
 
     def __repr__(self):
