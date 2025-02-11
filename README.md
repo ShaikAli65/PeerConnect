@@ -12,13 +12,53 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 - **Standard Library Use**: Core functionality implemented using Python’s standard library to avoid unnecessary dependencies.
 
 ## Internals
-- **Network Discovery**: finds other peers incrementally in the local network and lists them to the user   
-- **k 
-- **Messaging**: 
+- **Network Discovery**: Finds other peers incrementally in the local network and lists them to the user   
+- **Kademlia**: Is used in the overlay routing 
+- **Messaging**: Direct messaging is used, a combination of datagram and stream protocols are used 
+
+
+### What it Lacks
+- Distributed Reputation System
+- Encryption
+
+### Future Plans
+- **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
+- **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
+  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream, 
+  should respect backpressure, utilizing maximum bandwidth 
+
+### More Features 
+These are not planned for completion but code (Internal High Level APIs) tries it's best to be extensible to include various functionalities  
+- **Shared directory**: Allow users to share a directory and other peers can search for files they want
+- **Building Reputation System**: Not planned to be made, will take forever
+- **Calls**: Voice and Video Calls
+
+## Usage
+
+Clone the repository and follow the instructions to get started with either the **Main** (stable) or **Dev** (development) branch.
+
+```
+git clone https://github.com/ShaikAli65/PeerConnect.git
+cd PeerConnect/bin
+```
+
+### Windows
+
+```
+peerconnect.bat
+```
+
+### Linux
+
+```
+peerconnect.sh
+```
+Run the script, if any errors occur raise an issue and include stdout of the script
+
 
 ## Main Branch
 
-The code in the main branch is a fully functional version of PeerConnect. It employs a **threaded synchronous model** and includes:
+The code in the main branch is a functional version of PeerConnect. It employs a **threaded synchronous model** and includes:
 
 - **Mesh Networking**: Maintains peer-to-peer connections with local storage of peer information.
 - **Signaling Server**: Requires a centralized signaling server for coordinating peer connections.
@@ -31,6 +71,7 @@ The code in the main branch is a fully functional version of PeerConnect. It emp
 - **[pyqt](https://riverbankcomputing.com/software/pyqt/intro)**: Utilized for file picker (though a lighter alternative is desired).
 - **[websockets](https://websockets.readthedocs.io/)**: Facilitates Inter-Process Communication (IPC) between the backend and the frontend.
 
+
 ## Dev Branch (Under Development)
 
 The dev branch is a complete rewrite using Python’s asynchronous features, aiming to scale PeerConnect for **larger, distributed networks** without a centralized entity. This branch includes:
@@ -42,19 +83,11 @@ The dev branch is a complete rewrite using Python’s asynchronous features, aim
   - **Custom Gossip Protocol**: A lightweight, under-development gossip protocol designed for efficient large-scale peer messaging.
   
 - **Fully Asynchronous**: Leverages Python’s `asyncio` to handle asynchronous network communication efficiently.
-- **Decentralized Coordination**: Removes the need for a centralized signaling server, enabling pure peer-to-peer operations.
+- **Decentralized Coordination**: Eliminates the need for a centralized signaling server, enabling pure peer-to-peer operations.
 - **Scalability**: Expected to handle large networks of over 1500 peers concurrently.
-  
+- **High Speed Data Transfer**: Can transfer big files (with sizes in GBs) using maximum bandwidth 
+
+
 ### Additional Dependencies
 
 - **[kademlia](https://github.com/bmuller/kademlia)**: A distributed hash table implementation used for decentralized peer discovery.
-
-## Future Plans
-
-- **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
-- **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
-  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream, 
-  should respect backpressure, utilizing maximum bandwidth 
-## Usage
-
-PeerConnect is designed for local networks. Clone the repository and follow the instructions to get started with either the **Main** (stable) or **Dev** (development) branch.
