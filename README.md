@@ -20,17 +20,21 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 ### What it Lacks
 - Distributed Reputation System
 - Encryption
+- A good test suite
 
 ### Future Plans
 - **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
 - **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
-  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream, 
+  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream,
   should respect backpressure, utilizing maximum bandwidth 
 
 ### More Features 
-These are not planned for completion but code (Internal High Level APIs) tries it's best to be extensible to include various functionalities  
+These are not planned for completion but code (Internal High Level APIs) tries it's best to be extensible to include various functionalities
+
 - **Shared directory**: Allow users to share a directory and other peers can search for files they want
+
 - **Building Reputation System**: Not planned to be made, will take forever
+
 - **Calls**: Voice and Video Calls
 
 ## Usage
