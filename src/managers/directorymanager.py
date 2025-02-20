@@ -12,6 +12,7 @@ from src.avails import TransfersBookKeeper, Wire, WireData, connect, const, get_
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferRejected
 from src.core import Dock, get_this_remote_peer
+from src.core.connector import Connector
 from src.core.handles import TaskHandle
 from src.transfers import HEADERS
 from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
@@ -39,16 +40,10 @@ async def send_directory(remote_peer, dir_path):
     )
     # from src.core.connections import Connector
     # connection = await Connector.get_connection(remote_peer)
+    connector = Connector()
 
-    connection = await connect.connect_to_peer(
-        remote_peer,
-        to_which=connect.CONN_URI,
-        timeout=1,
-        retries=3
-    )
-
-    with connection:
-        await Wire.send_async(connection, bytes(dir_recv_signal_packet))
+    async with connector.connect(remote_peer) as connection:
+        await Wire.send_msg(connection, dir_recv_signal_packet)
         await _get_confirmation(connection)
 
         status_mixin = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
@@ -58,7 +53,7 @@ async def send_directory(remote_peer, dir_path):
             dir_path,
             status_mixin,
         )
-        sender.connection_made(connect.Sender(connection),connect.Receiver(connection))
+        sender.connection_made(connection)
         _logger.info(f"sending directory: {dir_path} to {remote_peer}")
         yield_decision = status_mixin.should_yield
         async with aclosing(sender.send_files()) as s:
@@ -76,7 +71,7 @@ async def send_directory(remote_peer, dir_path):
 async def _get_confirmation(connection):
     timeout = 100000  # :todo: structure better
     try:
-        confirmation = await connection.arecv(1)
+        confirmation = await connection.recv(1)
         if confirmation == b'\x00':
             _logger.info("not sending directory, other end rejected")
             raise TransferRejected()
@@ -115,9 +110,9 @@ def DirConnectionHandler():
             dir_path,
             status_iter,
         )
-        receiver.connection_made(connection.send, connection.recv)
+        receiver.connection_made(connection)
         try:
-            with connection:
+            async with connection:  # acquire lock
                 await connection.send(b'\x01')  # :todo: get confirmation from user
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(

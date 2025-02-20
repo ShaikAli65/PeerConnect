@@ -1,9 +1,12 @@
+import asyncio as _asyncio
+import struct
 import time
+from asyncio.trsock import TransportSocket
 from typing import Any, NamedTuple, TYPE_CHECKING
 
-from src.avails._asocket import Socket
+import src.avails.wire as wire
 from src.avails import const
-import asyncio as _asyncio
+from src.avails._asocket import Socket
 
 
 class _PauseMixIn:
@@ -94,8 +97,12 @@ class Connection(NamedTuple):
     """
     To represent A p2p connection
 
+    Recommended to use async with which acquires the underlying lock,
+    this makes sure that resource is kept within
+
     Note:
         does not own the resource (socket), just a handy wrapper to pass between functions
+
 
     Attributes:
         socket: underlying socket (for introspection)
@@ -103,21 +110,52 @@ class Connection(NamedTuple):
         recv: receiver API, async callable that returns bytes with requested length
         peer: peer object of other end
     """
-    socket: Socket
+    socket: TransportSocket
     send: Sender
     recv: Receiver
+
     if TYPE_CHECKING:
         from src.avails import RemotePeer
         peer: RemotePeer
     else:
         peer: Any
 
+    lock: _asyncio.Lock
+
     @staticmethod
-    def create_from(socket, peer):
-        return Connection(socket, Sender(socket), Receiver(socket), peer)
+    def create_from(socket: Socket, peer):
+        return Connection(TransportSocket(socket), Sender(socket), Receiver(socket), peer, _asyncio.Lock())
 
-    def __enter__(self):
-        return self.socket
+    async def __aenter__(self):
+        await self.lock.acquire()
+        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.socket.__exit__(exc_type, exc_val, exc_tb)
+    async def __aexit__(self, *exp_details):
+        self.lock.release()
+
+
+class MsgConnection(NamedTuple):
+    """Send or Receive WireData object from connection"""
+
+    connection_: Connection
+
+    async def send(self, data):
+        byted_data = bytes(data)  # marshall
+        data_size = struct.pack("!I", len(byted_data))
+        return await self.connection_.send(data_size + byted_data)
+
+    if TYPE_CHECKING:
+        async def send(self, data: wire.WireData): ...
+
+    async def recv(self):
+        data_size = struct.unpack("!I", await self.connection_.recv(4))[0]
+        raw_data = await self.connection_.recv(data_size)
+        return wire.WireData.load_from(raw_data)
+
+    @property
+    def socket(self):
+        return self.connection_.socket
+
+    @property
+    def peer(self):
+        return self.connection_.peer

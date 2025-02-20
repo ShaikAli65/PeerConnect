@@ -97,7 +97,6 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         _logger.debug(f'FILE[{self._file_id}] changing state to sending')
         self.state = TransferState.SENDING
         start_file = self.file_list[self._current_file_index]
-
         # synchronizing last file sent
         try:
             start_file.seeked = await use.recv_int(self.recv_func, use.LONG_INT)
@@ -105,6 +104,7 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
             self._raise_transfer_incomplete_and_change_state(ve)
         else:
             self.status_updater.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
+        # :todo: handle state more maturily
 
         # continuing with remaining transfer
         async with aclosing(self.send_files()) as file_sender:
@@ -133,9 +133,9 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         self.send_files_task.set_exception(ct)
         await self.send_files_task
 
-    def connection_made(self, sender, receiver):
-        self.send_func = sender
-        self.recv_func = receiver
+    def connection_made(self, connection):
+        self.send_func = connection.send
+        self.recv_func = connection.recv
 
     @property
     def id(self):

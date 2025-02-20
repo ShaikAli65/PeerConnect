@@ -5,7 +5,6 @@ import struct
 from contextlib import aclosing, contextmanager
 
 from src.avails import const, use
-from src.avails.connect import Sender
 from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
@@ -154,13 +153,10 @@ class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, Abstr
                 async for items in file_receiver:
                     yield items
 
-    def connection_made(self, sender, receiver):
-        assert isinstance(sender, Sender), f"Expected Sender instance found {sender=}"
-        assert isinstance(receiver, Receiver), f"Expected Receiver instance found {receiver=}"
-
-        self.connection_wait.set_result((sender, receiver))
-        self.send_func = sender
-        self.recv_func = receiver
+    def connection_made(self, connection):
+        self.connection_wait.set_result(connection)
+        self.send_func = connection.send
+        self.recv_func = connection.recv
 
     async def cancel(self):
         if self.state not in (TransferState.RECEIVING, TransferState.PAUSED):

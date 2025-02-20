@@ -340,7 +340,7 @@ async def get_remote_peer(peer_id):
 async def get_remote_peer_at_every_cost(peer_id) -> Optional[RemotePeer]:
     """
     Just a helper, tries to check for peer_id in cached Dock.peer_list
-    if there is a chance that cached remote peer object is expired then use :func: `peers.get_remote_peer`
+    if there is a chance that cached remote peer object is expired then use ``:func: peers.get_remote_peer``
     if not found the performs a distributed search in the network
     """
     try:

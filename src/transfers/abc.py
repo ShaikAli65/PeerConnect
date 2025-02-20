@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
-from typing import Callable
 
 from src.avails import connect, const
 from src.avails.exceptions import CancelTransfer, TransferIncomplete
@@ -12,18 +11,12 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
     @abstractmethod
     async def continue_transfer(self):
-        """
-        Continue Transfer called when some error happens in the initial state and that error has been recovered
+        """When some error happens in the initial state and that error has been recovered
         """
 
     @abstractmethod
-    def connection_made(self, sender: Callable[[bytes], None] | connect.Sender,
-                        receiver: Callable[[int], bytes] | connect.Receiver):
+    def connection_made(self, connection: connect.Connection):
         """Connection has arrived that is related to this handle
-
-        Args:
-            sender(Callable[[bytes],None]): called when some data is expected to send, returns when all the data is sent
-            receiver(Callable[[int],bytes]): called when some data is expected to receive, returns with bytes of length passed into
         """
 
     @abstractmethod
@@ -54,11 +47,6 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
 
 class AbstractSender(AbstractTransferHandle, ABC):
-    """
-
-
-    """
-
     @abstractmethod
     def __init__(self, peer_obj, transfer_id, file_list, status_updater): ...
 
@@ -107,15 +95,14 @@ class CommonExceptionHandlersMixIn:
         err = TransferIncomplete(detail)
         err.__cause__ = prev_error
         self._expected_errors.add(err)
-        raise err
+        raise err from prev_error
 
     def _handle_os_error(self, err, detail=""):
         logger.error(f"{self._log_prefix} got error, pausing transfer", exc_info=True)
         self.state = TransferState.PAUSED
         ti = TransferIncomplete(detail)
-        ti.__cause__ = err
         self._expected_errors.add(ti)
-        raise ti
+        raise ti from err
 
     def _handle_cancel_transfer(self, ct):
         if ct in self._expected_errors:

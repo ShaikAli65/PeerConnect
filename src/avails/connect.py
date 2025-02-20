@@ -1,9 +1,7 @@
 import asyncio as _asyncio
 import ipaddress
 import logging
-import socket
 import socket as _socket
-import struct
 
 from src.avails import useables
 from src.avails._asocket import *  # noqa
@@ -185,17 +183,17 @@ def get_free_port(ip=None) -> int:
 def ipv4_multicast_socket_helper(
         sock, local_addr, multicast_addr, *, loop_back=0, ttl=1, add_membership=True
 ):
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, loop_back)
+    sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_TTL, ttl)
+    sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_LOOP, loop_back)
     if add_membership:
-        group = socket.inet_aton(f"{multicast_addr[0]}")
+        group = _socket.inet_aton(f"{multicast_addr[0]}")
 
         if not const.IS_WINDOWS:
-            mreq = struct.pack("4sl", group, socket.INADDR_ANY)
+            mreq = struct.pack("4sl", group, _socket.INADDR_ANY)
         else:
-            mreq = struct.pack("4s4s", group, socket.inet_aton(str(local_addr[0])))
+            mreq = struct.pack("4s4s", group, _socket.inet_aton(str(local_addr[0])))
 
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_ADD_MEMBERSHIP, mreq)
     sock_options = {
         "membership": add_membership,
         "loop_back": loop_back,
@@ -207,16 +205,16 @@ def ipv4_multicast_socket_helper(
 def ipv6_multicast_socket_helper(
         sock, multicast_addr, *, loop_back=0, add_membership=True, hops=1
 ):
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_LOOP, loop_back)
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, hops)
+    sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_LOOP, loop_back)
+    sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_HOPS, hops)
 
     ip, port, _flow, interface_id = sock.getsockname()
-    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, interface_id)
+    sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_IF, interface_id)
 
     if add_membership:
-        group = socket.inet_pton(socket.AF_INET6, f"{multicast_addr[0]}")
+        group = _socket.inet_pton(_socket.AF_INET6, f"{multicast_addr[0]}")
         mreq = group + struct.pack("@I", interface_id)
-        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq)
+        sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_JOIN_GROUP, mreq)
 
     sock_options = {
         "ip": ip,

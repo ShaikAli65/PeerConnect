@@ -1,10 +1,9 @@
 import traceback
 from pathlib import Path
 
-from src.avails import BaseDispatcher, DataWeaver, Wire, WireData
+from src.avails import BaseDispatcher, DataWeaver, WireData
 from src.core import Dock, get_this_remote_peer, peers
-from src.core.connector import Connector
-from src.managers import directorymanager, filemanager
+from src.managers import directorymanager, filemanager, message
 from src.transfers import HEADERS
 from src.webpage_handlers import logger
 from src.webpage_handlers.headers import HANDLE
@@ -66,18 +65,17 @@ async def send_file(command_data: DataWeaver):
 
 async def send_text(command_data: DataWeaver):
     peer_obj = await peers.get_remote_peer_at_every_cost(command_data.peer_id)
-
     if peer_obj is None:
         return  # send data to page that peer is not reachable
 
-    connection = await Connector.get_connection(peer_obj)
-    data = WireData(
-        header=HEADERS.CMD_TEXT,
-        msg_id=get_this_remote_peer().peer_id,
-        message=command_data.content,
-    )
-    # :todo: wrap around with try except, signal page status update
-    await Wire.send_async(connection, bytes(data))
+    async with message.get_msg_conn(peer_obj) as conn:
+        data = WireData(
+            header=HEADERS.CMD_TEXT,
+            msg_id=get_this_remote_peer().peer_id,
+            message=command_data.content,
+        )
+        # :todo: wrap around with try except, signal page status update
+        await conn.send(bytes(data))
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):

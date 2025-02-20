@@ -7,7 +7,6 @@ from typing import Optional
 
 from src.avails import (RemotePeer, WireData, connect, const, use, wire)
 from src.avails.connect import UDPProtocol, get_free_port
-# from src.avails.remotepeer import RemotePeer
 from src.avails.wire import PalmTreeSession, Wire
 from src.core import Dock, get_this_remote_peer, peers
 from src.transfers import HEADERS

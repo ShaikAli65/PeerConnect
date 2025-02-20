@@ -7,7 +7,7 @@ from src.avails import const
 from src.configurations import bootup, configure
 from src.core import Dock, acceptor, connectivity, requests
 from src.core.async_runner import AnotherRunner
-from src.managers import profilemanager
+from src.managers import message, profilemanager
 from src.managers.statemanager import State, StateManager
 from src.webpage_handlers import pagehandle
 
@@ -22,6 +22,7 @@ def initial_states():
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)
     s9 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
+    s10 = State("starting message connections",message.initiate)
     s10 = State("initiating requests", requests.initiate, is_blocking=True)
     s11 = State("connectivity checker", connectivity.initiate)
 

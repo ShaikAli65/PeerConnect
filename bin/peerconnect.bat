@@ -1,4 +1,4 @@
-@echo off
+
 setlocal
 
 :: Check for Python installation
@@ -16,6 +16,14 @@ if %errorlevel% equ 0 (
     )
 )
 
+
+:: Get the base directory (parent of the script's directory)
+set "script_dir=%~dp0"
+set "base_dir=%script_dir:~0,-1%"
+for %%A in ("%base_dir%") do set "base_dir=%%~dpA"
+set "base_dir=%base_dir:~0,-1%"
+set "venv_dir=%base_dir%\.venv"
+
 :: Function to install dependencies
 :install
 %runner% -m pip install --upgrade pip >nul
@@ -24,13 +32,6 @@ echo Installing missing dependencies
 %runner% -m pip install -r "%base_dir%\bin\requirements.txt" >nul
 echo Installed dependencies successfully
 goto :eof
-
-:: Get the base directory (parent of the script's directory)
-set "script_dir=%~dp0"
-set "base_dir=%script_dir:~0,-1%"
-for %%A in ("%base_dir%") do set "base_dir=%%~dpA"
-set "base_dir=%base_dir:~0,-1%"
-set "venv_dir=%base_dir%\venv"
 
 :: Function to set up the virtual environment
 :setup_environment

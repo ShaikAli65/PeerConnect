@@ -15,10 +15,11 @@ class DISPATCHS(IntEnum):
     DISCOVER = 2
     GOSSIP = 3
     CONNECTIONS = 4
-    STREAM_DATA = 5
+    MESSAGES = 5
 
 
 class Dock:
+    """Global references, grouped at one place"""
     peer_list = _PeerDict()
     state_manager_handle = None
     global_gossip = None
@@ -56,3 +57,25 @@ def get_dispatcher(dispatcher_id):
 
 def set_current_remote_peer_object(remote_peer):
     Dock._this_object = remote_peer
+
+
+# dispatcher helpers
+
+def requests_dispatcher():  # = 1
+    return Dock.dispatchers.get(DISPATCHS.REQUESTS)
+
+
+def discover_dispatcher():  # = 2
+    return Dock.dispatchers.get(DISPATCHS.DISCOVER)
+
+
+def gossip_dispatcher():  # = 3
+    return Dock.dispatchers.get(DISPATCHS.GOSSIP)
+
+
+def connections_dispatcher():  # = 4
+    return Dock.dispatchers.get(DISPATCHS.CONNECTIONS)
+
+
+def msg_dispatcher():  # = 5
+    return Dock.dispatchers.get(DISPATCHS.MESSAGES)

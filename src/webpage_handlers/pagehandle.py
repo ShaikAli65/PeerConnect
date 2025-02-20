@@ -11,7 +11,7 @@ from src.avails import DataWeaver, InvalidPacket, const
 from src.avails.bases import BaseDispatcher
 from src.avails.events import StreamDataEvent
 from src.avails.exceptions import TransferIncomplete
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
+from src.avails.mixins import AExitStackMixIn, QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.core import Dock
 from src.transfers import HEADERS
 from src.webpage_handlers import headers, logger
@@ -114,7 +114,7 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
 
 
 @singleton_mixin
-class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
+class FrontEndDispatcher(QueueMixIn, AExitStackMixIn, BaseDispatcher):
     """
     Dispatcher that SENDS packets to frontend
     """
@@ -123,10 +123,8 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
 
     def __init__(self, stop_flag=None):
         super().__init__(transport=None, stop_flag=stop_flag)
-
         self.stop_flag = stop_flag or Dock.finalizing.is_set
         self.dispatchers = {}
-        self.dispatchers_exit_stack = AsyncExitStack()
 
     async def add_dispatcher(self, type_code, *dispatchers):
         """Adds dispatcher to watch list
@@ -141,7 +139,7 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
         """
         for dispatcher in dispatchers:
             self.dispatchers[type_code] = dispatcher
-            await self.dispatchers_exit_stack.enter_async_context(dispatcher)
+            await self._exit_stack.enter_async_context(dispatcher)
 
     def get_dispatcher(self, type_code) -> FrontEndWebSocketDispatcher:
         return self.dispatchers.get(type_code, None)
@@ -152,15 +150,6 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
             return await self.dispatchers[msg_packet.type](msg_packet)
         except TransferIncomplete as ti:
             logger.error(f"cannot send msg to frontend {msg_packet}, exp={ti}")
-
-    async def __aenter__(self):
-        await self.dispatchers_exit_stack.__aenter__()
-        await super().__aenter__()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.dispatchers_exit_stack.__aexit__(exc_type, exc_val, exc_tb)
-        return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
 class ReplyRegistry(ReplyRegistryMixIn):

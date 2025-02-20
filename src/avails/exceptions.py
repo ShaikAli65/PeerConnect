@@ -1,3 +1,6 @@
+import asyncio
+
+
 class DispatcherFinalizing(Exception):
     """Dispatcher is finalizing no longer working"""
 
@@ -28,3 +31,17 @@ class CancelTransfer(Exception):
 
 class InvalidStateError(Exception):
     """The operation is not allowed in this state."""
+
+
+class CannotConnect(OSError):
+    """Cannot connect to provided address or peer"""
+
+
+class ResourceBusy(Exception):
+    """Resource is Busy
+
+    Attributes:
+        available_after(asyncio.Condition):gets released when resource is freed
+
+    """
+    available_after: asyncio.Condition

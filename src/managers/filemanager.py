@@ -10,6 +10,7 @@ from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookK
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.core import Dock, get_this_remote_peer, peers
+from src.core.connector import Connector
 from src.transfers import HEADERS, TransferState, files, otm
 from src.transfers.status import StatusMixIn
 from src.webpage_handlers import webpage
@@ -41,7 +42,7 @@ async def send_files_to_peer(peer_id, selected_files):
     yield_decision = status_updater.should_yield
 
     try:
-        async with _handle_sending(file_sender, peer_id) as sender:
+        async with _sender_helper(file_sender, peer_id) as sender:
             yield file_sender
 
             async for _ in sender:
@@ -70,7 +71,7 @@ async def _send_setup(peer_id, selected_files):
 
 
 @asynccontextmanager
-async def _handle_sending(file_sender, peer_id):
+async def _sender_helper(file_sender, peer_id):
     async with AsyncExitStack() as stack:
         try:
             may_be_confirmed = True
@@ -97,35 +98,28 @@ async def _handle_sending(file_sender, peer_id):
 async def prepare_connection(sender_handle):
     _logger.debug(f"changing state to connection")  # debug
     sender_handle.state = TransferState.CONNECTING
-    try:
-        with await connect.connect_to_peer(
-                sender_handle.peer_obj,
-                connect.CONN_URI,
-                timeout=2,
-                retries=2,
-        ) as connection:
-            connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
-            handshake = WireData(
-                header=HEADERS.CMD_FILE_CONN,
-                version=sender_handle.version,
-                file_id=sender_handle.id,
-                peer_id=get_this_remote_peer().peer_id,
-            )
 
-            await Wire.send_async(connection, bytes(handshake))
-            _logger.debug("authorization header sent for file connection", extra={'id': sender_handle.id})
-
-            send_func = connect.Sender(connection)
-            recv_func = connect.Receiver(connection)
-            sender_handle.connection_made(send_func, recv_func)
-            _logger.debug(f"connection established")
+    connector = Connector()
+    async with connector.connect(sender_handle.peer_obj) as connection:
+        connection.socket.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
+        handshake = WireData(
+            header=HEADERS.CMD_FILE_CONN,
+            version=sender_handle.version,
+            file_id=sender_handle.id,
+            peer_id=get_this_remote_peer().peer_id,
+        )
+        _logger.debug("authorization header sent for file connection", extra={'id': sender_handle.id})
+        await Wire.send_msg(connection, handshake)
+        sender_handle.connection_made(connection)
+        _logger.info(f"connection established")
+        try:
             yield
-    except OSError as oops:
-        if not sender_handle.state == TransferState.PAUSED:
-            _logger.warning(f"reverting state to PREPARING, failed to connect to peer",
-                            exc_info=oops)
-            sender_handle.state = TransferState.PREPARING
-        raise
+        except OSError as oops:
+            if not sender_handle.state == TransferState.PAUSED:
+                _logger.warning(f"reverting state to PREPARING, failed to connect to peer",
+                                exc_info=oops)
+                sender_handle.state = TransferState.PREPARING
+            raise
 
 
 async def _send_finalize(file_sender, peer_id):
@@ -151,7 +145,7 @@ async def file_receiver(file_req: WireData, connection: connect.Connection, stat
         status_updater
     )
 
-    file_handle.connection_made(connection.send, connection.recv)
+    file_handle.connection_made(connection)
 
     transfers_book.add_to_current(file_req.id, file_handle)
     try:
@@ -205,43 +199,44 @@ def new_otm_request_arrived(req_data: WireData, addr):
 
 def FileConnectionHandler():
     async def handler(event: ConnectionEvent):
-        with event.connection:
-            file_req = event.handshake
-            _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
+        file_req = event.handshake
+        _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
 
-            # if not await webpage.get_transfer_ok(event.handshake.peer_id):  # :todo: ask webpage
-            #     await event.transport.send(b'\x00')
-            #     return
+        # if not await webpage.get_transfer_ok(event.handshake.peer_id):  # :todo: ask webpage
+        #     await event.transport.send(b'\x00')
+        #     return
 
-            await event.connection.send(b'\x01')
+        await event.connection.send(b'\x01')
 
-            _logger.debug(f"scheduling file transfer request {file_req!r}")
+        _logger.debug(f"scheduling file transfer request {file_req!r}")
 
-            try:
-                async with AsyncExitStack() as exit_stack:
-                    status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
-                    receiver_handle = await exit_stack.enter_async_context(file_receiver(
-                        file_req,
-                        event.connection,
-                        status_updater,
-                    ))
-                    receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
-                    yield_decision = status_updater.should_yield
-                    async for _ in receiver:
-                        if yield_decision():
-                            await webpage.transfer_update(
-                                file_req.peer_id,
-                                receiver_handle.id,
-                                receiver_handle.current_file
-                            )
-                status_updater.close()
-            except TransferIncomplete as e:
-                await webpage.transfer_incomplete(
-                    file_req.peer_id,
-                    receiver_handle.id,
-                    receiver_handle.current_file,
-                    detail=e
-                )
+        try:
+            async with AsyncExitStack() as exit_stack:
+                status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
+                receiver_handle = await exit_stack.enter_async_context(file_receiver(
+                    file_req,
+                    event.connection,
+                    status_updater,
+                ))
+                receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
+
+                yield_decision = status_updater.should_yield
+                async for _ in receiver:
+                    if yield_decision():
+                        await webpage.transfer_update(
+                            file_req.peer_id,
+                            receiver_handle.id,
+                            receiver_handle.current_file
+                        )
+
+            status_updater.close()
+        except TransferIncomplete as e:
+            await webpage.transfer_incomplete(
+                file_req.peer_id,
+                receiver_handle.id,
+                receiver_handle.current_file,
+                detail=e
+            )
 
     return handler
 
