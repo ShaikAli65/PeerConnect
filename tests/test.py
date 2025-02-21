@@ -8,8 +8,6 @@ from kademlia import utils
 
 import _path  # noqa
 import main
-import src
-from src import managers
 from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
@@ -107,7 +105,8 @@ async def profile_getter():
 
 
 async def mock_profile():
-    src.managers.profilemanager._current_profile = await profile_getter()
+    await profilemanager.set_current_profile(await profile_getter())
+    # src.managers.profilemanager._current_profile = await profile_getter()
 
 
 def mock_multicast():

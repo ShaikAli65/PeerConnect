@@ -40,23 +40,25 @@ def print_constants():
 
 def set_paths():
     const.PATH_CURRENT = Path(os.getcwd())
-    const.PATH_PROFILES = Path(const.PATH_CURRENT, 'profiles')
     const.PATH_LOG = Path(const.PATH_CURRENT, 'logs')
     const.PATH_PAGE = Path(const.PATH_CURRENT, 'src', 'webpage')
-    const.PATH_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', const.DEFAULT_CONFIG_FILE)
-    const.PATH_LOG_CONFIG = Path(const.PATH_CURRENT, 'src', 'configurations', 'log_config.json')
-    downloads_path = Path(os.path.expanduser('~'), 'Downloads')
+    config_path = Path(const.PATH_CURRENT, 'configs')
+    const.PATH_CONFIG_FILE = Path(config_path, const.DEFAULT_CONFIG_FILE_NAME)
+    const.PATH_PROFILES = Path(config_path, 'profiles')
+    const.PATH_LOG_CONFIG = Path(config_path, const.LOG_CONFIG_NAME)
+    const.PATH_CONFIG = config_path
 
+    downloads_path = Path(os.path.expanduser('~'), 'Downloads')
     # check if the directory exists
     if not os.path.exists(downloads_path):
         downloads_path = Path(os.path.expanduser('~'), 'Desktop')
+    const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, const.APP_NAME))
 
-    const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, 'PeerConnect'))
     try:
         os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)
     except OSError as e:
-        # error_log(f"Error creating directory: {e} from set_paths() at line 70 in core/constants.py")
-        const.PATH_DOWNLOAD = os.path.join(const.PATH_CURRENT, 'fallbacks')
+        _logger.error(f"Error creating directory: {e} from set_paths()")
+        const.PATH_DOWNLOAD = os.path.join(const.PATH_CURRENT, 'downloads')
 
 
 async def load_configs():
@@ -64,10 +66,10 @@ async def load_configs():
 
     def _helper():
         try:
-            config_map.read(const.PATH_CONFIG)
+            config_map.read(const.PATH_CONFIG_FILE)
         except KeyError:
-            write_default_configurations(const.PATH_CONFIG)
-            config_map.read(const.PATH_CONFIG)
+            write_default_configurations(const.PATH_CONFIG_FILE)
+            config_map.read(const.PATH_CONFIG_FILE)
 
         if not Path(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME).exists():
             write_default_profile()
@@ -75,7 +77,7 @@ async def load_configs():
         if const.DEFAULT_PROFILE_NAME not in config_map['USER_PROFILES']:
             config_map.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
-        with open(const.PATH_CONFIG, 'w+') as fp:
+        with open(const.PATH_CONFIG_FILE, 'w+') as fp:
             config_map.write(fp)  # noqa
 
     # _helper()
@@ -118,10 +120,10 @@ def write_default_profile():
     with open(os.path.join(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME), 'w+') as profile_file:
         profile_file.write(default_profile_file)
     parser = configparser.ConfigParser(allow_no_value=True)
-    parser.read(const.PATH_CONFIG)
+    parser.read(const.PATH_CONFIG_FILE)
     parser.set('USER_PROFILES', const.DEFAULT_PROFILE_NAME)
 
-    with open(const.PATH_CONFIG, 'w+') as fp:
+    with open(const.PATH_CONFIG_FILE, 'w+') as fp:
         parser.write(fp)  # noqa
 
 

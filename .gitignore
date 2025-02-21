@@ -1,8 +1,10 @@
 *.ini
-!default*.ini
-logs/*
-!logs/.gitkeep
-*.logs
+!config.ini
+!default_profile.ini
+
+logs
+*.log
+
 .idea
 .vscode
 __pycache__/*

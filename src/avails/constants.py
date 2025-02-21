@@ -4,6 +4,8 @@ from sys import platform
 from threading import Lock
 from typing import Optional, TYPE_CHECKING
 
+
+APP_NAME = 'PeerConnect'
 CLEAR_LOGS = 1
 USERNAME = "admin"
 SERVER_IP = "127.0.0.1"
@@ -27,9 +29,9 @@ IS_DARWIN = platform == "darwin"
 IS_LINUX = platform == "linux"
 
 SERVER_TIMEOUT = 6
-DEFAULT_CONFIG_FILE = "default_config.ini"
+DEFAULT_CONFIG_FILE_NAME = "config.ini"
 DEFAULT_PROFILE_NAME = "default_profile.ini"
-
+LOG_CONFIG_NAME = "log_config.json"
 FORMAT = "utf-8"
 
 DATA = 0x00
@@ -42,13 +44,16 @@ PORT_SERVER = 3487
 PORT_PAGE = 12260
 PORT_PAGE_SERVE = 40000
 
+PATH_DOWNLOAD = path.join(path.expanduser("~"), "Downloads")
+
+# values are just for reference, these get set at runtime
 PATH_CURRENT = "../.."
 PATH_LOG = "../../logs"
-PATH_PROFILES = "../../profiles"
 PATH_PAGE = "../webpage"
-PATH_DOWNLOAD = path.join(path.expanduser("~"), "Downloads")
-PATH_CONFIG = f"..\\configurations\\{DEFAULT_CONFIG_FILE}"
-PATH_LOG_CONFIG = "..\\configurations\\log_config.json"
+PATH_CONFIG = f"..\\..\\configs"
+PATH_PROFILES = f"{PATH_CONFIG}\\profiles"
+PATH_CONFIG_FILE = f"{PATH_CONFIG}\\{DEFAULT_CONFIG_FILE_NAME}"
+PATH_LOG_CONFIG = f"{PATH_CONFIG}\\{LOG_CONFIG_NAME}"
 
 IP_VERSION = socket.AF_INET6
 USING_IP_V4 = True
