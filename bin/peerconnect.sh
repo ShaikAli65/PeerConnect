@@ -58,7 +58,7 @@ if [ "$lines" -ne 32 ]; then
 fi
 
 cd $base_dir || exit
-$runner main.py
+$runner src
 
 deactivate
 

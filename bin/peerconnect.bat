@@ -77,7 +77,7 @@ if %lines% neq 32 (
 
 :: Change to the base directory and run the main Python script
 cd /d "%base_dir%"
-%runner% main.py
+%runner% src
 
 :: Deactivate the virtual environment
 deactivate
