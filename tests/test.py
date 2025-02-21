@@ -7,7 +7,7 @@ import sys
 from kademlia import utils
 
 import _path  # noqa
-import main
+from src.__main__ import initiate
 from src.avails import RemotePeer, const
 from src.avails.connect import UDPProtocol
 from src.configurations import bootup, configure
@@ -27,8 +27,7 @@ def _create_listen_socket_mock(bind_address, _):
 
 
 async def _mock_interface_selector(interfaces):
-
-    for i,inter in interfaces.items():
+    for i, inter in interfaces.items():
         if 'wi' in inter.friendly_name.lower():
             print(inter)
             return i
@@ -106,7 +105,6 @@ async def profile_getter():
 
 async def mock_profile():
     await profilemanager.set_current_profile(await profile_getter())
-    # src.managers.profilemanager._current_profile = await profile_getter()
 
 
 def mock_multicast():
@@ -134,7 +132,7 @@ def test_initial_states():
 
 def start_test(other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    main.initiate(test_initial_states() + tuple(other_states))
+    initiate(test_initial_states() + tuple(other_states))
 
 
 if __name__ == "__main__":

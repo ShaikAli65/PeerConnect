@@ -30,7 +30,7 @@ async def initiate():
 
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
 
-    req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
+    req_dispatcher = RequestsDispatcher()
     await Dock.exit_stack.enter_async_context(req_dispatcher)
 
     transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
@@ -46,7 +46,7 @@ async def initiate():
     Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
 
-    Dock.requests_endpoint = transport
+    Dock.requests_transport = transport
     Dock.kademlia_network_server = kad_server
 
     discovery_state = State(
@@ -109,10 +109,6 @@ def _subscribe_to_multicast(sock, multicast_addr):
 
 
 class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
-    __slots__ = ()
-
-    def __init__(self, transport, stop_flag):
-        super().__init__(transport, stop_flag)
 
     async def submit(self, req_event: RequestEvent):
         self.msg_arrived(req_event.request)
@@ -173,5 +169,5 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
 async def end_requests():
     Dock.kademlia_network_server.stop()
-    Dock.requests_endpoint.close()
-    Dock.requests_endpoint = None
+    Dock.requests_transport.close()
+    Dock.requests_transport = None

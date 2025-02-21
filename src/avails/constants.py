@@ -4,8 +4,7 @@ from sys import platform
 from threading import Lock
 from typing import Optional, TYPE_CHECKING
 
-
-APP_NAME = 'PeerConnect'
+APP_NAME = "PeerConnect"
 CLEAR_LOGS = 1
 USERNAME = "admin"
 SERVER_IP = "127.0.0.1"
@@ -14,6 +13,7 @@ THIS_IP = None
 
 if TYPE_CHECKING:
     from src.avails import connect
+
     THIS_IP: connect.IPAddress
 
 MULTICAST_IP_v4 = "239.1.11.11"
@@ -93,7 +93,6 @@ PING_TIMEOUT = 4
 PALM_TREE_LINK_TIMEOUT = 3
 DISCOVER_TIMEOUT = 3
 TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK = 4
-
 
 VERSIONS = {
     "GLOBAL": 1.1,

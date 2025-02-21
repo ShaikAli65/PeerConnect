@@ -3,12 +3,12 @@ import logging
 from contextlib import AsyncExitStack, asynccontextmanager
 from inspect import isawaitable
 
-from src.avails import BaseDispatcher, InvalidPacket, RemotePeer
+from src.avails import BaseDispatcher, InvalidPacket, RemotePeer, Wire, WireData
 from src.avails.connect import MsgConnection
 from src.avails.constants import MAX_CONCURRENT_MSG_PROCESSING, TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK
-from src.avails.events import ConnectionEvent, StreamDataEvent
-from src.avails.mixins import QueueMixIn
-from src.core import DISPATCHS, Dock, connections_dispatcher
+from src.avails.events import ConnectionEvent, MessageEvent
+from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
+from src.core import DISPATCHS, Dock, connections_dispatcher, get_this_remote_peer
 from src.core.connector import Connector
 from src.transfers import HEADERS
 from src.webpage_handlers import pagehandle
@@ -20,28 +20,34 @@ _msg_conn_pool = {}
 
 
 async def initiate():
-    data_dispatcher = MsgDispatcher(None, Dock.finalizing.is_set)
+    data_dispatcher = MsgDispatcher()
     data_dispatcher.register_handler(HEADERS.CMD_TEXT, pagehandle.MessageHandler())
     Dock.dispatchers[DISPATCHS.MESSAGES] = data_dispatcher
     msg_conn_handler = MessageConnHandler(data_dispatcher, Dock.finalizing.is_set)
     connections_dispatcher().register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
+    connections_dispatcher().register_handler(HEADERS.PING, PingHandler())
     await Dock.exit_stack.enter_async_context(data_dispatcher)
     await Dock.exit_stack.enter_async_context(_locks_stack)
     return data_dispatcher
 
 
-class MsgDispatcher(QueueMixIn, BaseDispatcher):
+class MsgDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     """
     Works with ProcessDataHandler that sends any events into StreamDataDispatcher
     which dispatches event into respective handlers
     """
     __slots__ = ()
 
-    async def submit(self, event: StreamDataEvent):
-        message_header = event.data.header
-        handler = self.registry[message_header]
+    async def submit(self, event: MessageEvent):
+        self.msg_arrived(event.msg)
+        message_header = event.msg.header
+        try:
+            handler = self.registry[message_header]
+        except KeyError:
+            _logger.error(f"No handler found for {message_header}")
+            return
 
-        _logger.info(f"[STREAM DATA] dispatching msg with header {message_header} to {handler}")
+        _logger.info(f"dispatching msg with header {message_header} to {handler}")
 
         r = handler(event)
 
@@ -66,7 +72,7 @@ def MessageConnHandler(data_dispatcher, finalizer):
             try:
                 wire_data = msg_connection.recv()
                 print(f"[STREAM DATA] new msg {wire_data}")  # debug
-                data_event = StreamDataEvent(wire_data, msg_connection)
+                data_event = MessageEvent(wire_data, msg_connection)
             except InvalidPacket:
                 pass
 
@@ -83,15 +89,46 @@ def MessageConnHandler(data_dispatcher, finalizer):
     return handler
 
 
+def PingHandler():
+    async def handler(msg_event: MessageEvent):
+        ping = msg_event.msg
+        un_ping = WireData(
+            header=HEADERS.UNPING,
+            peer_id=get_this_remote_peer().peer_id,
+            msg_id=ping.msg_id,
+        )
+        return await msg_event.connection.send(un_ping)
+
+    return handler
+
+
 @asynccontextmanager
 async def get_msg_conn(peer: RemotePeer):
     if peer not in _msg_conn_pool:
         connector = Connector()
         connection = await _locks_stack.enter_async_context(connector.connect(peer))
+        await Wire.send_msg(
+            connection,
+            WireData(
+                header=HEADERS.CMD_MSG_CONN,
+                peer_id=get_this_remote_peer().peer_id
+            )
+        )
         msg_connection = MsgConnection(connection)
         _msg_conn_pool[peer] = msg_connection
         yield msg_connection
 
 
-def send_message(peer, msg):
-    ...
+async def send_message(msg, peer, *, expect_reply=False):
+    """Sends message to peer
+
+    Args:
+        peer(RemotePeer): peer to send to
+        msg(WireData): message to send
+        expect_reply: if true then waits until a reply
+
+    Returns:
+
+    """
+    async with get_msg_conn(peer) as connection:
+        connection.send()

@@ -9,7 +9,7 @@ import websockets
 
 from src.avails import DataWeaver, InvalidPacket, const
 from src.avails.bases import BaseDispatcher
-from src.avails.events import StreamDataEvent
+from src.avails.events import MessageEvent
 from src.avails.exceptions import TransferIncomplete
 from src.avails.mixins import AExitStackMixIn, QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.core import Dock
@@ -29,9 +29,9 @@ _exit_stack = AsyncExitStack()
 
 
 class FrontEndWebSocketDispatcher(BaseDispatcher):
-    def __init__(self, transport, *args, buffer_size=const.MAX_FRONTEND_MESSAGE_BUFFER_LEN, **kwargs):
+    def __init__(self, transport=None, buffer_size=const.MAX_FRONTEND_MESSAGE_BUFFER_LEN, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.stopping_event = _asyncio.Event()
-        super().__init__(transport=transport, stop_flag=self.stopping_event.is_set, *args, **kwargs)
         self.ping_sender = _asyncio.Condition()
         self.max_buffer_size = buffer_size
         self.buffer = _asyncio.Queue(buffer_size)
@@ -39,6 +39,7 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
             self._is_transport_connected = True
         else:
             self._is_transport_connected = False
+        self.transport = transport
         self._finalized = False
 
     async def update_transport(self, transport):
@@ -61,14 +62,15 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
             raise TransferIncomplete from wse
 
     async def _send_buffer(self):
+        stop_flag = self.stopping_event.is_set
         while True:
             async with self.ping_sender:
                 await self.ping_sender.wait()
-            if self.stop_flag():
+            if stop_flag():
                 break
             while True:
                 msg = await self.buffer.get()
-                if self.stop_flag():
+                if stop_flag():
                     break
                 try:
                     await self.transport.send(str(msg))
@@ -77,7 +79,7 @@ class FrontEndWebSocketDispatcher(BaseDispatcher):
                     self._is_transport_connected = False
                     break
                 except AttributeError:
-                    # transport is None, and we got "None does not have .send" thing
+                    # transport is None, and we got \\"None does not have .send"\\ thing
                     break
 
     async def _add_to_buffer(self, msg):
@@ -119,14 +121,7 @@ class FrontEndDispatcher(QueueMixIn, AExitStackMixIn, BaseDispatcher):
     Dispatcher that SENDS packets to frontend
     """
 
-    __slots__ = 'stop_flag', 'dispatchers'
-
-    def __init__(self, stop_flag=None):
-        super().__init__(transport=None, stop_flag=stop_flag)
-        self.stop_flag = stop_flag or Dock.finalizing.is_set
-        self.dispatchers = {}
-
-    async def add_dispatcher(self, type_code, *dispatchers):
+    async def add_dispatcher(self, type_code, dispatcher):
         """Adds dispatcher to watch list
 
         Enters context of dispatchers passed in,
@@ -134,20 +129,19 @@ class FrontEndDispatcher(QueueMixIn, AExitStackMixIn, BaseDispatcher):
 
         Args:
             type_code(int):
-            *dispatchers:
+            dispatcher:
 
         """
-        for dispatcher in dispatchers:
-            self.dispatchers[type_code] = dispatcher
-            await self._exit_stack.enter_async_context(dispatcher)
+        self.register_handler(type_code, dispatcher)
+        await self._exit_stack.enter_async_context(dispatcher)
 
     def get_dispatcher(self, type_code) -> FrontEndWebSocketDispatcher:
-        return self.dispatchers.get(type_code, None)
+        return self.get_handler(type_code)
 
     async def submit(self, msg_packet: DataWeaver):
-        """Outgoing"""
+        """Outgoing (to frontend)"""
         try:
-            return await self.dispatchers[msg_packet.type](msg_packet)
+            return await self.registry[msg_packet.type](msg_packet)
         except TransferIncomplete as ti:
             logger.error(f"cannot send msg to frontend {msg_packet}, exp={ti}")
 
@@ -163,7 +157,7 @@ class MessageFromFrontEndDispatcher(QueueMixIn, BaseDispatcher):
     __slots__ = ()
 
     def __init__(self, reply_registry, *args, **kwargs):
-        super().__init__(transport=None, stop_flag=None, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.reply_registry = reply_registry
 
     async def submit(self, data_weaver):
@@ -233,18 +227,20 @@ async def start_websocket_server():
 
 
 async def initiate_page_handle():
-    front_end = FrontEndDispatcher(stop_flag=Dock.finalizing.is_set)
+    front_end = FrontEndDispatcher()
 
     # these transports will get, set later when websocket connection from frontend arrives
-    await front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher(transport=None))
+    await front_end.add_dispatcher(headers.DATA, FrontEndWebSocketDispatcher())
 
-    await front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher(transport=None))
+    await front_end.add_dispatcher(headers.SIGNALS, FrontEndWebSocketDispatcher())
 
     from src.webpage_handlers.handlesignals import FrontEndSignalDispatcher
     from src.webpage_handlers.handledata import FrontEndDataDispatcher
 
-    signal_disp = FrontEndSignalDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
-    data_disp = FrontEndDataDispatcher(transport=None, stop_flag=Dock.finalizing.is_set)
+    signal_disp = FrontEndSignalDispatcher()
+    data_disp = FrontEndDataDispatcher()
+    signal_disp.register_all()
+    data_disp.register_all()
 
     msg_disp = MessageFromFrontEndDispatcher(ReplyRegistry())
 
@@ -276,11 +272,11 @@ def front_end_data_dispatcher(data, expect_reply=False) -> Future[DataWeaver | N
 
 
 def MessageHandler():
-    async def handler(event: StreamDataEvent):
+    async def handler(event: MessageEvent):
         front_end_data_dispatcher(DataWeaver(
-            header=event.data.header,
-            content=event.data["message"],
-            peer_id=event.data.peer_id,
+            header=event.msg.header,
+            content=event.msg["message"],
+            peer_id=event.msg.peer_id,
         ))
 
     return handler

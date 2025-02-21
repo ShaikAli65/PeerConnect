@@ -157,3 +157,7 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
         const.BIND_IP = const._BIND_IP_V6
 
     return True
+
+
+def print_paths():
+    print("\n".join(f"{x}={getattr(const, x)}" for x in dir(const) if x.startswith("PATH")))

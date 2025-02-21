@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-from src.avails.connect import Addr, Connection
+from src.avails.connect import Addr, Connection, MsgConnection
 from src.avails.wire import GossipMessage, WireData
 
 
@@ -20,6 +20,6 @@ class ConnectionEvent(NamedTuple):
     handshake: WireData
 
 
-class StreamDataEvent(NamedTuple):
-    data: WireData
-    connection: Connection
+class MessageEvent(NamedTuple):
+    msg: WireData
+    connection: MsgConnection

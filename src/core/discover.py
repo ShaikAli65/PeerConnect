@@ -56,19 +56,20 @@ async def discovery_initiate(
         req_dispatcher,
         transport
 ):
-    discover_dispatcher = DiscoveryDispatcher(transport, Dock.finalizing.is_set)
+    discover_dispatcher = DiscoveryDispatcher()
+    discovery_transport = DiscoveryTransport(transport)
     await Dock.exit_stack.enter_async_context(discover_dispatcher)
     req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
     Dock.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
 
     discovery_reply_handler = DiscoveryReplyHandler(kad_server)
-    discovery_req_handler = DiscoveryRequestHandler(discover_dispatcher.transport)
+    discovery_req_handler = DiscoveryRequestHandler(discovery_transport)
 
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
     await send_discovery_requests(
-        discover_dispatcher.transport,
+        discovery_transport,
         multicast_address
     )
 
@@ -110,11 +111,6 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     if TYPE_CHECKING:
         transport: DiscoveryTransport
 
-    def __init__(self, transport, stopping_flag):
-        super().__init__(
-            transport=DiscoveryTransport(transport), stop_flag=stopping_flag
-        )
-
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         self.msg_arrived(wire_data)
@@ -122,12 +118,10 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         _logger.debug(f"dispatching request {handle}")
         try:
             await handle(event)
-        except RuntimeError:
-            # error from internal task_group if it is exited
+        except Exception:
             if const.debug:
                 traceback.print_exc()
-            if self.stop_flag():
-                return
+            raise
 
 
 async def send_discovery_requests(transport, multicast_addr):

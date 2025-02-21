@@ -1,4 +1,3 @@
-import asyncio
 import enum
 import sys
 from abc import ABC, abstractmethod
@@ -67,18 +66,15 @@ class AbstractDispatcher(ABC):
 
 class BaseDispatcher(AbstractDispatcher):
     """
+
     Attributes:
-        stop_flag (Callable[[None], bool]): gets called to check for exiting, should return bool
-        transport (asyncio.BaseTransport): any transport object that is used to perform network i/o
         registry (dict): internal dictionary that gets looked up when an event occurs
     """
 
-    __slots__ = 'transport', 'stop_flag', 'registry'
+    __slots__ = 'registry',
 
-    def __init__(self, transport, stop_flag, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.transport = transport
-        self.stop_flag = stop_flag
         self.registry = {}
 
     def __call__(self, *args, **kwargs):
@@ -88,7 +84,7 @@ class BaseDispatcher(AbstractDispatcher):
         """Called when event occurs
         """
 
-    def register_handler(self, event_trigger: enum.Enum | str | bytes,
+    def register_handler(self, event_trigger: enum.Enum | str | bytes | int,
                          handler: BaseHandler | AbstractDispatcher | Callable):
         """
         Args:
@@ -96,6 +92,12 @@ class BaseDispatcher(AbstractDispatcher):
             event_trigger (str | bytes): event trigger to register with
         """
         self.registry[event_trigger] = handler
+
+    def get_handler(self, event_trigger):
+        return self.registry.get(event_trigger, None)
+
+    def remove_handler(self, event_trigger):
+        return self.registry.pop(event_trigger)
 
 
 class RumorMessageList(ABC):

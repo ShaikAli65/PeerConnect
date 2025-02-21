@@ -1,5 +1,3 @@
-from typing import Callable, Coroutine
-
 from src.avails import BaseDispatcher, GossipMessage
 from src.avails.events import GossipEvent
 from src.avails.mixins import QueueMixIn
@@ -48,18 +46,6 @@ def GossipSearchReplyHandler(searcher):
 
 
 class GossipDispatcher(QueueMixIn, BaseDispatcher):
-    """
-        elif req_data.match_header(HEADERS.GOSSIP_CREATE_SESSION):
-            self.handle_gossip_session(req_data, addr)
-            GOSSIP.CREATE_SESSION: None,
-    """
-    __slots__ = 'registry',
-
-    def __init__(self, transport: GossipTransport, stop_flag):
-        super().__init__(transport=transport, stop_flag=stop_flag)
-        self.transport = transport
-        self.registry: dict[bytes, Callable[[GossipEvent], Coroutine[None, None, None]]] = {}
-
     async def submit(self, event):
         gossip_message = GossipMessage(event.request)
         handler = self.registry[gossip_message.header]
@@ -71,7 +57,7 @@ def initiate_gossip(data_transport, req_dispatcher):
     gossip_transport = GossipTransport(data_transport)
     Dock.global_gossip = GlobalRumorMonger(gossip_transport)
 
-    g_dispatcher = GossipDispatcher(gossip_transport, Dock.finalizing.is_set)
+    g_dispatcher = GossipDispatcher()
 
     gossip_searcher = get_search_handler()
 

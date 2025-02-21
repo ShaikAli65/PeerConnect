@@ -22,7 +22,7 @@ def initial_states():
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)
     s9 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
-    s10 = State("starting message connections",message.initiate)
+    s10 = State("starting message connections", message.initiate)
     s10 = State("initiating requests", requests.initiate, is_blocking=True)
     s11 = State("connectivity checker", connectivity.initiate)
 
@@ -56,9 +56,9 @@ def initiate(states):
     except KeyboardInterrupt:
         if const.debug:
             traceback.print_exc()
-            print("-"*80)
+            print("-" * 80)
             print(f"## PRINTING TRACEBACK, {const.debug=}")
-            print("-"*80)
+            print("-" * 80)
             elapsed = time.perf_counter() - cancellation_started
             print(f"clean exit completed within {elapsed:.6f}s")
 
@@ -66,5 +66,5 @@ def initiate(states):
 
 
 if __name__ == "__main__":
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     initiate(initial_states())

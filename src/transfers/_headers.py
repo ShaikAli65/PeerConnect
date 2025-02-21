@@ -4,6 +4,7 @@ class HEADERS:
     SERVER_OK = b"connect accepted"
     REMOVAL_PING = b"pinging peer for removal"
     PING = b"PING"
+    UNPING = b"UN PING"
     CMD_RECV_FILE_AGAIN = b"recv file again "
     CMD_VERIFY_HEADER = b"verify header   "
     CMD_MSG_CONN = b"message connection"

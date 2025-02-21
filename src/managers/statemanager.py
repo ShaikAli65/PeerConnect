@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from typing import Iterable, Optional
 
 from src.avails import useables
+from src.avails.mixins import singleton_mixin
 from src.avails.useables import echo_print
 
 
@@ -75,11 +76,12 @@ class State:
         return ret_val
 
 
+@singleton_mixin
 class StateManager:
     """
     A Singleton class
     Sort of task queue
-    process_states is called at the begining of program
+    process_states is called at the beginning of program
     """
     _instance = None
     _initialized = False

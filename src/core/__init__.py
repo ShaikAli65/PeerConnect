@@ -26,7 +26,7 @@ class Dock:
     _this_object: Optional[_RemotePeer] = None
     kademlia_network_server = None
     finalizing = _asyncio.Event()
-    requests_endpoint: Optional[_asyncio.DatagramTransport] = None
+    requests_transport: Optional[_asyncio.DatagramTransport] = None
     dispatchers: dict[DISPATCHS, BaseDispatcher] = {}
     exit_stack = AsyncExitStack()
     if TYPE_CHECKING:

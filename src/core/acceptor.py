@@ -12,7 +12,7 @@ from collections import namedtuple
 from inspect import isawaitable
 from typing import Optional
 
-from src.avails import (BaseDispatcher, InvalidPacket, Wire, WireData, connect,
+from src.avails import (BaseDispatcher, InvalidPacket, Wire, connect,
                         const)
 from src.avails.connect import Connection
 from src.avails.events import ConnectionEvent
@@ -26,7 +26,7 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate_acceptor():
-    connection_dispatcher = ConnectionDispatcher(None, Dock.finalizing.is_set)
+    connection_dispatcher = ConnectionDispatcher()
 
     # data_dispatcher.register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
 
@@ -69,7 +69,12 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
         self._parking_lot[connection] = item
 
     async def submit(self, event: ConnectionEvent):
-        handler = self.registry[event.handshake.header]
+        try:
+            handler = self.registry[event.handshake.header]
+        except KeyError:
+            _logger.error(f"no handler found for event {event}")
+            return
+
         _logger.info(f"dispatching connection with header {event.handshake.header} to {handler}")
         r = handler(event)
 
@@ -158,29 +163,28 @@ class Acceptor(AExitStackMixIn):
         self._exit_stack.enter_context(initial_conn)
         con_event = ConnectionEvent(conn, handshake)
         watcher = bandwidth.Watcher()
-        watcher.add_new_socket(initial_conn, conn)
+        watcher.watch(initial_conn, conn)
         connection_disp = connections_dispatcher()
         connection_disp(con_event)
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
-        raw_hand_shake = None
+        error_log = ""
         try:
-            raw_hand_shake = await asyncio.wait_for(
-                Wire.receive_async(initial_conn), const.SERVER_TIMEOUT
+            hand_shake = await asyncio.wait_for(
+                Wire.recv_msg(initial_conn), const.SERVER_TIMEOUT
             )
-            if raw_hand_shake:
-                return WireData.load_from(raw_hand_shake)
+            return hand_shake
         except TimeoutError:
-            _logger.error(f"new connection inactive for {const.SERVER_TIMEOUT}s, closing")
-            initial_conn.close()
+            error_log = f"new connection inactive for {const.SERVER_TIMEOUT}s, closing"
         except OSError:
-            _logger.error(f"Socket error", exc_info=True)
-            initial_conn.close()
+            error_log = f"Socket error"
         except InvalidPacket:
-            _logger.error(f"Initial handshake packet is invalid, closing connection {raw_hand_shake=}", exc_info=True)
+            error_log = f"Initial handshake packet is invalid, closing connection"
+
+        if error_log:
+            _logger.error(error_log)
             initial_conn.close()
-        return None
 
     def reset_socket(self):
         self.main_socket.close()
