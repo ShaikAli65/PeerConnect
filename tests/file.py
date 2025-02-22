@@ -27,4 +27,4 @@ async def test_file_transfer():
 if __name__ == '__main__':
     i_states = test_initial_states()
     s10 = State("test file transfer", test_file_transfer, is_blocking=True)
-    start_test([s10])
+    start_test(s10)

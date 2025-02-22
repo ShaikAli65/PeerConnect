@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import logging
 import math
 import threading
 from asyncio import Queue as _queue
@@ -9,7 +10,8 @@ from typing import Iterable, Optional
 
 from src.avails import useables
 from src.avails.mixins import singleton_mixin
-from src.avails.useables import echo_print
+
+_logger = logging.getLogger(__name__)
 
 
 def _get_func_name(func):
@@ -31,7 +33,7 @@ def _get_func_name(func):
         return frame.f_code.co_name
 
     # Default name if everything else fails
-    return "not defined"
+    return "N/A"
 
 
 class State:
@@ -62,13 +64,13 @@ class State:
     async def enter_state(self):
         loop = asyncio.get_event_loop()
         x = loop.time()
-        echo_print(f"[{x - math.floor(x):.5f}s] CORO:{self.is_coro} entering state :", self.name, end=' ')
-        print("func:", self.func_name)
+        coro = self.is_coro
+        _logger.info(f"[{x - math.floor(x):.5f}s] {coro=} entering state : {self.name}{{{self.func_name}}}")
 
         if self.event:
             await self.event.wait()
 
-        if self.is_coro:
+        if coro:
             ret_val = await self.func()
         else:
             ret_val = self.func()
@@ -107,7 +109,8 @@ class StateManager:
         self.close = True
         self.state_queue.put(None)
         for t in self.all_tasks:
-            t.cancel("finalizing from state manager")
+            if not t.done():
+                t.cancel("finalizing from state manager")
 
     async def put_state(self, state: Optional[State]):
         await self.state_queue.put(state)
@@ -122,15 +125,10 @@ class StateManager:
         different points in code wrap functions in states to get processed
         """
         while self.close is False:
-            try:
-                current_state: State = await self.state_queue.get()
-                r = await current_state.enter_state()
-                if isinstance(r, asyncio.Task):
-                    self.all_tasks.append(r)
-
-            except KeyboardInterrupt:
-                print('received keyboard interrupt finalizing')
-                exit(1)
+            current_state: State = await self.state_queue.get()
+            r = await current_state.enter_state()
+            if isinstance(r, asyncio.Task):
+                self.all_tasks.append(r)
 
 
 END_STATE = State('Final State', func=lambda: None)

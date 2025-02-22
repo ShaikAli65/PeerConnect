@@ -1,9 +1,10 @@
 import asyncio
 import random
 
+import _path  # noqa
 from src.avails import DataWeaver, Wire, WireData
 from src.avails.events import ConnectionEvent, MessageEvent
-from src.core import connections_dispatcher, get_this_remote_peer, msg_dispatcher
+from src.core import Dock, connections_dispatcher, get_this_remote_peer, msg_dispatcher
 from src.core.bandwidth import Watcher
 from src.core.connector import Connector
 from src.managers import message
@@ -13,7 +14,11 @@ from tests.test import get_a_peer, start_test
 
 
 async def test_connection():
+    print("waiting to get into network")
+    await Dock.in_network.wait()
+
     peer = get_a_peer()
+    assert peer is not None, "no peers"
     connector = Connector()
 
     TEST_HEADER = "TEST HEADER"
@@ -69,6 +74,6 @@ async def test_message():
 
 
 if __name__ == "__main__":
-    s1 = State("testing connection", test_connection)
-    s2 = State("testing message", test_message)
-    start_test([s1, s2])
+    s1 = State("testing connection", test_connection, is_blocking=True)
+    # s2 = State("testing message", test_message)
+    start_test(s1)

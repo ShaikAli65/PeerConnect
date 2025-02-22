@@ -21,7 +21,7 @@ def initial_states():
     s6 = State("boot_up initiating", bootup.initiate_bootup)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)
-    s9 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
+    s9 = State("initiating comms", acceptor.initiate_acceptor)
     s10 = State("starting message connections", message.initiate)
     s10 = State("initiating requests", requests.initiate, is_blocking=True)
     s11 = State("connectivity checker", connectivity.initiate)
@@ -32,7 +32,7 @@ def initial_states():
 def initiate(states):
     cancellation_started = 0.0
 
-    async def _initiate():
+    async def _async_initiate():
         Dock.state_manager_handle = StateManager()
         await Dock.state_manager_handle.put_states(states)
 
@@ -52,7 +52,8 @@ def initiate(states):
 
     try:
         with AnotherRunner(debug=const.debug) as runner:
-            runner.run(_initiate())
+
+            runner.run(_async_initiate())
     except KeyboardInterrupt:
         if const.debug:
             traceback.print_exc()

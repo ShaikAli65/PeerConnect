@@ -20,4 +20,4 @@ async def test_message():
 
 if __name__ == '__main__':
     s = State("testing message",test_message)
-    start_test([s])
+    start_test(s)

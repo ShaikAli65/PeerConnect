@@ -66,4 +66,4 @@ async def test_one_to_many_file_transfer():
 
 if __name__ == "__main__":
     s11 = State("test otm file transfer", test_one_to_many_file_transfer, is_blocking=True)
-    start_test([s11])
+    start_test(s11)

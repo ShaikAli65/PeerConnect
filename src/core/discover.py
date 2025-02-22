@@ -139,6 +139,7 @@ async def send_discovery_requests(transport, multicast_addr):
         async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
             transport.sendto(ping_data, multicast_addr)
             if Dock.kademlia_network_server.is_bootstrapped:
+                Dock.in_network.set()  # set the signal informing that we are in network
                 break
 
         _logger.debug(f"sent discovery request to multicast {multicast_addr}")
@@ -146,11 +147,12 @@ async def send_discovery_requests(transport, multicast_addr):
     async def enter_passive_mode():
         _logger.info(f"entering passive mode for discovery after waiting for {const.DISCOVER_TIMEOUT}s")
         async for _ in use.async_timeouts(initial=0.1, max_retries=-1, max_value=const.DISCOVER_TIMEOUT):
-            if Dock.kademlia_network_server.is_bootstrapped:
-                continue
             if Dock.finalizing.is_set():
                 return
+            if Dock.kademlia_network_server.is_bootstrapped:
+                continue
 
+            Dock.in_network.clear()  # set to false, signalling that we are no longer connect to network
             await send_discovery_packet()
 
     await send_discovery_packet()

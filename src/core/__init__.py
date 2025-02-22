@@ -25,6 +25,7 @@ class Dock:
     global_gossip = None
     _this_object: Optional[_RemotePeer] = None
     kademlia_network_server = None
+    in_network = _asyncio.Event()  # this gets set when we are in network and unset if not
     finalizing = _asyncio.Event()
     requests_transport: Optional[_asyncio.DatagramTransport] = None
     dispatchers: dict[DISPATCHS, BaseDispatcher] = {}

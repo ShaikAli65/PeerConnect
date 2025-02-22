@@ -22,4 +22,4 @@ async def test_members():
 if __name__ == "__main__":
     members_test = State("testing members", test_members)
     peer_gathers = State("checking for peer gathering", test_list_of_peers, is_blocking=True)
-    start_test((members_test, peer_gathers))
+    start_test(members_test, peer_gathers)

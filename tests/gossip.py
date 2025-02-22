@@ -43,4 +43,4 @@ async def test_gossip_search_user(username=TEST_USERNAME):
 if __name__ == "__main__":
     s7 = State("checking for gossip", test_gossip)
     s8 = State("checking for gossip search", test_gossip_search_user)
-    start_test((s7,s8))
+    start_test(s7, s8)

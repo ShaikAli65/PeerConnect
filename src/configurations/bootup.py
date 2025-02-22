@@ -7,7 +7,7 @@ from pathlib import Path
 from kademlia.utils import digest
 
 import src.core.async_runner  # noqa
-import src.core.eventloop  # noqa
+import src.core.eventloop as eventloop
 from src.avails import RemotePeer, constants as const, use
 from src.avails.connect import IPAddress
 from src.configurations import logger as _logger
@@ -18,6 +18,7 @@ from src.webpage_handlers import webpage
 
 
 async def initiate_bootup():
+    eventloop.set_task_factory()
     clear_logs() if const.CLEAR_LOGS else None
 
     await Dock.exit_stack.enter_async_context(logmanager.initiate())

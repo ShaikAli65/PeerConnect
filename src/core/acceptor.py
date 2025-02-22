@@ -7,7 +7,7 @@ lazy loading is used to avoid circular import through initiate_acceptor function
 import asyncio
 import logging
 import threading
-from asyncio import TaskGroup
+from asyncio import CancelledError, TaskGroup
 from collections import namedtuple
 from inspect import isawaitable
 from typing import Optional
@@ -42,8 +42,6 @@ async def initiate_acceptor():
     # warning, careful with order
     await Dock.exit_stack.enter_async_context(connection_dispatcher)
     await Dock.exit_stack.enter_async_context(acceptor)
-
-    await acceptor.initiate()
 
 
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
@@ -103,6 +101,7 @@ class Acceptor(AExitStackMixIn):
         self.back_log = 4
         self.max_timeout = 90
         self._task_group = TaskGroup()
+        self._initiate_task = asyncio.create_task(self.initiate())
 
     async def initiate(self):
         _logger.info(f"Initiating Acceptor {self.address}")
@@ -114,28 +113,28 @@ class Acceptor(AExitStackMixIn):
                 initial_conn, addr = await self.main_socket.aaccept()
             except OSError:
                 if self.stopping():
-                    # if we are finalizing then
-                    # it's mostly a case for asyncio cancelling this task
-
-                    # but,
-                    # async def accept_coro(future, conn):
-                    #   Coroutine closing the accept socket if the future is cancelled
-                    #   try:
-                    #       await future
-                    #   except exceptions.CancelledError:
-                    #       conn.close()
-                    #       raise
-                    #
-                    # this part of asyncio internals does not handle OSError,
-                    # causing a dirty log
-                    #
-                    # Task exception was never retrieved
-                    # future: < Task finished name = 'Task-6' coro = accept_coro() done,.. >
-                    # OSError: [WinError 995] The I/O operation has been aborted ...
-
-                    # try dealing with this
                     return
                 raise
+                # if we are finalizing then
+                # it's mostly a case for asyncio cancelling this task
+
+                # but,
+                # async def accept_coro(future, conn):
+                #   Coroutine closing the accept socket if the future is cancelled
+                #   try:
+                #       await future
+                #   except exceptions.CancelledError:
+                #       conn.close()
+                #       raise
+                #
+                # this part of asyncio internals does not handle OSError,
+                # causing a dirty log
+                #
+                # Task exception was never retrieved
+                # future: < Task finished name = 'Task-6' coro = accept_coro() done,.. >
+                # OSError: [WinError 995] The I/O operation has been aborted ...
+
+                # try dealing with this
 
             self._task_group.create_task(
                 self.__accept_connection(initial_conn),
@@ -186,12 +185,17 @@ class Acceptor(AExitStackMixIn):
             _logger.error(error_log)
             initial_conn.close()
 
-    def reset_socket(self):
-        self.main_socket.close()
-        self._start_socket()
-
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self.main_socket.close()
+        self._initiate_task.cancel(sentinel := object())
+
+        try:
+            await self._initiate_task
+        except CancelledError as ce:
+            if ce.args and ce.args[0] is sentinel:
+                pass
+            else:
+                raise
+
         return await super().__aexit__(exc_tb, exc_type, exc_tb)
 
     def __repr__(self):

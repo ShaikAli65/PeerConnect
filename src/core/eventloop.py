@@ -32,4 +32,5 @@ if sys.platform == 'win32':
     # _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
 
 
-_asyncio.get_event_loop().set_task_factory(_asyncio.eager_task_factory)
+def set_task_factory():
+    _asyncio.get_event_loop().set_task_factory(_asyncio.eager_task_factory)

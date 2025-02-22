@@ -125,15 +125,15 @@ def test_initial_states():
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)
     s9 = State("initiating requests", requests.initiate)
-    s10 = State("initiating comms", acceptor.initiate_acceptor, is_blocking=True)
+    s10 = State("initiating comms", acceptor.initiate_acceptor)
     s11 = State("connectivity checker", connectivity.initiate)
     return tuple(locals().values())
 
 
-def start_test(other_states):
+def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    initiate(test_initial_states() + tuple(other_states))
+    initiate(test_initial_states() + other_states)
 
 
 if __name__ == "__main__":
-    start_test([])
+    start_test()

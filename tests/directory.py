@@ -57,4 +57,4 @@ def main():
 
 if __name__ == '__main__':
     s10 = State("test dir transfer", test_dir_transfer, is_blocking=True)
-    start_test([s10])
+    start_test(s10)
