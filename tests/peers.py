@@ -2,7 +2,8 @@ import asyncio
 
 import _path  # noqa
 from src.avails.useables import async_input
-from src.core import Dock, peers
+from src.core import peers
+from src.core.public import Dock
 from src.managers.statemanager import State
 from tests.test import start_test
 

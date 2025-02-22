@@ -6,20 +6,30 @@ from contextlib import aclosing
 from pathlib import Path
 
 from src.avails import const, use
-from src.avails.exceptions import CancelTransfer, InvalidStateError
+from src.avails.exceptions import InvalidStateError
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
-from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonExceptionHandlersMixIn, PauseMixIn
+from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonCancelMixIn, CommonExceptionHandlersMixIn, \
+    PauseMixIn
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
 
 
-class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, AbstractSender):
+# nah, this is not a function definition
 
+class Sender(
+    CommonExceptionHandlersMixIn,  # keep at the top of the mro, cause calls to these methods are more
+    # probably called only once or twice
+    PauseMixIn,
+    CommonAExitMixIn,
+    # probably called on rare occasion
+    CommonCancelMixIn,
+    AbstractSender
+):
     version = const.VERSIONS['FO']
     timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
     def __init__(self, peer_obj, transfer_id, file_list, status_updater):
-        self.send_files_task = None
+        self.main_task = None
         self.state = TransferState.PREPARING
         self.file_list = [
             FileItem(Path(x), seeked=0) for x in file_list
@@ -29,7 +39,7 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         self.status_updater = status_updater
         self.to_stop = False
         self.socket = None
-        self._current_file_index = 0
+        self._current_file_index = -1
         self.send_func = None
         self.recv_func = None
         self._expected_errors = set()
@@ -37,14 +47,13 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
     async def send_files(self):
         _logger.debug(f'{self._log_prefix} changing state to sending')
         self.state = TransferState.SENDING
-        self.send_files_task = asyncio.current_task()
+        self.main_task = asyncio.current_task()
 
-        for index in range(self._current_file_index, len(self.file_list)):
+        while self._current_file_index < len(self.file_list) and self.to_stop is False:
 
-            if self.to_stop:
-                break
-            file_item = self.file_list[index]
-            self._current_file_index = index
+            self._current_file_index += 1
+
+            file_item = self.file_list[self._current_file_index]
             await self._send_file_item(file_item)
             async with aclosing(self.send_one_file(file_item)) as loop:
                 async for _ in loop:
@@ -96,15 +105,19 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
 
         _logger.debug(f'FILE[{self._file_id}] changing state to sending')
         self.state = TransferState.SENDING
-        start_file = self.file_list[self._current_file_index]
+        interrupted_file = self.file_list[self._current_file_index]
         # synchronizing last file sent
         try:
-            start_file.seeked = await use.recv_int(self.recv_func, use.LONG_INT)
+            interrupted_file.seeked = await use.recv_int(self.recv_func, use.LONG_INT)
         except ValueError as ve:
             self._raise_transfer_incomplete_and_change_state(ve)
         else:
-            self.status_updater.status_setup(f"resuming file:{start_file}", start_file.seeked, start_file.size)
-        # :todo: handle state more maturily
+            if interrupted_file.seeked != interrupted_file.size:
+                self.status_updater.status_setup(f"resuming file:{interrupted_file}", interrupted_file.seeked,
+                                                 interrupted_file.size)
+            else:
+                # we got interrupted exactly when next file's file item is being sent
+                self._current_file_index += 1
 
         # continuing with remaining transfer
         async with aclosing(self.send_files()) as file_sender:
@@ -113,7 +126,8 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
 
     def attach_files(self, paths_list):
         if self.state not in (TransferState.PAUSED, TransferState.SENDING):
-            raise InvalidStateError(f"expected state to be {(TransferState.PAUSED, TransferState.SENDING)}, found {self.state=}")
+            raise InvalidStateError(
+                f"expected state to be {(TransferState.PAUSED, TransferState.SENDING)}, found {self.state=}")
 
         self.file_list.extend(FileItem(Path(path), 0) for path in paths_list)
 
@@ -123,15 +137,6 @@ class Sender(CommonExceptionHandlersMixIn, PauseMixIn, CommonAExitMixIn, Abstrac
         self.state = TransferState.SENDING
         self.recv_func.resume()
         self.send_func.resume()
-
-    async def cancel(self):
-        if self.state not in (TransferState.SENDING, TransferState.PAUSED):
-            raise InvalidStateError(f"{self.state=}")
-
-        self.to_stop = True
-        self._expected_errors.add(ct := CancelTransfer())
-        self.send_files_task.set_exception(ct)
-        await self.send_files_task
 
     def connection_made(self, connection):
         self.send_func = connection.send

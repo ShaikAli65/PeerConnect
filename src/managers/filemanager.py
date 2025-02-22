@@ -9,11 +9,12 @@ from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookK
     const, get_dialog_handler
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
-from src.core import Dock, get_this_remote_peer, peers
+from src.conduit import webpage
+from src.core import peers
 from src.core.connector import Connector
+from src.core.public import Dock, get_this_remote_peer
 from src.transfers import HEADERS, TransferState, files, otm
 from src.transfers.status import StatusMixIn
-from src.webpage_handlers import webpage
 
 transfers_book = TransfersBookKeeper()
 
@@ -75,8 +76,9 @@ async def _sender_helper(file_sender, peer_id):
     async with AsyncExitStack() as stack:
         try:
             may_be_confirmed = True
-            await stack.enter_async_context(prepare_connection(file_sender))
-            accepted = await asyncio.wait_for(file_sender.recv_func(1), const.DEFAULT_TRANSFER_TIMEOUT)
+            connection = await stack.enter_async_context(prepare_connection(file_sender))
+            file_sender.connection_made(connection)
+            accepted = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
             print(f"{accepted=}")
             if accepted == b'\x00':
                 may_be_confirmed = False
@@ -108,12 +110,11 @@ async def prepare_connection(sender_handle):
             file_id=sender_handle.id,
             peer_id=get_this_remote_peer().peer_id,
         )
-        _logger.debug("authorization header sent for file connection", extra={'id': sender_handle.id})
+        _logger.debug(f"authorization header sent for file connection {sender_handle.id}")
         await Wire.send_msg(connection, handshake)
-        sender_handle.connection_made(connection)
         _logger.info(f"connection established")
         try:
-            yield
+            yield connection
         except OSError as oops:
             if not sender_handle.state == TransferState.PAUSED:
                 _logger.warning(f"reverting state to PREPARING, failed to connect to peer",
@@ -200,9 +201,13 @@ def new_otm_request_arrived(req_data: WireData, addr):
 def FileConnectionHandler():
     async def handler(event: ConnectionEvent):
         file_req = event.handshake
-        _logger.info("new file connection arrived", extra={'id': file_req['file_id']})
+        _logger.info(f"new file connection arrived transfer_id={file_req['file_id']}")
+        if transfer_handle := transfers_book.check_running(file_req['file_id']):
+            # if we have a transfer running with same id, just send that connection into running handle
+            transfer_handle.connection_made(event.connection)
+            return
 
-        # if not await webpage.get_transfer_ok(event.handshake.peer_id):  # :todo: ask webpage
+            # if not await webpage.get_transfer_ok(event.handshake.peer_id):  # TODO: ask webpage
         #     await event.transport.send(b'\x00')
         #     return
 
@@ -247,16 +252,15 @@ def OTMConnectionHandler():
         This is the final function call related to an otm session, all other rpc' s from now are made
         internally from/to otm session relay
         """
-        connection = event.connection.socket
         link_data = event.handshake
-        _logger.info("updating otm connection", extra={'addr': connection.getpeername()})
+        _logger.info(f"updating otm connection from{event.connection.socket.getpeername()}")
         session_id = link_data['session_id']
         otm_relay = transfers_book.get_scheduled(session_id)
         if otm_relay:
-            await otm_relay.otm_add_stream_link(connection, link_data)
+            await otm_relay.otm_add_stream_link(event.connection, link_data)
         else:
             _logger.error(f"otm session not found with id={session_id}")
-            _logger.error(f"ignoring request from {connection.getpeername()}")
+            _logger.error(f"ignoring request from {event.connection.socket.getpeername()}")
 
     return handler
 

@@ -86,72 +86,21 @@ referring 1.3 :
 import asyncio
 import logging
 import time
-from collections import defaultdict
 from collections.abc import AsyncIterator
 from typing import Optional, override
 
-from kademlia import crawling, storage
+from kademlia import crawling
 
 from src.avails import GossipMessage, RemotePeer, use
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.avails.useables import get_unique_id
-from src.core import Dock, connectivity, get_gossip, get_this_remote_peer
+from src.conduit import webpage
+from src.core import connectivity
+from src.core.peerstore import node_list_ids
+from src.core.public import Dock, get_gossip, get_this_remote_peer
 from src.transfers import GOSSIP
-from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
-
-# this list contains 20 evenly spread numbers in [0, 2**160]
-node_list_ids = [
-    b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
-    b'\x0c\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc',
-    b'\x19\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x98',
-    b'&ffffffffffffffffffd',
-    b'33333333333333333330',
-    b'?\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfc',
-    b'L\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xc8',
-    b'Y\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x94',
-    b'fffffffffffffffffff`',
-    b's333333333333333333,',
-    b'\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xf8',
-    b'\x8c\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xc4',
-    b'\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x90',
-    b'\xa6ffffffffffffffffff\\',
-    b'\xb3333333333333333333(',
-    b'\xbf\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xf4',
-    b'\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xc0',
-    b'\xd9\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x99\x8c',
-    b'\xe6ffffffffffffffffffX',
-    b'\xf3333333333333333333$',
-]
-
-
-class Storage(storage.ForgetfulStorage):
-    # :todo: introduce diff based reads
-    node_lists_ids = set(node_list_ids)
-    peer_data_storage = defaultdict(set)
-
-    def get_list_of_peers(self, list_key):
-        if list_key in self.peer_data_storage:
-            return list(self.peer_data_storage.get(list_key))
-
-    def all_peers_in_lists(self):
-        return self.peer_data_storage.items()
-
-    def store_peers_in_list(self, list_key, list_of_peers):
-        if list_key not in self.node_lists_ids:
-            return False
-
-        # temporary fix
-        filtered_peers = set()
-        for peer in list_of_peers:
-            if isinstance(peer, list):
-                filtered_peers.add(peer[0])
-            else:
-                filtered_peers.add(peer)
-        self.peer_data_storage[list_key] |= filtered_peers
-
-        return True
 
 
 class SearchCrawler:

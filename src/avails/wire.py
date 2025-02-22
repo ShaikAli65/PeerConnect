@@ -219,7 +219,7 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
 class DataWeaver:
     """A wrapper purposely designed to handle data (as {header, content, msg_id, peer_id} format)
 
-    Only to be used by `webpage_handlers` package, and is completely hidden from core API
+    Only to be used by `conduit` package, and is completely hidden from core API
 
     """
 

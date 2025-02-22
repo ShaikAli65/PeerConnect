@@ -1,9 +1,9 @@
 import _path  # noqa
 from src.avails import DataWeaver
-from src.core import Dock
+from src.conduit import handledata
+from src.conduit.headers import HANDLE
+from src.core.public import Dock
 from src.managers.statemanager import State
-from src.webpage_handlers import handledata
-from src.webpage_handlers.headers import HANDLE
 from tests.test import start_test
 
 
@@ -43,7 +43,7 @@ async def test_one_to_many_file_transfer():
         |+++{5}
 
     Expected:
-    Best tree should have a maxmimum depth of 0 - 1 - 2.
+    Best tree should have a maximum depth of 0 - 1 - 2.
 
     Possible cause:
     using hyper cube in initial graph formation

@@ -8,10 +8,11 @@ from src.avails.connect import MsgConnection
 from src.avails.constants import MAX_CONCURRENT_MSG_PROCESSING, TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK
 from src.avails.events import ConnectionEvent, MessageEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, connections_dispatcher, get_this_remote_peer
+from src.conduit import pagehandle
+from src.core import bandwidth
 from src.core.connector import Connector
+from src.core.public import DISPATCHS, Dock, connections_dispatcher, get_this_remote_peer
 from src.transfers import HEADERS
-from src.webpage_handlers import pagehandle
 
 _logger = logging.getLogger(__name__)
 
@@ -117,6 +118,19 @@ async def get_msg_conn(peer: RemotePeer):
         msg_connection = MsgConnection(connection)
         _msg_conn_pool[peer] = msg_connection
         yield msg_connection
+    else:
+        watcher = bandwidth.Watcher()
+        connection = _msg_conn_pool.get(peer)
+        active, _ = await watcher.refresh(peer, _msg_conn_pool.get(peer))
+
+        if connection not in active:
+            _msg_conn_pool.pop(peer)
+        else:
+            yield connection
+            return
+
+        async with get_msg_conn(peer) as msg_conn:
+            yield msg_conn
 
 
 async def send_message(msg, peer, *, expect_reply=False):
@@ -131,4 +145,4 @@ async def send_message(msg, peer, *, expect_reply=False):
 
     """
     async with get_msg_conn(peer) as connection:
-        connection.send()
+        await connection.send(msg)

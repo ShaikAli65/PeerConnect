@@ -6,7 +6,7 @@ import struct
 import time
 
 from src.avails import (RemotePeer, Wire, connect, const, use)
-from src.core import Dock, get_this_remote_peer
+from src.core.public import Dock, get_this_remote_peer
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)

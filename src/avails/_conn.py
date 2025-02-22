@@ -4,8 +4,8 @@ import time
 from asyncio.trsock import TransportSocket
 from typing import Any, NamedTuple, TYPE_CHECKING
 
-import src.avails.wire as wire
-from src.avails import const
+# import src.avails.wire as wire
+from src.avails import const, wire
 from src.avails._asocket import Socket
 
 
@@ -134,28 +134,31 @@ class Connection(NamedTuple):
         self.lock.release()
 
 
-class MsgConnection(NamedTuple):
+class MsgConnection:
     """Send or Receive WireData object from connection"""
+    __slots__ = '_connection'
+    _connection: Connection
 
-    connection_: Connection
+    def __init__(self, connection):
+        self._connection = connection
 
     async def send(self, data):
         byted_data = bytes(data)  # marshall
         data_size = struct.pack("!I", len(byted_data))
-        return await self.connection_.send(data_size + byted_data)
+        return await self._connection.send(data_size + byted_data)
 
     if TYPE_CHECKING:
         async def send(self, data: wire.WireData): ...
 
     async def recv(self):
-        data_size = struct.unpack("!I", await self.connection_.recv(4))[0]
-        raw_data = await self.connection_.recv(data_size)
+        data_size = struct.unpack("!I", await self._connection.recv(4))[0]
+        raw_data = await self._connection.recv(data_size)
         return wire.WireData.load_from(raw_data)
 
     @property
     def socket(self):
-        return self.connection_.socket
+        return self._connection.socket
 
     @property
     def peer(self):
-        return self.connection_.peer
+        return self._connection.peer

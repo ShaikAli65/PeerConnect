@@ -1,12 +1,15 @@
 import asyncio
 
+from _socket import gethostbyname, gethostname
+
 
 class Multicast(asyncio.DatagramProtocol):
     def __init__(self):
         self.all_peers = set()
+        self.transport = None
 
     def connection_made(self, transport):
-        print("server up and running", transport.get_extra_info('socket'))
+        print("multicast up and running", transport.get_extra_info('socket'))
         self.transport = transport
 
     def datagram_received(self, data, addr):
@@ -19,9 +22,12 @@ class Multicast(asyncio.DatagramProtocol):
         self.all_peers.add(addr)
 
 
-async def main():
-    # multicast_ip = '127.0.0.1'
-    multicast_ip = '172.16.210.0'
+async def main(config):
+    if config.test_mode == "host":
+        multicast_ip = '127.0.0.1'
+    else:
+        multicast_ip = gethostbyname(gethostname())
+
     multicast_port = 4000
 
     loop = asyncio.get_running_loop()
@@ -30,9 +36,3 @@ async def main():
         local_addr=(multicast_ip, multicast_port)
     )
     await asyncio.Event().wait()
-
-    print("stopping")
-
-
-if __name__ == "__main__":
-    asyncio.run(main=main())

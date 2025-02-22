@@ -5,18 +5,27 @@ import struct
 from contextlib import aclosing, contextmanager
 
 from src.avails import const, use
-from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
+from src.avails.exceptions import InvalidStateError, TransferIncomplete
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
-from src.transfers.abc import AbstractReceiver, CommonAExitMixIn, CommonExceptionHandlersMixIn, PauseMixIn
+from src.transfers.abc import AbstractReceiver, CommonAExitMixIn, CommonCancelMixIn, CommonExceptionHandlersMixIn, \
+    PauseMixIn
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size, validatename
 
 
-class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, AbstractReceiver):
+class Receiver(
+    CommonExceptionHandlersMixIn,  # keep at the top of the mro, cause calls to these methods are more
+    # probably called only once or twice
+    PauseMixIn,
+    CommonAExitMixIn,
+    # probably called on rare occasion
+    CommonCancelMixIn,
+    AbstractReceiver
+):
     version = const.VERSIONS['FO']
 
     def __init__(self, peer_obj, file_id, download_path, status_updater):
-        self.recv_files_task = None
+        self.main_task = None
         self.state = TransferState.PREPARING
         self.peer = peer_obj
         self._file_id = file_id
@@ -35,7 +44,7 @@ class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, Abstr
         Not reentrant, see AbstractTransferHandle.continue_transfer for that behaviour
         """
 
-        self.recv_files_task = asyncio.current_task()
+        self.main_task = asyncio.current_task()
 
         _logger.debug(f"{self._log_prefix} changing state to CONNECTING")
         self.state = TransferState.CONNECTING
@@ -132,7 +141,7 @@ class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, Abstr
         if not self.state == TransferState.PAUSED or self.to_stop is True:
             raise InvalidStateError(f"{self.state=}, {self.to_stop=}")
 
-        self.recv_files_task = asyncio.current_task()
+        self.main_task = asyncio.current_task()
 
         _logger.debug(f'FILE[{self._file_id}] changing state to receiving')
         self.state = TransferState.RECEIVING
@@ -157,15 +166,6 @@ class Receiver(CommonAExitMixIn, PauseMixIn, CommonExceptionHandlersMixIn, Abstr
         self.connection_wait.set_result(connection)
         self.send_func = connection.send
         self.recv_func = connection.recv
-
-    async def cancel(self):
-        if self.state not in (TransferState.RECEIVING, TransferState.PAUSED):
-            raise InvalidStateError(f"{self.state=}")
-
-        self.to_stop = True
-        self._expected_errors.add(ct := CancelTransfer())
-        self.recv_files_task.set_exception(ct)
-        await self.recv_files_task
 
     def resume(self):
         if self.state is not TransferState.PAUSED:

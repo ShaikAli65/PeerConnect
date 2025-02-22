@@ -15,8 +15,9 @@ from rpcudp.protocol import RPCProtocol
 from src.avails import RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
-from src.core import Dock, get_this_remote_peer, peers
-from src.core.peers import Storage
+from src.core import peers
+from src.core.peerstore import Storage
+from src.core.public import Dock, get_this_remote_peer
 from src.transfers import REQUESTS_HEADERS
 from src.transfers.transports import KademliaTransport
 

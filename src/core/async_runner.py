@@ -1,7 +1,7 @@
 import asyncio
 from typing import override
 
-from src.core import Dock
+from src.core.public import Dock
 
 
 class AnotherRunner(asyncio.Runner):  # noqa # dirty dirty dirty

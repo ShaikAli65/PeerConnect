@@ -81,7 +81,10 @@
       "propagate": true
     },
     "src.core.discover": {
-      "propagate": true
+      "handlers": [
+        "discovery_handler"
+      ],
+      "propagate": false
     }
   }
 }

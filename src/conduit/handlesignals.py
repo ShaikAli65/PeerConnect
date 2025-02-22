@@ -1,12 +1,13 @@
 from src.avails import BaseDispatcher, DataWeaver
-from src.core import Dock, peers
-from src.managers.statemanager import State
-from src.webpage_handlers import logger, webpage
-from src.webpage_handlers.handleprofiles import (
+from src.conduit import logger, webpage
+from src.conduit.handleprofiles import (
     align_profiles,
     set_selected_profile,
 )
-from src.webpage_handlers.headers import HANDLE
+from src.conduit.headers import HANDLE
+from src.core import peers
+from src.core.public import Dock
+from src.managers.statemanager import State
 
 
 class FrontEndSignalDispatcher(BaseDispatcher):

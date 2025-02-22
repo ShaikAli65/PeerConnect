@@ -1,73 +1,20 @@
+import argparse
 import asyncio
-import getpass
+import functools
+import multiprocessing
 import os
-import random
-import sys
-
-from kademlia import utils
 
 import _path  # noqa
 from src.__main__ import initiate
-from src.avails import RemotePeer, const
-from src.avails.connect import UDPProtocol
+from src.avails import RemotePeer
+from src.conduit import pagehandle
 from src.configurations import bootup, configure
-from src.core import Dock, acceptor, connectivity, requests, set_current_remote_peer_object
-from src.managers import ProfileManager, profilemanager
+from src.core import acceptor, connectivity, requests
+from src.core.public import Dock
+from src.managers import profilemanager
 from src.managers.statemanager import State
-from src.webpage_handlers import pagehandle, webpage
-
-
-def _create_listen_socket_mock(bind_address, _):
-    loop = asyncio.get_running_loop()
-    sock = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
-    )
-    print("mocked socket creation")
-    return sock
-
-
-async def _mock_interface_selector(interfaces):
-    for i, inter in interfaces.items():
-        if 'wi' in inter.friendly_name.lower():
-            print(inter)
-            return i
-
-    print("not asking for", (i := next(iter(interfaces))))
-    return i
-
-
-webpage.ask_for_interface_choice = _mock_interface_selector
-
-
-# async def setup_request_transport(bind_address, multicast_address, req_dispatcher):
-#     loop = asyncio.get_running_loop()
-#     base_socket = _create_listen_socket(bind_address, multicast_address)
-#     transport, proto = await loop.create_datagram_endpoint(
-#         functools.partial(RequestsEndPoint, req_dispatcher),
-#         sock=base_socket
-#     )
-#     req_dispatcher.transport = RequestsTransport(transport)
-#     return transport
-
-
-def test():
-    requests._create_listen_socket = _create_listen_socket_mock
-    const.THIS_IP = '127.0.0.' + sys.argv[1]
-    const.SERVER_IP = const.THIS_IP
-    const.MULTICAST_IP_v4 = '127.0.0.1'
-    const.PORT_NETWORK = 4000
-    const.DISCOVER_RETRIES = 1
-    set_current_remote_peer_object(
-        RemotePeer(
-            byte_id=utils.digest(f"{const.THIS_IP}{const.PORT_THIS}"),
-            username=f"test-{getpass.getuser()}",
-            ip=const.THIS_IP,
-            conn_port=const.PORT_THIS,
-            req_port=const.PORT_REQ,
-            status=1,
-        )
-    )
-    # print(peers.get_this_remote_peer())
+from tests import multicast_stub
+from tests.mock import mock
 
 
 def get_a_peer() -> RemotePeer | None:
@@ -79,48 +26,12 @@ def get_a_peer() -> RemotePeer | None:
     return p
 
 
-async def profile_getter():
-    p = await ProfileManager.add_profile(
-        getpass.getuser(),
-        {
-            "USER": {
-                "name": getpass.getuser(),
-                "id": random.getrandbits(255),
-            },
-            "SERVER": {
-                "port": 45000,
-                "ip": "0.0.0.0",
-                "id": 0,
-            },
-            "INTERFACE": {}
-        }
-    )
-
-    async def delete(*_):
-        await ProfileManager.delete_profile(p.file_name)
-
-    Dock.exit_stack.push_async_exit(delete)
-    return p
-
-
-async def mock_profile():
-    await profilemanager.set_current_profile(await profile_getter())
-
-
-def mock_multicast():
-    const.MULTICAST_IP_v4 = "172.16.210.0"
-    # const.MULTICAST_IP_v4 = '172.16.196.238'
-    const.PORT_NETWORK = 4000
-    requests._create_listen_socket = _create_listen_socket_mock
-
-
 def test_initial_states():
-    # :todo: look into states once again
     s1 = State("set paths", configure.set_paths)
     s2 = State("loading configurations", configure.load_configs)
     s3 = State("loading profiles", profilemanager.load_profiles_to_program)
+    s5 = State("mocking", functools.partial(mock, parser.parse_args()))
     s4 = State("launching webpage", pagehandle.initiate_page_handle)
-    s5 = State("mocking profile", mock_profile)
     s6 = State("boot up", bootup.initiate_bootup)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)
@@ -130,10 +41,72 @@ def test_initial_states():
     return tuple(locals().values())
 
 
+def _str2bool(value):
+    """
+    Convert a string to a boolean.
+    Accepts: 'true', 't', 'yes', '1' for True and 'false', 'f', 'no', '0' for False.
+    """
+    if isinstance(value, bool):
+        return value
+    lower_value = value.lower()
+    if lower_value in {'true', 't', 'yes', '1'}:
+        return True
+    elif lower_value in {'false', 'f', 'no', '0'}:
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected (True or False).")
+
+
+parser = argparse.ArgumentParser(
+    description="Argument parser for test-mode, peers, and mock-multicast"
+)
+parser.add_argument(
+    '--test-mode',
+    choices=['local', 'host'],
+    required=True,
+    help="Test mode (choose 'local' or 'host')."
+)
+parser.add_argument(
+    '--peers',
+    type=int,
+    required=True,
+    help="Number of peers (an integer)."
+)
+parser.add_argument(
+    '--mock-multicast',
+    type=_str2bool,
+    required=True,
+    help="Enable mock multicast (True or False)."
+)
+
+
 def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    initiate(test_initial_states() + other_states)
+    try:
+        initiate(test_initial_states() + other_states)
+    except KeyboardInterrupt:
+        return
+
+
+def start_multicast():
+    config = parser.parse_args()
+    try:
+        asyncio.run(main=multicast_stub.main(config))
+    except KeyboardInterrupt:
+        return
 
 
 if __name__ == "__main__":
-    start_test()
+    config = parser.parse_args()
+
+    if config.mock_multicast:
+        multicast_process = multiprocessing.Process(target=start_multicast)
+        multicast_process.start()
+
+    if config.test_mode == "local":
+        start_test()
+        exit()
+
+    for _ in range(config.peers):
+        multicast_process = multiprocessing.Process(target=start_test)
+        multicast_process.start()

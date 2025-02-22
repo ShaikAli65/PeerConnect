@@ -2,11 +2,12 @@ import traceback
 from pathlib import Path
 
 from src.avails import BaseDispatcher, DataWeaver, WireData
-from src.core import Dock, get_this_remote_peer, peers
+from src.conduit import logger
+from src.conduit.headers import HANDLE
+from src.core import peers
+from src.core.public import Dock, get_this_remote_peer
 from src.managers import directorymanager, filemanager, message
 from src.transfers import HEADERS
-from src.webpage_handlers import logger
-from src.webpage_handlers.headers import HANDLE
 
 
 class FrontEndDataDispatcher(BaseDispatcher):
@@ -74,7 +75,7 @@ async def send_text(command_data: DataWeaver):
             msg_id=get_this_remote_peer().peer_id,
             message=command_data.content,
         )
-        # :todo: wrap around with try except, signal page status update
+        # TODO: wrap around with try except, signal page status update
         await conn.send(bytes(data))
 
 
@@ -89,7 +90,7 @@ async def send_files_to_multiple_peers(command_data: DataWeaver):
 
     async for update in file_sender.start():
         print(update)
-        # :todo: feed updates to frontend
+        # TODO: feed updates to frontend
 
 
 async def send_dir_to_multiple_peers(_: DataWeaver): ...

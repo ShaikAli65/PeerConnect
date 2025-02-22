@@ -11,13 +11,13 @@ from pathlib import Path
 from src.avails import TransfersBookKeeper, Wire, WireData, connect, const, get_dialog_handler, use
 from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferRejected
-from src.core import Dock, get_this_remote_peer
+from src.conduit import webpage
 from src.core.connector import Connector
 from src.core.handles import TaskHandle
+from src.core.public import Dock, get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
 from src.transfers.status import StatusMixIn
-from src.webpage_handlers import webpage
 
 transfers_book = TransfersBookKeeper()
 _logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ async def send_directory(remote_peer, dir_path):
 
 
 async def _get_confirmation(connection):
-    timeout = 100000  # :todo: structure better
+    timeout = 100000  # TODO: structure better
     try:
         confirmation = await connection.recv(1)
         if confirmation == b'\x00':
@@ -113,7 +113,7 @@ def DirConnectionHandler():
         receiver.connection_made(connection)
         try:
             async with connection:  # acquire lock
-                await connection.send(b'\x01')  # :todo: get confirmation from user
+                await connection.send(b'\x01')  # TODO: get confirmation from user
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(
                     f"receiving directory from {peer}, saving at {use.shorten_path(dir_path, 40)}"

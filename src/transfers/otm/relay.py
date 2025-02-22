@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, override
 
 from src.avails import WireData, constants as const
 from src.avails.useables import LONG_INT, recv_int
-from src.core import get_this_remote_peer
+from src.core.public import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
 
 
 class OTMFilesRelay(PalmTreeRelay):
-    # :todo: try using temporary-spooled files
+    # TODO: try using temporary-spooled files
     if TYPE_CHECKING:
         from src.transfers.otm.receiver import FilesReceiver
         file_receiver: FilesReceiver

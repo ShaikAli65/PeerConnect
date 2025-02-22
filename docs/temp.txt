@@ -1,0 +1,16 @@
+working of application:
+
+we are using an IPC thing with frontend and backend
+
+backend has a websocket server endpoint running, and when application starts up, it opens index.html in PeerConnect/webpage directory using a http server or a simple webbrowser.open call
+
+now frontend connects to predefined websocket endpoint running at localhost, (port numbers are hardcoded into source)
+
+after connection of webpage, python further boots up the application
+
+now if any of the core code or application feature code needs to interact with frontend, it uses functions provided by webpage_handlers.webpage module
+
+and all the frontend communication part is inside webpage_handlers package, so that we can seperate frontend comms in a clear way
+while testing we can even mock all the webpage_handlers package and automate user interactions
+
+we are using a custom json schema for back-and-fourth communication

@@ -6,7 +6,7 @@ import time
 
 from src.avails import RemotePeer, WireData, connect, const, use
 from src.avails.mixins import QueueMixIn, singleton_mixin
-from src.core import DISPATCHS, Dock
+from src.core.public import Dock, send_msg_to_requests_endpoint
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -56,34 +56,30 @@ class Connectivity(QueueMixIn):
             msg_id=use.get_unique_id(str)
         )
 
-        req_dispatcher = Dock.dispatchers[DISPATCHS.REQUESTS]
-
-        fut = req_dispatcher.register_reply(ping_data.msg_id)
-
-        _logger.info(f"connectivity check initiating for {request}")
-        request.status = ConnectivityCheckState.REQ_CHECK
-        succeeded = True
-        req_dispatcher.transport.sendto(bytes(ping_data), request.peer.req_uri)
+        _logger.debug(f"connectivity check initiating for {request}")
 
         try:
-            await asyncio.wait_for(fut, const.PING_TIMEOUT)
+            t = send_msg_to_requests_endpoint(ping_data, request.peer, expect_reply=True)
+            await asyncio.wait_for(t, const.PING_TIMEOUT)
+            return True
         except TimeoutError:
             # try a tcp connection if network is terrible with UDP
 
             # or another possibility that is observed:
             # windows does not forward packets to application level when system is locked or sleeping
             # (interfaces shutdown)
+            pass
 
-            try:
-                request.status = ConnectivityCheckState.CON_CHECK
-                with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
-                    await sock.asendall(struct.pack("!I", 0))
-            except OSError:
-                # okay this one is cooked
-                succeeded = False
-
-        request.status = ConnectivityCheckState.COMPLETED
-        return succeeded
+        try:
+            request.status = ConnectivityCheckState.CON_CHECK
+            with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
+                await sock.asendall(struct.pack("!I", 0))
+        except OSError:
+            request.status = ConnectivityCheckState.COMPLETED
+            # okay this one is cooked
+            return False
+        else:
+            return True
 
     async def __aenter__(self):
         await super().__aenter__()

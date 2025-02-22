@@ -4,9 +4,9 @@ import random
 import _path  # noqa
 from src.avails import DataWeaver, Wire, WireData
 from src.avails.events import ConnectionEvent, MessageEvent
-from src.core import Dock, connections_dispatcher, get_this_remote_peer, msg_dispatcher
 from src.core.bandwidth import Watcher
 from src.core.connector import Connector
+from src.core.public import Dock, connections_dispatcher, get_this_remote_peer, msg_dispatcher
 from src.managers import message
 from src.managers.statemanager import State
 from src.transfers import HEADERS

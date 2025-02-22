@@ -42,10 +42,10 @@ from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, addr_tuple, get_this_remote_peer
+from src.conduit import webpage
+from src.core.public import DISPATCHS, Dock, addr_tuple, get_this_remote_peer
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
 from src.transfers.transports import DiscoveryTransport
-from src.webpage_handlers import webpage
 
 _logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
             raise
 
 
-async def send_discovery_requests(transport, multicast_addr):
+async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr):
     this_rp = get_this_remote_peer()
     ping_data = bytes(
         WireData(

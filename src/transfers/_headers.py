@@ -40,6 +40,7 @@ class REQUESTS_HEADERS:
     KADEMLIA = b"\x00"
     DISCOVERY = b"\x01"
     GOSSIP = b"\x02"
+    REQUEST = b"\xff"
 
 
 class DISCOVERY:

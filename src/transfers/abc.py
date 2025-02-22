@@ -1,13 +1,34 @@
+import asyncio
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 
-from src.avails import connect, const
-from src.avails.exceptions import CancelTransfer, TransferIncomplete
+from src.avails import RemotePeer, connect, const
+from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
 from src.transfers import TransferState
 from src.transfers._logger import logger
 
 
+class AbstractStatusMix(ABC):
+    @abstractmethod
+    def update_status(self, status): ...
+
+    @abstractmethod
+    def should_yield(self): ...
+
+    @abstractmethod
+    def status_setup(self, prefix, initial_limit, final_limit): ...
+
+    @abstractmethod
+    def close(self): ...
+
+
 class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
+    status_updater: AbstractStatusMix
+    peer: RemotePeer
+    state: TransferState
+    to_stop: bool
+    _expected_errors: set
+    main_task: asyncio.Task | None
 
     @abstractmethod
     async def continue_transfer(self):
@@ -46,7 +67,19 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         return f"[{self.__class__}]"
 
 
-class AbstractSender(AbstractTransferHandle, ABC):
+class CommonCancelMixIn:
+    async def cancel(self):
+        """Cancel the transfer"""
+        if self.state not in (TransferState.SENDING, TransferState.RECEIVING, TransferState.PAUSED):
+            raise InvalidStateError(f"state is not expected to be in {self.state=}")
+
+        self.to_stop = True
+        self._expected_errors.add(ct := CancelTransfer())
+        self.main_task.set_exception(ct)
+        await self.main_task
+
+
+class AbstractSender(AbstractTransferHandle):
     @abstractmethod
     def __init__(self, peer_obj, transfer_id, file_list, status_updater): ...
 
@@ -138,3 +171,4 @@ class PauseMixIn:
         self.state = TransferState.PAUSED
         self.send_func.pause()
         self.recv_func.pause()
+        self.to_stop = True

@@ -3,7 +3,7 @@ import random
 import time
 
 from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, RumorPolicy, const
-from src.core import Dock
+from src.core.public import Dock
 from src.transfers.transports import GossipTransport
 
 
@@ -63,7 +63,7 @@ class SimpleRumorMessageList(RumorMessageList):
 
     def sample_peers(self, message_id, sample_size):
         # using reservoir sampling algorithm
-        # :todo: try working with bloom filters
+        # TODO: try working with bloom filters
         _m: RumorMessageItem = self._message_list[message_id]
         peer_list = self._get_list_of_peers() - _m.peer_list
         reservoir = []

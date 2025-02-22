@@ -1,6 +1,6 @@
 from src.avails import DataWeaver, RemotePeer
-from src.webpage_handlers import headers
-from src.webpage_handlers.pagehandle import front_end_data_dispatcher
+from src.conduit import headers
+from src.conduit.pagehandle import front_end_data_dispatcher
 
 
 async def ask_for_interface_choice(interfaces):

@@ -3,11 +3,11 @@ from collections import defaultdict
 from src.avails import RemotePeer
 from src.avails.connect import Connection, Socket, is_socket_connected
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
-from src.core import Dock
+from src.core import public
 
 
 async def start_watcher():
-    await Dock.exit_stack.enter_async_context(Watcher())
+    await public.Dock.exit_stack.enter_async_context(Watcher())
 
 
 @singleton_mixin
@@ -29,7 +29,7 @@ class Watcher(AExitStackMixIn):
     async def refresh(self, peer, *connections: Connection):
         active = set()
         not_active = set()
-        for sock, conn in tuple(self.sockets[peer].items()):
+        for conn, sock in tuple(self.sockets[peer].items()):
             if conn not in connections:
                 continue
             if is_socket_connected(sock):

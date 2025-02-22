@@ -4,12 +4,13 @@ import traceback
 from asyncio import CancelledError
 
 from src.avails import const
+from src.conduit import pagehandle
 from src.configurations import bootup, configure
-from src.core import Dock, acceptor, connectivity, requests
+from src.core import acceptor, connectivity, requests
 from src.core.async_runner import AnotherRunner
+from src.core.public import Dock
 from src.managers import message, profilemanager
 from src.managers.statemanager import State, StateManager
-from src.webpage_handlers import pagehandle
 
 
 def initial_states():
@@ -17,7 +18,7 @@ def initial_states():
     s2 = State("loading configurations", configure.load_configs)
     s3 = State("loading profiles", profilemanager.load_profiles_to_program)
     s4 = State("launching webpage", pagehandle.initiate_page_handle)
-    # s5 = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
+    s5 = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
     s6 = State("boot_up initiating", bootup.initiate_bootup)
     s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
     s8 = State("printing configurations", configure.print_constants)

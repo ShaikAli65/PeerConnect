@@ -9,8 +9,9 @@ from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, _kademlia, gossip
+from src.core import _kademlia, gossip
 from src.core.discover import discovery_initiate
+from src.core.public import DISPATCHS, Dock
 from src.managers.statemanager import State
 from src.transfers.transports import RequestsTransport
 
@@ -45,8 +46,7 @@ async def initiate():
 
     Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
     Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
-
-    Dock.requests_transport = transport
+    Dock.requests_transport = req_dispatcher.transport
     Dock.kademlia_network_server = kad_server
 
     discovery_state = State(
@@ -69,7 +69,7 @@ async def initiate():
 
     await Dock.state_manager_handle.put_state(discovery_state)
     await Dock.state_manager_handle.put_state(add_to_lists)
-    # :todo: introduce context manager support into state-manager.State itself which reduces boilerplate
+    # TODO: introduce context manager support into state-manager.State itself which reduces boilerplate
 
     Dock.exit_stack.push_async_exit(kad_server)
 
@@ -162,7 +162,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"error:", exc_info=ip)
             return
 
-        _logger.info(f"received: {code} from : {addr}, {req_data.dict=}")
+        _logger.info(f"from : {addr}, received: ({code=},{req_data.msg_id=})")
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 
@@ -170,4 +170,3 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 async def end_requests():
     Dock.kademlia_network_server.stop()
     Dock.requests_transport.close()
-    Dock.requests_transport = None

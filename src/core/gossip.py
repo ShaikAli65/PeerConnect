@@ -1,8 +1,8 @@
 from src.avails import BaseDispatcher, GossipMessage
 from src.avails.events import GossipEvent
 from src.avails.mixins import QueueMixIn
-from src.core import Dock, get_gossip
 from src.core.peers import get_search_handler
+from src.core.public import Dock, get_gossip
 from src.transfers import GOSSIP, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
 
@@ -26,8 +26,22 @@ def GlobalGossipMessageHandler(global_gossiper):
     return handle
 
 
-def GossipSearchReqHandler(searcher, transport, gossiper: RumorMongerProtocol,
-                           gossip_handler: GlobalGossipMessageHandler):
+def GossipSearchReqHandler(searcher, transport, gossiper,
+                           gossip_handler):
+    """
+    Working:
+        * GossipEvent is passed into the handler when someone tries to search for some user
+        * We only reply if the search string relates to us.
+        * All the decision-making is done by searcher, just a helper to send reply returned by searcher
+        * Gossips the received search request received using gossiper
+
+    Args:
+        searcher(GossipSearch): delegates search request event to this object
+        transport(GossipTransport): transport to use to send messages
+        gossiper(RumorMongerProtocol): helper to gossip event message
+        gossip_handler(GlobalGossipMessageHandler): handler that handles gossip message that has arrived
+
+    """
     async def handle(event: GossipEvent):
         if not gossiper.is_seen(event.message):
             await gossip_handler(event)

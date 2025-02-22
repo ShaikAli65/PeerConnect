@@ -10,11 +10,10 @@ import src.core.async_runner  # noqa
 import src.core.eventloop as eventloop
 from src.avails import RemotePeer, constants as const, use
 from src.avails.connect import IPAddress
-from src.configurations import logger as _logger
-from src.configurations.interfaces import get_interfaces
-from src.core import Dock, set_current_remote_peer_object
+from src.conduit import webpage
+from src.configurations import interfaces as _interfaces, logger as _logger
+from src.core.public import Dock, set_current_remote_peer_object
 from src.managers import get_current_profile, logmanager, profilemanager
-from src.webpage_handlers import webpage
 
 
 async def initiate_bootup():
@@ -39,7 +38,7 @@ async def initiate_bootup():
 
 
 async def get_ip() -> IPAddress:
-    interfaces = dict(enumerate(get_interfaces()))
+    interfaces = dict(enumerate(_interfaces.get_interfaces()))
     if const.debug:
         print("-" * 100)
         print(f"interfaces found: \n{"\n".join(str(i) for i in interfaces.values())}")

@@ -17,7 +17,8 @@ from src.avails import (BaseDispatcher, InvalidPacket, Wire, connect,
 from src.avails.connect import Connection
 from src.avails.events import ConnectionEvent
 from src.avails.mixins import AExitStackMixIn, QueueMixIn, singleton_mixin
-from src.core import DISPATCHS, Dock, addr_tuple, bandwidth, connections_dispatcher, peers
+from src.core import bandwidth, peers
+from src.core.public import DISPATCHS, Dock, addr_tuple, connections_dispatcher
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
 from src.transfers import HEADERS
@@ -168,7 +169,6 @@ class Acceptor(AExitStackMixIn):
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
-        error_log = ""
         try:
             hand_shake = await asyncio.wait_for(
                 Wire.recv_msg(initial_conn), const.SERVER_TIMEOUT
@@ -181,7 +181,7 @@ class Acceptor(AExitStackMixIn):
         except InvalidPacket:
             error_log = f"Initial handshake packet is invalid, closing connection"
 
-        if error_log:
+        if locals().get('error_log'):
             _logger.error(error_log)
             initial_conn.close()
 
