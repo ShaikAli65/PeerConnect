@@ -8,6 +8,7 @@ from pathlib import Path
 import src.avails.constants as const
 from src.avails import connect
 from src.configurations import logger as _logger
+from src.core.public import Dock
 
 
 def print_constants():
@@ -31,17 +32,11 @@ def print_constants():
         print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
         return print(print_string)
 
-    # print("current path: ", const.PATH_CURRENT)
-    # print("config path: ", const.PATH_PROFILES)
-    # print("log path: ", const.PATH_LOG)
-    # print("page path: ", const.PATH_PAGE)
-    # print("download path: ", const.PATH_DOWNLOAD)
-
 
 def set_paths():
     const.PATH_CURRENT = Path(os.getcwd())
     const.PATH_LOG = Path(const.PATH_CURRENT, 'logs')
-    const.PATH_PAGE = Path(const.PATH_CURRENT, 'src', 'webpage')
+    const.PATH_PAGE = Path(const.PATH_CURRENT, 'webpage')
     config_path = Path(const.PATH_CURRENT, 'configs')
     const.PATH_CONFIG_FILE = Path(config_path, const.DEFAULT_CONFIG_FILE_NAME)
     const.PATH_PROFILES = Path(config_path, 'profiles')
@@ -80,8 +75,18 @@ async def load_configs():
         with open(const.PATH_CONFIG_FILE, 'w+') as fp:
             config_map.write(fp)  # noqa
 
-    await asyncio.to_thread(_helper)
+    async def finalize_config():
 
+        def _finalize_config_helper():
+            with open(const.PATH_CONFIG_FILE, 'w+') as fp:
+                config_map.write(fp)  # noqa
+                # write the final state of configuration when exiting application
+
+        return await asyncio.to_thread(_finalize_config_helper)
+
+    await asyncio.to_thread(_helper)
+    Dock.current_config = config_map
+    Dock.exit_stack.push_async_callback(finalize_config)
     set_constants(config_map)
 
 

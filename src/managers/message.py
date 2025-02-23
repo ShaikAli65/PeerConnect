@@ -20,15 +20,15 @@ _locks_stack = AsyncExitStack()
 _msg_conn_pool = {}
 
 
-async def initiate():
+async def initiate(exit_stack, dispatchers, finalizing):
     data_dispatcher = MsgDispatcher()
     data_dispatcher.register_handler(HEADERS.CMD_TEXT, pagehandle.MessageHandler())
-    Dock.dispatchers[DISPATCHS.MESSAGES] = data_dispatcher
-    msg_conn_handler = MessageConnHandler(data_dispatcher, Dock.finalizing.is_set)
+    dispatchers[DISPATCHS.MESSAGES] = data_dispatcher
+    msg_conn_handler = MessageConnHandler(data_dispatcher, finalizing.is_set)
     connections_dispatcher().register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
     connections_dispatcher().register_handler(HEADERS.PING, PingHandler())
-    await Dock.exit_stack.enter_async_context(data_dispatcher)
-    await Dock.exit_stack.enter_async_context(_locks_stack)
+    await exit_stack.enter_async_context(data_dispatcher)
+    await exit_stack.enter_async_context(_locks_stack)
     return data_dispatcher
 
 
@@ -103,6 +103,10 @@ def PingHandler():
     return handler
 
 
+async def recv(*args):
+    raise NotImplemented("not allowed to recv using msg connection")
+
+
 @asynccontextmanager
 async def get_msg_conn(peer: RemotePeer):
     if peer not in _msg_conn_pool:
@@ -117,6 +121,7 @@ async def get_msg_conn(peer: RemotePeer):
         )
         msg_connection = MsgConnection(connection)
         _msg_conn_pool[peer] = msg_connection
+        msg_connection.recv = recv  # receiving through message connection is not allowed for now
         yield msg_connection
     else:
         watcher = bandwidth.Watcher()

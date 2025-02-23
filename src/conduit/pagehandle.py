@@ -1,3 +1,4 @@
+import asyncio
 import asyncio as _asyncio
 import functools
 from asyncio import Future
@@ -12,7 +13,6 @@ from src.avails.events import MessageEvent
 from src.avails.exceptions import TransferIncomplete
 from src.avails.mixins import AExitStackMixIn, QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.conduit import headers, logger
-from src.core.public import Dock
 from src.transfers import HEADERS
 
 PROFILE_WAIT = _asyncio.Event()
@@ -125,11 +125,6 @@ class FrontEndDispatcher(QueueMixIn, AExitStackMixIn, BaseDispatcher):
 
         Enters context of dispatchers passed in,
         owns lifetime of those dispatchers
-
-        Args:
-            type_code(int):
-            dispatcher:
-
         """
         self.register_handler(type_code, dispatcher)
         await self._exit_stack.enter_async_context(dispatcher)
@@ -138,9 +133,9 @@ class FrontEndDispatcher(QueueMixIn, AExitStackMixIn, BaseDispatcher):
         return self.get_handler(type_code)
 
     async def submit(self, msg_packet: DataWeaver):
-        """Outgoing (to frontend)"""
+        """> Outgoing (to frontend)"""
         try:
-            return await self.registry[msg_packet.type](msg_packet)
+            return await self.registry[msg_packet.type].submit(msg_packet)
         except TransferIncomplete as ti:
             logger.error(f"cannot send msg to frontend {msg_packet}, exp={ti}")
 
@@ -160,7 +155,7 @@ class MessageFromFrontEndDispatcher(QueueMixIn, BaseDispatcher):
         self.reply_registry = reply_registry
 
     async def submit(self, data_weaver):
-        if self.reply_registry.is_registered(data_weaver.msg_id):
+        if self.reply_registry.is_registered(data_weaver):
             return self.reply_registry.msg_arrived(data_weaver)
 
         await self.registry[data_weaver.type](data_weaver)
@@ -225,7 +220,25 @@ async def start_websocket_server():
         raise
 
 
-async def initiate_page_handle():
+@asynccontextmanager
+async def run_page_server(host="localhost"):
+    args = "-m", "http.server", "-b", f"{host}", "-d", f"{const.PATH_PAGE}", f"{const.PORT_PAGE_SERVE}",
+
+    process = await asyncio.create_subprocess_exec(f"python3", *args)
+    #
+    # try:
+    #     await process.communicate()
+    # except Exception:
+    #     logger.critical("cannot launch http demon, quitting application", exc_info=True)
+    #     raise
+
+    try:
+        yield
+    finally:
+        process.terminate()
+
+
+async def initiate_page_handle(exit_stack):
     front_end = FrontEndDispatcher()
 
     # these transports will get, set later when websocket connection from frontend arrives
@@ -246,9 +259,9 @@ async def initiate_page_handle():
     msg_disp.register_handler(headers.DATA, data_disp.submit)
     msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
 
-    await Dock.exit_stack.enter_async_context(_exit_stack)
+    await exit_stack.enter_async_context(_exit_stack)
     # enter early, cause these contexts are mostly last one to exit
-
+    await _exit_stack.enter_async_context(run_page_server())
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(start_websocket_server())
@@ -265,9 +278,10 @@ def front_end_data_dispatcher(data, expect_reply=True) -> _asyncio.Future[DataWe
 def front_end_data_dispatcher(data, expect_reply=False) -> Future[DataWeaver | None]:
     disp = FrontEndDispatcher()
     msg_disp = MessageFromFrontEndDispatcher()
+    r = disp(data)
     if expect_reply:
         return msg_disp.register_reply(data)
-    return disp(data)
+    return r
 
 
 def MessageHandler():

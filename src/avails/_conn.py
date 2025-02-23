@@ -136,7 +136,7 @@ class Connection(NamedTuple):
 
 class MsgConnection:
     """Send or Receive WireData object from connection"""
-    __slots__ = '_connection'
+    __slots__ = '_connection',  # 'recv', 'send'
     _connection: Connection
 
     def __init__(self, connection):

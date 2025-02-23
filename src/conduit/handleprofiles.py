@@ -1,6 +1,7 @@
 from src.avails import DataWeaver
 from src.conduit import logger, webpage
 from src.conduit.pagehandle import PROFILE_WAIT
+from src.configurations.interfaces import get_interfaces
 from src.managers import (
     ProfileManager,
     all_profiles,
@@ -11,7 +12,10 @@ from src.managers import (
 
 async def align_profiles(_: DataWeaver):
     logger.info("::[PROFILES] sending profiles")
-    updated_profiles = await webpage.send_profiles_and_get_updated_profiles(all_profiles())
+    updated_profiles = await webpage.send_profiles_and_get_updated_profiles(
+        all_profiles(),
+        dict(
+            enumerate(get_interfaces())))
     await configure_further_profile_data(updated_profiles)
     await refresh_profile_list()
     PROFILE_WAIT.set()
@@ -26,10 +30,16 @@ async def configure_further_profile_data(profiles_data):
                 'name' : *,
                 'id' : *,
             },
-            'SERVER' : {
-                'ip' : *,
-                'port' : *,
-            },
+            # 'SERVER' : {
+            #     'ip' : *,
+            #     'port' : *,
+            # },
+            "INTERFACE": {
+                ip = 127.234.2.93
+                scope_id = -1
+                if_name = b'{TEST}'
+                friendly_name = testing
+            }
         },
         ...
     }

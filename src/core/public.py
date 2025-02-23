@@ -1,4 +1,5 @@
 import asyncio as _asyncio
+from configparser import ConfigParser
 from contextlib import AsyncExitStack
 from enum import IntEnum
 from typing import Optional, TYPE_CHECKING
@@ -27,6 +28,7 @@ class Dock:
     requests_transport = None
     dispatchers: dict[DISPATCHS, BaseDispatcher] = {}
     exit_stack = AsyncExitStack()
+    current_config = ConfigParser()
     if TYPE_CHECKING:
         from src.transfers import RumorMongerProtocol
         from src.transfers.transports import RequestsTransport

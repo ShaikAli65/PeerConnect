@@ -16,17 +16,13 @@ import struct
 from asyncio import BaseTransport
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Coroutine, NamedTuple, Optional, TYPE_CHECKING, Union
+from typing import Coroutine, NamedTuple, Optional, Union
 
 import umsgpack
 
-if TYPE_CHECKING:
-    from src.avails.connect import Socket as _Socket
-else:
-    _Socket = None
-from src.avails.connect import Connection, MsgConnection
+from src.avails.connect import Connection, MsgConnection, Socket as _Socket, is_socket_connected
 from src.avails.exceptions import InvalidPacket
-from src.avails.useables import wait_for_sock_read
+from src.avails.useables import recv_int, wait_for_sock_read
 from src.avails.waiters import Actuator, const as _const
 
 _controller = Actuator()
@@ -79,9 +75,14 @@ class Wire:
 
     @staticmethod
     async def receive_async(sock: _Socket):
-        data_size = struct.unpack("!I", await sock.arecv(4))[0]
-        data = await sock.arecv(data_size)
-        return data
+        try:
+            data_size = await recv_int(sock.arecv)
+            data = await sock.arecv(data_size)
+            return data
+        except ValueError:
+            if not is_socket_connected(sock):
+                raise OSError("connection error")
+            raise
 
     @staticmethod
     def receive(sock: _Socket, timeout=None, controller=_controller):

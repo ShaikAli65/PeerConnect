@@ -27,7 +27,7 @@ from src.transfers import HEADERS
 _logger = logging.getLogger(__name__)
 
 
-async def initiate_acceptor():
+async def initiate_acceptor(exit_stack, dispatchers):
     connection_dispatcher = ConnectionDispatcher()
 
     # data_dispatcher.register_handler(HEADERS.CMD_CLOSING_HEADER, ConnectionCloseHandler())
@@ -37,13 +37,13 @@ async def initiate_acceptor():
     c_reg_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler())
     c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
 
-    Dock.dispatchers[DISPATCHS.CONNECTIONS] = connection_dispatcher
+    dispatchers[DISPATCHS.CONNECTIONS] = connection_dispatcher
 
     acceptor = Acceptor(finalizer=Dock.finalizing.is_set)
 
     # warning, careful with order
-    await Dock.exit_stack.enter_async_context(connection_dispatcher)
-    await Dock.exit_stack.enter_async_context(acceptor)
+    await exit_stack.enter_async_context(connection_dispatcher)
+    await exit_stack.enter_async_context(acceptor)
 
 
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):

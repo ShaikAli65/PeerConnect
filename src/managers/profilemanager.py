@@ -3,6 +3,7 @@ import configparser
 import logging
 import os
 import time
+from configparser import ConfigParser
 from pathlib import Path
 from typing import Optional, Union
 
@@ -28,7 +29,7 @@ class ProfileManager:
     as it can lead to unexpected behaviour
     """
 
-    _main_config = configparser.ConfigParser(allow_no_value=True)
+    main_config: ConfigParser = None
     PROFILE_LIST = []
 
     def __init__(self, profiles_file, *, profile_data=None):
@@ -88,8 +89,8 @@ class ProfileManager:
                 const.PATH_PROFILES, self.__uniquify(self.username) + ".ini"
             )
             os.rename(self.profile_file_path, new_profile_path)
-            await self.__remove_from_main_config(self.profile_file_path.name)
-            await self.__write_to_main_config(new_profile_path.name)
+            await self.__remove_profile_from_main_config(self.profile_file_path.name)
+            await self.__write_profile_to_main_config(new_profile_path.name)
             self.profile_file_path = new_profile_path
         await self._write_profile()
 
@@ -125,20 +126,24 @@ class ProfileManager:
         for section, setting in settings.items():
             config[section] = setting
         await write_config(config, profile_path)
-        await cls.__write_to_main_config(profile_path.name)
+        await cls.__write_profile_to_main_config(profile_path.name)
         cls.PROFILE_LIST.append(p := cls(profile_path, profile_data=settings))
         # await p.set_profile_data_from_file()
         return p
 
     @classmethod
-    async def __write_to_main_config(cls, file_name):
-        cls._main_config.set("USER_PROFILES", file_name)
-        await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+    async def __write_profile_to_main_config(cls, file_name):
+        cls.main_config.set("USER_PROFILES", file_name)
+        # await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+
+        # these writes get updated when application is  finalizing
 
     @classmethod
-    async def __remove_from_main_config(cls, profile_key):
-        cls._main_config.remove_option("USER_PROFILES", profile_key)  # debug
-        await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+    async def __remove_profile_from_main_config(cls, profile_key):
+        cls.main_config.remove_option("USER_PROFILES", profile_key)  # debug
+        # await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+
+        # these writes get updated when application is  finalizing
 
     @classmethod
     async def _clear_selected_profile(cls):
@@ -148,12 +153,14 @@ class ProfileManager:
 
     @classmethod
     async def write_selected_profile(cls, profile):
-        cls._main_config.remove_section("SELECTED_PROFILE")
-        await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+        # cls._main_config.remove_section("SELECTED_PROFILE")
+        # await write_config(cls._main_config, const.PATH_CONFIG_FILE)
 
-        cls._main_config.add_section("SELECTED_PROFILE")
-        cls._main_config.set("SELECTED_PROFILE", profile.file_name)
-        await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+        cls.main_config.add_section("SELECTED_PROFILE")
+        cls.main_config.set("SELECTED_PROFILE", profile.file_name)
+        # await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+
+        # these writes get updated when application is finalizing
 
     @classmethod
     async def delete_profile(cls, profile_file_name):
@@ -166,7 +173,7 @@ class ProfileManager:
             except os.error as e:
                 _logger.error(f"deletion error for profile {profile_file_name} exp:{e}")
 
-        await cls.__remove_from_main_config(profile_path.name)
+        await cls.__remove_profile_from_main_config(profile_path.name)
 
         if profile_file_name == cls.prev_selected_profile_file_name():
             await cls._clear_selected_profile()
@@ -211,7 +218,7 @@ class ProfileManager:
     def prev_selected_profile_file_name(cls):
         """profile that user selected in the previous session"""
         try:
-            return next(iter(cls._main_config["SELECTED_PROFILE"]))
+            return next(iter(cls.main_config["SELECTED_PROFILE"]))
         except StopIteration:
             return None
 
@@ -258,13 +265,10 @@ def all_profiles():
     return profiles
 
 
-async def load_profiles_to_program():
+async def load_profiles_to_program(main_config):
     assert os.path.exists(const.PATH_PROFILES), "profiles path not found"
 
-    main_config = configparser.ConfigParser(allow_no_value=True)
-    await asyncio.to_thread(main_config.read, filenames=const.PATH_CONFIG_FILE, encoding=None)
-
-    ProfileManager._main_config = main_config
+    ProfileManager.main_config = main_config
     for profile_id in main_config["USER_PROFILES"]:
         try:
             # this is the only place where profile objects are created
@@ -280,7 +284,7 @@ async def load_profiles_to_program():
 
 async def refresh_profile_list():
     ProfileManager.PROFILE_LIST.clear()
-    await load_profiles_to_program()
+    await load_profiles_to_program(ProfileManager.main_config)
 
 
 def get_profile_from_profile_file_name(

@@ -1,7 +1,8 @@
-import os
+import asyncio
 import os
 import subprocess
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from kademlia.utils import digest
@@ -13,12 +14,11 @@ from src.avails.mixins import AggregatingAsyncExitStack
 from src.conduit import webpage
 from src.configurations import interfaces as _interfaces, logger as _logger
 from src.core.public import Dock, set_current_remote_peer_object
-from src.managers import get_current_profile, profilemanager
 
 
-async def initiate_bootup():
+async def set_ip_config(current_profile):
     clear_logs() if const.CLEAR_LOGS else None
-    ip_addr = await get_ip()
+    ip_addr = await get_ip(current_profile)
 
     # _logger.critical("getting ip interfaces failed, trying fallback options", exc_info=exp)
     # from src.configurations import getip
@@ -37,14 +37,13 @@ def set_exit_stack():
     # use aggregating exit stack if we are in debug, this prints tracebacks more aggressively
 
 
-async def get_ip() -> IPAddress:
+async def get_ip(current_profile) -> IPAddress:
     interfaces = dict(enumerate(_interfaces.get_interfaces()))
     if const.debug:
         print("-" * 100)
         print(f"interfaces found: \n{"\n".join(str(i) for i in interfaces.values())}")
         print("-" * 100)
 
-    current_profile = profilemanager.get_current_profile()
     assert current_profile is not None, "profile not set exiting"
 
     default_interface = next(iter(interfaces.values()))
@@ -74,14 +73,13 @@ def clear_logs():
         Path(path).write_text("")
 
 
-def configure_this_remote_peer():
-    rp = make_this_remote_peer()
+def configure_this_remote_peer(current_profile):
+    rp = make_this_remote_peer(current_profile)
     set_current_remote_peer_object(rp)
     const.USERNAME = rp.username
 
 
-def make_this_remote_peer():
-    profile = get_current_profile()
+def make_this_remote_peer(profile):
     rp = RemotePeer(
         byte_id=digest(profile.id),
         username=profile.username,
@@ -123,8 +121,9 @@ def retrace_browser_path():
         return command_output
 
 
-def launch_web_page():
-    page_url = os.path.join(const.PATH_PAGE, "index.html")
+async def launch_web_page():
+    page_url = f"http://localhost:{const.PORT_PAGE_SERVE}/?port={const.PORT_PAGE}"
+
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
@@ -133,6 +132,3 @@ def launch_web_page():
 
         elif const.IS_LINUX or const.IS_DARWIN:
             subprocess.Popen(['xdg-open', page_url])
-
-    except FileNotFoundError:
-        _logger.critical("::webpage not found, look's like the what you downloaded is corrupted")

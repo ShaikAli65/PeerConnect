@@ -7,7 +7,7 @@ async def ask_for_interface_choice(interfaces):
     reply = await front_end_data_dispatcher(
         DataWeaver(
             header=headers.GET_INTERFACE_CHOICE,
-            content={k:v._asdict() for k,v in interfaces}
+            content={k: v._asdict() for k, v in interfaces}
         ),
         expect_reply=True
     )
@@ -111,6 +111,12 @@ async def search_response(search_id, peer_list):
     front_end_data_dispatcher(response_data)
 
 
-async def send_profiles_and_get_updated_profiles(profiles):
-    userdata = DataWeaver(header=headers.PEER_LIST, content=profiles)
+async def send_profiles_and_get_updated_profiles(profiles, interfaces):
+    userdata = DataWeaver(
+        header=headers.PEER_LIST,
+        content={
+            "profiles": profiles,
+            "interfaces": {k: v._asdict() for k, v in interfaces}
+        }
+    )
     return (await front_end_data_dispatcher(userdata, expect_reply=True)).content

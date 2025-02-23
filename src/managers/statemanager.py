@@ -9,6 +9,7 @@ from typing import Iterable, Optional
 
 from src.avails import useables
 from src.avails.mixins import singleton_mixin
+from src.avails.useables import awaitable
 
 _logger = logging.getLogger(__name__)
 
@@ -36,36 +37,61 @@ def _get_func_name(func):
 
 
 class State:
-    def __init__(self, name, func, is_blocking=False, controller=None, event_to_wait: asyncio.Event = None):
+    """Represents a state in application
+
+    Attributes:
+        name (str): some detail related to state
+        func (Callable): any callable to call when entering state, awaited if it's async
+        args(tuple): arguments to pass into function
+        is_blocking(bool): True if the function takes long time to complete
+        lazy_args(tuple[Callable | Any]): if callable it gets evaluated just before function call or else just passed in, appended to args parameter
+        event(asyncio.Event): event to wait before calling func
+
+    """
+    def __init__(self, name, func, *args, is_blocking=False, lazy_args=(), event_to_wait: asyncio.Event = None):
         self.name = name
         self.is_blocking = is_blocking
-        self.actuator = controller
         self.event = event_to_wait
         self.func = func
+        self.args = args
+        self.lazy_args = lazy_args
 
-    def _make_function(self):
+    async def _make_function(self):
         func = self.func
+        lazy_args = []
+
+        for arg in self.lazy_args:
+            if callable(arg):
+                result = arg()
+                if inspect.isawaitable(result):
+                    result = await result
+            else:
+                result = arg
+
+            lazy_args.append(result)
+
+        self.args += tuple(lazy_args)
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
-            f = useables.wrap_with_tryexcept(_func)
+            f = useables.wrap_with_tryexcept(_func, *self.args)
             return asyncio.create_task(f())
 
         @functools.wraps(func)
         def wrap_in_thread(_func):
-            threading.Thread(target=func, daemon=True).start()
+            threading.Thread(target=func, args=self.args, daemon=True).start()
 
         self.is_coro = inspect.iscoroutinefunction(func)
 
         if self.is_blocking:
             self.func = functools.partial(wrap_in_task if self.is_coro else wrap_in_thread, func)
         else:
-            self.func = func
+            self.func = functools.partial(func,*self.args)
 
         self.func_name = _get_func_name(func)
 
     async def enter_state(self):
-        self._make_function()
+        await self._make_function()
 
         loop = asyncio.get_event_loop()
         loop_time_ = loop.time() - math.floor(loop.time())
@@ -92,6 +118,7 @@ class StateManager:
     Sort of task queue
     process_states is called at the beginning of program
     """
+
     def __init__(self):
         self.state_queue = _queue()
         self.close = False

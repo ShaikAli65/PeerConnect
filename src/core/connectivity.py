@@ -104,5 +104,5 @@ def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
     return req, connector(req)
 
 
-async def initiate():
-    await Dock.exit_stack.enter_async_context(Connectivity())
+async def initiate(exit_stack):
+    await exit_stack.enter_async_context(Connectivity())

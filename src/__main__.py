@@ -14,7 +14,7 @@ from src.configurations import bootup, configure
 from src.core import acceptor, connectivity, eventloop, requests
 from src.core.async_runner import AnotherRunner
 from src.core.public import Dock
-from src.managers import logmanager, message, profilemanager
+from src.managers import get_current_profile, logmanager, message, profilemanager
 from src.managers.statemanager import State, StateManager
 
 
@@ -23,16 +23,47 @@ def initial_states():
     log_config = State("initiating logging", logmanager.initiate)
     set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack)
     load_config = State("loading configurations", configure.load_configs)
-    load_profiles = State("loading profiles", profilemanager.load_profiles_to_program)
-    launch_webpage = State("launching webpage", pagehandle.initiate_page_handle)
+    load_profiles = State(
+        "loading profiles",
+        profilemanager.load_profiles_to_program,
+        lazy_args=(lambda: Dock.current_config,)
+    )
+    # launch_webpage = State("launching webpage", bootup.launch_web_page)
+
+    page_handle = State("initiating page handle", pagehandle.initiate_page_handle, lazy_args=(lambda: Dock.exit_stack,))
+
     profile_choice = State("waiting for profile choice", pagehandle.PROFILE_WAIT.wait)
-    boot_up = State("boot_up initiating", bootup.initiate_bootup)
-    configure_rm = State("configuring this remote peer object", bootup.configure_this_remote_peer)
+
+    boot_up = State("boot_up initiating", bootup.set_ip_config, lazy_args=(get_current_profile,))
+
+    configure_rm = State(
+        "configuring this remote peer object",
+        bootup.configure_this_remote_peer,
+        lazy_args=(get_current_profile,)
+    )
+
     print_config = State("printing configurations", configure.print_constants)
-    comms = State("initiating comms", acceptor.initiate_acceptor)
-    msg_con = State("starting message connections", message.initiate)
-    ini_request = State("initiating requests", requests.initiate, is_blocking=True)
-    connectivity_check = State("connectivity checker", connectivity.initiate)
+
+    comms = State(
+        "initiating comms",
+        acceptor.initiate_acceptor,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers)
+    )
+
+    msg_con = State(
+        "starting message connections",
+        message.initiate,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers, Dock.finalizing)
+    )
+
+    ini_request = State(
+        "initiating requests",
+        requests.initiate,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers, lambda: Dock.state_manager_handle),
+        is_blocking=True
+    )
+
+    connectivity_check = State("connectivity checker", connectivity.initiate, lazy_args=(lambda: Dock.exit_stack,))
 
     return tuple(locals().values())
 

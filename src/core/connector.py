@@ -50,7 +50,7 @@ class Connector(AExitStackMixIn):
         raise err
 
     @asynccontextmanager
-    async def connect(self, peer, raise_if_busy=False):
+    async def connect(self, peer,*, raise_if_busy=False):
         """Get a reliable connection to transfer data
 
         Callers should handle any slowdowns in throughput as bandwidth limiting is performed on need

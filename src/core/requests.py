@@ -18,7 +18,7 @@ from src.transfers.transports import RequestsTransport
 _logger = logging.getLogger(__name__)
 
 
-async def initiate():
+async def initiate(exit_stack, dispatchers, state_manager):
     # a discovery request packet is observed in wire shark but that packet is
     # not getting delivered to application socket in linux when we bind to specific interface address
 
@@ -32,7 +32,7 @@ async def initiate():
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher()
-    await Dock.exit_stack.enter_async_context(req_dispatcher)
+    await exit_stack.enter_async_context(req_dispatcher)
 
     transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
@@ -42,10 +42,10 @@ async def initiate():
 
     # await gossip_initiate(req_dispatcher, transport)
     gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
-    await Dock.exit_stack.enter_async_context(gossip_dispatcher)
+    await exit_stack.enter_async_context(gossip_dispatcher)
 
-    Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
-    Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
+    dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
+    dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
     Dock.requests_transport = req_dispatcher.transport
     Dock.kademlia_network_server = kad_server
 
@@ -67,8 +67,8 @@ async def initiate():
         is_blocking=True,
     )
 
-    await Dock.state_manager_handle.put_state(discovery_state)
-    await Dock.state_manager_handle.put_state(add_to_lists)
+    await state_manager.put_state(discovery_state)
+    await state_manager.put_state(add_to_lists)
     # TODO: introduce context manager support into state-manager.State itself which reduces boilerplate
 
     Dock.exit_stack.push_async_exit(kad_server)

@@ -12,7 +12,7 @@ from src.conduit import pagehandle
 from src.configurations import bootup, configure
 from src.core import acceptor, connectivity, requests
 from src.core.public import Dock
-from src.managers import logmanager, profilemanager
+from src.managers import get_current_profile, logmanager, message, profilemanager
 from src.managers.statemanager import State
 from tests import multicast_stub
 from tests.mock import mock
@@ -69,19 +69,63 @@ def get_a_peer() -> RemotePeer | None:
 
 
 def test_initial_states():
-    s1 = State("set paths", configure.set_paths)
+    set_paths = State("set paths", configure.set_paths)
     log_config = State("initiating logging", logmanager.initiate)
     set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack)
-    s2 = State("loading configurations", configure.load_configs)
-    s3 = State("loading profiles", profilemanager.load_profiles_to_program)
-    s5 = State("mocking", functools.partial(mock, config))
-    s4 = State("launching webpage", pagehandle.initiate_page_handle)
-    s6 = State("boot up", bootup.initiate_bootup)
-    s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    s8 = State("printing configurations", configure.print_constants)
-    s9 = State("initiating requests", requests.initiate)
-    s10 = State("initiating comms", acceptor.initiate_acceptor)
-    s11 = State("connectivity checker", connectivity.initiate)
+    load_config = State("loading configurations", configure.load_configs)
+    load_profiles = State(
+        "loading profiles",
+        profilemanager.load_profiles_to_program,
+        lazy_args=(lambda: Dock.current_config,)
+    )
+    mock_state = State("mocking", functools.partial(mock, config))
+
+    page_handle = State("initiating page handle", pagehandle.initiate_page_handle, lazy_args=(lambda: Dock.exit_stack,))
+
+    boot_up = State("boot_up initiating", bootup.set_ip_config, lazy_args=(get_current_profile,))
+
+    configure_rm = State(
+        "configuring this remote peer object",
+        bootup.configure_this_remote_peer,
+        lazy_args=(get_current_profile,)
+    )
+
+    print_config = State("printing configurations", configure.print_constants)
+
+    comms = State(
+        "initiating comms",
+        acceptor.initiate_acceptor,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers)
+    )
+
+    msg_con = State(
+        "starting message connections",
+        message.initiate,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers, Dock.finalizing)
+    )
+
+    ini_request = State(
+        "initiating requests",
+        requests.initiate,
+        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers, lambda: Dock.state_manager_handle),
+        is_blocking=True
+    )
+
+    connectivity_check = State("connectivity checker", connectivity.initiate, lazy_args=(lambda: Dock.exit_stack,))
+
+    # s1 = State("set paths", configure.set_paths)
+    # log_config = State("initiating logging", logmanager.initiate)
+    # set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack)
+    # s2 = State("loading configurations", configure.load_configs)
+    # s3 = State("loading profiles", profilemanager.load_profiles_to_program)
+    # s5 = State("mocking", functools.partial(mock, config))
+    # s4 = State("launching webpage", pagehandle.initiate_page_handle)
+    # s6 = State("boot up", bootup.initiate_bootup)
+    # s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
+    # s8 = State("printing configurations", configure.print_constants)
+    # s9 = State("initiating requests", requests.initiate)
+    # s10 = State("initiating comms", acceptor.initiate_acceptor)
+    # s11 = State("connectivity checker", connectivity.initiate)
     return tuple(locals().values())
 
 
