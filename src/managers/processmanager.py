@@ -2,6 +2,7 @@
 This code is designed to handle process spawning mechanisms,
 but it is no longer in use
 """
+raise DeprecationWarning("not in use")
 
 import asyncio
 import itertools

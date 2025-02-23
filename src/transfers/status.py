@@ -62,6 +62,7 @@ class StatusMixIn(AbstractStatusMix):
 
     def update_status(self, status):
         self.progress_bar.update(status - self.current_status)
+        # update only the increment b/w before and after
         self.current_status = status
 
     def should_yield(self):
@@ -71,6 +72,7 @@ class StatusMixIn(AbstractStatusMix):
         return False
 
     def status_setup(self, prefix, initial_limit, final_limit):
+        print("#" * 89, initial_limit, final_limit)
         if self.progress_bar:
             self.progress_bar.close()
 
@@ -80,7 +82,7 @@ class StatusMixIn(AbstractStatusMix):
             unit='B',
             unit_scale=True,
             unit_divisor=1024,
-            # total=initial_limit
+            dynamic_ncols=True
         )
         self.progress_bar.update(initial_limit)
 

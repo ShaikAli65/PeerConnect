@@ -150,6 +150,7 @@ async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr)
             if Dock.finalizing.is_set():
                 return
             if Dock.kademlia_network_server.is_bootstrapped:
+                Dock.in_network.set()  # set the signal informing that we are in network
                 continue
 
             Dock.in_network.clear()  # set to false, signalling that we are no longer connect to network
@@ -157,10 +158,10 @@ async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr)
 
     await send_discovery_packet()
 
+    task = asyncio.create_task(enter_passive_mode())
+
     await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
     # stay in passive mode and keep sending discovery requests
-
-    task = asyncio.create_task(enter_passive_mode())
 
     # try requesting user a host name of peer that is already in network
     if not Dock.kademlia_network_server.is_bootstrapped:

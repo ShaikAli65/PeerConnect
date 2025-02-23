@@ -10,7 +10,9 @@ async def mock_start_websocket_server():
     yield
 
 
-def mock_webpage():
-    profile = get_current_profile()
-    constants.WEBSOCKET_BIND_IP = profile.interface.ip
+def mock_webpage(config):
+    if config.test_mode == "host":
+        profile = get_current_profile()
+        constants.WEBSOCKET_BIND_IP = profile.interface.ip
+
     pagehandle.start_websocket_server = mock_start_websocket_server

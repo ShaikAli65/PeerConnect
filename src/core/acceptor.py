@@ -7,12 +7,13 @@ lazy loading is used to avoid circular import through initiate_acceptor function
 import asyncio
 import logging
 import threading
+import traceback
 from asyncio import CancelledError, TaskGroup
 from collections import namedtuple
 from inspect import isawaitable
 from typing import Optional
 
-from src.avails import (BaseDispatcher, InvalidPacket, Wire, connect,
+from src.avails import (BaseDispatcher, InvalidPacket, Wire, WireData, connect,
                         const)
 from src.avails.connect import Connection
 from src.avails.events import ConnectionEvent
@@ -48,7 +49,7 @@ async def initiate_acceptor():
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     __slots__ = ()
     _parking_lot = {}
-    parked_item = namedtuple("ConnectionAndWatcherTask", ("connection", "watcher_task"))
+    _parked_item = namedtuple("ConnectionAndWatcherTask", ("connection", "watcher_task"))
 
     def park(self, connection):
         async def watcher():
@@ -57,7 +58,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             self._parking_lot.pop(connection)  # remove from passive mode
             await self.submit(event)
 
-        item = self.parked_item(
+        item = self._parked_item(
             connection,
             asyncio.create_task(
                 watcher(),
@@ -170,18 +171,21 @@ class Acceptor(AExitStackMixIn):
     @classmethod
     async def _perform_handshake(cls, initial_conn):
         try:
-            hand_shake = await asyncio.wait_for(
-                Wire.recv_msg(initial_conn), const.SERVER_TIMEOUT
+            raw_handshake = await asyncio.wait_for(
+                Wire.receive_async(initial_conn), const.SERVER_TIMEOUT
             )
-            return hand_shake
+            return WireData.load_from(raw_handshake)
         except TimeoutError:
             error_log = f"new connection inactive for {const.SERVER_TIMEOUT}s, closing"
         except OSError:
             error_log = f"Socket error"
         except InvalidPacket:
             error_log = f"Initial handshake packet is invalid, closing connection"
+        except Exception:
+            print("*" * 79)
+            traceback.print_exc()
 
-        if locals().get('error_log'):
+        if error_log := locals().get('error_log'):
             _logger.error(error_log)
             initial_conn.close()
 

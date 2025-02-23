@@ -16,7 +16,7 @@ import struct
 from asyncio import BaseTransport
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NamedTuple, Optional, TYPE_CHECKING, Union
+from typing import Coroutine, NamedTuple, Optional, TYPE_CHECKING, Union
 
 import umsgpack
 
@@ -39,7 +39,7 @@ class Wire:
         return await sock.asendall(data_size + data)
 
     @staticmethod
-    async def send_msg(connection, msg):
+    def send_msg(connection, msg):
         """
 
         Args:
@@ -48,10 +48,10 @@ class Wire:
 
         """
         messaged = MsgConnection(connection)
-        return await messaged.send(msg)
+        return messaged.send(msg)
 
     @staticmethod
-    async def recv_msg(connection):
+    def recv_msg(connection) -> Coroutine:
         """
         Args:
             connection(Connection): connection object
@@ -262,11 +262,15 @@ class DataWeaver:
     def match_header(self, _header) -> bool:
         return self.__data["header"] == _header
 
-    def __getitem__(self, key):
-        return self.__data[key]
+    def __iter__(self):
+        # prevent from being an iterator cause sequence protocol may mess up
+        raise NotImplemented
 
-    def __setitem__(self, key, value):
-        self.__data[key] = value
+    def __getitem__(self, key):
+        return self.__data["content"][key]
+
+    def __contains__(self, item):
+        return item in self.__data["content"]
 
     @property
     def content(self):

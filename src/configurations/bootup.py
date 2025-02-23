@@ -1,4 +1,4 @@
-import logging
+import os
 import os
 import subprocess
 import webbrowser
@@ -7,22 +7,17 @@ from pathlib import Path
 from kademlia.utils import digest
 
 import src.core.async_runner  # noqa
-import src.core.eventloop as eventloop
 from src.avails import RemotePeer, constants as const, use
 from src.avails.connect import IPAddress
+from src.avails.mixins import AggregatingAsyncExitStack
 from src.conduit import webpage
 from src.configurations import interfaces as _interfaces, logger as _logger
 from src.core.public import Dock, set_current_remote_peer_object
-from src.managers import get_current_profile, logmanager, profilemanager
+from src.managers import get_current_profile, profilemanager
 
 
 async def initiate_bootup():
-    eventloop.set_task_factory()
     clear_logs() if const.CLEAR_LOGS else None
-
-    await Dock.exit_stack.enter_async_context(logmanager.initiate())
-    const.debug = logging.getLogger().level == logging.DEBUG
-
     ip_addr = await get_ip()
 
     # _logger.critical("getting ip interfaces failed, trying fallback options", exc_info=exp)
@@ -35,6 +30,11 @@ async def initiate_bootup():
     const.THIS_IP = ip_addr
     # const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{const.THIS_IP=}")
+
+
+def set_exit_stack():
+    Dock.exit_stack = AggregatingAsyncExitStack() if const.debug else Dock.exit_stack
+    # use aggregating exit stack if we are in debug, this prints tracebacks more aggressively
 
 
 async def get_ip() -> IPAddress:
@@ -70,7 +70,7 @@ async def get_ip() -> IPAddress:
 
 
 def clear_logs():
-    for path in Path(const.PATH_LOG).glob("*.log"):
+    for path in Path(const.PATH_LOG).glob("*.log*"):
         Path(path).write_text("")
 
 

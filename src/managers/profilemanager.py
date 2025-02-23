@@ -259,9 +259,7 @@ def all_profiles():
 
 
 async def load_profiles_to_program():
-    if not os.path.exists(const.PATH_PROFILES):
-        print("profiles path not found")
-        exit(-1)
+    assert os.path.exists(const.PATH_PROFILES), "profiles path not found"
 
     main_config = configparser.ConfigParser(allow_no_value=True)
     await asyncio.to_thread(main_config.read, filenames=const.PATH_CONFIG_FILE, encoding=None)

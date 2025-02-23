@@ -1,7 +1,7 @@
 import traceback
 from pathlib import Path
 
-from src.avails import BaseDispatcher, DataWeaver, WireData
+from src.avails import BaseDispatcher, DataWeaver, WireData, const
 from src.conduit import logger
 from src.conduit.headers import HANDLE
 from src.core import peers
@@ -49,18 +49,22 @@ async def new_dir_transfer(command_data: DataWeaver):
 
 
 async def send_file(command_data: DataWeaver):
-    selected_files = await filemanager.open_file_selector()
-    if not selected_files:
-        return
+    if "paths" in command_data:
+        selected_files = [Path(x) for x in command_data["paths"]]
+    else:
+        selected_files = await filemanager.open_file_selector()
+        if not selected_files:
+            return
 
     selected_files = [Path(x) for x in selected_files]
     send_files = filemanager.send_files_to_peer(command_data.peer_id, selected_files)
     try:
         async with send_files as sender:
-            print(sender)
+            print(sender)  # debug
     except OSError as e:
-        traceback.print_exc()
-        print("{error}", e)
+        if const.debug:
+            traceback.print_exc()
+            print("{error}", e)  # debug
         # page_handle.dispatch_data(DataWeaver)
 
 

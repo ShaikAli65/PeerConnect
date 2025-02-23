@@ -14,3 +14,56 @@ and all the frontend communication part is inside webpage_handlers package, so t
 while testing we can even mock all the webpage_handlers package and automate user interactions
 
 we are using a custom json schema for back-and-fourth communication
+
+
+    """Helps in maintaining all the contexts of classes with multiple inheritance
+
+    Should come early in MRO if used, so that it can control the exit hierarchy
+
+    Useful when we need to enter and exit all the classes with exception propagation in-place
+
+    This is helpful when we have multiple aexits and all the subclasses need not be aware of super class's exit method
+
+    No need to do this::
+
+        class B:
+            async def __aexit__(self, *args):
+                print("B aexit")
+                if hasattr(super(),'__aexit__'):
+                    super().__aexit__(*args)
+                ### this needs to be done in all the exits
+
+    Examples:
+
+    ::
+
+        class B:
+            async def __aenter__(self):
+                print("B aenter")
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                print("B aexit")
+                # No exception here; simply return False.
+                return False
+
+        class C:
+            async def __aenter__(self):
+                print("C aenter")
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                print("C aexit")
+                raise ValueError("C failed on aexit")
+
+        class D:
+            async def __aenter__(self):
+                print("D aenter")
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                print("D aexit")
+                raise ValueError("D failed on aexit")
+
+        class E(AsyncMultiContextManagerMixIn, B, C, D):
+            pass
+        # this ensures that all the B,C,D classes cleanup perfectly
+
+    Raises:
+        ExceptionGroup: aggregates all the exceptions, so that we can get tracebacks
+
+    """

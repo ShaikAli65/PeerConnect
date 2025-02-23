@@ -19,25 +19,23 @@
       "backupCount": 3,
       "encoding": "utf8"
     },
-
     "console": {
       "class": "logging.StreamHandler",
       "formatter": "default",
       "level": "DEBUG"
     },
-
     "file": {
       "class": "logging.FileHandler",
       "filename": "default.log",
       "formatter": "detailed",
       "level": "DEBUG"
     },
-
     "queue_handler": {
       "class": "logging.handlers.QueueHandler",
-      "handlers": ["rfile_handler"]
+      "handlers": [
+        "rfile_handler"
+      ]
     },
-
     "discovery_sub_handler": {
       "class": "logging.handlers.RotatingFileHandler",
       "level": "DEBUG",
@@ -47,15 +45,17 @@
       "backupCount": 3,
       "encoding": "utf8"
     },
-
     "discovery_handler": {
-      "class" : "logging.handlers.QueueHandler",
-      "handlers": ["discovery_sub_handler"]
+      "class": "logging.handlers.QueueHandler",
+      "handlers": [
+        "discovery_sub_handler"
+      ]
     }
-
   },
-  "queue_handlers": ["queue_handler", "discovery_handler"],
-
+  "queue_handlers": [
+    "queue_handler",
+    "discovery_handler"
+  ],
   "loggers": {
     "": {
       "handlers": [
@@ -67,18 +67,21 @@
     "websockets": {
       "level": "INFO"
     },
-    "kademlia" : {
+    "kademlia": {
       "level": "INFO",
       "propagate": true
     },
-    "rpcudp" : {
+    "rpcudp": {
       "level": "INFO"
     },
     "src.core.requests": {
-      "propagate": true
+      "propagate": false
     },
     "kademlia.protocol": {
-      "propagate": true
+      "propagate": false
+    },
+    "kademlia.crawling": {
+      "propagate": false
     },
     "src.core.discover": {
       "handlers": [

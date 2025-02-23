@@ -77,7 +77,11 @@ class QueueMixIn:
         use.sync(self._task_group.__aenter__())
 
     async def __aexit__(self, *exp_details):
-        return await self._task_group.__aexit__(*exp_details)
+        try:
+            return await self._task_group.__aexit__(*exp_details)
+        except Exception as exp:
+            exp.add_note(f"from {type(self)}")
+            raise exp
 
 
 class AExitStackMixIn:
@@ -91,14 +95,28 @@ class AExitStackMixIn:
         return await self._exit_stack.__aenter__()
 
     async def __aexit__(self, *exp_details):
-        return await self._exit_stack.__aexit__(*exp_details)  # noqa
+        try:
+            return await self._exit_stack.__aexit__(*exp_details)  # noqa
+        except Exception as exp:
+            exp.add_note(f"from {type(self)}")
+            raise exp
 
 
-class _AggregatingAsyncExitStack(AsyncExitStack):
-    """As the name says, aggregates all the exceptions raised by context managers, and raises an ExceptionGroup
+class AggregatingAsyncExitStack(AsyncExitStack):
+    """An async context manager that aggregates exceptions from nested context managers.
 
-    Most of the code is just a copy and paste from stdlib
-    Just modified to aggregate exceptions
+    Extends `AsyncExitStack` to collect all exceptions raised during stack unwinding
+    and re-raise them as an `ExceptionGroup`. This ensures all cleanup errors are
+    reported rather than just the first encountered exception.
+
+    Key features:
+    - Maintains LIFO order for callback execution
+    - Preserves exception context chains
+    - Aggregates both sync and async exit exceptions
+    - Compatible with standard `AsyncExitStack` API
+
+    Note: This is particularly useful for complex cleanup scenarios where multiple
+    resources need to release simultaneously and all errors should be visible.
     """
     __slots__ = ()
 
@@ -126,7 +144,7 @@ class _AggregatingAsyncExitStack(AsyncExitStack):
         pending_raise = False
 
         # Call callbacks in LIFO order.
-        _exit_callbacks = getattr(self,'_exit_callbacks')
+        _exit_callbacks = getattr(self, '_exit_callbacks')
 
         while _exit_callbacks:
             is_sync, cb = _exit_callbacks.pop()
@@ -147,67 +165,37 @@ class _AggregatingAsyncExitStack(AsyncExitStack):
                 aggregated.append(new_exc)
 
         if pending_raise and aggregated:
-            raise ExceptionGroup("Multiple exceptions in __aexit__", aggregated)
+            raise ExceptionGroup("Aggregating Multiple exceptions in __aexit__", aggregated)
 
         return received_exc and suppressed_exc
 
 
 class AsyncMultiContextManagerMixIn:
-    """Helps in maintaining all the contexts of classes with multiple inheritance
+    """Mixin for managing multiple async context managers in complex inheritance hierarchies.
 
-    Should come early in MRO if used, so that it can control the exit hierarchy
+    Provides unified context management for classes with multiple parent classes
+    implementing async context managers. Ensures proper entry/exit order and
+    aggregates exceptions from all context exits.
 
-    Useful when we need to enter and exit all the classes with exception propagation in-place
+    Features:
+    - Automatic MRO-aware context management
+    - Exception aggregation through `AggregatingAsyncExitStack`
+    - Safe __aenter__/__aexit__ chaining
+    - Compatible with standard async context manager patterns
 
-    This is helpful when we have multiple exits and all the classes need not be aware of super class's exit method
+    Usage:
+    Inherit this mixin first in your class definition:
 
-    No need to do this::
+    class MyClass(AsyncMultiContextManagerMixIn, ParentA, ParentB):
+        ...
 
-        class B:
-            async def __aexit__(self, *args):
-                print("B aexit")
-                if hasattr(super(),'__aexit__'):
-                    super().__aexit__(*args)
-                ### this needs to be done in all the exits
-
-    Examples:
-
-    ::
-
-        class B:
-            async def __aenter__(self):
-                print("B aenter")
-            async def __aexit__(self, exc_type, exc_value, traceback):
-                print("B aexit")
-                # No exception here; simply return False.
-                return False
-
-        class C:
-            async def __aenter__(self):
-                print("C aenter")
-            async def __aexit__(self, exc_type, exc_value, traceback):
-                print("C aexit")
-                raise ValueError("C failed on aexit")
-
-        class D:
-            async def __aenter__(self):
-                print("D aenter")
-            async def __aexit__(self, exc_type, exc_value, traceback):
-                print("D aexit")
-                raise ValueError("D failed on aexit")
-
-        class E(AsyncMultiContextManagerMixIn, B, C, D):
-            pass
-        # this ensures that all the B,C,D classes cleanup perfectly
-
-    Raises:
-        ExceptionGroup: aggregates all the exceptions, so that we can get tracebacks
-
+    This ensures all parent class contexts are properly entered/exited and any
+    exit exceptions are aggregated into an ExceptionGroup.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._aexit_stack = _AggregatingAsyncExitStack()
+        self._aexit_stack = AggregatingAsyncExitStack()
 
     async def __aenter__(self):
         await self._aexit_stack.__aenter__()

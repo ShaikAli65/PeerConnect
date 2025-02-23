@@ -5,7 +5,6 @@ import logging
 import math
 import threading
 from asyncio import Queue as _queue
-from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from typing import Iterable, Optional
 
 from src.avails import useables
@@ -39,6 +38,13 @@ def _get_func_name(func):
 class State:
     def __init__(self, name, func, is_blocking=False, controller=None, event_to_wait: asyncio.Event = None):
         self.name = name
+        self.is_blocking = is_blocking
+        self.actuator = controller
+        self.event = event_to_wait
+        self.func = func
+
+    def _make_function(self):
+        func = self.func
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
@@ -51,31 +57,32 @@ class State:
 
         self.is_coro = inspect.iscoroutinefunction(func)
 
-        if is_blocking:
+        if self.is_blocking:
             self.func = functools.partial(wrap_in_task if self.is_coro else wrap_in_thread, func)
         else:
             self.func = func
 
         self.func_name = _get_func_name(func)
 
-        self.actuator = controller
-        self.event = event_to_wait
-
     async def enter_state(self):
+        self._make_function()
+
         loop = asyncio.get_event_loop()
-        x = loop.time()
-        coro = self.is_coro
-        _logger.info(f"[{x - math.floor(x):.5f}s] {coro=} entering state : {self.name}{{{self.func_name}}}")
+        loop_time_ = loop.time() - math.floor(loop.time())
+        _logger.info(f"[{loop_time_:.5f}s] [state={self.name}] {{{self.func_name=}}}")
 
         if self.event:
             await self.event.wait()
 
-        if coro:
+        if self.is_coro:
             ret_val = await self.func()
         else:
             ret_val = self.func()
 
         return ret_val
+
+    def __repr__(self):
+        return f"<State({self.name})>"
 
 
 @singleton_mixin
@@ -85,24 +92,9 @@ class StateManager:
     Sort of task queue
     process_states is called at the beginning of program
     """
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls, *args, **kwargs)
-        return cls._instance
-
     def __init__(self):
-        if self._initialized:
-            return
         self.state_queue = _queue()
-
-        self.executor = _ThreadPoolExecutor()
         self.close = False
-        self._initialized = True
-        self.last_state = None
-        self.global_wait = threading.Event()
         self.all_tasks: list[asyncio.Task] = []
 
     def signal_stopping(self):
@@ -117,6 +109,8 @@ class StateManager:
 
     async def put_states(self, states: Iterable[State]):
         for state in states:
+            # if not isinstance(state, State):
+            #     continue
             await self.state_queue.put(state)
 
     async def process_states(self):
@@ -129,6 +123,3 @@ class StateManager:
             r = await current_state.enter_state()
             if isinstance(r, asyncio.Task):
                 self.all_tasks.append(r)
-
-
-END_STATE = State('Final State', func=lambda: None)

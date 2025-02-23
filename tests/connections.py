@@ -2,7 +2,7 @@ import asyncio
 import random
 
 import _path  # noqa
-from src.avails import DataWeaver, Wire, WireData
+from src.avails import Wire, WireData
 from src.avails.events import ConnectionEvent, MessageEvent
 from src.core.bandwidth import Watcher
 from src.core.connector import Connector
@@ -50,13 +50,13 @@ async def test_message():
 
     check = asyncio.Event()
 
-    ping = DataWeaver(
+    ping = WireData(
         header=HEADERS.PING,
         peer_id=get_this_remote_peer().peer_id,
         msg_id=(ping_id := str(random.randint(1, 1000)))
     )
 
-    async def PingHandlerMock():
+    def PingHandlerMock():
         async def handler(msg_event: MessageEvent):
             if msg_event.msg.msg_id == ping_id:
                 check.set()

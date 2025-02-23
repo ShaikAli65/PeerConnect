@@ -78,8 +78,9 @@ async def _sender_helper(file_sender, peer_id):
             may_be_confirmed = True
             connection = await stack.enter_async_context(prepare_connection(file_sender))
             file_sender.connection_made(connection)
-            accepted = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
-            print(f"{accepted=}")
+            accepted = await connection.recv(1)
+            # accepted = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
+            print(f"{accepted=}")  # debug
             if accepted == b'\x00':
                 may_be_confirmed = False
         except OSError as oe:  # unable to connect
@@ -112,6 +113,7 @@ async def prepare_connection(sender_handle):
         )
         _logger.debug(f"authorization header sent for file connection {sender_handle.id}")
         await Wire.send_msg(connection, handshake)
+
         _logger.info(f"connection established")
         try:
             yield connection
@@ -128,6 +130,11 @@ async def _send_finalize(file_sender, peer_id):
         transfers_book.add_to_completed(peer_id, file_sender)
     elif file_sender.state in (TransferState.PAUSED, TransferState.CONNECTING):
         transfers_book.add_to_continued(peer_id, file_sender)
+
+
+@asynccontextmanager
+async def send_big_file():
+    ...
 
 
 @asynccontextmanager
@@ -156,46 +163,6 @@ async def file_receiver(file_req: WireData, connection: connect.Connection, stat
             transfers_book.add_to_completed(file_req.id, file_handle)
         if file_handle.state == TransferState.PAUSED:
             transfers_book.add_to_continued(file_req.id, file_handle)
-
-
-def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer]):
-    file_sender = otm.FilesSender(
-        file_list=files_list,
-        peers=peers,
-        timeout=3,
-    )
-    transfers_book.add_to_scheduled(file_sender.id, file_sender)
-    return file_sender
-
-
-def new_otm_request_arrived(req_data: WireData, addr):
-    session = OTMSession(
-        originate_id=req_data.id,
-        session_id=req_data['session_id'],
-        key=req_data['key'],
-        fanout=req_data['fanout'],
-        link_wait_timeout=req_data['link_wait_timeout'],
-        adjacent_peers=req_data['adjacent_peers'],
-        file_count=req_data['file_count'],
-        chunk_size=req_data['chunk_size'],
-    )
-    this_peer = get_this_remote_peer()
-    passive_endpoint_address = (this_peer.ip, connect.get_free_port())
-    receiver = otm.FilesReceiver(
-        session,
-        passive_endpoint_address,
-        this_peer.uri
-    )
-    transfers_book.add_to_scheduled(receiver.id, receiver)
-    _logger.info(f"adding otm session to registry id={session.session_id}")
-    reply = OTMInformResponse(
-        peer_id=this_peer.peer_id,
-        passive_addr=passive_endpoint_address,
-        active_addr=this_peer.uri,
-        session_key=session.key,
-    )
-    _logger.info(f"replying otm req with passive={reply.passive_addr} active={reply.active_addr}")
-    return bytes(reply)
 
 
 def FileConnectionHandler():
@@ -268,6 +235,47 @@ def OTMConnectionHandler():
 async def open_file_selector():
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, get_dialog_handler().open_file_dialog_window)  # noqa
+    input(f"aksfjsdifasudbvajeoviefbvdsofsdifneoigiaergoaeslgnk{result}")
     if any(result) and result[0] == '.':
         return []
     return result
+
+
+def start_new_otm_file_transfer(files_list: list[Path], peers: list[RemotePeer]):
+    file_sender = otm.FilesSender(
+        file_list=files_list,
+        peers=peers,
+        timeout=3,
+    )
+    transfers_book.add_to_scheduled(file_sender.id, file_sender)
+    return file_sender
+
+
+def new_otm_request_arrived(req_data: WireData, addr):
+    session = OTMSession(
+        originate_id=req_data.id,
+        session_id=req_data['session_id'],
+        key=req_data['key'],
+        fanout=req_data['fanout'],
+        link_wait_timeout=req_data['link_wait_timeout'],
+        adjacent_peers=req_data['adjacent_peers'],
+        file_count=req_data['file_count'],
+        chunk_size=req_data['chunk_size'],
+    )
+    this_peer = get_this_remote_peer()
+    passive_endpoint_address = (this_peer.ip, connect.get_free_port())
+    receiver = otm.FilesReceiver(
+        session,
+        passive_endpoint_address,
+        this_peer.uri
+    )
+    transfers_book.add_to_scheduled(receiver.id, receiver)
+    _logger.info(f"adding otm session to registry id={session.session_id}")
+    reply = OTMInformResponse(
+        peer_id=this_peer.peer_id,
+        passive_addr=passive_endpoint_address,
+        active_addr=this_peer.uri,
+        session_key=session.key,
+    )
+    _logger.info(f"replying otm req with passive={reply.passive_addr} active={reply.active_addr}")
+    return bytes(reply)

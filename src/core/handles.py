@@ -1,3 +1,10 @@
+"""
+Handles to be used with processmanager API
+
+"""
+
+raise DeprecationWarning("not in use")
+
 from abc import ABC, abstractmethod
 from multiprocessing.managers import BaseProxy
 

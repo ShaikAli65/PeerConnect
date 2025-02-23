@@ -162,7 +162,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"error:", exc_info=ip)
             return
 
-        _logger.info(f"from : {addr}, received: ({code=},{req_data.msg_id=})")
+        # _logger.info(f"from : {addr}, received: ({code=},{req_data.msg_id=})")
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 

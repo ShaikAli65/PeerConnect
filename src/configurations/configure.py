@@ -80,7 +80,6 @@ async def load_configs():
         with open(const.PATH_CONFIG_FILE, 'w+') as fp:
             config_map.write(fp)  # noqa
 
-    # _helper()
     await asyncio.to_thread(_helper)
 
     set_constants(config_map)

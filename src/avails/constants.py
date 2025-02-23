@@ -1,5 +1,6 @@
 import socket
 from os import path
+from pathlib import Path
 from sys import platform
 from threading import Lock
 from typing import Optional, TYPE_CHECKING
@@ -44,16 +45,16 @@ PORT_SERVER = 3487
 PORT_PAGE = 12260
 PORT_PAGE_SERVE = 40000
 
-PATH_DOWNLOAD = path.join(path.expanduser("~"), "Downloads")
+PATH_DOWNLOAD = Path(path.expanduser("~"), "Downloads")
 
 # values are just for reference, these get set at runtime
-PATH_CURRENT = "../.."
-PATH_LOG = "../../logs"
-PATH_PAGE = "../webpage"
-PATH_CONFIG = f"..\\..\\configs"
-PATH_PROFILES = f"{PATH_CONFIG}\\profiles"
-PATH_CONFIG_FILE = f"{PATH_CONFIG}\\{DEFAULT_CONFIG_FILE_NAME}"
-PATH_LOG_CONFIG = f"{PATH_CONFIG}\\{LOG_CONFIG_NAME}"
+PATH_CURRENT = Path("..", "..")
+PATH_LOG = Path("..", "..", "logs")
+PATH_PAGE = Path("..", "webpage")
+PATH_CONFIG = Path("..", "..", "configs")
+PATH_PROFILES = PATH_CONFIG / "profiles"
+PATH_CONFIG_FILE = PATH_CONFIG / f"{DEFAULT_CONFIG_FILE_NAME}"
+PATH_LOG_CONFIG = PATH_CONFIG / f"{LOG_CONFIG_NAME}"
 
 IP_VERSION = socket.AF_INET6
 USING_IP_V4 = True
@@ -91,7 +92,7 @@ PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS = 10
 DEFAULT_TRANSFER_TIMEOUT = 4
 PING_TIMEOUT = 4
 PALM_TREE_LINK_TIMEOUT = 3
-DISCOVER_TIMEOUT = 3
+DISCOVER_TIMEOUT = 2.5
 TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK = 4
 
 VERSIONS = {

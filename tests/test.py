@@ -3,6 +3,7 @@ import asyncio
 import functools
 import multiprocessing
 import os
+import traceback
 
 import _path  # noqa
 from src.__main__ import initiate
@@ -11,34 +12,10 @@ from src.conduit import pagehandle
 from src.configurations import bootup, configure
 from src.core import acceptor, connectivity, requests
 from src.core.public import Dock
-from src.managers import profilemanager
+from src.managers import logmanager, profilemanager
 from src.managers.statemanager import State
 from tests import multicast_stub
 from tests.mock import mock
-
-
-def get_a_peer() -> RemotePeer | None:
-    try:
-        p = next(iter(Dock.peer_list))
-    except StopIteration:
-        print("no peers available")
-        return None
-    return p
-
-
-def test_initial_states():
-    s1 = State("set paths", configure.set_paths)
-    s2 = State("loading configurations", configure.load_configs)
-    s3 = State("loading profiles", profilemanager.load_profiles_to_program)
-    s5 = State("mocking", functools.partial(mock, parser.parse_args()))
-    s4 = State("launching webpage", pagehandle.initiate_page_handle)
-    s6 = State("boot up", bootup.initiate_bootup)
-    s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    s8 = State("printing configurations", configure.print_constants)
-    s9 = State("initiating requests", requests.initiate)
-    s10 = State("initiating comms", acceptor.initiate_acceptor)
-    s11 = State("connectivity checker", connectivity.initiate)
-    return tuple(locals().values())
 
 
 def _str2bool(value):
@@ -79,6 +56,34 @@ parser.add_argument(
     help="Enable mock multicast (True or False)."
 )
 
+config = parser.parse_args()
+
+
+def get_a_peer() -> RemotePeer | None:
+    try:
+        p = next(iter(Dock.peer_list))
+    except StopIteration:
+        print("no peers available")
+        return None
+    return p
+
+
+def test_initial_states():
+    s1 = State("set paths", configure.set_paths)
+    log_config = State("initiating logging", logmanager.initiate)
+    set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack)
+    s2 = State("loading configurations", configure.load_configs)
+    s3 = State("loading profiles", profilemanager.load_profiles_to_program)
+    s5 = State("mocking", functools.partial(mock, config))
+    s4 = State("launching webpage", pagehandle.initiate_page_handle)
+    s6 = State("boot up", bootup.initiate_bootup)
+    s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
+    s8 = State("printing configurations", configure.print_constants)
+    s9 = State("initiating requests", requests.initiate)
+    s10 = State("initiating comms", acceptor.initiate_acceptor)
+    s11 = State("connectivity checker", connectivity.initiate)
+    return tuple(locals().values())
+
 
 def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -89,24 +94,45 @@ def start_test(*other_states):
 
 
 def start_multicast():
-    config = parser.parse_args()
     try:
         asyncio.run(main=multicast_stub.main(config))
     except KeyboardInterrupt:
         return
 
 
-if __name__ == "__main__":
-    config = parser.parse_args()
+def start_test1(*states):
+    """
+    pass tuples of states into function,
+    add empty tuples if no states are to be added into process
+    spawns len(states) process and unpacks states inside tuples that get added into state sequence
+    if test mode is "local" then only the first tuple of states are considered
+
+    Args:
+        *states(tuple[State | None]):
+    """
 
     if config.mock_multicast:
         multicast_process = multiprocessing.Process(target=start_multicast)
         multicast_process.start()
 
     if config.test_mode == "local":
-        start_test()
-        exit()
+        start_test(*states[0])
+        return
 
-    for _ in range(config.peers):
-        multicast_process = multiprocessing.Process(target=start_test)
-        multicast_process.start()
+    processes = []
+    for i in range(len(states)):
+        p = multiprocessing.Process(target=start_test, args=states[i])
+        p.start()
+        processes.append(p)
+
+    print(processes)
+
+    for p in processes:
+        try:
+            p.join()
+        except Exception:
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    start_test1(*[tuple()] * config.peers)

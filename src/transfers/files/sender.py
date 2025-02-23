@@ -49,7 +49,7 @@ class Sender(
         self.state = TransferState.SENDING
         self.main_task = asyncio.current_task()
 
-        while self._current_file_index < len(self.file_list) and self.to_stop is False:
+        while self._current_file_index < len(self.file_list) - 1 and self.to_stop is False:
 
             self._current_file_index += 1
 

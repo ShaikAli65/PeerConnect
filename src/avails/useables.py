@@ -3,7 +3,6 @@ import functools
 import inspect
 import os
 import platform
-import select
 import socket
 import struct
 import subprocess
@@ -16,6 +15,8 @@ from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from sys import _getframe  # noqa
 from typing import Annotated, Awaitable, Final
 from uuid import uuid4
+
+import select
 
 from src.avails import const
 
@@ -132,7 +133,7 @@ def echo_print(*args, **kwargs):
 
 
 def async_input(helper_str=""):
-    return asyncio.get_event_loop().run_in_executor(None, input, helper_str)
+    return asyncio.to_thread(input, helper_str)
 
 
 def open_file(content):
@@ -282,7 +283,6 @@ def wrap_with_tryexcept(func, *args, **kwargs):
     async def wrapped_with_tryexcept():
         try:
             nonlocal args, kwargs
-            # print("wrapping with try except", func_str(func))
             return await func(*args, **kwargs)
         except Exception as e:
 
