@@ -1,5 +1,6 @@
 import asyncio
 import random
+import traceback
 from contextlib import AsyncExitStack
 
 import _path  # noqa
@@ -16,7 +17,6 @@ from tests.test import get_a_peer, start_test1
 
 
 async def test_connection():
-
     peer = get_a_peer()
     assert peer is not None, "no peers"
     connector = Connector()
@@ -27,36 +27,49 @@ async def test_connection():
 
         assert connection in active, "connection is not active"
 
+    print("[TEST][PASSED] connected")
+
 
 async def test_connection_pool():
-
     peer = get_a_peer()
-    assert peer is not None, "no peers test failed"
+    assert peer is not None, "[TEST][FAILED] no peers test "
 
     connector = Connector()
     const.MAX_CONNECTIONS_BETWEEN_PEERS = 3
-
+    available_after = None
     connections = set()
+
+    async def connection_wait_task(connection_wait):
+        async with connection_wait:
+            return await connection_wait.wait()
+
     async with AsyncExitStack() as a_exit:
         for _ in range(const.MAX_CONNECTIONS_BETWEEN_PEERS):
             c = await a_exit.enter_async_context(connector.connect(peer))
             connections.add(c)
+
         try:
             await a_exit.enter_async_context(connector.connect(peer, raise_if_busy=True))
-            print("no exception found, connection limit test failed")
+            print("[TEST][FAILED] no exception found, connection limit test ")
         except ResourceBusy as rb:
-            print("connection limit test passed", rb)
+            available_after = rb.available_after
+            connection_wait_t = asyncio.create_task(connection_wait_task(available_after))
+            print(f"[TEST][PASSED] connection limit test  {rb=}")
 
-    async with rb.available_after:
-        try:
-            await asyncio.wait_for(rb.available_after.wait(), 0.001)
-            print("'available after' condition test passed")
-        except TimeoutError:
-            print("'available after' condition check failed")
+    assert available_after is not None, "[TEST][FAILED] no exception found, test "
+
+    try:
+        await asyncio.wait_for(connection_wait_t, 0)
+        print("[TEST][PASSED] 'available after' condition test ", available_after)
+    except TimeoutError:
+        print("[TEST][FAILED] 'available after' condition check ", available_after)
 
     async with connector.connect(peer) as connection:
         pass
-    assert connection in connections, "connection found in the expected set, test passed"
+
+    assert connection in connections, "[TEST][FAILED] connection not found in the expected set"
+
+    print("[TEST][PASSED] connection found in the expected set, test ")
 
 
 async def test_message():
@@ -82,15 +95,15 @@ async def test_message():
     msg_dispatcher().register_handler(HEADERS.UNPING, UNPingHandlerMock())
 
     async with message.get_msg_conn(peer) as connection:
-        connection.send(ping)
+        await connection.send(ping)
 
     try:
         await asyncio.wait_for(check.wait(), 3)
     except TimeoutError:
-        print("failed to send message reason: un ping not received")
-
-    msg_dispatcher().remove_handler(HEADERS.UNPING)
-    print("passed message")
+        print("[TEST][FAILED] to send message reason: un ping not received")
+    else:
+        msg_dispatcher().remove_handler(HEADERS.UNPING)
+        print("[TEST][PASSED]  message")
 
 
 async def test_connections():
@@ -98,9 +111,14 @@ async def test_connections():
     await Dock.in_network.wait()
 
     print("starting testing connections")
-    await test_connection()
-    await test_connection_pool()
-    await test_message()
+    try:
+        await test_connection()
+        await test_connection_pool()
+        await test_message()
+    except Exception:
+        print("#@" * 23)  # debug
+        traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":

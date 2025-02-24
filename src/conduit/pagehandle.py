@@ -3,9 +3,10 @@ import asyncio as _asyncio
 import functools
 from asyncio import Future
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import TYPE_CHECKING, overload
+from typing import overload
 
 import websockets
+from websockets import WebSocketServerProtocol
 
 from src.avails import DataWeaver, InvalidPacket, const
 from src.avails.bases import BaseDispatcher
@@ -16,11 +17,6 @@ from src.conduit import headers, logger
 from src.transfers import HEADERS
 
 PROFILE_WAIT = _asyncio.Event()
-
-if TYPE_CHECKING:
-    from websockets.asyncio.connection import Connection
-else:
-    Connection = None
 
 # maintain separate exit stack, so that we can maintain nested exits in a better way
 # without filling up Dock.exit_stack which has more critical exit ordering
@@ -185,7 +181,7 @@ async def validate_connection(web_socket):
     logger.info("[PAGE HANDLE] waiting for data from websocket")
 
 
-async def handle_client(web_socket: Connection):
+async def handle_client(web_socket: WebSocketServerProtocol):
     try:
         try:
             await validate_connection(web_socket)

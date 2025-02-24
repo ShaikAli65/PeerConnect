@@ -4,6 +4,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from inspect import isawaitable
 
 from src.avails import BaseDispatcher, InvalidPacket, RemotePeer, Wire, WireData
+from src.avails._conn import MsgConnectionNoRecv
 from src.avails.connect import MsgConnection
 from src.avails.constants import MAX_CONCURRENT_MSG_PROCESSING, TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK
 from src.avails.events import ConnectionEvent, MessageEvent
@@ -11,7 +12,7 @@ from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.conduit import pagehandle
 from src.core import bandwidth
 from src.core.connector import Connector
-from src.core.public import DISPATCHS, Dock, connections_dispatcher, get_this_remote_peer
+from src.core.public import DISPATCHS, connections_dispatcher, get_this_remote_peer
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ def MessageConnHandler(data_dispatcher, finalizer):
             await asyncio.wait_for(data_dispatcher(data_event), TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
 
     async def handler(event: ConnectionEvent):
-        with event.connection:
+        async with event.connection:
             msg_conn = MsgConnection(event.connection)
             _msg_conn_pool[event.connection.peer] = event.connection
 
@@ -119,9 +120,8 @@ async def get_msg_conn(peer: RemotePeer):
                 peer_id=get_this_remote_peer().peer_id
             )
         )
-        msg_connection = MsgConnection(connection)
+        msg_connection = MsgConnectionNoRecv(connection)
         _msg_conn_pool[peer] = msg_connection
-        msg_connection.recv = recv  # receiving through message connection is not allowed for now
         yield msg_connection
     else:
         watcher = bandwidth.Watcher()

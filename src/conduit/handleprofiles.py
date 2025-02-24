@@ -23,26 +23,31 @@ async def align_profiles(_: DataWeaver):
 
 async def configure_further_profile_data(profiles_data):
     """
-    profiles_data structure
-    {
-        file_name : {
-            'USER' : {
-                'name' : *,
-                'id' : *,
+
+    profiles_data structure::
+
+        {
+            file_name : {
+                'USER' : {
+                    'name' : *,
+                    'id' : *,
+                },
+                # 'SERVER' : {
+                #     'ip' : *,
+                #     'port' : *,
+                # },
+                "INTERFACE": {
+                    ip = 127.234.2.93
+                    scope_id = -1
+                    if_name = b'{TEST}'
+                    friendly_name = testing
+                }
             },
-            # 'SERVER' : {
-            #     'ip' : *,
-            #     'port' : *,
-            # },
-            "INTERFACE": {
-                ip = 127.234.2.93
-                scope_id = -1
-                if_name = b'{TEST}'
-                friendly_name = testing
-            }
-        },
-        ...
-    }
+            ...
+        }
+
+    Args:
+        profiles_data(dict): ...
     """
     if removed_profiles := set(all_profiles()) - set(profiles_data):
         for profile_file_name in removed_profiles:

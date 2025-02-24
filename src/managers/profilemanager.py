@@ -51,10 +51,6 @@ class ProfileManager:
     def match_pattern(self, profile_data):
         match profile_data:
             case {
-                "SERVER": {
-                    "ip": _,
-                    "port": _,
-                },
                 "USER": {
                     "name": _,
                     "id": _,
@@ -153,8 +149,9 @@ class ProfileManager:
 
     @classmethod
     async def write_selected_profile(cls, profile):
-        # cls._main_config.remove_section("SELECTED_PROFILE")
-        # await write_config(cls._main_config, const.PATH_CONFIG_FILE)
+
+        if cls.main_config.has_section("SELECTED_PROFILE"):
+            cls.main_config.remove_section("SELECTED_PROFILE")
 
         cls.main_config.add_section("SELECTED_PROFILE")
         cls.main_config.set("SELECTED_PROFILE", profile.file_name)
@@ -206,10 +203,6 @@ class ProfileManager:
     def file_name(self):
         return self.profile_file_path.name
 
-    @property
-    def server_ip(self):
-        return self.profile_data["SERVER"]["ip"]
-
     @staticmethod
     def __uniquify(username):
         return f"{username}{int(time.time() * 10)}"
@@ -227,7 +220,6 @@ class ProfileManager:
             return (
                     self.id == other["USER"]["id"]
                     and self.username == other["USER"]["name"]
-                    and self.server_ip == other["SERVER"]["ip"]
             )
         if isinstance(other, ProfileManager):
             return self.id == other.id and self.username == other.username
@@ -236,7 +228,6 @@ class ProfileManager:
     def __str__(self):
         return (
             f"<ProfileManager(\n"
-            f"\tserver_ip={self.server_ip},\n"
             f"\tusername={self.username},\n"
             f"\tfile_name={self.file_name},\n"
             f"\tinterface={self.interface}\n"

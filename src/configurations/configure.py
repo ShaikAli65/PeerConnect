@@ -1,9 +1,14 @@
 import asyncio
 import configparser
 import ipaddress
+import logging
 import os
+import random
 import socket
+from io import StringIO
 from pathlib import Path
+
+from kademlia.utils import digest
 
 import src.avails.constants as const
 from src.avails import connect
@@ -78,6 +83,14 @@ async def load_configs():
     async def finalize_config():
 
         def _finalize_config_helper():
+            if _logger.level == logging.DEBUG:
+                config_buffer = StringIO()
+                config_map.write(config_buffer)
+                _logger.debug(f"writing configurations:")
+                _logger.debug(config_buffer.getvalue())
+            else:
+                _logger.info("writing final configurations")
+
             with open(const.PATH_CONFIG_FILE, 'w+') as fp:
                 config_map.write(fp)  # noqa
                 # write the final state of configuration when exiting application
@@ -113,12 +126,8 @@ def write_default_profile():
     default_profile_file = (
         '[USER]\n'
         'name = new user\n'
-        'id = 1234'
+        f'id = {digest(random.randbytes(160))}'
         '\n'
-        '[SERVER]\n'
-        'port = 45000\n'
-        'ip = 0.0.0.0\n'
-        'id = 0\n'
         '[INTERFACE]'
     )
     with open(os.path.join(const.PATH_PROFILES, const.DEFAULT_PROFILE_NAME), 'w+') as profile_file:

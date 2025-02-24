@@ -1,8 +1,6 @@
-import asyncio
 import os
 import subprocess
 import webbrowser
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from kademlia.utils import digest

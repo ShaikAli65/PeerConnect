@@ -73,6 +73,9 @@ class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         await self.send_func(self.sock, buf)
         return self._update_throughput(len(buf), time.perf_counter())
 
+    def __repr__(self):
+        return f"<connect.{type(self)}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
+
 
 class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
     __slots__ = ('sock', 'recv_func', '_limiter',
@@ -91,6 +94,9 @@ class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         data = await self.recv_func(self.sock, nbytes)
         self._update_throughput(nbytes, time.perf_counter())
         return data
+
+    def __repr__(self):
+        return f"<connect.{type(self)}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
 
 
 class Connection(NamedTuple):
@@ -162,3 +168,10 @@ class MsgConnection:
     @property
     def peer(self):
         return self._connection.peer
+
+
+class MsgConnectionNoRecv(MsgConnection):
+    __slots__ = ()
+
+    async def recv(self, *args):
+        raise NotImplementedError("not allowed")

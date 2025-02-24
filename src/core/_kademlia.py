@@ -9,7 +9,7 @@ from typing import override
 import kademlia.node
 from kademlia import crawling, network, node, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
-from kademlia.protocol import log
+from kademlia.protocol import log as _logger
 from rpcudp.protocol import RPCProtocol
 
 from src.avails import RemotePeer, const, use
@@ -86,14 +86,14 @@ class RPCReceiver(RPCProtocol):
 
     def rpc_store(self, sender, sender_peer, key, value):
         self._check_in(sender_peer)
-        log.debug("got a store request from %s, storing '%s'='%s'",
+        _logger.debug("got a store request from %s, storing '%s'='%s'",
                   sender, key.hex(), value)
         self.storage[key] = value
         return True
 
     def rpc_find_node(self, sender, sender_peer, key):
         source = self._check_in(sender_peer)
-        log.info("finding neighbors of %i in local table",
+        _logger.info("finding neighbors of %i in local table",
                  source.long_id)
         peer = RemotePeer(key)
         neighbors = self.router.find_neighbors(peer, exclude=source)
@@ -192,7 +192,7 @@ class PeerServer(network.Server):
         peer = RemotePeer(list_key)
         nearest = self.protocol.router.find_neighbors(peer)
         if not nearest:
-            log.warning("There are no known neighbors to get key %s", list_key)
+            _logger.warning("There are no known neighbors to get key %s", list_key)
             return None
         peer_list_getter = peers.PeerListGetter(self.protocol, node, nearest,
                                                 self.ksize, self.alpha)
@@ -215,7 +215,7 @@ class PeerServer(network.Server):
 
     async def add_this_peer_to_lists(self):
         if self.add_this_peer_task:
-            log.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
+            _logger.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
             # this function only gets called once in the entire application lifetime
             return
 
@@ -228,16 +228,16 @@ class PeerServer(network.Server):
             if self.stopping:
                 break
             if await self.store_nodes_in_list(closest_list_id, [self.node]):
-                log.debug(f"added this peer object in list_id={closest_list_id}")  # debug
+                _logger.debug(f"added this peer object in list_id={closest_list_id}")  # debug
                 break
 
         # entering passive mode
-        log.info("entering passive mode for adding this peer to lists")
+        _logger.info("entering passive mode for adding this peer to lists")
 
         while not self.stopping:
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             if not await self.store_nodes_in_list(closest_list_id, [self.node]):
-                log.error("failed adding this peer object to lists")
+                _logger.error("failed adding this peer object to lists")
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -245,14 +245,14 @@ class PeerServer(network.Server):
 
         nearest = self.protocol.router.find_neighbors(list_key)
         if not nearest:
-            # log.info("There are no known neighbors to set key %s",
+            # _logger.info("There are no known neighbors to set key %s",
             #          list_key_id.hex())
             return False
         spider = crawling.NodeSpiderCrawl(self.protocol, list_key, nearest,
                                           self.ksize, self.alpha)
         relevant_peers = await spider.find()
 
-        # log.info("setting '%s' on %s", dkey.hex(), list(map(str, relevant_peers)))
+        # _logger.info("setting '%s' on %s", dkey.hex(), list(map(str, relevant_peers)))
         distances = [n.distance_to(list_key) for n in relevant_peers]
         if not distances:
             return False

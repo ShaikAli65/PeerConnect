@@ -45,7 +45,7 @@ class Connector(AExitStackMixIn):
     _global_conn_count = 0
 
     def _raise_resource_busy(self, peer):
-        err = ResourceBusy()
+        err = ResourceBusy("resource busy")
         err.available_after = self.conn_waiters[peer]
         raise err
 
@@ -148,6 +148,7 @@ class Connector(AExitStackMixIn):
                     self._global_conn_count -= 1
             else:
                 self.passive_conns[peer].add(connection)
+                _logger.debug(f"added to passive list, {connection}")
 
             async with (signal := self.conn_waiters[peer]):
                 signal.notify()
@@ -162,4 +163,4 @@ class Connector(AExitStackMixIn):
         return self._global_conn_count
 
     def number_of_connections(self, peer):
-        return len(self.active_conns.get(peer, set())) + len(self.passive_conns.get(peer, set()))
+        return len(self.active_conns.get(peer, ())) + len(self.passive_conns.get(peer, ()))
