@@ -10,10 +10,8 @@ logs
 __pycache__/*
 *.pyc
 *venv
-bin/*
-!bin/peerconnect.bat
-!bin/peerconnect.sh
-!bin/requirements.txt
+*setup_completed*
+
 reports
 
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
