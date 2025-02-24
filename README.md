@@ -16,6 +16,7 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 - **Kademlia**: Is used in the overlay routing 
 - **Messaging**: Direct messaging is used, a combination of datagram and stream protocols are used 
 
+> Visit [here](https://excalidraw.com/?#json=JwupHwQ7QuQyK1BEYFhdl,528_biXX7getTXAvT763uw) for project documentation
 
 ### What it Lacks
 - Distributed Reputation System
@@ -38,13 +39,7 @@ These are not planned for completion but code (Internal High Level APIs) tries i
 - **Calls**: Voice and Video Calls
 
 ## Usage
-
-Clone the repository and follow the instructions to get started with either the **Main** (stable) or **Dev** (development) branch.
-
-```
-git clone https://github.com/ShaikAli65/PeerConnect.git
-cd PeerConnect/bin
-```
+  TBD
 
 ### Windows
 
