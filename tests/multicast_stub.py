@@ -1,6 +1,9 @@
 import asyncio
+import logging
 
 from _socket import gethostbyname, gethostname
+
+_logger = logging.getLogger(__name__)
 
 
 class Multicast(asyncio.DatagramProtocol):
@@ -9,16 +12,19 @@ class Multicast(asyncio.DatagramProtocol):
         self.transport = None
 
     def connection_made(self, transport):
-        print("multicast up and running", transport.get_extra_info('socket'))
+        _logger.info("multicast up and running", transport.get_extra_info('socket'))
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        print('new message arrived', addr)
-        print("forwarding to", end=' ')
+        _logger.info('new multicast arrived', addr)
+        strings = ["forwarding to"]
         for peer in (self.all_peers - {addr}):
-            print(peer, end=' ')
+            strings.append(f"{peer} ")
             self.transport.sendto(data, peer)
-        print('')
+
+        strings.append('\n')
+        _logger.debug("".join(strings))
+
         self.all_peers.add(addr)
 
 

@@ -257,7 +257,7 @@ async def initiate_page_handle(exit_stack):
 
     await exit_stack.enter_async_context(_exit_stack)
     # enter early, cause these contexts are mostly last one to exit
-    await _exit_stack.enter_async_context(run_page_server())
+    # await _exit_stack.enter_async_context(run_page_server())  TODO: FIX THIS
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(start_websocket_server())

@@ -74,7 +74,7 @@ class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         return self._update_throughput(len(buf), time.perf_counter())
 
     def __repr__(self):
-        return f"<connect.{type(self)}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
+        return f"<connect.{type(self).__name__}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
 
 
 class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
@@ -96,7 +96,7 @@ class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         return data
 
     def __repr__(self):
-        return f"<connect.{type(self)}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
+        return f"<connect.{type(self).__name__}(>{self.sock.getpeername()}, rate={self.rate}, slow={not self._limiter.is_set()})>"
 
 
 class Connection(NamedTuple):

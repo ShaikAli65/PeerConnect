@@ -50,7 +50,7 @@ class Connector(AExitStackMixIn):
         raise err
 
     @asynccontextmanager
-    async def connect(self, peer,*, raise_if_busy=False):
+    async def connect(self, peer, *, raise_if_busy=False):
         """Get a reliable connection to transfer data
 
         Callers should handle any slowdowns in throughput as bandwidth limiting is performed on need
@@ -99,6 +99,7 @@ class Connector(AExitStackMixIn):
 
             if active:
                 one_connection = active.pop()
+                self.passive_conns[peer].remove(one_connection)
                 del active  # drop the references early
                 async with self._yield_connection_and_maintain(one_connection):
                     yield one_connection
@@ -150,13 +151,16 @@ class Connector(AExitStackMixIn):
                 self.passive_conns[peer].add(connection)
                 _logger.debug(f"added to passive list, {connection}")
 
-            async with (signal := self.conn_waiters[peer]):
-                signal.notify()
-                # wake up something if waiting for connection getting freed
+            async with (signal := self.conn_waiters[peer]):  # condition returns none in its async context manager
+                signal.notify_all()
+                # wake up, if waiting for connection getting freed
 
     def max_connections_that_can_be_made(self, peer: RemotePeer):
         return const.MAX_CONNECTIONS_BETWEEN_PEERS - len(self.active_conns.get(peer)) - len(
             self.passive_conns.get(peer)) - 1
+
+    def is_connection_available(self, peer):
+        return lambda: bool(self.passive_conns.get(peer, ()))
 
     @property
     def conn_count(self):

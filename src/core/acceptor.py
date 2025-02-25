@@ -142,7 +142,7 @@ class Acceptor(AExitStackMixIn):
                 self.__accept_connection(initial_conn),
                 name=f"acceptor task for socket {addr=}"
             )
-            _logger.info(f"New connection from {addr}")
+            _logger.info(f"new connection from {addr}")
             await asyncio.sleep(0)
 
     def _start_socket(self):
@@ -184,6 +184,7 @@ class Acceptor(AExitStackMixIn):
         except Exception:
             print("*" * 79)
             traceback.print_exc()
+            raise
 
         if error_log := locals().get('error_log'):
             _logger.error(error_log)
