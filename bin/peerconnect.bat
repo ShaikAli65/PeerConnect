@@ -31,8 +31,8 @@ where python >nul 2>&1 || (
 )
 
 :: Verify Python version
-%py_cmd% -c "import sys; exit(0) if sys.version_info >= (3,6) else exit(1)" || (
-    echo Error: Python 3.6+ required
+%py_cmd% -c "import sys; exit(0) if sys.version_info >= (3,11) else exit(1)" || (
+    echo Error: Python 3.11+ required
     exit /b 1
 )
 
