@@ -56,5 +56,5 @@ The two modules work together to form the backbone of PeerConnect’s peer-to-pe
 
 
 **References:**  
-- connector [docs](https://github.com/ShaikAli65/PeerConnect/blob/dev/docs/core/connector.md) [src](https://github.com/ShaikAli65/PeerConnect/blob/dev/src/core/connector.md)
-- bandwidth [docs](https://github.com/ShaikAli65/PeerConnect/blob/dev/docs/core/bandwidth.md) [src](https://github.com/ShaikAli65/PeerConnect/blob/dev/src/core/bandwidth.md)
+- connector [docs](https://github.com/ShaikAli65/PeerConnect/blob/dev/docs/core/connector.md) [src](https://github.com/ShaikAli65/PeerConnect/blob/dev/src/core/connector.py)
+- bandwidth [docs](https://github.com/ShaikAli65/PeerConnect/blob/dev/docs/core/bandwidth.md) [src](https://github.com/ShaikAli65/PeerConnect/blob/dev/src/core/bandwidth.py)
