@@ -31,7 +31,7 @@
 **adding peer schema**
 ```
 > data = DataWeaver(
->   header= [NEW_PEER](#NEW_PEER),
+>   header= [NEW_PEER](#transfer_update),
 >   content={
 >       "name": peer.username,
 >       "ip": peer.ip,
