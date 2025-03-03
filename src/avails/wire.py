@@ -1,6 +1,6 @@
 """Every Wire Format of Peerconnect
 
-This module contains all the classes related to how data appears in wire transfer on top of ip protocols.
+Contains all the classes related to how data appears in wire transfer on top of ip protocols.
 
 All classes provide serializing and de-serializing methods to make them ready to transfer over wire.
 
@@ -16,13 +16,13 @@ import struct
 from asyncio import BaseTransport
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import NamedTuple, Optional, Union
+from typing import Coroutine, NamedTuple, Optional, Union
 
 import umsgpack
 
-from src.avails.connect import Socket as _Socket, is_socket_connected
+from src.avails.connect import Connection, MsgConnection, Socket as _Socket, is_socket_connected
 from src.avails.exceptions import InvalidPacket
-from src.avails.useables import wait_for_sock_read
+from src.avails.useables import recv_int, wait_for_sock_read
 from src.avails.waiters import Actuator, const as _const
 
 _controller = Actuator()
@@ -33,6 +33,29 @@ class Wire:
     async def send_async(sock: _Socket, data: bytes):
         data_size = struct.pack("!I", len(data))
         return await sock.asendall(data_size + data)
+
+    @staticmethod
+    def send_msg(connection, msg):
+        """
+
+        Args:
+            connection(Connection): connection object
+            msg(WireData):data to send
+
+        """
+        messaged = MsgConnection(connection)
+        return messaged.send(msg)
+
+    @staticmethod
+    def recv_msg(connection) -> Coroutine:
+        """
+        Args:
+            connection(Connection): connection object
+        Returns:
+            WireData: on successful receive
+        """
+        msg_con = MsgConnection(connection)
+        return msg_con.recv()
 
     @staticmethod
     def send(sock: _Socket, data: bytes):
@@ -53,14 +76,13 @@ class Wire:
     @staticmethod
     async def receive_async(sock: _Socket):
         try:
-            data_size = struct.unpack("!I", await sock.arecv(4))[0]
+            data_size = await recv_int(sock.arecv)
             data = await sock.arecv(data_size)
             return data
-        except struct.error:
-            if is_socket_connected(sock):
-                raise
-            else:
-                raise OSError("connection broken")
+        except ValueError:
+            if not is_socket_connected(sock):
+                raise OSError("connection error")
+            raise
 
     @staticmethod
     def receive(sock: _Socket, timeout=None, controller=_controller):
@@ -198,7 +220,7 @@ def unpack_datagram(data_payload) -> Optional[WireData]:
 class DataWeaver:
     """A wrapper purposely designed to handle data (as {header, content, msg_id, peer_id} format)
 
-    Only to be used by `webpage_handlers` package, and is completely hidden from core API
+    Only to be used by `conduit` package, and is completely hidden from core API
 
     """
 
@@ -241,11 +263,15 @@ class DataWeaver:
     def match_header(self, _header) -> bool:
         return self.__data["header"] == _header
 
-    def __getitem__(self, key):
-        return self.__data[key]
+    def __iter__(self):
+        # prevent from being an iterator cause sequence protocol may mess up
+        raise NotImplemented
 
-    def __setitem__(self, key, value):
-        self.__data[key] = value
+    def __getitem__(self, key):
+        return self.__data["content"][key]
+
+    def __contains__(self, item):
+        return item in self.__data["content"]
 
     @property
     def content(self):
@@ -419,7 +445,7 @@ class PalmTreeInformResponse:
     def load_from(data: bytes):
         peer_id, passive_addr, active_addr, session_key = umsgpack.loads(data)
         return PalmTreeInformResponse(
-            peer_id, tuple(passive_addr), tuple(active_addr), session_key
+            peer_id, tuple(passive_addr), tuple(active_addr), session_key  # noqa
         )
 
 

@@ -1,14 +1,17 @@
 import asyncio
 import functools
 import inspect
+import logging
 import math
 import threading
-from asyncio import Queue as _queue
-from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
+from asyncio import CancelledError, Queue as _queue
 from typing import Iterable, Optional
 
 from src.avails import useables
-from src.avails.useables import echo_print
+from src.avails.mixins import singleton_mixin
+from src.avails.useables import awaitable
+
+_logger = logging.getLogger(__name__)
 
 
 def _get_func_name(func):
@@ -30,39 +33,70 @@ def _get_func_name(func):
         return frame.f_code.co_name
 
     # Default name if everything else fails
-    return "not defined"
+    return "N/A"
 
 
 class State:
-    def __init__(self, name, func, is_blocking=False, controller=None, event_to_wait: asyncio.Event = None):
+    """Represents a state in application
+
+    Attributes:
+        name (str): some detail related to state
+        func (Callable): any callable to call when entering state, awaited if it's async
+        args(tuple): arguments to pass into function
+        is_blocking(bool): True if the function takes long time to complete
+        lazy_args(tuple[Callable | Any]): if callable it gets evaluated just before function call or else just passed in, appended to args parameter
+        event(asyncio.Event): event to wait before calling func
+
+    """
+    def __init__(self, name, func, *args, is_blocking=False, lazy_args=(), event_to_wait: asyncio.Event = None):
         self.name = name
+        self.is_blocking = is_blocking
+        self.event = event_to_wait
+        self.func = func
+        self.args = args
+        self.lazy_args = lazy_args
+        self._func_async_task = None
+
+    async def _make_function(self):
+        func = self.func
+        lazy_args = []
+
+        for arg in self.lazy_args:
+            if callable(arg):
+                result = arg()
+                if inspect.isawaitable(result):
+                    result = await result
+            else:
+                result = arg
+
+            lazy_args.append(result)
+
+        self.args += tuple(lazy_args)
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
-            f = useables.wrap_with_tryexcept(_func)
-            return asyncio.create_task(f())
+            f = useables.wrap_with_tryexcept(_func, *self.args)
+            self._func_async_task = asyncio.create_task(f())
 
         @functools.wraps(func)
         def wrap_in_thread(_func):
-            threading.Thread(target=func, daemon=True).start()
+            threading.Thread(target=_func, args=self.args, daemon=True).start()
 
         self.is_coro = inspect.iscoroutinefunction(func)
 
-        if is_blocking:
+        if self.is_blocking:
             self.func = functools.partial(wrap_in_task if self.is_coro else wrap_in_thread, func)
         else:
-            self.func = func
+            self.func = functools.partial(func,*self.args)
 
         self.func_name = _get_func_name(func)
 
-        self.actuator = controller
-        self.event = event_to_wait
-
     async def enter_state(self):
+        await self._make_function()
+
         loop = asyncio.get_event_loop()
-        x = loop.time()
-        echo_print(f"[{x - math.floor(x):.5f}s] CORO:{self.is_coro} entering state :", self.name, end=' ')
-        print("func:", self.func_name)
+        loop_time_ = loop.time() - math.floor(loop.time())
+        _logger.info(f"[{loop_time_:.5f}s] [state={self.name}] {{{self.func_name=}}}")
 
         if self.event:
             await self.event.wait()
@@ -74,44 +108,51 @@ class State:
 
         return ret_val
 
+    def __repr__(self):
+        return f"<State({self.name})>"
 
+    async def stop_if_running(self):
+        if not self._func_async_task:
+            return
+
+        if self._func_async_task.done():
+            return
+        
+        self._func_async_task.cancel(sentinel := object())      
+        try:
+            await self._func_async_task
+        except CancelledError as ce:
+            if any(ce.args) and ce.args[0] is sentinel:
+                return
+            raise
+
+@singleton_mixin
 class StateManager:
     """
     A Singleton class
     Sort of task queue
-    process_states is called at the begining of program
+    process_states is called at the beginning of program
     """
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(StateManager, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
 
     def __init__(self):
-        if self._initialized:
-            return
         self.state_queue = _queue()
-
-        self.executor = _ThreadPoolExecutor()
+        self.states = []
         self.close = False
-        self._initialized = True
-        self.last_state = None
-        self.global_wait = threading.Event()
         self.all_tasks: list[asyncio.Task] = []
 
-    def signal_stopping(self):
+    async def signal_stopping(self):
         self.close = True
-        self.state_queue.put(None)
-        for t in self.all_tasks:
-            t.cancel("finalizing from state manager")
+        self.state_queue.put(None)  # stop processing, this will end the `process_states` and `exit_stack` is invoked 
+        for state in reversed(self.states):
+            await state.stop_if_running()
 
     async def put_state(self, state: Optional[State]):
         await self.state_queue.put(state)
 
     async def put_states(self, states: Iterable[State]):
         for state in states:
+            # if not isinstance(state, State):
+            #     continue
             await self.state_queue.put(state)
 
     async def process_states(self):
@@ -120,15 +161,7 @@ class StateManager:
         different points in code wrap functions in states to get processed
         """
         while self.close is False:
-            try:
-                current_state: State = await self.state_queue.get()
-                r = await current_state.enter_state()
-                if isinstance(r, asyncio.Task):
-                    self.all_tasks.append(r)
-
-            except KeyboardInterrupt:
-                print('received keyboard interrupt finalizing')
-                exit(1)
-
-
-END_STATE = State('Final State', func=lambda: None)
+            current_state: State = await self.state_queue.get()
+            self.states.append(current_state)
+            r = await current_state.enter_state()
+            assert r is None, "state returned non None value"

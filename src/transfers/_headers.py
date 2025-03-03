@@ -3,9 +3,11 @@ class HEADERS:
     REDIRECT = b"redirect        "
     SERVER_OK = b"connect accepted"
     REMOVAL_PING = b"pinging peer for removal"
+    PING = b"PING"
+    UNPING = b"UN PING"
     CMD_RECV_FILE_AGAIN = b"recv file again "
     CMD_VERIFY_HEADER = b"verify header   "
-    CMD_BASIC_CONN = b"basic connection"
+    CMD_MSG_CONN = b"message connection"
     CMD_RECV_FILE = b"receive file    "
     CMD_CLOSING_HEADER = b"close connection"
     CMD_TEXT = b"this is message "
@@ -38,6 +40,7 @@ class REQUESTS_HEADERS:
     KADEMLIA = b"\x00"
     DISCOVERY = b"\x01"
     GOSSIP = b"\x02"
+    REQUEST = b"\xff"
 
 
 class DISCOVERY:

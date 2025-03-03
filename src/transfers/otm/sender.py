@@ -5,7 +5,7 @@ from pathlib import Path
 import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, const, use
-from src.core import get_this_remote_peer
+from src.core.public import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
 from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
@@ -13,7 +13,7 @@ from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
 
 class FilesSender:
 
-    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], timeout):
+    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], all_peers_list, timeout):
         self.peer_list = peers
         self.file_items = [FileItem(file_path, 0) for file_path in file_list]
         self.timeout = timeout
@@ -23,6 +23,7 @@ class FilesSender:
             get_this_remote_peer(),
             self.session,
             peers,
+            all_peers_list,
         )
 
         self.relay: OTMFilesRelay = self.palm_tree.relay

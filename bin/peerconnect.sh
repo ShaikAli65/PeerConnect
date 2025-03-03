@@ -57,8 +57,8 @@ if [ "$lines" -ne 32 ]; then
   install
 fi
 
-cd $base_dir
-$runner main.py
+cd $base_dir || exit
+$runner src
 
 deactivate
 

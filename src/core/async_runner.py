@@ -1,14 +1,12 @@
 import asyncio
 from typing import override
 
-from src.core import Dock
-
 
 class AnotherRunner(asyncio.Runner):  # noqa # dirty dirty dirty
+    def __init__(self, *,finalizing_flag, debug = None, loop_factory = None):
+        self.finalizing = finalizing_flag
+        super().__init__(debug=debug, loop_factory=loop_factory)
     @override
     def _on_sigint(self, signum, frame, main_task):
-        Dock.finalizing.set()
+        self.finalizing.set()
         return super()._on_sigint(signum, frame, main_task)
-
-
-asyncio.Runner = AnotherRunner

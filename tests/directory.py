@@ -3,8 +3,8 @@ import hashlib
 
 import _path  # noqa
 from src.avails import DataWeaver
+from src.conduit import handledata
 from src.managers.statemanager import State
-from src.webpage_handlers import handledata
 from test import get_a_peer
 from tests.test import start_test
 
@@ -57,4 +57,4 @@ def main():
 
 if __name__ == '__main__':
     s10 = State("test dir transfer", test_dir_transfer, is_blocking=True)
-    start_test([s10])
+    start_test(s10)

@@ -8,7 +8,7 @@ from src.avails import const
 
 def _waker_flag_windows():
     """
-    This function is made to pass in a file descriptor to (sort of trojan horse) select module primitives
+    Made to pass in a file descriptor to (sort of trojan horse) select module primitives
     which prevents polling and waking up of cpu in regular intervals
     On Windows system this function returns a pair of socket file descriptors connected to each other providing pipe-like
     behaviour
@@ -30,12 +30,12 @@ def _waker_flag_windows():
 
 def _waker_flag_linux():
     """
-    This function is made to pass in a file descriptor to (sort of trojan horse) select module primitives
+    Made to pass in a file descriptor to (sort of trojan horse) select module primitives
     which prevents polling and waking up of cpu in regular intervals
-    On Windows system this function returns a pair of socket file descriptors connected to each other providing pipe-like
+    On Windows system, returns a pair of socket file descriptors connected to each other providing pipe-like
     behaviour
     as select on windows does not support file descriptors other that sockets
-    On other platforms this function returns a ~os.pipe's file descriptors wrapped in TextIOWrapper
+    On other platforms, returns a ~os.pipe's file descriptors wrapped in TextIOWrapper
     :return:pair of `BufferedReader | BinaryIO, a function which writes to reader` on calling
     """
 
@@ -59,7 +59,7 @@ else:
 class _ThreadActuator:
     """
 
-        This is used to control threads in a blocking way
+        Used to control threads in a blocking way
         :func:`signal_stopping` can be used directly to wake ~select.select calls instantly
         which were blocked in order to get their reads active
         can be used directly in condition checking to check for
@@ -87,7 +87,7 @@ class _ThreadActuator:
 
     def flip(self):
         """
-        This function sets or unsets the underlying control flag Event
+        Sets or unsets the underlying control flag Event
         useful when to_stop is used in a while loop which prevent inverting True to False and vice versa
         :return:
         """

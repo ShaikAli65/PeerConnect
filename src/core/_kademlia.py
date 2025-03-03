@@ -9,14 +9,15 @@ from typing import override
 import kademlia.node
 from kademlia import crawling, network, node, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
-from kademlia.protocol import log
+from kademlia.protocol import log as _logger
 from rpcudp.protocol import RPCProtocol
 
 from src.avails import RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
-from src.core import Dock, get_this_remote_peer, peers
-from src.core.peers import Storage
+from src.core import peers
+from src.core.peerstore import Storage
+from src.core.public import get_this_remote_peer
 from src.transfers import REQUESTS_HEADERS
 from src.transfers.transports import KademliaTransport
 
@@ -85,14 +86,14 @@ class RPCReceiver(RPCProtocol):
 
     def rpc_store(self, sender, sender_peer, key, value):
         self._check_in(sender_peer)
-        log.debug("got a store request from %s, storing '%s'='%s'",
+        _logger.debug("got a store request from %s, storing '%s'='%s'",
                   sender, key.hex(), value)
         self.storage[key] = value
         return True
 
     def rpc_find_node(self, sender, sender_peer, key):
         source = self._check_in(sender_peer)
-        log.info("finding neighbors of %i in local table",
+        _logger.info("finding neighbors of %i in local table",
                  source.long_id)
         peer = RemotePeer(key)
         neighbors = self.router.find_neighbors(peer, exclude=source)
@@ -121,15 +122,16 @@ class RPCReceiver(RPCProtocol):
 
     def rpc_search_peers(self, sender, caller_peer, search_string):
         self._check_in(caller_peer)
-        relevant_peers = use.search_relevant_peers(Dock.peer_list, search_string)
+        relevant_peers = use.search_relevant_peers(self.peer_list, search_string)
         return list(map(bytes, relevant_peers))
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, source_node, storage, ksize):
+    def __init__(self, peer_list, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(self, ksize, source_node)
         self.storage = storage
+        self.peer_list = peer_list
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
@@ -172,16 +174,21 @@ class AnotherRoutingTable(routing.RoutingTable):
 class PeerServer(network.Server):
     protocol_class = KadProtocol
 
-    def __init__(self, ksize=20, alpha=3, peer_id=None, storage=None):
+    def __init__(self,app_ctx, ksize=20, alpha=3, peer_id=None, storage=None):
         super().__init__(ksize, alpha, peer_id, storage)
         self.add_this_peer_task = None
         self._transport = None
         self.stopping = False
+        self.app_ctx = app_ctx
 
     @override
     async def bootstrap_node(self, addr):
         result = await self.protocol.ping(addr, bytes(self.node))
         return RemotePeer.load_from(result[1]) if result[0] else None
+
+    @override
+    def _create_protocol(self):
+        return self.protocol_class(self.app_ctx.peer_list, self.node, self.storage, self.ksize)
 
     def start(self):
         self.protocol = self._create_protocol()
@@ -191,7 +198,7 @@ class PeerServer(network.Server):
         peer = RemotePeer(list_key)
         nearest = self.protocol.router.find_neighbors(peer)
         if not nearest:
-            log.warning("There are no known neighbors to get key %s", list_key)
+            _logger.warning("There are no known neighbors to get key %s", list_key)
             return None
         peer_list_getter = peers.PeerListGetter(self.protocol, node, nearest,
                                                 self.ksize, self.alpha)
@@ -214,7 +221,7 @@ class PeerServer(network.Server):
 
     async def add_this_peer_to_lists(self):
         if self.add_this_peer_task:
-            log.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
+            _logger.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
             # this function only gets called once in the entire application lifetime
             return
 
@@ -227,16 +234,17 @@ class PeerServer(network.Server):
             if self.stopping:
                 break
             if await self.store_nodes_in_list(closest_list_id, [self.node]):
-                log.debug(f"added this peer object in list_id={closest_list_id}")  # debug
+                _logger.debug(f"added this peer object in list_id={closest_list_id}")  # debug
                 break
 
         # entering passive mode
-        log.info("entering passive mode for adding this peer to lists")
+        _logger.info("entering passive mode for adding this peer to lists")
 
         while not self.stopping:
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             if not await self.store_nodes_in_list(closest_list_id, [self.node]):
-                log.error("failed adding this peer object to lists")
+                _logger.error("failed adding this peer object to lists")
+                await self.app_ctx.in_network.wait()
 
     async def store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
@@ -244,14 +252,14 @@ class PeerServer(network.Server):
 
         nearest = self.protocol.router.find_neighbors(list_key)
         if not nearest:
-            # log.info("There are no known neighbors to set key %s",
+            # _logger.info("There are no known neighbors to set key %s",
             #          list_key_id.hex())
             return False
         spider = crawling.NodeSpiderCrawl(self.protocol, list_key, nearest,
                                           self.ksize, self.alpha)
         relevant_peers = await spider.find()
 
-        # log.info("setting '%s' on %s", dkey.hex(), list(map(str, relevant_peers)))
+        # _logger.info("setting '%s' on %s", dkey.hex(), list(map(str, relevant_peers)))
         distances = [n.distance_to(list_key) for n in relevant_peers]
         if not distances:
             return False
@@ -325,8 +333,8 @@ def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     dispatcher.register_handler(REQUESTS_HEADERS.KADEMLIA, handler)
 
 
-def prepare_kad_server(req_transport):
-    kad_server = PeerServer(storage=Storage())
+def prepare_kad_server(req_transport, app):
+    kad_server = PeerServer(app_ctx=app, storage=Storage())
     kad_server.node = get_this_remote_peer()
     kad_server.start()
     kad_server.transport = KademliaTransport(req_transport)

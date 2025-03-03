@@ -12,4 +12,4 @@ def test_interfaces():
 
 
 if __name__ == "__main__":
-    start_test([State("testing interfaces", test_interfaces)])
+    start_test(State("testing interfaces", test_interfaces))

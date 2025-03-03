@@ -5,25 +5,19 @@ from typing import TYPE_CHECKING, override
 
 from src.avails import WireData, constants as const
 from src.avails.useables import LONG_INT, recv_int
-from src.core import get_this_remote_peer
+from src.core.public import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
 
 
 class OTMFilesRelay(PalmTreeRelay):
-    # :todo: try using temporary-spooled files
+    # TODO: try using temporary-spooled files
     if TYPE_CHECKING:
         from src.transfers.otm.receiver import FilesReceiver
         file_receiver: FilesReceiver
 
-    def __init__(
-            self,
-            file_receiver,
-            session,
-            passive_endpoint_addr,
-            active_endpoint_addr,
-    ):
-        super().__init__(session, passive_endpoint_addr, active_endpoint_addr)
+    def __init__(self, file_receiver, *args,**kwargs):
+        super().__init__(*args, **kwargs)
         self._read_link = None
         self.file_receiver = file_receiver
         # this is a generator `:method: OTMFilesReceiver.data_receiver` that takes byte-chunk inside it
@@ -48,7 +42,7 @@ class OTMFilesRelay(PalmTreeRelay):
 
     async def _recv_file_metadata(self):
         self._read_link = await self._parent_link_fut
-        # this future is set when a sender makes a connection
+        # set when a sender makes a connection
 
         files_metadata = await self._read_link.recv(self.session.chunk_size)
 
@@ -57,7 +51,7 @@ class OTMFilesRelay(PalmTreeRelay):
         await self.send_file_metadata(files_metadata)
 
     async def send_file_metadata(self, data):
-        # this is the first step of a file transfer
+        # first step of a file transfer
         await self._forward_chunk(data)
 
     async def _forward_chunk(self, chunk: bytes):

@@ -1,29 +1,43 @@
+import asyncio
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
-from typing import Callable
 
-from src.avails import connect, const
-from src.avails.exceptions import CancelTransfer, TransferIncomplete
+from src.avails import RemotePeer, connect, const
+from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
 from src.transfers import TransferState
 from src.transfers._logger import logger
 
 
+class AbstractStatusMix(ABC):
+    @abstractmethod
+    def update_status(self, status): ...
+
+    @abstractmethod
+    def should_yield(self): ...
+
+    @abstractmethod
+    def status_setup(self, prefix, initial_limit, final_limit): ...
+
+    @abstractmethod
+    def close(self): ...
+
+
 class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
+    status_updater: AbstractStatusMix
+    peer: RemotePeer
+    state: TransferState
+    to_stop: bool
+    _expected_errors: set
+    main_task: asyncio.Task | None
 
     @abstractmethod
     async def continue_transfer(self):
-        """
-        Continue Transfer called when some error happens in the initial state and that error has been recovered
+        """When some error happens in the initial state and that error has been recovered
         """
 
     @abstractmethod
-    def connection_made(self, sender: Callable[[bytes], None] | connect.Sender,
-                        receiver: Callable[[int], bytes] | connect.Receiver):
+    def connection_made(self, connection: connect.Connection):
         """Connection has arrived that is related to this handle
-
-        Args:
-            sender(Callable[[bytes],None]): called when some data is expected to send, returns when all the data is sent
-            receiver(Callable[[int],bytes]): called when some data is expected to receive, returns with bytes of length passed into
         """
 
     @abstractmethod
@@ -53,12 +67,19 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         return f"[{self.__class__}]"
 
 
-class AbstractSender(AbstractTransferHandle, ABC):
-    """
+class CommonCancelMixIn:
+    async def cancel(self):
+        """Cancel the transfer"""
+        if self.state not in (TransferState.SENDING, TransferState.RECEIVING, TransferState.PAUSED):
+            raise InvalidStateError(f"state is not expected to be in {self.state=}")
+
+        self.to_stop = True
+        self._expected_errors.add(ct := CancelTransfer())
+        self.main_task.set_exception(ct)
+        await self.main_task
 
 
-    """
-
+class AbstractSender(AbstractTransferHandle):
     @abstractmethod
     def __init__(self, peer_obj, transfer_id, file_list, status_updater): ...
 
@@ -107,15 +128,14 @@ class CommonExceptionHandlersMixIn:
         err = TransferIncomplete(detail)
         err.__cause__ = prev_error
         self._expected_errors.add(err)
-        raise err
+        raise err from prev_error
 
     def _handle_os_error(self, err, detail=""):
         logger.error(f"{self._log_prefix} got error, pausing transfer", exc_info=True)
         self.state = TransferState.PAUSED
         ti = TransferIncomplete(detail)
-        ti.__cause__ = err
         self._expected_errors.add(ti)
-        raise ti
+        raise ti from err
 
     def _handle_cancel_transfer(self, ct):
         if ct in self._expected_errors:
@@ -151,3 +171,4 @@ class PauseMixIn:
         self.state = TransferState.PAUSED
         self.send_func.pause()
         self.recv_func.pause()
+        self.to_stop = True

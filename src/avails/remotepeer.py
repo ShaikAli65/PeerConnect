@@ -7,7 +7,7 @@ class RemotePeer:
     """Used to represent a peer details in network
 
     There are some attributes that are kept to keep this class compatible with kademlia package
-    This Follows a structure that is required by kademila package's Node
+    Follows a structure that is required by kademila package's Node
     and added extra things used by code
 
     Note:
@@ -76,11 +76,11 @@ class RemotePeer:
 
     @property
     def uri(self):
-        return self.ip, self._conn_port
+        return const.THIS_IP.addr_tuple(port=self._conn_port, ip=self.ip)
 
     @property
     def req_uri(self):
-        return self.ip, self._req_port
+        return const.THIS_IP.addr_tuple(port=self._req_port, ip=self.ip)
 
     @classmethod
     def load_from(cls, data: bytes):

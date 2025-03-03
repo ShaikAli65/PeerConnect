@@ -3,7 +3,6 @@ import random
 import time
 
 from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, RumorPolicy, const
-from src.core import Dock
 from src.transfers.transports import GossipTransport
 
 
@@ -38,8 +37,7 @@ class SimpleRumorMessageList(RumorMessageList):
     def _get_current_clock():
         return time.monotonic()
 
-    @staticmethod
-    def _get_list_of_peers():
+    def _get_list_of_peers(self):
         return NotImplemented
 
     def push(self, message: GossipMessage):
@@ -63,7 +61,7 @@ class SimpleRumorMessageList(RumorMessageList):
 
     def sample_peers(self, message_id, sample_size):
         # using reservoir sampling algorithm
-        # :todo: try working with bloom filters
+        # TODO: try working with bloom filters
         _m: RumorMessageItem = self._message_list[message_id]
         peer_list = self._get_list_of_peers() - _m.peer_list
         reservoir = []
@@ -115,11 +113,12 @@ class RumorMongerProtocol:
     alpha = 3
     policy_class: RumorPolicy = DefaultRumorPolicy
 
-    def __init__(self, datagram_transport: GossipTransport, message_list_class: type[SimpleRumorMessageList]):
-        self.message_list = message_list_class(const.NODE_POV_GOSSIP_TTL)
+    def __init__(self, datagram_transport: GossipTransport, global_peer_list, message_list: SimpleRumorMessageList):
+        self.message_list = message_list
         self.transport = datagram_transport
         self.policy = self.policy_class(self)
         self._is_initiated = True
+        self.global_peer_list = global_peer_list
 
     def message_arrived(self, data: GossipMessage, from_addr):
 
@@ -140,7 +139,7 @@ class RumorMongerProtocol:
         print("[GOSSIP] message received and processed: %s" % data)
 
     def __forward_payload(self, message, peer_id):
-        peer_obj = Dock.peer_list.get_peer(peer_id)
+        peer_obj = self.global_peer_list.get_peer(peer_id)
         if peer_obj is not None:
             self.transport.sendto(bytes(message), peer_obj.req_uri)
             return peer_obj

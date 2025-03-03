@@ -4,7 +4,8 @@ import time
 import _path  # noqa
 from src.avails import GossipMessage, WireData
 from src.avails.useables import get_unique_id
-from src.core import get_gossip, peers
+from src.core import peers
+from src.core.public import get_gossip
 from src.managers.statemanager import State
 from src.transfers import GOSSIP
 from tests.test import start_test
@@ -43,4 +44,4 @@ async def test_gossip_search_user(username=TEST_USERNAME):
 if __name__ == "__main__":
     s7 = State("checking for gossip", test_gossip)
     s8 = State("checking for gossip search", test_gossip_search_user)
-    start_test((s7,s8))
+    start_test(s7, s8)

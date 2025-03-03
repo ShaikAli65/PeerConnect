@@ -4,61 +4,64 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, const, unpack_datagram, use
+from src.avails import InvalidPacket, const, unpack_datagram
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
-from src.core import DISPATCHS, Dock, _kademlia, gossip
+from src.core import _kademlia, gossip
 from src.core.discover import discovery_initiate
+from src.core.public import DISPATCHS, Dock
 from src.managers.statemanager import State
+from src.transfers import REQUESTS_HEADERS
 from src.transfers.transports import RequestsTransport
 
 _logger = logging.getLogger(__name__)
 
 
-async def initiate():
+async def initiate(app: Dock):
     # a discovery request packet is observed in wire shark but that packet is
     # not getting delivered to application socket in linux when we bind to specific interface address
 
     # TL;DR: causing some unknown behaviour in linux system
 
-    if const.IS_WINDOWS:
-        const.BIND_IP = const.THIS_IP
+    exit_stack = app.exit_stack
+    dispatchers = app.dispatchers
+    state_manager = app.state_manager_handle
 
-    bind_address = (const.BIND_IP, const.PORT_REQ)
+    if const.IS_WINDOWS:
+        const.BIND_IP = const.THIS_IP.ip
+
+    bind_address = const.THIS_IP.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
 
     multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
-    broad_cast_address = (const.BROADCAST_IP, const.PORT_NETWORK)
 
-    req_dispatcher = RequestsDispatcher(None, Dock.finalizing.is_set)
-    await Dock.exit_stack.enter_async_context(req_dispatcher)
+    req_dispatcher = RequestsDispatcher()
+    await exit_stack.enter_async_context(req_dispatcher)
 
     transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
     req_dispatcher.transport = RequestsTransport(transport)
 
-    kad_server = _kademlia.prepare_kad_server(transport)
+    kad_server = _kademlia.prepare_kad_server(transport, app=app)
     _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
 
     # await gossip_initiate(req_dispatcher, transport)
-    gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher)
-    await Dock.exit_stack.enter_async_context(gossip_dispatcher)
+    gossip_dispatcher = gossip.initiate_gossip(transport, req_dispatcher, app)
+    await exit_stack.enter_async_context(gossip_dispatcher)
 
-    Dock.dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
-    Dock.dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
-
-    Dock.requests_endpoint = transport
-    Dock.kademlia_network_server = kad_server
+    dispatchers[DISPATCHS.REQUESTS] = req_dispatcher
+    dispatchers[DISPATCHS.GOSSIP] = gossip_dispatcher
+    app.requests_transport = req_dispatcher.transport
+    app.kademlia_network_server = kad_server
 
     discovery_state = State(
         "discovery",
-        functools.partial(
-            discovery_initiate,
-            kad_server,
-            multicast_address,
-            req_dispatcher,
-            transport
-        ),
+        discovery_initiate,
+        kad_server,
+        multicast_address,
+        transport,
+        req_dispatcher,
+        app,
         is_blocking=True,
     )
 
@@ -68,18 +71,22 @@ async def initiate():
         is_blocking=True,
     )
 
-    await Dock.state_manager_handle.put_state(discovery_state)
-    await Dock.state_manager_handle.put_state(add_to_lists)
-    # :todo: introduce context manager support into state-manager.State itself which reduces boilerplate
+    await state_manager.put_state(discovery_state)
+    await state_manager.put_state(add_to_lists)
 
-    Dock.exit_stack.push_async_exit(kad_server)
+    app.exit_stack.push_async_exit(kad_server)
 
     # await kad_server.add_this_peer_to_lists()
 
 
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     loop = asyncio.get_running_loop()
-    base_socket = await _create_listen_socket(bind_address, multicast_address)
+
+    base_socket = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
+
+    _subscribe_to_multicast(base_socket, multicast_address)
     transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher),
         sock=base_socket
@@ -87,13 +94,7 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
     return transport
 
 
-async def _create_listen_socket(bind_address, multicast_addr):
-    loop = asyncio.get_running_loop()
-    family, _, _, _, resolved_bind_address = await anext(use.get_addr_info(*bind_address))
-    sock = UDPProtocol.create_async_server_sock(
-        loop, resolved_bind_address, family=family
-    )
-
+def _subscribe_to_multicast(sock, multicast_addr):
     if const.USING_IP_V4:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
@@ -102,7 +103,7 @@ async def _create_listen_socket(bind_address, multicast_addr):
             log = "not " + log
         _logger.debug(log)
 
-        ipv4_multicast_socket_helper(sock, bind_address, multicast_addr)
+        ipv4_multicast_socket_helper(sock, sock.getsockname(), multicast_addr)
         _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
     else:
         ipv6_multicast_socket_helper(sock, multicast_addr)
@@ -113,17 +114,26 @@ async def _create_listen_socket(bind_address, multicast_addr):
 class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     __slots__ = ()
 
-    def __init__(self, transport, stop_flag):
-        super().__init__(transport, stop_flag)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.registry[REQUESTS_HEADERS.REQUEST] = {}
+        # for simple handlers
 
     async def submit(self, req_event: RequestEvent):
-        self.msg_arrived(req_event.request)
+
+        if self.is_registered(req_event.request):
+            self.msg_arrived(req_event.request)
+            return
 
         # reply registry and dispatcher's registry are most often mutually exclusive
         # going with try except because the hit rate to the self.registry will be high
         # when compared to reply registry
         try:
-            handler = self.registry[req_event.root_code]
+            if req_event.root_code == REQUESTS_HEADERS.REQUEST:
+                handler = self.registry[req_event.root_code][req_event.request.header]
+                # a simple handler that is associated with requests root-code
+            else:
+                handler = self.registry[req_event.root_code]
         except KeyError:
             return
 
@@ -138,6 +148,12 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         except Exception as e:
             # we can't afford exceptions here as they move into QueueMixIn
             _logger.warning(f"{handler}({req_event}) failed with \n", exc_info=e)
+
+    def register_simple_handler(self, header, handler):
+        """Register a simple callback against ``REQUESTS_HEADERS.REQUEST``
+        These handlers mostly invoked when a datagram is sent using ``requests_transport``, that has root_code = REQUESTS_HEADERS.REQUEST
+        """
+        self.registry[REQUESTS_HEADERS.REQUEST][header] = handler
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
@@ -168,12 +184,11 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"error:", exc_info=ip)
             return
 
-        _logger.info(f"received: {code} from : {addr}, {req_data.dict=}")
+        # _logger.info(f"from : {addr}, received: ({code=},{req_data.msg_id=})")
         event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
         self.dispatcher(event)
 
 
-async def end_requests():
-    Dock.kademlia_network_server.stop()
-    Dock.requests_endpoint.close()
-    Dock.requests_endpoint = None
+async def end_requests(app):
+    app.kademlia_network_server.stop()
+    app.requests_transport.close()

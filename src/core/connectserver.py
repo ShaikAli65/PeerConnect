@@ -6,7 +6,7 @@ import struct
 import time
 
 from src.avails import (RemotePeer, Wire, connect, const, use)
-from src.core import Dock, get_this_remote_peer
+from src.core.public import get_this_remote_peer
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -42,8 +42,8 @@ async def get_list_from(initiate_socket):
         return await get_initial_list(length, initiate_socket)
 
 
-async def list_error_handler():
-    req_peer = next(iter(Dock.peer_list.peers()))
+async def list_error_handler(app):
+    req_peer = next(iter(app.peer_list.peers()))
     # try:
     conn = await connect.connect_to_peer(_peer_obj=req_peer)
     # except OSError:

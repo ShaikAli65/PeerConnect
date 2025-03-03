@@ -1,23 +1,21 @@
 import asyncio
-import contextlib
-import socket
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from itertools import count
-from typing import Iterable, TYPE_CHECKING, Union, ValuesView
+from typing import Iterable, TYPE_CHECKING, ValuesView
 from weakref import WeakSet
 
-import src.avails.connect as connect
 from src.avails.bases import HasID, HasIdProperty, HasPeerId
 
 """
 This module contains simple storages used across the peer connect
-1. 
+1. TransfersBookKeeper
 2. PeerDict
-3. SafeSet
-4. FileDict
-5. SocketStore
-6. SocketCache
 """
+
+match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
+
+
+# (self, peer_id:  str, transfer_handle: HasID | HasIdProperty)
 
 
 class PeerDict(dict):
@@ -88,41 +86,41 @@ class TransfersBookKeeper:
         self.__completed = defaultdict(WeakSet)  # str: flip[PeerFilePool]
         self.__current = defaultdict(set)  # str: flip[PeerFilePool]
 
-    def add_to_current(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
+    def add_to_current(self, peer_id, transfer_handle):
         self.__current[peer_id].add(transfer_handle)
         self.__continued[peer_id].discard(transfer_handle)
 
-    def add_to_completed(self, peer_id: str, transfer_handle: HasID | HasIdProperty):
+    def add_to_completed(self, peer_id, transfer_handle):
         self.__current[peer_id].discard(transfer_handle)
         self.__continued[peer_id].discard(transfer_handle)
         self.__completed[peer_id].add(transfer_handle)
 
-    def add_to_scheduled(self, key, transfer_handle: HasID | HasIdProperty):
+    def add_to_scheduled(self, key, transfer_handle):
         self.__scheduled[key] = transfer_handle
 
-    def add_to_continued(self, peer_id: str, file_pool):
+    def add_to_continued(self, peer_id, file_pool):
         self.__current[peer_id].discard(file_pool)
         self.__continued[peer_id].add(file_pool)
 
-    def swap(self, peer_id: str, file_pool):
+    def continued_to_completed(self, peer_id, file_pool):
         self.__continued[peer_id].remove(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def _get_running_transfers(self, peer_id: str, file_id=None):
+    def _get_running_transfers(self, peer_id, file_id=None):
         if file_id:
             return next(file for file in self.__current[peer_id] if file.id == file_id)
         return list(self.__current[peer_id])
 
-    def _get_completed_transfer(self, peer_id: str, file_id):
+    def _get_completed_transfer(self, peer_id, file_id):
         return next(file for file in self.__completed[peer_id] if file.id == file_id)
 
-    def _get_continued_file(self, peer_id: str, file_id):
+    def _get_continued_file(self, peer_id, file_id):
         return next(file for file in self.__continued[peer_id] if file.id == file_id)
 
     def get_scheduled(self, file_id):
         return self.__scheduled.get(file_id, None)
 
-    def get_transfer(self, peer_id: str, file_id):
+    def get_transfer(self, peer_id, file_id):
         try:
             return self._get_running_transfers(peer_id, file_id)
         except StopIteration:
@@ -158,90 +156,42 @@ class TransfersBookKeeper:
             return running[0]
         return None
 
-    def stop_all_files(self):
-        for file_set in self.__current.values():
-            for file in file_set:
-                file.break_loop()
-        self.__continued.update(self.__current)
-        self.__current.clear()
-        return
+
+if TYPE_CHECKING:
+    from src.transfers.abc import AbstractTransferHandle
 
 
-class SocketStore:
-    """
-    a bare soft wrapper to close multiple sockets
-    """
-    __slots__ = 'storage',
+    class TransfersBookKeeper:
+        def add_to_current(self, peer_id: str, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
 
-    def __init__(self):
-        self.storage = set()
+        def add_to_completed(self, peer_id: str, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
 
-    def add_socket(self, sock):
-        self.storage.add(sock)
+        def add_to_scheduled(self, key, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
 
-    def remove_socket(self, sock):
-        self.storage.discard(sock)
+        def add_to_continued(self, peer_id: str, file_pool): ...
 
-    def close_all(self):
-        for sock in self.storage:
-            with contextlib.suppress(OSError, socket.error):
-                sock.close()
+        def swap(self, peer_id: str, file_pool): ...
 
+        def _get_running_transfers(self, peer_id: str, file_id=None) -> AbstractTransferHandle: ...
 
-class SocketCache:
-    """
-    Maintains a pool of active sockets between peers
+        def _get_completed_transfer(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
 
-    """
+        def _get_continued_file(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
 
-    def __init__(self, max_limit=4):
-        self.socket_cache: dict[str: connect.Socket] = OrderedDict()
-        self.max_limit = max_limit
+        def get_scheduled(self, file_id) -> AbstractTransferHandle: ...
 
-    def add_peer_sock(self, peer_id: str, peer_socket):
-        if len(self.socket_cache) >= self.max_limit:
-            self.socket_cache.popitem(last=False)
-        self.socket_cache[peer_id] = peer_socket
-        return peer_socket
+        def get_transfer(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
 
-    def get_socket(self, peer_id) -> Union[connect.Socket, None]:
-        sock = self.socket_cache.pop(peer_id, None)
-        if sock:
-            self.socket_cache[peer_id] = sock
-        return sock
+        @property
+        def continued(self) -> int: ...  # noqa
 
-    def is_connected(self, peer_id) -> Union[connect.Socket, bool]:
-        try:
-            sock = self.socket_cache[peer_id]
-            if connect.is_socket_connected(sock):
-                return sock
-            return False
-        except KeyError:
-            return False
+        @property
+        def completed(self) -> int: ...  # noqa
 
-    def remove_and_close(self, peer_id):
-        try:
-            sock = self.socket_cache[peer_id]
-            del self.socket_cache[peer_id]
-            sock.close()
-        except KeyError:
-            return
-        except (OSError, socket.error):
-            del self.socket_cache[peer_id]
+        @property
+        def current(self) -> int: ...  # noqa
 
-    def clear(self):
-        self.__close_all_socks()
-        self.socket_cache.clear()
+        @classmethod
+        def get_new_id(cls) -> str: ...
 
-    def __close_all_socks(self):
-        for sock in list(self.socket_cache.values()):
-            try:
-                sock.close()
-            except Exception:  # noqa
-                pass
-
-    def __contains__(self, item: str):
-        return item in self.socket_cache
-
-    def __del__(self):
-        self.__close_all_socks()
+        def check_running(self, peer_id) -> AbstractTransferHandle | None: ...

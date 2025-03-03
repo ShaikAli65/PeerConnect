@@ -1,17 +1,15 @@
-*.ini
-!default*.ini
-logs/*
-!logs/.gitkeep
-*.logs
+configs/profiles/*
+
+logs
+*.log
+
 .idea
 .vscode
 __pycache__/*
 *.pyc
 *venv
-bin/*
-!bin/peerconnect.bat
-!bin/peerconnect.sh
-!bin/requirements.txt
+*setup_completed*
+
 reports
 
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
@@ -163,7 +161,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+src_docs/_build/
 
 # PyBuilder
 .pybuilder/

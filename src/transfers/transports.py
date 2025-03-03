@@ -14,7 +14,7 @@ class RequestsTransport(BaseTransport):  # just for type hinting
     which is further used to detect and multiplex to different registered dispatchers
 
     Note:
-        no need to use this as **Wire.send_*(self.transport)**, that is only for bare sockets
+        no need to use this with **Wire.send_*(self.transport)**, that is only for bare sockets
 
     Usage:
         >>> class Subclass(RequestsTransport):
@@ -25,7 +25,7 @@ class RequestsTransport(BaseTransport):  # just for type hinting
     """
 
     __slots__ = 'transport', 'trigger'
-    _trigger = b''
+    _trigger = REQUESTS_HEADERS.REQUEST
 
     def __init__(self, transport, _event_trigger_header=None):
         super().__init__()
@@ -46,7 +46,7 @@ class KademliaTransport(RequestsTransport):
     _trigger = REQUESTS_HEADERS.KADEMLIA
 
     @override
-    def sendto(self, data: bytes, addr: tuple[str, int] = None):
+    def sendto(self, data: bytes, addr: tuple[str, int] | tuple[str, int, int, int] = None):
         formatted = bytes(WireData(data=data))
         return super().sendto(formatted, addr)
 
