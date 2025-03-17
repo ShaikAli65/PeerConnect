@@ -16,6 +16,7 @@ from rpcudp.protocol import RPCProtocol
 from src.avails import RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.events import RequestEvent
+from src.avails.useables import override
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import AppType, ReadOnlyAppType
@@ -324,6 +325,11 @@ class PeerServer(network.Server):
 
         return False
 
+    @override
+    def bootstrappable_neighbors(self):
+        neighbors = self.protocol.router.find_neighbors(self.node)
+        return [peer.req_uri[:2] for peer in neighbors]
+
     async def load_state(self):  # noqa
         if not os.path.exists(self.state_dump_file):
             return
@@ -338,7 +344,7 @@ class PeerServer(network.Server):
 
         if data['neighbors']:
             try:
-                await self.bootstrap(data['neighbors'])
+                await self.bootstrap(self.app_ctx.addr_tuple(t[0], t[1]) for t in data['neighbors'])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
 

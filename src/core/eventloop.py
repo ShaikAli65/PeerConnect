@@ -15,12 +15,19 @@ if sys.platform == 'win32':
             s.set_loop(_asyncio.get_running_loop())
             return s
 
+        def sendto(self, conn, buf, flags=0, addr=None):
+            return super().sendto(conn, buf, flags, addr)
+
 
     class CustomProactorEventLoop(_asyncio.ProactorEventLoop):
         def __init__(self, proactor: _asyncio.IocpProactor | None = None) -> None:
             if proactor is None:
                 proactor = CustomIocpProactor()
             super().__init__(proactor)
+
+        def sock_sendto(self, sock, data, address):
+            assert isinstance(address[0], str), f"invalid address: {address}"
+            return super().sock_sendto(sock, data, address)
 
 
     class CustomWindowsProactorEventLoopPolicy(_asyncio.WindowsProactorEventLoopPolicy):

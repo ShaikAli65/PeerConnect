@@ -124,10 +124,10 @@ class RumorMongerProtocol:
 
         if not data.fields_check():
             print(f"fields missing, ignoring message: {data.actual_data}")
-            return
+            return False
 
         if not self.policy.should_rumor(data):
-            return
+            return False
 
         if data.id in self.message_list:
             # no need to re-enter message into list, this refreshes timer of that message
@@ -135,8 +135,9 @@ class RumorMongerProtocol:
             self._gossip_forward(message=data)
         else:
             self.gossip_message(data)
-
         print("[GOSSIP] message received and processed: %s" % data)
+
+        return True
 
     def __forward_payload(self, message, peer_id):
         peer_obj = self.global_peer_list.get_peer(peer_id)

@@ -91,7 +91,7 @@ async def initiate_connection(app_ctx):
 
 
 async def setup_server_connection(app_ctx):
-    address = (const.SERVER_IP, const.PORT_SERVER)
+    address = app_ctx.addr_tuple(const.SERVER_IP, const.PORT_SERVER)
     conn = None
     for i, timeout in enumerate(use.get_timeouts(0.1)):
         try:
@@ -118,7 +118,7 @@ async def send_quit_status_to_server(app_ctx):
     try:
         app_ctx.this_remote_peer.status = RemotePeer.OFFLINE
         sock = await connect.create_connection_async(
-            (const.SERVER_IP, const.PORT_SERVER),
+            app_ctx.addr_tuple(const.SERVER_IP, const.PORT_SERVER),
             timeout=const.SERVER_TIMEOUT
         )
         with sock:

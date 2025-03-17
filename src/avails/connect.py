@@ -3,7 +3,7 @@ import ipaddress
 import logging
 import socket as _socket
 
-from src.avails import useables
+from src.avails import constants as const, useables  # noqa
 from src.avails._asocket import *  # noqa
 from src.avails._conn import *  # noqa
 from src.avails._netproto import *  # noqa
@@ -64,7 +64,7 @@ def create_connection_sync(
     sock.settimeout(timeout)
 
     if const.USING_IP_V6 and len(address) != 4:
-        address = const.THIS_IP.addr_tuple(port=address[1], ip=address[0])
+        raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
 
     sock.connect(address)
     return sock
@@ -73,7 +73,7 @@ def create_connection_sync(
 async def create_connection_async(address, timeout=None) -> Socket:
     loop = _asyncio.get_running_loop()
     if const.USING_IP_V6 and len(address) != 4:
-        address = const.THIS_IP.addr_tuple(port=address[1], ip=address[0])
+        raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
     sock = await const.PROTOCOL.create_connection_async(loop, address, timeout)
     return sock
 
@@ -97,7 +97,8 @@ def connect_to_peer(
 
     """
 
-    address = getattr(_peer_obj, to_which)
+    addr = getattr(_peer_obj, to_which)
+    address = const.THIS_IP.addr_tuple(port=addr[1], ip=addr[0])
 
     if timeout is None:
         return create_connection_sync(address)
@@ -132,9 +133,8 @@ async def connect_to_peer(
     :returns: connected socket if successful
     :raises: OSError
     """
-
-    address = getattr(_peer_obj, to_which)
-
+    addr = getattr(_peer_obj, to_which)
+    address = const.THIS_IP.addr_tuple(port=addr[1], ip=addr[0])
     retry_count = 0
 
     if timeout is None:
