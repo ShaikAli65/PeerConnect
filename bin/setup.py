@@ -119,22 +119,35 @@ def register_application(app_name, app_path, version="1.0", publisher="PeerConne
 
 def add_to_path(app_dir):
     """Add application directory to the Windows PATH environment variable."""
-    import winreg
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Environment",
                             0, winreg.KEY_ALL_ACCESS) as key:
-            current_path, _ = winreg.QueryValueEx(key, "Path")
+            try:
+                current_path, _ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current_path = ""
 
-            if app_dir not in current_path:
-                new_path = f"{current_path};{app_dir}"
+            if app_dir not in current_path.split(';'):
+                new_path = f"{current_path};{app_dir}" if current_path else app_dir
                 winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
                 print(f"Added {app_dir} to PATH")
+
+                # Notify system about the environment variable change
+                HWND_BROADCAST = 0xFFFF
+                WM_SETTINGCHANGE = 0x1A
+                SMTO_ABORTIFHUNG = 0x0002
+                result = ctypes.c_long()
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    HWND_BROADCAST, WM_SETTINGCHANGE, 0, 'Environment',
+                    SMTO_ABORTIFHUNG, 5000, ctypes.byref(result))
             else:
-                print("Path already exists in PATH variable.")
+                print(f"{app_dir} is already in the PATH variable.")
     except PermissionError:
-        print("Run this script as Administrator!")
+        print("Permission denied: Unable to access the registry. "
+              "Try running this script as an Administrator.")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"An error occurred: {e}")
 
 
 def create_data_folder():
