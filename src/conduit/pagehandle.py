@@ -7,7 +7,9 @@ Interfacing with UI using websockets
 import asyncio
 import asyncio as _asyncio
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import overload
 
 import websockets
@@ -225,9 +227,32 @@ async def start_websocket_server():
         logger.info("[PAGE HANDLE] websocket server closed")
 
 
-async def run_page_server(host="localhost"):
-    args = "-m", "http.server", "-b", f"{host}", "-d", f"{const.PATH_PAGE}", f"{const.PORT_PAGE_SERVE}",
-    await asyncio.create_subprocess_exec(f"python3", *args)
+def _http_server(bind, port, directory):
+    class HTTPServer(ThreadingHTTPServer):
+        def finish_request(self, request, client_address):
+            self.RequestHandlerClass(request, client_address, self, directory=directory)
+
+    with HTTPServer((bind, port), SimpleHTTPRequestHandler) as httpd:
+        host, port = httpd.socket.getsockname()[:2]
+        url_host = f'[{host}]' if ':' in host else host
+        logger.info(
+            f"Serving HTTP on {host} port {port} "
+            f"(http://{url_host}:{port}/) ..."
+        )
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            logger.info("\nKeyboard interrupt received, exiting.")
+
+
+def run_page_server(host="localhost", _exit_stack=_exit_stack):
+    async def _helper():
+        with ProcessPoolExecutor(1) as pool:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(pool, _http_server, host, const.PORT_PAGE_SERVE, const.PATH_PAGE)
+
+    run_server = asyncio.create_task(_helper(), name="http-demon-for-frontend")
+    _exit_stack.push_async_callback(use.safe_cancel_task, run_server)
 
 
 async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
@@ -256,7 +281,7 @@ async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
     msg_disp.register_handler(headers.DATA, data_disp.submit)
     msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
 
-    await run_page_server()  # TODO
+    run_page_server()
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(start_websocket_server())

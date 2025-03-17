@@ -87,7 +87,7 @@
       "handlers": [
         "discovery_handler"
       ],
-      "propagate": true
+      "propagate": false
     }
   }
 }

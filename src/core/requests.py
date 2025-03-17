@@ -35,7 +35,12 @@ async def initiate(app: AppType):
     req_dispatcher = RequestsDispatcher()
     await app.exit_stack.enter_async_context(req_dispatcher)
     try:
-        transport = await setup_endpoint(bind_address, multicast_address, req_dispatcher)
+        transport = await setup_endpoint(
+            bind_address,
+            multicast_address,
+            req_dispatcher,
+            app.read_only(),
+        )
         _logger.debug("created requests transport")
     except OSError as oe:
         print(const.BIND_FAILED)
@@ -72,10 +77,8 @@ async def initiate(app: AppType):
     await app.state_manager_handle.put_state(discovery_state)
     await app.state_manager_handle.put_state(add_to_lists)
 
-    await app.exit_stack.enter_async_context(kad_server)
 
-
-async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
+async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ctx):
     assert isinstance(bind_address, tuple) and isinstance(multicast_address,
                                                           tuple), "expecting bind_address and multicast_address"
     loop = asyncio.get_running_loop()
@@ -86,7 +89,7 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher):
 
     _subscribe_to_multicast(base_socket, multicast_address)
     transport, _ = await loop.create_datagram_endpoint(
-        functools.partial(RequestsEndPoint, req_dispatcher),
+        functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
         sock=base_socket
     )
     return transport
@@ -143,6 +146,8 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
         try:
             await f if inspect.isawaitable(f := handler(req_event)) else None
+        except RuntimeError:
+            await self._handle_runtime_error(_logger)
         except Exception as e:
             # we can't afford exceptions here as they move into QueueMixIn
             _logger.error(f"{handler}({req_event}) failed with \n", exc_info=e)
@@ -155,9 +160,9 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
-    __slots__ = 'transport', 'dispatcher'
+    __slots__ = 'transport', 'dispatcher', "_app_ctx"
 
-    def __init__(self, dispatcher):
+    def __init__(self, dispatcher, app_ctx):
         """A Requests Endpoint
 
             Handles all the requests/messages come to the application's requests endpoint
@@ -165,16 +170,21 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
             Args:
                 dispatcher(RequestsDispatcher) : dispatcher object that gets `called` when a datagram arrives
+                app_ctx(ReadOnlyAppType): application context object to retrieve addr_tuple
         """
 
         self.transport = None
         self.dispatcher = dispatcher
+        self._app_ctx = app_ctx
 
     def connection_made(self, transport):
         self.transport = transport
         _logger.info(f"started requests endpoint at {transport.get_extra_info('socket')}")
 
     def datagram_received(self, actual_data, addr):
+        if self._app_ctx.finalizing.is_set():
+            _logger.warning(f"application is finalizing, ignoring request packet from: {addr}")
+            return
         code, stripped_data = actual_data[:1], actual_data[1:]
         try:
             req_data = unpack_datagram(stripped_data)
@@ -182,8 +192,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"error:", exc_info=ip)
             return
 
-        # _logger.info(f"from : {addr}, received: ({code=},{req_data.msg_id=})")
-        event = RequestEvent(root_code=code, request=req_data, from_addr=addr)
+        event = RequestEvent(root_code=code, request=req_data, from_addr=self._app_ctx.addr_tuple(*addr[:2]))
         self.dispatcher(event)
 
 

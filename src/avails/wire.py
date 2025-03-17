@@ -52,11 +52,14 @@ class WireData:
 
     @classmethod
     def load_from(cls, data: bytes):
+        list_of_attributes = None
         try:
             list_of_attributes = umsgpack.loads(data)
             header, _id, version, body, peer_id = list_of_attributes
-        except (ValueError, umsgpack.UnpackException) as exp:
-            raise InvalidPacket from exp
+        except (ValueError, umsgpack.UnpackException, TypeError) as exp:
+            ip = InvalidPacket()
+            ip.add_note(f"items={list_of_attributes}")
+            raise ip from exp
 
         return cls(header, _id, peer_id, version=version, **body)
 

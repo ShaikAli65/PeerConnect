@@ -1,3 +1,18 @@
+"""Messages dispatchers and senders
+
+Working:
+
+* MsgDispatcher
+    - CMD_TEXT : MessageHandler
+
+* ConnectionsDispatcher
+    - CMD_MSG_CONN: MessageConnHandler
+    - PING: PingHandler
+
+* MessageConnHandler
+    Reads stream, creates message events, calls message dispatcher to dispatch message events
+
+"""
 import asyncio
 import logging
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -238,7 +253,7 @@ class MsgSender:
         return self._connected.is_set()
 
     async def __aenter__(self):
-        self._sender_task = asyncio.create_task(self._sender_manager())
+        self._sender_task = asyncio.create_task(self._sender_manager(), name=f"message-sender-{self.peer.ip}")
 
     async def stop(self):
         self._message_senders.pop(self.peer.peer_id)
@@ -287,13 +302,13 @@ async def send_message(msg, peer_id):
     """Sends message to peer
 
     Args:
-        msg(WireData): message to send
+        msg(str): message to send
         peer_id(str): peer id to send to
     """
 
     if sender := MsgSender.get_sender(peer_id):
         _logger.debug(f"found msg sender for {peer_id}, sending message")
-        await sender.send(bytes(msg))
+        await sender.send(msg.encode())
         return
 
     await connect_ahead(peer_id)

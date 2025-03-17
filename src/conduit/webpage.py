@@ -1,4 +1,4 @@
-from src.avails import DataWeaver, RemotePeer, use
+from src.avails import DataWeaver, use
 from src.conduit import headers
 from src.conduit.pagehandle import front_end_data_dispatcher
 from src.managers import ProfileManager
@@ -57,8 +57,8 @@ async def peer_connected(peer_id):
 
 async def update_peer(peer):
     data = DataWeaver(
-        header=headers.NEW_PEER if peer.status == RemotePeer.ONLINE else headers.REMOVE_PEER,
-        content={"peer": _json_peer(peer)},
+        header=headers.NEW_PEER if peer.is_online else headers.REMOVE_PEER,
+        content=_json_peer(peer),
         peer_id=peer.peer_id,
     )
     front_end_data_dispatcher(data)

@@ -71,7 +71,10 @@ async def send_file(command_data: DataWeaver):
 
 
 async def send_text(command_data: DataWeaver):
-    return await message.send_message(command_data.content, command_data.peer_id)
+    peer_id = command_data.peer_id
+    if isinstance(peer_id, list):
+        peer_id = peer_id[0]
+    return await message.send_message(command_data.content, peer_id)
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):

@@ -67,6 +67,35 @@ class QueueMixIn:
         """A handy way to enter task group context synchronously, Useful in constructors """
         use.sync(self._task_group.__aenter__())
 
+    def is_healthy(self):
+        async def do_nothing():
+            pass
+
+        try:
+            self(do_nothing())
+            return True
+        except RuntimeError:
+            return False
+
+    async def repair(self, logger):
+        try:
+            await self._task_group.__aexit__(None, None, None)
+        except ExceptionGroup:
+            logger.warning(f"{self.__class__.__name__}, skipping these errors, creating new task group", exc_info=True)
+
+        self._task_group = TaskGroup()
+        await self.__aenter__()
+
+    async def _handle_runtime_error(self, logger):
+        logger.warning(f"got unexpected runtime error, checking {self.__class__.__name__} queue")
+        if self.is_healthy():
+            logger.info("requests dispatcher queue healthy")
+        else:
+            logger.warning("requests dispatcher queue not healthy", exc_info=True)
+            logger.debug("recovering...")
+            await self.repair(logger)
+            logger.debug("recovery done")
+
     async def __aexit__(self, *exp_details):
         try:
             return await self._task_group.__aexit__(*exp_details)

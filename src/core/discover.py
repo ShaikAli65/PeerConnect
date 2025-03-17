@@ -89,8 +89,8 @@ def DiscoveryReplyHandler(app_ctx: ReadOnlyAppType):
 def DiscoveryRequestHandler(app_ctx: ReadOnlyAppType):
     async def handle(event: RequestEvent):
         req_packet = event.request
-        if req_packet["reply_addr"][0] == const.THIS_IP:
-            _logger.debug("ignoring echo")
+        if req_packet["reply_addr"][0] == app_ctx.this_ip.ip[0]:
+            _logger.debug(f"ignoring echo, {req_packet['reply_addr']}")
             return
         _logger.info(f"discovery replying to req: {req_packet.body}")
         data_payload = WireData(
@@ -113,10 +113,15 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         self.msg_arrived(wire_data)
-        handle = self.registry[wire_data.header]
+        handle = self.registry.get(wire_data.header, None)
+        if handle is None:
+            return
+
         _logger.debug(f"dispatching request {handle}")
         try:
             await handle(event)
+        except RuntimeError:
+            await self._handle_runtime_error(_logger)
         except Exception as exp:
             _logger.error(f"{handle} failed with :", exc_info=exp)
 
@@ -178,7 +183,11 @@ async def _try_asking_user(transport, discovery_packet):
     while True:
         if peer_name := await webpage.ask_user_peer_name_for_discovery(reason):
             try:
-                async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
+                async for family, sock_type, proto, _, addr in use.get_addr_info(
+                        peer_name,
+                        const.PORT_REQ,
+                        family=const.IP_VERSION
+                ):
                     transport.sendto(discovery_packet, addr)
                     return
             except OSError:

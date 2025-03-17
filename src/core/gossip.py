@@ -1,10 +1,14 @@
+import logging
+
 from src.avails import BaseDispatcher, GossipMessage, const
-from src.avails.events import GossipEvent
+from src.avails.events import GossipEvent, RequestEvent
 from src.avails.mixins import QueueMixIn
 from src.core import search
 from src.core.app import AppType, ReadOnlyAppType
 from src.transfers import GOSSIP_HEADER, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
+
+_logger = logging.getLogger(__name__)
 
 
 class GlobalGossipRumorMessageList(SimpleRumorMessageList):
@@ -35,11 +39,21 @@ def GlobalGossipMessageHandler(app_ctx: ReadOnlyAppType):
 
 
 class GossipDispatcher(QueueMixIn, BaseDispatcher):
-    async def submit(self, event):
+    """Dispatches gossip messages from multiplexed requests endpoint"""
+
+    async def submit(self, event: RequestEvent):
         gossip_message = GossipMessage(event.request)
-        handler = self.registry[gossip_message.header]
+        handler = self.registry.get(gossip_message.header, None)
+        if handler is None:
+            return
         g_event = GossipEvent(gossip_message, event.from_addr)
-        await handler(g_event)
+        try:
+            await handler(g_event)
+        except RuntimeError:
+            await self._handle_runtime_error(_logger)
+        except Exception as e:
+            # we can't afford exceptions here as they move into QueueMixIn
+            _logger.error(f"{handler}({g_event}) failed with \n", exc_info=e)
 
 
 async def initiate_gossip(data_transport, req_dispatcher, app_ctx: AppType):
@@ -64,4 +78,3 @@ async def initiate_gossip(data_transport, req_dispatcher, app_ctx: AppType):
     await app_ctx.exit_stack.enter_async_context(g_dispatcher)
     app_ctx.gossip.dispatcher = g_dispatcher
     return g_dispatcher
-

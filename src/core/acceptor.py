@@ -111,9 +111,16 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
         _logger.info(f"dispatching connection with header {event.handshake.header} to {handler}")
 
         try:
-            r = handler(event)
-            if isawaitable(r):
-                await asyncio.ensure_future(r)
+            try:
+                r = handler(event)
+                if isawaitable(r):
+                    await asyncio.ensure_future(r)
+            except RuntimeError:
+                await self._handle_runtime_error(_logger)
+            except Exception as e:
+                # we can't afford exceptions here as they move into QueueMixIn
+                _logger.error(f"{handler}({event}) failed with \n", exc_info=e)
+
         finally:
             await self._try_parking(handler, event.connection)
 
@@ -239,6 +246,7 @@ class Acceptor(AExitStackMixIn):
         handshake = await self._perform_handshake(initial_conn)
         if not handshake:
             return
+        _logger.info(f"handshake successful {handshake}")
         peer = await peers.get_remote_peer(handshake.peer_id)
         conn = Connection.create_from(initial_conn, peer)
         self._exit_stack.enter_context(initial_conn)

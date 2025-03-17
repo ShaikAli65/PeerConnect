@@ -1,11 +1,12 @@
+import ctypes
 import io
 import os
-import traceback
-import urllib.request
-import zipfile
 import sys
 import time
-import ctypes
+import traceback
+import urllib.request
+import winreg
+import zipfile
 
 
 def is_admin():
@@ -15,9 +16,9 @@ def is_admin():
     except:
         return False
 
+
 APP_NAME = os.environ.get("APP_NAME", "PeerConnect")
 ZIP_FILE_NAME = f"{APP_NAME}.zip"
-
 
 GITHUB_REPO_DOWNLOAD_URL = (
     f"https://github.com/ShaikAli65/{APP_NAME}/releases/latest/download/{ZIP_FILE_NAME}"
@@ -31,6 +32,7 @@ def format_size(size_bytes):
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
+
 
 def download_zip(url):
     """Download ZIP file with progress display"""
@@ -49,7 +51,7 @@ def download_zip(url):
                     break
                 data.append(chunk)
                 downloaded += len(chunk)
-                
+
                 elapsed = time.time() - start_time
                 speed = downloaded / elapsed if elapsed > 0 else 0
                 percent = (downloaded / total_size) * 100 if total_size > 0 else 0
@@ -84,17 +86,17 @@ def extract_zip(zip_content, target_directory):
             members = zip_ref.namelist()
             total_files = len(members)
             max_name_length = max(len(name) for name in members) if members else 0
-            
+
             for i, member in enumerate(members, 1):
                 zip_ref.extract(member, target_directory)
                 display_name = member if len(member) <= 30 else f"...{member[-27:]}"
                 sys.stdout.write(
                     f"\rExtracting [{i}/{total_files}] "
                     f"{display_name.ljust(30)} "
-                    f"({i/total_files*100:.1f}%)"
+                    f"({i / total_files * 100:.1f}%)"
                 )
                 sys.stdout.flush()
-            
+
             print("\nExtraction completed successfully.")
 
     except Exception as e:
@@ -102,8 +104,6 @@ def extract_zip(zip_content, target_directory):
 
 
 def register_application(app_name, app_path, version="1.0", publisher="PeerConnect"):
-    import winreg
-
     key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\\" + app_name
     try:
         with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
@@ -121,7 +121,8 @@ def add_to_path(app_dir):
     """Add application directory to the Windows PATH environment variable."""
     import winreg
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment", 0, winreg.KEY_ALL_ACCESS) as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+                            0, winreg.KEY_ALL_ACCESS) as key:
             current_path, _ = winreg.QueryValueEx(key, "Path")
 
             if app_dir not in current_path:
@@ -151,6 +152,20 @@ def create_data_folder():
     return data_folder
 
 
+def add_to_search_reg(exe_name, exe_path, install_dir):
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\App Paths\{}".format(exe_name)
+    try:
+        # Create or update the registry key
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, reg_path) as key:
+            # Set the default value to the full path of the executable
+            winreg.SetValueEx(key, None, 0, winreg.REG_SZ, exe_path)
+            # Optional: Add the directory to the PATH when the app runs
+            winreg.SetValueEx(key, "Path", 0, winreg.REG_SZ, install_dir)
+        print(f"Added registry entry for {exe_name}.")
+    except Exception as e:
+        print(f"Failed to update registry: {str(e)}")
+
+
 def main():
     if not is_admin():
         print("Requesting administrator privileges...")
@@ -161,7 +176,6 @@ def main():
         sys.exit()
 
     zip_content = download_zip(GITHUB_REPO_DOWNLOAD_URL)
-
 
     program_files = os.environ.get("ProgramFiles")
     if not program_files:
@@ -176,11 +190,12 @@ def main():
 
     extract_zip(zip_content, app_install_dir)
     app_dir = fr"{app_install_dir}\{APP_NAME}"
-    
+
     register_application(APP_NAME, app_dir)
     add_to_path(app_dir)
-
+    add_to_search_reg(APP_NAME, os.path.join(app_dir, f'{APP_NAME}.exe'), app_dir)
     create_data_folder()
+
     print("Setup completed successfully.")
 
 

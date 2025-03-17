@@ -26,32 +26,40 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 - A good test suite
 - Application is not Chaos-Tested for network partitions
 
-## Usage
+## Installation
 
-  TBD
+  Visit installation wiki [here](https://github.com/ShaikAli65/PeerConnect/wiki/Installation)
+
+
+## Usage for source clone
+
+```sh
+git clone https://github.com/ShaikAli65/PeerConnect.git
+cd PeerConnect
+```
 
 ### Windows
 
 ```
-peerconnect.bat
+bin\peerconnect.bat
 ```
 
 ### Linux
 
 ```
-peerconnect.sh
+bin/peerconnect.sh
 ```
 
 - Run the script, if any errors occur raise an issue and include stdout of the script
 
-### Future Plans
+## Future Plans
 
 - **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
 - **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
   but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream,
   should respect backpressure, utilizing maximum bandwidth
 
-### More Features
+## More Features
 
 These are not planned for completion but code (Internal High Level APIs) tries it's best to be extensible to include various functionalities
 
@@ -80,7 +88,8 @@ The code in the main branch is a functional version of PeerConnect. It employs a
 - **[websockets](https://websockets.readthedocs.io/)**: Facilitates Inter-Process Communication (IPC) between the backend and the frontend.
 
 ### Dev Branch
-
+ *default*
+ 
 The dev branch is a complete rewrite using Python’s asynchronous features, aiming to scale PeerConnect for **larger, distributed networks** without a centralized entity. This branch includes:
 
 - **Distributed Hash Tables (DHT)**: Implements the **Kademlia** protocol for maintaining decentralized peer connections.
