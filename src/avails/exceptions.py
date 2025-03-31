@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 
 class DispatcherFinalizing(Exception):
@@ -54,3 +55,8 @@ class RemotePeerNotFound(Exception):
 
 class SearchExhausted(Exception):
     """Search iterator is expired, cannot be iterated"""
+
+
+class FailedToSend(TransferIncomplete):
+    """Failed to Send Something"""
+    item: Any

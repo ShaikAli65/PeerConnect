@@ -6,6 +6,7 @@ lazy loading is used to avoid circular import through initiate_acceptor function
 
 import asyncio
 import logging
+import socket
 import threading
 import traceback
 from asyncio import CancelledError, TaskGroup
@@ -27,7 +28,7 @@ from src.transfers import HEADERS
 _logger = logging.getLogger(__name__)
 
 
-def _task_name(handshake):
+def task_name(handshake):
     return f"accept-con[{handshake.header}]"
 
 
@@ -50,9 +51,9 @@ async def initiate_acceptor(app_ctx: AppType):
 
 
 class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
-    """Dispatches incoming connections ...
+    """Dispatches incoming connections...
 
-    ... Based on the handshake header, used to identify services registered for incoming connections
+    ...Based on the handshake header, used to identify services registered for incoming connections
 
     Life Cycle of a Submitted ``ConnectionEvent``::
 
@@ -73,6 +74,8 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     {1}: there is a chance of registered handler cancelling its task, which will lead to cancellation of submit task if submit
          directly awaits on handler, so we keep that in its own task
 
+    Note:
+        Closes connections if anything unexpected happens
     """
     __slots__ = ()
     _parking_lot = {}
@@ -84,18 +87,19 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             try:
                 async with connection:
                     service_header = await asyncio.wait_for(Wire.recv_msg(connection), const.MAX_IDLE_TIME_FOR_CONN)
-            except (TimeoutError, OSError):
+            except (TimeoutError, OSError, InvalidPacket):
                 await conn_watcher.request_closing(connection)
+                return
             else:
                 event = ConnectionEvent(connection, service_header)
                 self._parking_lot.pop(connection)  # remove from passive mode
-                self(event, _task_name=_task_name(event.handshake))  # this spawns a seperate Task with self.submit
+                self(event, _task_name=task_name(event.handshake))  # this spawns a seperate Task with self.submit
 
         item = self._parked_item(
             connection,
             self._task_group.create_task(
                 watcher(),
-                name=f"watching socket for activity-[>{connection.socket.getpeername()}]"
+                name=f"watching socket for activity [> peer={connection.peer.ip}]"
             )
         )
 
@@ -137,9 +141,9 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             await asyncio.wait_for(connection.lock.acquire(), 1)
             connection.lock.release()
         except TimeoutError:
-            _logger.warning(f"failed to acquire connection lock from {handler}, closing connection")
+            _logger.error(f"failed to acquire connection lock from {handler}, closing connection")
             await conn_watcher.request_closing(connection)
-            # DESICION, whether we should forcefully release
+            # DESICION, whether we should forcefully release using
             # connection.lock.release() and park,
             # or to close connection itself
             return
@@ -207,7 +211,7 @@ class Acceptor(AExitStackMixIn):
                 #   try:
                 #       await future
                 #   except exceptions.CancelledError:
-                #       conn.close()
+                #       connection.close()
                 #       raise
                 #
                 # this part of asyncio internals does not handle OSError,
@@ -234,6 +238,7 @@ class Acceptor(AExitStackMixIn):
                 family=const.IP_VERSION,
                 backlog=self.back_log
             )
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         except OSError:
             print(const.BIND_FAILED)
             _logger.critical("failed to bind acceptor", exc_info=True)
@@ -253,7 +258,7 @@ class Acceptor(AExitStackMixIn):
         con_event = ConnectionEvent(conn, handshake)
         watcher = bandwidth.Watcher()
         watcher.watch(initial_conn, conn)
-        self._app_ctx.connections.dispatcher(con_event, _task_name=_task_name(handshake))
+        self._app_ctx.connections.dispatcher(con_event, _task_name=task_name(handshake))
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):

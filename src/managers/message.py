@@ -15,24 +15,27 @@ Working:
 """
 import asyncio
 import logging
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack
 from inspect import isawaitable
 
-from src.avails import BaseDispatcher, InvalidPacket, RemotePeer, Wire, WireData, const, use
+from src.avails import BaseDispatcher, Connection, InvalidPacket, RemotePeer, Wire, WireData, const, use
 from src.avails.connect import MsgConnection, MsgConnectionNoRecv
 from src.avails.events import ConnectionEvent, MessageEvent
-from src.avails.exceptions import InvalidStateError
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
+from src.avails.exceptions import CannotConnect, RemotePeerNotFound
+from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.conduit import webpage
-from src.core import bandwidth, peers
+from src.core import acceptor, bandwidth, connectivity, peers
 from src.core.app import App, ReadOnlyAppType, provide_app_ctx
 from src.core.connector import Connector
 from src.transfers import HEADERS
+from src.transfers.messages import MsgReceiver, MsgSender
 
 _logger = logging.getLogger(__name__)
 
 _exit_stack = AsyncExitStack()
-_msg_conn_pool = {}
+
+
+# _msg_conn_pool = {}  # type: dict[str, MsgConnectionNoRecv]
 
 
 async def initiate(app_ctx: App):
@@ -42,30 +45,24 @@ async def initiate(app_ctx: App):
     msg_conn_handler = MessageConnHandler(app_ctx.read_only())
     app_ctx.connections.dispatcher.register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
     app_ctx.connections.dispatcher.register_handler(HEADERS.PING, PingHandler(app_ctx.read_only()))
+    app_ctx.connections.dispatcher.register_handler(
+        HEADERS.CMD_MSG_CONN_RECV_LOOP_BACK,
+        MessageRecvLoopBackHandler(app_ctx.read_only())
+    )
     await app_ctx.exit_stack.enter_async_context(data_dispatcher)
     await app_ctx.exit_stack.enter_async_context(_exit_stack)
+    await _exit_stack.enter_async_context(_msg_conn_pool)
 
 
-def MessageHandler():
-    async def handler(event: MessageEvent):
-        await webpage.msg_arrived(
-            event.msg.header,
-            event.msg["message"],
-            event.msg.peer_id
-        )
-
-    return handler
-
-
+@singleton_mixin
 class MsgDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
-    """
-    Works with ProcessDataHandler that sends any events into StreamDataDispatcher
-    which dispatches event into respective handlers
-    """
     __slots__ = ()
 
     async def submit(self, event: MessageEvent):
-        self.msg_arrived(event.msg)
+
+        # self.reply_arrived(event.msg)  # no need of this
+        # handled directly at recv loop as an optimization
+
         message_header = event.msg.header
         try:
             handler = self.registry[message_header]
@@ -83,8 +80,132 @@ class MsgDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
             await asyncio.wait_for(r, const.TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
         except TimeoutError:
             _logger.debug(f"timeout at message processing task, cancelling {handler} task")
+        except RuntimeError:
+            await self._handle_run_time_error(_logger)  # noqa
         except Exception as exp:
             _logger.error(f"{handler=}, failed with error", exc_info=exp)
+
+
+# ================
+# connection pool
+# ================
+
+class _MsgConnectionPool:
+    _internal_msg_conn_pool = {}  # type: dict[str, MsgConnectionNoRecv]
+    # k:v :: peer_id: message-connection
+
+    _connector_calls = {}
+
+    def add(self, connection: Connection):
+        """Adds connection to pool
+
+        Gets peer_id from connection
+
+        Creates a msg connection that has no recv method and adds that, returns it
+
+        Args:
+            connection(Connection): connection to pool
+        Returns:
+            MsgConnectionNoRecv: msg connection into a send-only one
+        """
+
+        msg_conn_no_recv = self._internal_msg_conn_pool[connection.peer.peer_id] = MsgConnectionNoRecv(connection)
+        return msg_conn_no_recv
+
+    def get(self, peer_id):
+        return self._internal_msg_conn_pool.get(peer_id, None)
+
+    def remove(self, peer_id):
+        return self._internal_msg_conn_pool.pop(peer_id, None)
+
+    async def enter_connector(self, connector_callback):
+        connection = await connector_callback.__aenter__()
+        self._connector_calls[connection] = connector_callback
+        return connection
+
+    async def exit_connector_context(self, connection: Connection):
+        if connection not in self._connector_calls:
+            return
+
+        connector_lock = self._connector_calls.pop(connection)
+        return await connector_lock.__aexit__(*[None] * 3)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        nones = [None] * 3
+        for conn, _exit in self._connector_calls.items():
+            try:
+                await _exit.__aexit__(*nones)
+            except Exception as exp:
+                _logger.warning(
+                    "not expecting error in exiting connection context of message connection: {conn}",
+                    exc_info=exp,
+                )
+
+
+_msg_conn_pool = _MsgConnectionPool()
+
+
+async def _get_from_pool(peer):
+    """Get connection from pool
+    Checks whether any connection is available in pool or not
+
+    If a connection is found in pool,
+        then checks if the connection is active or not
+        if not removes connection from pool
+
+    Returns:
+        None | MsgConnectionNoRecv : None if connection is not found or inactive else corresponding MsgConnection object
+    """
+
+    connection = _msg_conn_pool.get(peer.peer_id)
+    if connection is None:
+        return connection
+
+    closed = await _refresh_pool(peer, connection)
+    if closed is True:
+        return None
+
+    return connection
+
+
+async def _refresh_pool(peer, msg_connection):
+    """Refresh connection pool by checking whether the connection is still active or not
+
+    Args:
+        peer(RemotePeer)
+        msg_connection(MsgConnection)
+
+    Returns:
+        bool: indicating whether the connection is removed or not
+    """
+    watcher = bandwidth.Watcher()
+    closed = await watcher.close_if_not_active(peer, msg_connection.connection)
+    if closed is True:
+        _msg_conn_pool.remove(peer.peer_id)
+        await _msg_conn_pool.exit_connector_context(msg_connection.connection)
+        return closed
+
+    return False
+
+
+# =============
+# handlers
+# =============
+
+
+def MessageHandler():
+    """Handle an incoming message"""
+
+    async def handler(event: MessageEvent):
+        await webpage.msg_arrived(
+            event.msg["msg"],
+            event.msg.peer_id
+        )
+
+    return handler
 
 
 def MessageConnHandler(app_ctx):
@@ -95,40 +216,55 @@ def MessageConnHandler(app_ctx):
     Args:
         app_ctx(ReadOnlyAppType): application context
     """
-    limiter = asyncio.Semaphore(const.MAX_CONCURRENT_MSG_PROCESSING)
 
-    async def process_once(msg_connection):
-        async with limiter:
-            try:
-                wire_data = await asyncio.wait_for(msg_connection.recv, const.MSG_RECV_TIMEOUT)
-                print(f"[STREAM DATA] new msg {wire_data}")  # debug
-                data_event = MessageEvent(wire_data, msg_connection)
-            except InvalidPacket:
-                pass
+    async def handle_duplication_conn(connection):
+        conn = await _get_from_pool(connection.peer)
+        if conn is not None:
+            # no duplicate connections allowed
+            closing_connection = WireData(
+                header=HEADERS.DUP_MSG_CONN,
+                peer_id=app_ctx.this_peer_id
+            )
+            await Wire.send_msg(conn.connection, closing_connection)
+            return True
 
-            await app_ctx.messages.dispatcher(data_event)
+        return False
 
     async def handler(event: ConnectionEvent):
-        finalizer = app_ctx.finalizing.is_set
-        patience_threshold = 10
-        counter = 0
-        async with event.connection:
-            msg_conn = MsgConnection(event.connection)
-            _msg_conn_pool[event.connection.peer] = event.connection
+        is_dup = await handle_duplication_conn(event.connection)
+        if is_dup is True:
+            return
+        ok = WireData(
+            header=HEADERS.MSG_CONN_OK,
+            peer_id=app_ctx.this_peer_id
+        )
 
-            while finalizer():
-                try:
-                    await process_once(msg_conn)
-                except TimeoutError:
-                    counter += 1
-                    if counter > patience_threshold:
-                        _logger.debug(f"message processing threshold reached, returning {event.connection=}")
-                        break
+        await Wire.send_msg(event.connection, ok)
+        _msg_conn_pool.add(event.connection)
+        receiver = MsgReceiver(app_ctx, MsgConnection(event.connection))
+        try:
+            async with event.connection:
+                await receiver.start_receiving()
+        except OSError:
+            return
+
+    return handler
+
+
+def MessageRecvLoopBackHandler(app_ctx):
+    async def handler(event: ConnectionEvent):
+        receiver = MsgReceiver(app_ctx, MsgConnection(event.connection))
+        try:
+            await receiver.start_receiving()
+        except OSError:
+            return
 
     return handler
 
 
 def PingHandler(app_ctx):
+    """Handle a ping received"""
+
     async def handler(msg_event: MessageEvent):
         ping = msg_event.msg
         un_ping = WireData(
@@ -141,160 +277,95 @@ def PingHandler(app_ctx):
     return handler
 
 
-@asynccontextmanager
-@provide_app_ctx
-async def get_msg_conn(peer: RemotePeer, *, app_ctx=None):
-    if peer not in _msg_conn_pool:
-        connector = Connector()
-        connection = await _exit_stack.enter_async_context(connector.connect(peer))
-        await Wire.send_msg(
-            connection,
-            WireData(
-                header=HEADERS.CMD_MSG_CONN,
-                peer_id=app_ctx.this_peer_id
-            )
+# =============
+# connectors
+# =============
+
+async def _try_connecting(peer, this_peer_id) -> tuple[bool, ConnectionEvent | None]:
+    connector = Connector()
+    connection = await _msg_conn_pool.enter_connector(connector.connect(peer, acquire_lock=False))
+    await Wire.send_msg(
+        connection,
+        WireData(
+            header=HEADERS.CMD_MSG_CONN,
+            peer_id=this_peer_id
         )
-        msg_connection = MsgConnectionNoRecv(connection)
-        _msg_conn_pool[peer] = msg_connection
-        yield msg_connection
-        return
+    )
+    try:
+        reply = await Wire.recv_msg(connection)
+    except InvalidPacket:
+        return False, None
 
-    watcher = bandwidth.Watcher()
-    connection = _msg_conn_pool.get(peer)
-    active, _ = await watcher.refresh(peer, _msg_conn_pool.get(peer))
+    handshake = WireData(
+        header=HEADERS.CMD_MSG_CONN_RECV_LOOP_BACK,
+        peer_id=reply.peer_id
+    )
 
-    if connection not in active:
-        _msg_conn_pool.pop(peer)
-    else:
-        yield connection
-        return
+    con_event = ConnectionEvent(connection, handshake)
 
-    async with get_msg_conn(peer) as msg_conn:
-        yield msg_conn
+    if reply.header == HEADERS.DUP_MSG_CONN:
+        return False, con_event
 
-
-class MsgSender:
-    _message_senders = {}
-
-    __slots__ = "peer", "_msg_queue", "_connection", "_connected", "_started", "_sender_task", "_finalized"
-
-    def __init__(self, peer_obj):
-        self.peer: RemotePeer = peer_obj
-        self._msg_queue = asyncio.Queue()
-        self._connection = None
-        self._connected = asyncio.Event()
-        self._message_senders[peer_obj.peer_id] = self
-        self._started = False
-        self._sender_task = None
-        self._finalized = False
-
-    async def connect(self):
-        async with get_msg_conn(self.peer) as connection:
-            self._connection = connection
-
-        self._connected.set()
-
-    async def _message_sender(self):
-        self._started = True
-        fut = None
-        try:
-            while True:
-                message, fut = await self._msg_queue.get()
-                if message is None:
-                    return
-
-                await self._connection.send(message)
-                if not fut.done():
-                    fut.set_result(message)
-
-        except OSError as oe:
-            if fut and not fut.done():
-                fut.set_exception(oe)
-            raise
-
-    async def _sender_manager(self):
-        while True:
-            try:
-                await self._message_sender()
-                break  # if it's smooth exit, then we are done
-            except OSError:
-                self._connected.clear()
-                await self._retry_connecting()
-                if not self.peer.is_online:
-                    await self.stop()
-                    break
-
-    async def _retry_connecting(self):
-        async for timeout in use.get_timeouts(max_retries=-1):
-            try:
-                if self._connected.is_set():
-                    return
-                await self.connect()
-                if not self.peer.is_online:
-                    break
-            except OSError:
-                await webpage.failed_to_reach(self.peer.peer_id)
-                await asyncio.sleep(timeout)
-
-    async def send(self, msg):
-        if self._started is False:
-            raise InvalidStateError("sender not started yet!")
-
-        loop = asyncio.get_event_loop()
-        await self._msg_queue.put((msg, fut := loop.create_future()))
-        return await fut
-
-    @classmethod
-    def get_sender(cls, peer_id):
-        return cls._message_senders.get(peer_id, None)
-
-    @property
-    def is_connected(self):
-        return self._connected.is_set()
-
-    async def __aenter__(self):
-        self._sender_task = asyncio.create_task(self._sender_manager(), name=f"message-sender-{self.peer.ip}")
-
-    async def stop(self):
-        self._message_senders.pop(self.peer.peer_id)
-
-        self._msg_queue.put_nowait(None)
-        await asyncio.sleep(0)
-        await use.safe_cancel_task(self._sender_task)
-
-        if not self._msg_queue.empty():
-            _logger.warning(f"message queue not empty, discarding buffer {self._msg_queue}")
-
-        self._connected.clear()
-        self._connection = None
-        self._finalized = True
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._finalized:
-            return
-        await self.stop()
-
-    def __repr__(self):
-        return f"<MsgSender(peer={self.peer}, connected={self.is_connected}, queued={self._msg_queue.qsize()})>"
+    assert reply.header == HEADERS.MSG_CONN_OK, \
+        f"expected -{HEADERS.MSG_CONN_OK} from {connection}, got -{reply.header}"
+    return True, con_event
 
 
-async def connect_ahead(peer_id):
+@provide_app_ctx
+async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType = None) -> MsgConnectionNoRecv:
+    if msg_connection := await _get_from_pool(peer):
+        _logger.debug(f"not connection again, reusing pooled connection, peer={peer}")
+        return msg_connection
+
+    ok, conn_event = await _try_connecting(peer, app_ctx.this_peer_id)
+    _logger.debug("failed to connect")
+    if ok is False:
+        raise CannotConnect("try again")
+
+    msg_conn = _msg_conn_pool.add(conn_event.connection)
+    app_ctx.connections.dispatcher(
+        conn_event,
+        _task_name=acceptor.task_name(conn_event.handshake)
+    )
+    return msg_conn
+
+
+@provide_app_ctx
+async def connect_ahead(peer_id, *, app_ctx: ReadOnlyAppType):
     if sender := MsgSender.get_sender(peer_id):
-        if sender.peer.is_online and sender.is_connected:
-            _logger.debug(f"not connecting again, already connected: {sender=!r}")
-            return
+        if sender.is_connected:
+            _logger.debug(f"not connecting again, found message sender: {sender=!r}")
+            return True
+        if not sender.peer.is_online:
+            _logger.debug(f"peer not online, initiating a connectivity check, peer={sender.peer!r}")
+            _, what = connectivity.new_check(sender.peer)
+            if (await what) is False:
+                _logger.debug(f"cannot reach, peer={sender.peer=!r}")
+                raise CannotConnect("peer unreachable")
+
+        await sender.connect()
+        return True
 
     peer_obj = await peers.get_remote_peer(peer_id)
-    _logger.info(f"connecting {peer_obj} for messages")
-    sender = MsgSender(peer_obj)
-    try:
-        await sender.connect()
-    except OSError:
-        await sender.stop()
-        _logger.debug(f"failed to connect {peer_obj}, initiating a connectivity check")
-        return False
 
-    await _exit_stack.enter_async_context(sender)
+    _logger.debug(f"connecting for messages, peer={peer_obj}")
+    sender = MsgSender(
+        peer_obj,
+        app_ctx.messages.dispatcher.register_reply,
+        get_msg_conn,
+    )
+    async with AsyncExitStack() as a_ex:
+        try:
+            await sender.connect()
+            await a_ex.enter_async_context(sender)
+            _logger.info(f"connected for messages, peer={peer_obj}")
+            a_ex.pop_all()
+        except OSError:
+            await sender.stop()
+            _logger.debug(f"failed to connect, initiating a connectivity check, peer={peer_obj}")
+            return False
+
+    _exit_stack.push_async_exit(sender)
     return True
 
 
@@ -307,9 +378,19 @@ async def send_message(msg, peer_id):
     """
 
     if sender := MsgSender.get_sender(peer_id):
-        _logger.debug(f"found msg sender for {peer_id}, sending message")
-        await sender.send(msg.encode())
+        _logger.debug(f"found msg sender for, sending message, peer={peer_id}")
+        await sender.send(
+            WireData(
+                header=HEADERS.CMD_TEXT,
+                msg_id=use.get_unique_id(),
+                msg=msg,
+            )
+        )
+        return
+    try:
+        await connect_ahead(peer_id)
+    except RemotePeerNotFound:
+        await webpage.failed_to_reach(peer_id)
         return
 
-    await connect_ahead(peer_id)
     await send_message(msg, peer_id)

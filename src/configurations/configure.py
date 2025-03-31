@@ -1,11 +1,11 @@
 import asyncio
 import configparser
 import ipaddress
-import logging
+import json
 import os
 import random
 import socket
-from io import StringIO
+import textwrap
 from pathlib import Path
 
 from kademlia.utils import digest
@@ -18,27 +18,30 @@ from src.core.app import AppType
 
 def print_app(app):
     ip_version = ipaddress.ip_address(app.this_ip.ip).version
-    print_string = (
-        f'\n:configuration choices{"=" * 32}\n'
-        f'{"USERNAME": <15} : {app.this_remote_peer.username: <10}\n'
-        f'{"THIS_IP": <15} : {f"{app.this_ip}": <10}\n'
-        f'{"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}\n'
-        f'{"IP_VERSION": <15} : {ip_version: <10}\n'
-        f'{"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}\n'
-        f'{"MULTICAST_IP": <15} : {f"{const.MULTICAST_IP_v4 if ip_version == 4 else const.MULTICAST_IP_v6}": <10}\n'
-        f'{"PORT_THIS": <15} : {const.PORT_THIS: <10}\n'
-        f'{"SERVER_PORT": <15} : {const.PORT_SERVER: <10}\n'
-        f'{"NETWORK_PORT": <15} : {const.PORT_NETWORK: <10}\n'
-        f'{"PAGE_PORT": <15} : {const.PORT_PAGE: <10}\n'
-        f'{"PORT_REQ": <15} : {const.PORT_REQ: <10}\n'
-        f'{"=" * 56}\n'
+    print_string = textwrap.dedent(
+        f"""        
+        
+        :configuration choices{"=" * 32}
+        {"USERNAME": <15} : {app.this_remote_peer.username: <10}
+        {"THIS_IP": <15} : {f"{app.this_ip}": <10}
+        {"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}
+        {"IP_VERSION": <15} : {ip_version: <10}
+        {"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}
+        {"MULTICAST_IP": <15} : {f"{const.MULTICAST_IP_v4 if ip_version == 4 else const.MULTICAST_IP_v6}": <10}
+        {"PORT_THIS": <15} : {const.PORT_THIS: <10}
+        {"SERVER_PORT": <15} : {const.PORT_SERVER: <10}
+        {"NETWORK_PORT": <15} : {const.PORT_NETWORK: <10}
+        {"PAGE_PORT": <15} : {const.PORT_PAGE: <10}
+        {"PORT_REQ": <15} : {const.PORT_REQ: <10}
+        {"=" * 56}
+        """
     )
     with const.LOCK_PRINT:
         print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
         return print(print_string)
 
 
-def _get_local_appdata():
+def _get_local_appdata_path():
     if const.IS_WINDOWS:
         return Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local"), const.APP_NAME)
     else:
@@ -48,12 +51,12 @@ def _get_local_appdata():
 def set_paths():
     """
     Current Setup
-    * log config is present at applevel
+    * log config is present at app-level
     * basic config is present at local user data directories
     * all logs are written into local user data directories
-    * webpage at applevel
+    * webpage at app-level
     """
-    path_app_data = _get_local_appdata()
+    path_app_data = _get_local_appdata_path()
     path_app_data.mkdir(exist_ok=True)
     config_path = Path(path_app_data, 'configs')
     config_path.mkdir(exist_ok=True)
@@ -92,6 +95,7 @@ async def load_configs(app: AppType):
 
     def _helper():
         try:
+            _logger.debug(f"reading config file from : {const.PATH_CONFIG_FILE}")
             config_map.read(const.PATH_CONFIG_FILE)
             # access required keys
             _ = config_map['USER_PROFILES']
@@ -111,13 +115,10 @@ async def load_configs(app: AppType):
     async def finalize_config():
 
         def _finalize_config_helper():
-            if _logger.level == logging.DEBUG:
-                config_buffer = StringIO()
-                config_map.write(config_buffer)
-                _logger.debug(f"writing configurations:")
-                _logger.debug(config_buffer.getvalue())
-            else:
-                _logger.info("writing final configurations")
+            _logger.debug(f"writing configurations to {const.PATH_CONFIG_FILE}")
+
+            config_dict = {section: dict(config_map.items(section)) for section in config_map.sections()}
+            _logger.debug(json.dumps(config_dict, indent=4))
 
             with open(const.PATH_CONFIG_FILE, 'w+') as fp:
                 config_map.write(fp)  # noqa
@@ -132,41 +133,45 @@ async def load_configs(app: AppType):
 
 
 def _write_default_configurations(path):
-    default_config_file = (
-        "[NERD_OPTIONS]\n"
-        f"ip_version = {4 if const.IP_VERSION == socket.AF_INET else 6}\n"
-        "protocol = tcp\n"
-        f"this_port = {const.PORT_THIS}\n"
-        f"req_port = {const.PORT_REQ}\n"
-        f"page_port = {const.PORT_PAGE}\n"
-        f"page_serve_port = {const.PORT_PAGE_SERVE}\n"
-        "\n"
-        "[VERSIONS]\n"
-        "global = 1.1\n"
-        "rp = 1.1\n"
-        "fo = 1.1\n"
-        "do = 1.1\n"
-        "wire = 1.1\n"
-        "\n"
-        "[USER_PROFILES]\n"
-        f"{const.DEFAULT_PROFILE_NAME}\n"
-        "\n"
-        "[SELECTED_PROFILE]\n"
-        f"{const.DEFAULT_PROFILE_NAME}\n"
+    default_config_file = textwrap.dedent(
+        f"""
+        [NERD_OPTIONS]
+        ip_version = {4 if const.IP_VERSION == socket.AF_INET else 6}
+        protocol = tcp
+        this_port = {const.PORT_THIS}
+        req_port = {const.PORT_REQ}
+        page_port = {const.PORT_PAGE}
+        page_serve_port = {const.PORT_PAGE_SERVE}
+        
+        [VERSIONS]
+        global = 1.1
+        rp = 1.1
+        fo = 1.1
+        do = 1.1
+        wire = 1.1
+        
+        [USER_PROFILES]
+        {const.DEFAULT_PROFILE_NAME}
+        
+        [SELECTED_PROFILE]
+        {const.DEFAULT_PROFILE_NAME}
+        """
     )
     with open(path, 'w+') as config_file:
         config_file.write(default_config_file)
 
 
 def _write_default_profile(profile_path, config_map):
-    default_profile_file = (
-        "[USER]\n"
-        "name = new user\n"
-        f"id = {int.from_bytes(digest(random.randbytes(160)))}\n"
-        "\n"
-        "[INTERFACE]\n"
-        "\n"
-        "[TRANSFERS AGREED]\n"
+    default_profile_file = textwrap.dedent(
+        f"""
+        [USER]
+        name = new user
+        id = {int.from_bytes(digest(random.randbytes(160)))}
+        
+        [INTERFACE]
+        
+        [TRANSFERS AGREED]
+        """
     )
     with open(profile_path, 'w+') as profile_file:
         profile_file.write(default_profile_file)

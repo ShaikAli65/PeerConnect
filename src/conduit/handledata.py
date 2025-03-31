@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 from src.avails import BaseDispatcher, DataWeaver, RemotePeer
+from src.avails.exceptions import FailedToSend
 from src.conduit import logger, webpage
 from src.conduit.headers import HANDLE
 from src.core import peers
@@ -74,7 +75,10 @@ async def send_text(command_data: DataWeaver):
     peer_id = command_data.peer_id
     if isinstance(peer_id, list):
         peer_id = peer_id[0]
-    return await message.send_message(command_data.content, peer_id)
+    try:
+        return await message.send_message(command_data.content, peer_id)
+    except FailedToSend as fts:
+        await webpage.failed_to_send_message(fts.item.msg_id, peer_id)
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):

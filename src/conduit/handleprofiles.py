@@ -16,6 +16,7 @@ _alignment_done = asyncio.Event()
 
 
 async def align_profiles(_: DataWeaver):
+    interfaces.reset()
     _alignment_done.clear()
     logger.info("[PROFILES] sending profiles")
     updated_profiles = await webpage.send_profiles_and_get_updated_profiles(
@@ -62,11 +63,11 @@ async def configure_further_profile_data(profiles_data):
         profile_object = get_profile_from_profile_file_name(may_be_profile_name)
         if profile_object is None:
             profile_settings['USER']['id'] = int(profile_settings['USER']['id'])  # = new_remote_peer_id()
-            profile_name = profile_settings['USER']['name']
             preferred_ip = interfaces.get_ip_with_ifname(profile_settings["INTERFACE"]["if_name"])
             profile_settings["INTERFACE"] = getattr(preferred_ip, '_asdict')()
 
             # new profile does not have any id associated with it
+            profile_name = profile_settings['USER']['name']
             await ProfileManager.add_profile(profile_name, profile_settings)
             logger.info(f"[HANDLE PROFILE] added profile :{may_be_profile_name}, {profile_settings}")
             continue

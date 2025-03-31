@@ -112,7 +112,7 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
     async def submit(self, event: RequestEvent):
         wire_data = event.request
-        self.msg_arrived(wire_data)
+        self.reply_arrived(wire_data)
         handle = self.registry.get(wire_data.header, None)
         if handle is None:
             return

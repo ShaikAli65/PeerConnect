@@ -124,9 +124,9 @@ def get_app_context():
 
 def provide_app_ctx(func):
     """
-    Decorater that provides read only application context object with *kw* parameter ``app_ctx``
+    Decorator that provides read only application context object with *kw* parameter ``app_ctx``
 
-    If wrapped ``func`` does not take *kw* parameter with name ``app_ctx`` or if ``app_ctx`` is expilictly specified
+    If wrapped ``func`` does not take *kw* parameter with name ``app_ctx`` or if ``app_ctx`` is explicitly specified
     in *kw* args passed into ``func`` then it does not get wrapped
 
     Args:
