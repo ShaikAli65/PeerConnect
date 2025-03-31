@@ -1,7 +1,8 @@
-import socket as _socket
-from typing import Optional, Self, IO
-
 import asyncio as _asyncio
+import socket as _socket
+from typing import IO, Optional, Self
+
+__all__ = "Socket",
 
 
 class Socket(_socket.socket):

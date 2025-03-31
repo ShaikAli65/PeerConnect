@@ -12,8 +12,8 @@ class ReplyRegistryMixIn:
     """Provides reply functionality
 
     Methods:
-        msg_arrived: sets the registered future corresponding to expected reply
-        register_reply: returns a future that gets set when msg_arrived is called with expected id
+        reply_arrived: sets the registered future corresponding to expected reply
+        register_reply: returns a future that gets set when reply_arrived is called with expected id
 
     """
 
@@ -21,13 +21,26 @@ class ReplyRegistryMixIn:
         super().__init__(*args, **kwargs)
         self._reply_registry = {}
 
-    def msg_arrived(self, message: HasID):
+    def reply_arrived(self, message: HasID):
         if not self.is_registered(message):
             return
 
         fut = self._reply_registry.pop(message.id)
         if not fut.done():
             return fut.set_result(message)
+        loop = asyncio.get_running_loop()
+        loop.call_soon(self.__prune_done_futures, self._reply_registry)
+
+    @staticmethod
+    def __prune_done_futures(container):
+        removes = []
+        append = removes.append
+        for msg_id, fut in container.items():
+            if fut.done():
+                append(msg_id)
+
+        for msg_id in removes:
+            container.pop(msg_id)
 
     def register_reply(self, reply_id):
         fut = asyncio.get_running_loop().create_future()
@@ -89,7 +102,8 @@ class QueueMixIn:
     async def _handle_runtime_error(self, logger):
         logger.warning(f"got unexpected runtime error, checking {self.__class__.__name__} queue")
         if self.is_healthy():
-            logger.info("requests dispatcher queue healthy")
+            logger.info("requests dispatcher queue healthy, raise error again")
+            raise
         else:
             logger.warning("requests dispatcher queue not healthy", exc_info=True)
             logger.debug("recovering...")

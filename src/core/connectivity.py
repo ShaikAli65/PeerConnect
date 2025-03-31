@@ -4,14 +4,39 @@ import logging
 import struct
 import time
 
-from src.avails import RemotePeer, WireData, connect, const, use
+from src.avails import InvalidPacket, RemotePeer, WireData, connect, const, use
 from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, singleton_mixin
-from src.core.app import AppType
-from src.core.requests import send_request
+from src.core.app import AppType, provide_app_ctx
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
+
+
+@provide_app_ctx
+async def send_request(msg, peer, *, expect_reply=False, app_ctx=None):
+    """Send a msg to requests endpoint of the peer
+
+    Notes:
+        if expect_reply is True and no msg_id available in msg raises InvalidPacket
+    Args:
+        msg(WireData): message to send
+        peer(RemotePeer): msg is sent to
+        expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
+        app_ctx(ReadOnlyAppType): application context to retrieve requests transport
+
+    Raises:
+        InvalidPacket: if msg does not contain msg_id and expecting a reply
+    """
+
+    if msg.msg_id is None and expect_reply is True:
+        raise InvalidPacket("msg_id not found and expecting a reply")
+
+    app_ctx.requests.transport.sendto(bytes(msg), peer.req_uri)
+
+    if expect_reply:
+        req_disp = app_ctx.requests.dispatcher
+        return await req_disp.register_reply(msg.msg_id)
 
 
 class ConnectivityCheckState(enum.IntEnum):
@@ -99,7 +124,7 @@ def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
     connector = Connectivity()
     req = CheckRequest(peer, False)
     if fut := connector.check_for_recent(req):
-        # return fast without spawning a task (within queue mix in)
+        # return fast without spawning a task within queue mix in
         return req, fut
 
     return req, connector(req)

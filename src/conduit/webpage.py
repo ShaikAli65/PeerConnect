@@ -15,11 +15,19 @@ async def ask_for_interface_choice(interfaces):
     return reply.content.get("interface_id", None)
 
 
-async def msg_arrived(header, message, peer_id):
+async def msg_arrived(message, peer_id):
     front_end_data_dispatcher(DataWeaver(
-        header=header,
+        header=headers.RECEIVED_TEXT,
         content=message,
         peer_id=peer_id,
+    ))
+
+
+async def failed_to_send_message(message_id, peer_id):
+    front_end_data_dispatcher(DataWeaver(
+        header=headers.FAILED_TO_SEND,
+        peer_id=peer_id,
+        msg_id=message_id
     ))
 
 

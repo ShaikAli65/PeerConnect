@@ -99,7 +99,7 @@ class ProfileManager:
         self.profile_data = await self.get_profile_data()
 
     async def write_interface(self, interface: IPAddress):
-        return await self.edit_profile("INTERFACE", interface._asdict())
+        return await self.edit_profile("INTERFACE", getattr(interface, '_asdict')())
 
     async def write_profile(self):
         self._config_parser.update(self.profile_data)
@@ -222,7 +222,9 @@ class ProfileManager:
             f"\tfile_name={self.file_name},\n"
             f"\tinterface={self.interface}\n"
             f"\ttransfers-agreed={len(self.transfers_agreed)} peers\n"
-            f")>"
+            f")"
+            f"{' selected ' if self.prev_selected_profile_file_name() == self.file_name else ''}"
+            ">"
         )
 
     def __repr__(self):

@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import sys
 import time
 import traceback
 from asyncio import CancelledError
@@ -17,7 +18,7 @@ from src.managers import logmanager, message, profilemanager
 from src.managers.statemanager import State, StateManager
 
 
-def initial_states(app: AppType):
+def initial_states(app: AppType) -> tuple[State]:
     set_paths = State("set paths", configure.set_paths)
     log_config = State("initiating logging", logmanager.initiate, app)
     load_config = State("loading configurations", configure.load_configs, app)
@@ -76,12 +77,16 @@ def initiate(states, app):
             try:
                 await _app.state_manager_handle.process_states()
             except CancelledError as ce:
-                cancelled = ce
+                # cancelled = ce
                 # no point of passing cancelled error related to main task into exit_stack
                 # (which will be mostly related to keyboard interrupts)
 
                 nonlocal cancellation_started
                 cancellation_started = time.perf_counter()
+            except BaseException as be:
+                print("CRITICAL EXCEPTION NOT EXPECTING")
+                traceback.print_exc()
+                cancelled = be
 
         if cancelled is not None:
             raise cancelled
@@ -100,7 +105,7 @@ def initiate(states, app):
                         f"clean exit completed within {time.perf_counter() - cancellation_started:.6f}s\n"
             print(print_str)
 
-        return
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

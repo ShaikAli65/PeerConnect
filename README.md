@@ -19,16 +19,16 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 
 > Visit [here](<https://excalidraw.com/#json=aI4_uKCb50o2nOd0vPUJW,zyZRSVlXfsGfvdF7ELXeDQ>) for diagrams
 
+## Installation
+
+  Visit installation wiki [here](https://github.com/ShaikAli65/PeerConnect/wiki/Installation)
+
 ### What it Lacks
 
 - Distributed Reputation System
 - Encryption
 - A good test suite
 - Application is not Chaos-Tested for network partitions
-
-## Installation
-
-  Visit installation wiki [here](https://github.com/ShaikAli65/PeerConnect/wiki/Installation)
 
 
 ## Usage for source clone
@@ -106,3 +106,10 @@ The dev branch is a complete rewrite using Python’s asynchronous features, aim
 #### Additional Dependencies
 
 - **[kademlia](https://github.com/bmuller/kademlia)**: A distributed hash table implementation used for decentralized peer discovery.
+
+
+### Building
+- Github Action named `Build and Release` gets run every time a *PR* is made to `release` branch
+- Builds a *setup* executable for windows and creates a tarball zip for linux installation ([more](#installation))
+- Creates a release, for now releases use run number provided by github to increment patch number
+- Releases are planned to use semantic versioning as mentioned in [semver.org](<https://semver.org/>)

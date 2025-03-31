@@ -4,7 +4,7 @@ import inspect
 import logging
 import socket
 
-from src.avails import InvalidPacket, WireData, const, unpack_datagram
+from src.avails import InvalidPacket, const, unpack_datagram
 from src.avails.bases import BaseDispatcher
 from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
 from src.avails.events import RequestEvent
@@ -88,6 +88,7 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ct
     )
 
     _subscribe_to_multicast(base_socket, multicast_address)
+    base_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     transport, _ = await loop.create_datagram_endpoint(
         functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
         sock=base_socket
@@ -123,7 +124,7 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     async def submit(self, req_event: RequestEvent):
 
         if self.is_registered(req_event.request):
-            self.msg_arrived(req_event.request)
+            self.reply_arrived(req_event.request)
             return
 
         # reply registry and dispatcher's registry are most often mutually exclusive
@@ -194,32 +195,6 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
         event = RequestEvent(root_code=code, request=req_data, from_addr=self._app_ctx.addr_tuple(*addr[:2]))
         self.dispatcher(event)
-
-
-@provide_app_ctx
-async def send_request(msg, peer, *, expect_reply=False, app_ctx=None):
-    """Send a msg to requests endpoint of the peer
-
-    Notes:
-        if expect_reply is True and no msg_id available in msg raises InvalidPacket
-    Args:
-        msg(WireData): message to send
-        peer(RemotePeer): msg is sent to
-        expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
-        app_ctx(ReadOnlyAppType): application context to retrieve requests transport
-
-    Raises:
-        InvalidPacket: if msg does not contain msg_id and expecting a reply
-    """
-
-    if msg.msg_id is None and expect_reply is True:
-        raise InvalidPacket("msg_id not found and expecting a reply")
-
-    app_ctx.requests.transport.sendto(bytes(msg), peer.req_uri)
-
-    if expect_reply:
-        req_disp = app_ctx.requests.dispatcher
-        return await req_disp.register_reply(msg.msg_id)
 
 
 @provide_app_ctx

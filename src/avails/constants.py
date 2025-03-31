@@ -77,7 +77,7 @@ LOCK_PRINT = Lock()
 
 MAX_LOAD = 5
 MAX_CALL_BACKS = 5
-MAX_RETIRES = 7
+MAX_RETIRES = 7  # every other retry counts should be less than this number
 MAX_DATAGRAM_RECV_SIZE = 1024 * 256  # 256 KB
 MAX_DATAGRAM_SEND_SIZE = 1024 * 63  # 63 KB
 MAX_OTM_BUFFERING = 20  # 20 chunks

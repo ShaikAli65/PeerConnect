@@ -61,7 +61,7 @@ class FrontEndWebSocket:
             return
 
         try:
-            logger.debug(f"[PAGE HANDLE] > data to page: {data=}")
+            logger.debug(f"[PAGE HANDLE] > data to page: {data=!r}")
             await self.transport.send(str(data))
         except websockets.WebSocketException as wse:
             self._is_transport_connected = False
@@ -76,8 +76,8 @@ class FrontEndWebSocket:
             while self.stopping is False:
                 msg = await self.buffer.get()
                 try:
-                    logger.debug(f"[PAGE HANDLE] > data to page: {msg=}")
-                    await self.transport.send(msg)
+                    logger.debug(f"[PAGE HANDLE] > data to page: {msg=!r}")
+                    await self.transport.send(str(msg))
                 except websockets.WebSocketException:
                     await self._add_to_buffer(msg)
                     self._is_transport_connected = False
@@ -86,7 +86,7 @@ class FrontEndWebSocket:
                     # transport is None, and we got \\"None does not have .send"\\ thing
                     break
 
-    async def _add_to_buffer(self, msg):
+    async def _add_to_buffer(self, msg: DataWeaver):
         self._handle_buffer_and_log()
         return await self.buffer.put(msg)
 
@@ -136,7 +136,7 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
         try:
             return await self.registry[msg_packet.type].submit(msg_packet.dump())
         except TransferIncomplete as ti:
-            logger.info(f"cannot send msg to frontend {msg_packet}", exc_info=ti)
+            logger.info(f"! cannot send msg to frontend {msg_packet}", exc_info=ti)
 
 
 @singleton_mixin
@@ -184,8 +184,8 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
     while True:
         data = await recv()
 
-        logger.debug(f"[PAGE HANDLE] < data from page: {data=}")
         parsed_data = DataWeaver(serial_data=data)
+        logger.debug(f"[PAGE HANDLE] < data from page: {parsed_data=!r}")
 
         try:
             parsed_data.field_check()
@@ -195,7 +195,7 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
 
         if is_registered_for_reply(parsed_data):
             logger.debug(f"a reply is registered for {parsed_data.msg_id}")
-            front_end_data_disp.msg_arrived(parsed_data)
+            front_end_data_disp.reply_arrived(parsed_data)
             continue
 
         front_end_data_disp(parsed_data)
@@ -205,7 +205,7 @@ async def _handle_client_exp_logging_wrapper(*args, **kwargs):
     try:
         await _handle_client(*args, **kwargs)
     except websockets.WebSocketException as we:
-        logger.error(f"error occured in handler exp:{we}")
+        logger.error(f"error occurred in handler exp:{we}")
 
 
 @asynccontextmanager
@@ -230,9 +230,9 @@ async def start_websocket_server():
 def _http_server(bind, port, directory):
     class HTTPServer(ThreadingHTTPServer):
         def finish_request(self, request, client_address):
-            self.RequestHandlerClass(request, client_address, self, directory=directory)
+            self.RequestHandlerClass(request, client_address, self, directory=directory)  # noqa
 
-    with HTTPServer((bind, port), SimpleHTTPRequestHandler) as httpd:
+    with HTTPServer((bind, port), SimpleHTTPRequestHandler) as httpd:  # noqa
         host, port = httpd.socket.getsockname()[:2]
         url_host = f'[{host}]' if ':' in host else host
         logger.info(

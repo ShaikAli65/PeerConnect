@@ -23,11 +23,6 @@ async def set_ip_config(app_ctx: AppType):
 
     const.THIS_IP = app_ctx.current_profile.interface
 
-    # app_ctx.current_profile = next(iter(ProfileManager.PROFILE_LIST))
-    # await app_ctx.current_profile.write_interface(next(iter(_interfaces.get_interfaces())))
-    # const.THIS_IP = app_ctx.current_profile.interface
-
-    # const.WEBSOCKET_BIND_IP = const.THIS_IP
     _logger.info(f"{app_ctx.this_ip=}")
 
 

@@ -7,6 +7,16 @@ from typing import Any, NamedTuple, TYPE_CHECKING
 # import src.avails.wire as wire
 from src.avails import const, wire
 from src.avails._asocket import Socket
+from src.avails.exceptions import InvalidPacket
+
+__all__ = (
+    'ThroughputMixin',
+    'Sender',
+    'Receiver',
+    'Connection',
+    'MsgConnection',
+    'MsgConnectionNoRecv',
+)
 
 
 class _PauseMixIn:
@@ -68,10 +78,11 @@ class ThroughputMixin:
 
 class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
     __slots__ = ('sock', 'send_func', '_limiter',
-                 '_bytes_total', '_window_start', 'rate')
+                 '_bytes_total', '_window_start', 'rate', '_peer_name')
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
+        self._peer_name = sock.getpeername()
         loop = _asyncio.get_event_loop()
         self.send_func = loop.sock_sendall
         self._limiter = _asyncio.Event()
@@ -84,16 +95,18 @@ class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         return self._update_throughput(len(buf), time.perf_counter())
 
     def __repr__(self):
-        return f"<connect.{type(self).__name__}(>{self.sock.getpeername()}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
+        return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
 
 
 class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
     __slots__ = ('sock', 'recv_func', '_limiter',
-                 '_bytes_total', '_window_start', 'rate')
+                 '_bytes_total', '_window_start', 'rate', '_peer_name')
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
         loop = _asyncio.get_event_loop()
+        self._peer_name = sock.getpeername()
+
         self.recv_func = loop.sock_recv
         self._limiter = _asyncio.Event()
         self._limiter.set()
@@ -101,12 +114,22 @@ class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
 
     async def __call__(self, nbytes: int):
         await self._limiter.wait()
-        data = await self.recv_func(self.sock, nbytes)
-        self._update_throughput(nbytes, time.perf_counter())
-        return data
+        received_data = bytearray()
+
+        while len(received_data) < nbytes:
+            chunk = await self.recv_func(self.sock, nbytes - len(received_data))
+            if chunk == b"":  # Handle premature disconnection
+                ce = ConnectionError("Connection closed during data reception")
+                ce.received_data = bytes(received_data)
+                raise ce
+
+            self._update_throughput(len(chunk), time.perf_counter())
+            received_data += chunk
+
+        return bytes(received_data)
 
     def __repr__(self):
-        return f"<connect.{type(self).__name__}(>{self.sock.getpeername()}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
+        return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
 
 
 class Connection(NamedTuple):
@@ -142,6 +165,9 @@ class Connection(NamedTuple):
     def create_from(socket: Socket, peer):
         return Connection(TransportSocket(socket), Sender(socket), Receiver(socket), peer, _asyncio.Lock())
 
+    def __enter__(self):
+        raise RuntimeWarning("use async with!")
+
     async def __aenter__(self):
         await self.lock.acquire()
         return self
@@ -167,7 +193,10 @@ class MsgConnection:
         async def send(self, data: wire.WireData): ...
 
     async def recv(self):
-        data_size = struct.unpack("!I", await self._connection.recv(4))[0]
+        try:
+            data_size = struct.unpack("!I", await self._connection.recv(4))[0]
+        except struct.error as se:
+            raise InvalidPacket from se
         raw_data = await self._connection.recv(data_size)
         return wire.WireData.load_from(raw_data)
 
@@ -178,6 +207,10 @@ class MsgConnection:
     @property
     def peer(self):
         return self._connection.peer
+
+    @property
+    def connection(self):
+        return self._connection
 
 
 class MsgConnectionNoRecv(MsgConnection):

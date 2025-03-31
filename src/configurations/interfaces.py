@@ -9,7 +9,7 @@ Common Usage:
 
 from src.avails import const
 from src.avails.connect import IPAddress
-
+from . import logger
 if const.IS_WINDOWS:
     from ._interfaces_windows import get_interfaces as _get_interfaces
 else:
@@ -20,6 +20,7 @@ _if_info: list | None = None
 
 def reset():
     global _if_info
+    logger.info("reloading interfaces...")
     _if_info = _get_interfaces(const.IP_VERSION)
 
 

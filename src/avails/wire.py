@@ -20,7 +20,7 @@ from typing import Any, Coroutine, NamedTuple, Optional, Union
 
 import umsgpack
 
-from src.avails.connect import Connection, MsgConnection, Socket as _Socket, is_socket_connected
+from src.avails.connect import Connection, MsgConnection, Receiver, Socket as _Socket, is_socket_connected
 from src.avails.exceptions import InvalidPacket
 from src.avails.useables import recv_int, wait_for_sock_read
 from src.avails.waiters import Actuator, const as _const
@@ -91,7 +91,7 @@ class WireData:
         }
 
     def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+        return f"<WireData(header={self._header}, id={self.id}, body={repr(self.body)[:30]})>"
 
     def __repr__(self):
         return str(self)
@@ -205,7 +205,21 @@ class DataWeaver:
         return _json.dumps(self.__data)
 
     def __repr__(self):
-        return f"DataWeaver({self.__data})"
+        data = self.__data.copy()
+        content = data.pop("content")
+
+        if content is None:
+            data["content"] = None
+        elif isinstance(content, dict):
+            data["content"] = {}
+            for k, v in content.items():
+                data["content"][k] = repr(v)[:20]
+        elif isinstance(content, str):
+            data["content"] = content[:30]
+        else:
+            data["content"] = content
+
+        return f"DataWeaver({data})"
 
     def field_check(self):
         match self.__data:
@@ -426,8 +440,9 @@ class Wire:
     @staticmethod
     async def receive_async(sock: _Socket):
         try:
-            data_size = await recv_int(sock.arecv)
-            data = await sock.arecv(data_size)
+            recve = Receiver(sock)
+            data_size = await recv_int(recve)
+            data = await recve(data_size)
             return data
         except ValueError:
             if not is_socket_connected(sock):

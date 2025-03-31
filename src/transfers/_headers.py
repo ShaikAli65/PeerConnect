@@ -8,12 +8,17 @@ class HEADERS:
     CMD_RECV_FILE_AGAIN = b"recv file again "
     CMD_VERIFY_HEADER = b"verify header   "
     CMD_MSG_CONN = b"message connection"
+    CMD_MSG_CONN_RECV_LOOP_BACK = b"message connection loop back"
+    DUP_MSG_CONN = b"connection already exists"
+    MSG_CONN_OK = b"connection ok"
+
+    MSG_ACK = b"msg ack"
     CMD_RECV_FILE = b"receive file    "
     CMD_CLOSING_HEADER = b"close connection"
     CMD_TEXT = b"this is message "
     CMD_RECV_DIR = b"cmd to recv dir "
     CMD_FILE_CONN = b"connection for file transfer"
-    CMD_DIR_CONN = b'connection for dir transfer'
+    CMD_DIR_CONN = b"connection for dir transfer"
 
     GOSSIP_CREATE_SESSION = b"gossip_session_activate"
     GOSSIP_DOWNGRADE_CONN = "gossip_downgrade_connection"

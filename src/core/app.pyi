@@ -1,7 +1,7 @@
 import asyncio
 from configparser import ConfigParser
 from contextlib import AsyncExitStack
-from typing import Callable, Concatenate, ParamSpec, TypeVar
+from typing import Callable, Concatenate, ParamSpec, TypeVar, Union
 
 from src.avails import PeerDict, RemotePeer
 from src.avails.connect import IPAddress
@@ -53,6 +53,9 @@ class _Discovery(_NoSetter):
     transport: DiscoveryTransport
 
 
+class _RemotePeerDesc: ...
+
+
 class App(_NoSetter):
     __slots__ = ()
 
@@ -94,5 +97,7 @@ def get_app_context() -> ReadOnlyAppType: ...
 P = ParamSpec("P")
 R = TypeVar("R")
 
+Args = Union[Concatenate[P, ReadOnlyAppType], P]
 
-def provide_app_ctx(func: Callable[P, R]) -> Callable[Concatenate[P, ReadOnlyAppType] | P, R]: ...
+
+def provide_app_ctx(func: Callable[P, R]) -> Callable[Args, R]: ...

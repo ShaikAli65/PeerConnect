@@ -5,7 +5,7 @@ import os
 import traceback
 
 import _path  # noqa
-from src.__main__ import initiate
+from src.__main__ import initial_states, initiate
 from src.avails import RemotePeer
 from src.core.app import App, provide_app_ctx
 from src.managers.statemanager import State
@@ -63,14 +63,21 @@ def get_a_peer(app_ctx=None) -> RemotePeer | None:
     return p
 
 
-def test_initial_states():
-    return tuple(locals().values())
+def test_initial_states(app):
+    states = list(initial_states(app))
+    removes = {"launching webpage", "loading profiles"}
+
+    for state in states.copy():
+        if state.name in removes:
+            states.remove(state)
+
+    return tuple(states)
 
 
 def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     try:
-        initiate(test_initial_states() + other_states, App)
+        initiate(test_initial_states(App) + other_states, App)
     except KeyboardInterrupt:
         return
 

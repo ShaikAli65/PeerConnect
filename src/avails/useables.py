@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import functools
 import inspect
 import os
@@ -13,7 +14,7 @@ import uuid
 from pathlib import Path
 from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from sys import _getframe  # noqa
-from typing import Annotated, Awaitable, Final, Union
+from typing import Annotated, Awaitable, Union
 
 import select
 
@@ -60,13 +61,18 @@ async def safe_cancel_task(task: asyncio.Task):
     Args:
         task(asyncio.Task): task to cancel
     """
+    return task.cancel()
+    # await _safe_cancel1(task=task)
 
+
+async def _safe_cancel1(task):
     class CancelFlag(object):
         task_name = None
 
         def __repr__(self):
             return f"<{self.__class__.__name__}(task_name={self.task_name},id={id(self)})>"
 
+    assert isinstance(task, asyncio.Task), "expected asyncio.Task instance"
     task.cancel(sentinel := CancelFlag())
     sentinel.task_name = task.get_name()
 
@@ -134,7 +140,7 @@ async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHO
         integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
         return integer
     except struct.error as se:
-        raise ValueError(f"unable to unpack integer from: {byted_int}") from se
+        raise ValueError(f"unable to unpack integer from: {byted_int}") from se  # noqa
     except ConnectionResetError as ce:
         raise ValueError(f"unable to receive integer") from ce
 
@@ -193,7 +199,7 @@ def echo_print(*args, **kwargs):
         *args: The arguments to print.
     """
     # with LOCK_PRINT:
-    return print(*args, COLOR_RESET, **kwargs)
+    return print(*args, COLORS.RESET, **kwargs)
 
 
 def async_input(helper_str=""):
@@ -319,15 +325,13 @@ def awaitable(syncfunc):
     return decorate
 
 
-COLORS: Final[list[str]] = [
-    "\033[91m",  # Red
-    "\033[92m",  # Green
-    "\033[93m",  # Yellow
-    "\033[94m",  # Blue
-    "\033[95m",  # Magenta
-]
-
-COLOR_RESET: Final[str] = "\033[0m"
+class COLORS(enum.Enum):
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    RESET = "\033[0m"
 
 
 def wrap_with_tryexcept(func, *args, **kwargs):
@@ -350,13 +354,13 @@ def wrap_with_tryexcept(func, *args, **kwargs):
             return await func(*args, **kwargs)
         except Exception as e:
 
-            print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+            print(f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
             traceback.print_exc()
             tb = traceback.extract_tb(e.__traceback__)
             filtered_tb = [frame for frame in tb if "wrapped_with_tryexcept" not in frame.name]
 
             print(
-                f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
+                f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
                 file=sys.stderr,
             )
             # Print the filtered traceback
@@ -364,7 +368,7 @@ def wrap_with_tryexcept(func, *args, **kwargs):
                 print(f"  File \'{frame.filename}\', line {frame.lineno}, in {frame.name}")
                 if frame.line:
                     print(f"    {frame.line}")
-            print(COLOR_RESET)
+            print(COLORS.RESET)
             raise
 
     return wrapped_with_tryexcept

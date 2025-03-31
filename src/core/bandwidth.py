@@ -73,8 +73,23 @@ class Watcher(AExitStackMixIn):
             for peer, conn in to_be_removed:
                 self.sockets[peer].pop(conn)
 
+    async def close_if_not_active(self, peer, conn):
+        """
+        Args:
+              peer(RemotePeer): related peer object
+              conn(Connection): connection to check
+        Returns:
+            bool: True if connection is inactive, False is connection is active and not getting closed
+        """
+        active, closed = await self.refresh(peer, conn)
+        if conn in closed or conn not in active:
+            await self.request_closing(conn)
+            return True
+        return False
+
     async def request_closing(self, conn: Connection):
-        self.sockets[conn.peer][conn].close()
+        if conn in self.sockets.get(conn.peer, {}):
+            self.sockets[conn.peer][conn].close()
 
     @property
     def total_connections(self):

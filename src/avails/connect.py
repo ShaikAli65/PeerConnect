@@ -2,6 +2,8 @@ import asyncio as _asyncio
 import ipaddress
 import logging
 import socket as _socket
+import struct
+from typing import NamedTuple
 
 from src.avails import constants as const, useables  # noqa
 from src.avails._asocket import *  # noqa
@@ -151,10 +153,11 @@ async def connect_to_peer(
 
 
 def is_socket_connected(sock: Socket):
-    blocking = sock.getblocking()
-    keep_alive = sock.getsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE)
-
+    blocking = None
+    keep_alive = None
     try:
+        blocking = sock.getblocking()
+        keep_alive = sock.getsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE)
         sock.setblocking(False)
         sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
         sock.getpeername()
@@ -167,8 +170,10 @@ def is_socket_connected(sock: Socket):
         return False
     finally:
         try:
-            sock.setblocking(blocking)
-            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, keep_alive)
+            if blocking is not None:
+                sock.setblocking(blocking)
+            if keep_alive is not None:
+                sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, keep_alive)
         except OSError:
             return False
 

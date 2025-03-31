@@ -10,6 +10,7 @@ from src.conduit.handleprofiles import (
 from src.conduit.headers import HANDLE
 from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
+from src.managers import message
 from src.managers.statemanager import State
 
 
@@ -21,7 +22,9 @@ class FrontEndSignalDispatcher(BaseDispatcher):
 
     async def submit(self, data_weaver):
         try:
-            await self.registry[data_weaver.header](data_weaver)
+            handler = self.registry[data_weaver.header]
+            logger.debug(f"invoking page signal handler {handler}")
+            await handler(data_weaver)
         except Exception as exp:
             logger.error(f"signal dispatcher data:{data_weaver}", exc_info=exp)
 
@@ -96,7 +99,9 @@ async def send_list(data: DataWeaver):
     await webpage.search_response(data.msg_id, peer_list)
 
 
-async def connect_peer(handle_data: DataWeaver): ...
+async def connect_peer(handle_data: DataWeaver):
+    what = await message.connect_ahead(peer_id=handle_data.peer_id)
+    await (webpage.peer_connected if what else webpage.failed_to_reach)(handle_data.peer_id)
 
 
 @provide_app_ctx

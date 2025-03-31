@@ -51,14 +51,12 @@ class Connector(AExitStackMixIn):
         raise err
 
     @asynccontextmanager
-    async def connect(self, peer, *, raise_if_busy=False):
+    async def connect(self, peer, *, raise_if_busy=False, acquire_lock=True):
         """Get a reliable connection to transfer data
 
         Callers should handle any slowdowns in throughput as bandwidth limiting is performed on need
 
         Notes:
-            * Don't acquire lock of connection object returned, it's done internally and released on context manager exit
-
             * Can be pruned or slowed down if resource limits are reached
 
         state machine::
@@ -82,6 +80,9 @@ class Connector(AExitStackMixIn):
             raise_if_busy(bool):
                 if true then raises ResourceBusy which contains a condition that will be released,
                  signalling that to do something if needed
+            acquire_lock(bool):
+                acquires internal lock of connection, this removes need for nested with statements,
+                one for connect call and one for lock
 
         Yields:
             connect.Connection : tuple that has sender/receiver pair, underlying socket, peer object
@@ -101,7 +102,7 @@ class Connector(AExitStackMixIn):
                 one_connection = active.pop()
                 self.passive_conns[peer].remove(one_connection)
                 del active  # drop the references early
-                async with self._yield_connection_and_maintain(one_connection):
+                async with self._yield_connection_and_maintain(one_connection, acquire_lock):
                     yield one_connection
                 return
 
@@ -122,23 +123,29 @@ class Connector(AExitStackMixIn):
         watcher.watch(socket, connection)
         self._global_conn_count += 1
 
-        async with self._yield_connection_and_maintain(connection):
+        async with self._yield_connection_and_maintain(connection, acquire_lock):
             yield connection
 
     @asynccontextmanager
-    async def _yield_connection_and_maintain(self, connection):
+    async def _yield_connection_and_maintain(self, connection, acquire_lock=True):
         """
-        Some bookkeeping stuff with connection, and obtains lock on that connection until exited
+        Some bookkeeping stuff with connection, and obtains lock on that connection
+        if acquire lock is true, until exited
 
         Args:
             connection(Connection): connection to look after
+            acquire_lock(bool):...
         Yields:
             connection
         """
         try:
             self.active_conns[connection.peer].add(connection)
-            async with connection:
+            if acquire_lock:
+                async with connection:
+                    yield connection
+            else:
                 yield connection
+
         finally:
             peer = connection.peer
             watcher = bandwidth.Watcher()
@@ -156,8 +163,10 @@ class Connector(AExitStackMixIn):
                 # wake up, if waiting for connection getting freed
 
     def max_connections_that_can_be_made(self, peer: RemotePeer):
-        return const.MAX_CONNECTIONS_BETWEEN_PEERS - len(self.active_conns.get(peer)) - len(
-            self.passive_conns.get(peer)) - 1
+        return const.MAX_CONNECTIONS_BETWEEN_PEERS \
+            - len(self.active_conns.get(peer)) \
+            - len(self.passive_conns.get(peer)) \
+            - 1
 
     def is_connection_available(self, peer):
         return lambda: bool(self.passive_conns.get(peer, ()))
