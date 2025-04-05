@@ -2,7 +2,7 @@
 
 Implements the logic for sending files from one peer to another. It defines the `Sender` class, which is responsible for reading file data from disk, dividing files into chunks, and transmitting these chunks over the network using an asynchronous workflow.
 
-### Overview
+## Overview
 
 The `Sender` class encapsulates the entire lifecycle of a file transfer. It leverages several mixins to handle common behaviors such as exception handling, pause/resume capability, and cancellation. The sender works with a list of `FileItem` objects—each representing a file to be sent.
 
@@ -43,7 +43,7 @@ The `Sender` module integrates closely with other components in the PeerConnect 
 
 Responsible for receiving file data sent by a remote peer. It defines the `Receiver` class, which coordinates the reception of file chunks, writes these chunks to disk, and manages transfer state and metadata. A specialized subclass, `DirReceiver`, is also defined to handle [directory](/src_docs/managers/directory.md) transfers.
 
-### Overview
+## Overview
 
 The file receiver module implements a robust, asynchronous mechanism for file reception. It supports the following functionalities:
 
@@ -56,7 +56,7 @@ The file receiver module implements a robust, asynchronous mechanism for file re
 - **State Management:**  
   The receiver maintains an [internal state machine](/src/transfers/__init__.py) to track progress and handle errors.
 
-### Key Components
+## Key Components
 
 - **Receiver Class:**  
   - Inherits from several mixins (such as `CommonExceptionHandlersMixIn`, `PauseMixIn`, and `CommonCancelMixIn`) to provide a unified interface for error handling and cancellation.
@@ -72,7 +72,7 @@ The file receiver module implements a robust, asynchronous mechanism for file re
   - Implements additional logic to receive and reconstruct directory structures. For example, it handles both file and path codes so that directories are created on the receiving side before file data is written.
   - Uses helper functions such as `_recv_parts` to extract directory metadata (like parent paths and file names) from the incoming stream.
 
-### Workflow
+## Workflow
 
 1. **Metadata Update:**  
    The receiver begins by obtaining metadata for the files to be received. This metadata (often transmitted as a packed message using umsgpack) includes file sizes and target paths.
@@ -86,7 +86,7 @@ The file receiver module implements a robust, asynchronous mechanism for file re
 3. **Completion:**  
    When all files have been received and written to disk, the receiver changes its state to COMPLETED and closes all open file descriptors.
 
-### Integration
+## Integration
 
 The Receiver module is integrated into the broader PeerConnect file transfer framework. It works in tandem with the Sender module and higher-level managers that coordinate transfers. The use of asynchronous generators allows for progress updates to be streamed back to the UI or logging components in real time.
 
