@@ -216,7 +216,8 @@ def MessageConnHandler(app_ctx):
     Args:
         app_ctx(ReadOnlyAppType): application context
     """
-
+    receiver = MessageRecvLoopBackHandler(app_ctx=app_ctx)
+ 
     async def handle_duplication_conn(connection):
         conn = await _get_from_pool(connection.peer)
         if conn is not None:
@@ -226,28 +227,26 @@ def MessageConnHandler(app_ctx):
                 peer_id=app_ctx.this_peer_id
             )
             await Wire.send_msg(conn.connection, closing_connection)
-            return True
+            return False
 
-        return False
-
-    async def handler(event: ConnectionEvent):
-        is_dup = await handle_duplication_conn(event.connection)
-        if is_dup is True:
-            return
         ok = WireData(
             header=HEADERS.MSG_CONN_OK,
             peer_id=app_ctx.this_peer_id
         )
 
-        await Wire.send_msg(event.connection, ok)
-        _msg_conn_pool.add(event.connection)
-        receiver = MsgReceiver(app_ctx, MsgConnection(event.connection))
-        try:
-            async with event.connection:
-                await receiver.start_receiving()
-        except OSError:
+        await Wire.send_msg(connection, ok)
+
+        return True
+
+    async def handler(event: ConnectionEvent):
+        ok = await handle_duplication_conn(event.connection)
+        if ok is False:
             return
 
+        _msg_conn_pool.add(event.connection)
+        async with event.connection:
+            await receiver(event)
+    
     return handler
 
 
