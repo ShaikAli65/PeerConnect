@@ -153,8 +153,15 @@ def get_interfaces(address_family: socket.AF_INET | socket.AF_INET6):
                 # Extract the 16-byte address.
                 ip_addr = bytes(bytearray(addr_in6.sin6_addr.Byte))
                 ip = socket.inet_ntop(socket.AF_INET6, ip_addr)
+
                 scope_id = addr_in6.sin6_scope_id
             ua = ua.contents.Next
+
+        if not ip:
+            # windows returns zero-length string as ip address instead of not giving interface at all
+            # filter them out, else we get IPAddress(ip="") as entries in list of addresses
+            continue
+
         res = IPAddress(
             ip=ip,
             scope_id=scope_id,

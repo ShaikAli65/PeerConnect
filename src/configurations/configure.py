@@ -10,6 +10,7 @@ from pathlib import Path
 
 from kademlia.utils import digest
 
+from src import net
 from src.avails import const
 from src.configurations import logger as _logger
 from src.core.app import AppType
@@ -57,7 +58,7 @@ def set_paths():
     * webpage at app-level
     """
     path_app_data = _get_local_appdata_path()
-    path_app_data.mkdir(exist_ok=True)
+    path_app_data.mkdir(exist_ok=True, parents=True)
     config_path = Path(path_app_data, 'configs')
     config_path.mkdir(exist_ok=True)
 
@@ -199,9 +200,12 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
 
     const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
 
-    if const.IP_VERSION == socket.AF_INET6 and not socket.has_ipv6:
-        _logger.warning(f"system does not support ipv6 ({socket.has_ipv6=}), using ipv4")
-        const.IP_VERSION = socket.AF_INET
+    if const.IP_VERSION == socket.AF_INET6:
+        if socket.has_ipv6:
+            # this still does not assure that we have valid ipv6 addresses to avaliable interfaces
+            if len(net.get_interfaces(socket.AF_INET6)) <= 0:
+                _logger.warning(f"system does not have a valid interface with ipv6 address, using ipv4")
+                const.IP_VERSION = socket.AF_INET
 
     if const.IP_VERSION == socket.AF_INET6:
         const.USING_IP_V6 = True
