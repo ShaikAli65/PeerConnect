@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import webbrowser
@@ -6,7 +7,9 @@ from pathlib import Path
 from kademlia.utils import digest
 
 import src.core.async_runner  # noqa
+from src import net
 from src.avails import RemotePeer, constants as const, use
+from src.avails.useables import COLORS
 from src.conduit import pagehandle
 from src.configurations import interfaces as _interfaces, logger as _logger
 from src.core.app import AppType
@@ -87,6 +90,15 @@ def retrace_browser_path():
 async def launch_web_page():
     page_url = f"http://localhost:{const.PORT_PAGE_SERVE}/?port={const.PORT_PAGE}"
 
+    if const.IS_LINUX:
+        bridged, comment = await net.is_wsl_bridged()
+        if bridged is True:
+            await _open_page_in_win_shell(page_url)
+            return
+        if bridged is False:
+            print(COLORS.RED, "cannot launch UI:", comment, COLORS.RESET)
+            return
+
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
@@ -95,3 +107,12 @@ async def launch_web_page():
 
         elif const.IS_LINUX or const.IS_DARWIN:
             subprocess.Popen(['xdg-open', page_url])
+
+
+async def _open_page_in_win_shell(page_url):
+    p = await asyncio.create_subprocess_exec(
+        'powershell.exe',
+        '-Command',
+        f'start {page_url}'
+    )
+    await p.wait()

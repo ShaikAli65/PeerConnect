@@ -1,4 +1,8 @@
 import asyncio
+import ipaddress
+import os
+import platform
+import re
 import socket
 import struct
 import typing
@@ -77,3 +81,78 @@ async def get_addr_info(
 
     for family, sock_type, proto, canonname, addr in addresses:
         yield family, sock_type, proto, canonname, addr
+
+
+async def _run_cmd(*args):
+    """Run a shell command asynchronously and return stdout"""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL
+    )
+    stdout, _ = await proc.communicate()
+    return stdout.decode().strip()
+
+
+async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
+    """Check if system's networking mode is Bridged or not in WSL environment.
+
+    Returns:
+        tuple[bool | None, str]:
+            None: not in WSL
+            False: WSL but not bridged
+            True: bridged mode likely
+    """
+
+    if _cache:
+        return _cache[0]
+
+    if 'wsl' not in platform.release().lower():
+        _cache.append((None, "Not running in a WSL environment"))
+        return _cache[0]
+
+    try:
+        # === STEP 1: Get IP address for eth0 ===
+        ip_output = await _run_cmd("ip", "-4", "addr", "show", "eth0")
+        ip_line = next((line.strip() for line in ip_output.splitlines() if "inet " in line), None)
+        if not ip_line:
+            _cache.append((False, "Could not find eth0 IP"))
+            return _cache[0]
+
+        wsl_ip = ip_line.split()[1].split('/')[0]
+        wsl_ip_obj = ipaddress.ip_address(wsl_ip)
+
+        # === STEP 2: Get default gateway ===
+        route_output = await _run_cmd("ip", "route")
+        gw_line = next((line for line in route_output.splitlines() if line.startswith("default")), "")
+        gw_ip = gw_line.split()[2] if gw_line else None
+
+        ip_likely_bridged = any([
+            wsl_ip_obj in ipaddress.ip_network("192.168.0.0/16"),
+            wsl_ip_obj in ipaddress.ip_network("10.0.0.0/8"),
+            wsl_ip_obj in ipaddress.ip_network("172.16.0.0/12")
+        ]) and not str(wsl_ip_obj).startswith("172.26")
+
+        # === STEP 3: Parse .wslconfig ===
+        win_home_raw = await _run_cmd("cmd.exe", "/c", "echo", "%USERPROFILE%")
+        win_home = win_home_raw.replace("\\", "/").replace("C:", "/mnt/c")
+        wslconfig_path = f"{win_home}/.wslconfig"
+
+        config_mode = ""
+        if os.path.isfile(wslconfig_path):
+            with open(wslconfig_path, 'r') as f:
+                content = await asyncio.to_thread(f.read)
+                match = re.search(r'(?i)networkingMode\s*=\s*(\w+)', content)
+                if match:
+                    config_mode = match.group(1).lower()
+
+        config_says_bridged = config_mode in {"bridged", "mirrored"}
+        likely_bridged = ip_likely_bridged or config_says_bridged
+
+        notes = f"WSL IP: {wsl_ip}, Gateway: {gw_ip}, .wslconfig mode: {config_mode or 'not set'}"
+        _cache.append((likely_bridged, notes))
+        return likely_bridged, notes
+
+    except Exception as e:
+        _cache.append((False, f"Error: {e}"))
+        return False, f"Error: {e}"
