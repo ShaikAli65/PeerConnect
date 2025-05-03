@@ -6,9 +6,9 @@ import _path  # noqa
 from src.avails import const
 from src.avails.exceptions import ResourceBusy
 from src.core.app import provide_app_ctx
-from src.core.bandwidth import Watcher
-from src.core.connector import Connector
 from src.managers.statemanager import State
+from src.net.bandwidth import Watcher
+from src.net.connector import Connector
 from tests.test import get_a_peer, start_test1
 
 

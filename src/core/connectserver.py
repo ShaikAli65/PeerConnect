@@ -5,7 +5,8 @@ import socket
 import struct
 import time
 
-from src.avails import (RemotePeer, Wire, connect, const, use)
+from src.avails import RemotePeer, const, use
+from src.net import WireIO, connect
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ async def get_initial_list(no_of_users, initiate_socket):
     ping_queue = queue.Queue()
     for _ in range(no_of_users):
         # try:
-        raw_data = await Wire.receive_async(initiate_socket)
+        raw_data = await WireIO.receive_async(initiate_socket)
         _nomad = await RemotePeer.load_from(raw_data)
         ping_queue.put(_nomad)
         # requests_handler.signal_status(ping_queue, )
@@ -47,7 +48,7 @@ async def list_error_handler(app):
     conn = await connect.connect_to_peer(_peer_obj=req_peer)
     # except OSError:
     with conn:
-        await Wire.send_async(conn, HEADERS.REQ_FOR_LIST)
+        await WireIO.send_async(conn, HEADERS.REQ_FOR_LIST)
         # request = SimplePeerBytes(refer_sock=conn, data=HEADERS.REQ_FOR_LIST)
         # await request.send()
         list_len = struct.unpack('!Q', await conn.arecv(8))[0]
@@ -60,7 +61,7 @@ async def list_from_forward_control(list_owner: RemotePeer):
     # except:
 
     with conn as list_connection_socket:
-        await Wire.send_async(list_connection_socket, HEADERS.REQ_FOR_LIST)
+        await WireIO.send_async(list_connection_socket, HEADERS.REQ_FOR_LIST)
         # await SimplePeerBytes(list_connection_socket, HEADERS.REQ_FOR_LIST).send()
         await get_list_from(list_connection_socket)
 
@@ -72,7 +73,7 @@ async def initiate_connection(app_ctx):
         _logger.info("Can't connect to server")
         return False
     with server_connection:
-        text = await Wire.receive_async(server_connection)
+        text = await WireIO.receive_async(server_connection)
         # text = SimplePeerBytes(server_connection)
         # if await text.receive(cmp_string=const.SERVER_OK, require_confirmation=False):
         if text == HEADERS.SERVER_OK:
@@ -80,7 +81,7 @@ async def initiate_connection(app_ctx):
             await get_list_from(server_connection)
         elif text == HEADERS.REDIRECT:
             # server may send a peer's details to get list from
-            raw_data = await Wire.receive_async(server_connection)
+            raw_data = await WireIO.receive_async(server_connection)
             recv_list_user = RemotePeer.load_from(raw_data)
             _logger.info(f'Connection redirected by server to : {recv_list_user.req_uri}')
             # _logger.info(f'Connection redirected by server to : {recv_list_user.req_uri}','abc')
@@ -107,7 +108,7 @@ async def setup_server_connection(app_ctx):
         return
     try:
         this_peer = app_ctx.this_remote_peer
-        await Wire.send_async(conn, bytes(this_peer))
+        await WireIO.send_async(conn, bytes(this_peer))
     except (socket.error, OSError):
         conn.close()
         return
@@ -122,7 +123,7 @@ async def send_quit_status_to_server(app_ctx):
             timeout=const.SERVER_TIMEOUT
         )
         with sock:
-            await Wire.send_async(sock, bytes(app_ctx.this_remote_peer))
+            await WireIO.send_async(sock, bytes(app_ctx.this_remote_peer))
         _logger.info("::sent leaving status to server")
         return True
     except Exception as exp:

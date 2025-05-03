@@ -9,9 +9,10 @@ import re
 import socket
 import urllib.request
 
-from src.avails import connect, const, use
-from src.avails.connect import IPAddress
+import src.net.utils
+from src.avails import const, use
 from src.configurations import logger as _logger
+from src.net import IPAddress
 
 
 async def get_v4():
@@ -30,18 +31,18 @@ async def get_v4():
                 stdout, stderr = await proc.communicate()
                 config_ip = stdout.decode().split(" ")[0]
 
-    return connect.IPAddress(config_ip, -1)
+    return IPAddress(config_ip, -1)
 
 
 async def get_v6():
     if const.IS_WINDOWS:
         back_up = ipaddress.IPv6Address("::1")
-        async for sock_tuple in use.get_addr_info("", None, family=socket.AF_INET6):
+        async for sock_tuple in src.net.utils.get_addr_info("", None, family=socket.AF_INET6):
             ip, _, _, scope_id = sock_tuple[4]
             ipaddr = ipaddress.IPv6Address(ip)
             if ipaddr.is_link_local:
-                return connect.IPAddress(str(ipaddr), scope_id)
-        return connect.IPAddress(str(back_up), 0)
+                return IPAddress(str(ipaddr), scope_id)
+        return IPAddress(str(back_up), 0)
 
     elif const.IS_DARWIN or const.IS_LINUX:
         return next(iter(await get_v6_from_shell()))
@@ -89,7 +90,7 @@ async def get_v6_from_shell(include_link_local=True) -> list[IPAddress]:
             # Extract IPv6 address
             address_part = stripped_line.split()[1].split('/')[0]
             ipv6_info.append(
-                connect.IPAddress(
+                IPAddress(
                     address_part,
                     current_ifc_index,
                     current_ifc_name,
@@ -117,7 +118,7 @@ async def get_v6_from_api64():
     except ValueError:
         _logger.error("cannot get ipv6 address from api64")
         raise
-    return connect.IPAddress(config_ip, -1)
+    return IPAddress(str(config_ip), -1)
 
 
 @use.NotInUse
@@ -132,4 +133,4 @@ def get_v6_from_api64():
     except (urllib.request.HTTPError, json.JSONDecodeError):
         config_ip = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)[0][4][0]
 
-    return connect.IPAddress(ipaddress.IPv6Address(config_ip), -1)
+    return IPAddress(config_ip, -1)

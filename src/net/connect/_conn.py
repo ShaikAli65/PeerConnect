@@ -4,10 +4,9 @@ import time
 from asyncio.trsock import TransportSocket
 from typing import Any, NamedTuple, TYPE_CHECKING
 
-# import src.avails.wire as wire
 from src.avails import const, wire
-from src.avails._asocket import Socket
 from src.avails.exceptions import InvalidPacket
+from ._asocket import Socket
 
 __all__ = (
     'ThroughputMixin',
@@ -76,7 +75,7 @@ class ThroughputMixin:
         return self._window_start
 
 
-class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
+class Sender(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
     __slots__ = ('sock', 'send_func', '_limiter',
                  '_bytes_total', '_window_start', 'rate', '_peer_name')
 
@@ -98,7 +97,7 @@ class Sender(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
         return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
 
 
-class Receiver(_PauseMixIn, _ResumeMixIn, ThroughputMixin):
+class Receiver(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
     __slots__ = ('sock', 'recv_func', '_limiter',
                  '_bytes_total', '_window_start', 'rate', '_peer_name')
 

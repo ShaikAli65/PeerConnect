@@ -3,8 +3,8 @@ import random
 
 import _path  # noqa
 from src.avails import WireData
-from src.avails.events import MessageEvent
 from src.core.app import AppType
+from src.core.events import MessageEvent
 from src.managers import message
 from src.managers.statemanager import State
 from src.transfers import HEADERS

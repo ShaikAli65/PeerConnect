@@ -37,14 +37,15 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+import src.net.utils as net_util
 from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.conduit import webpage
 from src.core.app import AppType, ReadOnlyAppType
+from src.core.events import RequestEvent
+from src.net.transports import DiscoveryTransport
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
-from src.transfers.transports import DiscoveryTransport
 
 _logger = logging.getLogger(__name__)
 
@@ -183,7 +184,7 @@ async def _try_asking_user(transport, discovery_packet):
     while True:
         if peer_name := await webpage.ask_user_peer_name_for_discovery(reason):
             try:
-                async for family, sock_type, proto, _, addr in use.get_addr_info(
+                async for family, sock_type, proto, _, addr in net_util.get_addr_info(
                         peer_name,
                         const.PORT_REQ,
                         family=const.IP_VERSION

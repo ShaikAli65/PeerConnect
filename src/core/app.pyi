@@ -3,8 +3,9 @@ from configparser import ConfigParser
 from contextlib import AsyncExitStack
 from typing import Callable, Concatenate, ParamSpec, TypeVar, Union
 
-from src.avails import PeerDict, RemotePeer
 from src.avails.connect import IPAddress
+
+from src.avails import PeerDict, RemotePeer
 from src.core._kademlia import PeerServer
 from src.core.acceptor import ConnectionDispatcher
 from src.core.discover import DiscoveryDispatcher
@@ -13,8 +14,8 @@ from src.core.requests import RequestsDispatcher
 from src.managers import ProfileManager
 from src.managers.message import MsgDispatcher
 from src.managers.statemanager import StateManager
+from src.net.transports import DiscoveryTransport, RequestsTransport
 from src.transfers import GossipTransport
-from src.transfers.transports import DiscoveryTransport, RequestsTransport
 
 
 class _NoSetter:

@@ -45,6 +45,9 @@ async def _py312_initiate(app: AppType):
     for q_handler in log_config["queue_handlers"]:
         queue_handlers.append(logging.getHandlerByName(q_handler))
 
+    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+        const.debug = False
+
     if not any(queue_handlers):
         return
 
@@ -60,6 +63,9 @@ async def _py311_initiate(_: AppType):
         const.PATH_LOG_CONFIG.stem + "311")
     log_config = await asyncio.to_thread(_loader, log_file_311)
     logging.config.dictConfig(log_config)
+
+    if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+        const.debug = False
 
 if sys.version_info >= (3, 12):
     initiate = _py312_initiate

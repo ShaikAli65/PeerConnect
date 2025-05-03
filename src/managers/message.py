@@ -18,24 +18,20 @@ import logging
 from contextlib import AsyncExitStack
 from inspect import isawaitable
 
-from src.avails import BaseDispatcher, Connection, InvalidPacket, RemotePeer, Wire, WireData, const, use
-from src.avails.connect import MsgConnection, MsgConnectionNoRecv
-from src.avails.events import ConnectionEvent, MessageEvent
-from src.avails.exceptions import CannotConnect, RemotePeerNotFound
+from src.avails import BaseDispatcher, RemotePeer, WireData, const, use
+from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.conduit import webpage
-from src.core import acceptor, bandwidth, connectivity, peers
+from src.core import peers
 from src.core.app import App, ReadOnlyAppType, provide_app_ctx
-from src.core.connector import Connector
+from src.core.events import ConnectionEvent, MessageEvent
+from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth, connectivity
+from src.net.connector import Connector
 from src.transfers import HEADERS
 from src.transfers.messages import MsgReceiver, MsgSender
 
 _logger = logging.getLogger(__name__)
-
 _exit_stack = AsyncExitStack()
-
-
-# _msg_conn_pool = {}  # type: dict[str, MsgConnectionNoRecv]
 
 
 async def initiate(app_ctx: App):
@@ -226,7 +222,7 @@ def MessageConnHandler(app_ctx):
                 header=HEADERS.DUP_MSG_CONN,
                 peer_id=app_ctx.this_peer_id
             )
-            await Wire.send_msg(conn.connection, closing_connection)
+            await WireIO.send_msg(conn.connection, closing_connection)
             return False
 
         ok = WireData(
@@ -234,7 +230,7 @@ def MessageConnHandler(app_ctx):
             peer_id=app_ctx.this_peer_id
         )
 
-        await Wire.send_msg(connection, ok)
+        await WireIO.send_msg(connection, ok)
 
         return True
 
@@ -283,7 +279,7 @@ def PingHandler(app_ctx):
 async def _try_connecting(peer, this_peer_id) -> tuple[bool, ConnectionEvent | None]:
     connector = Connector()
     connection = await _msg_conn_pool.enter_connector(connector.connect(peer, acquire_lock=False))
-    await Wire.send_msg(
+    await WireIO.send_msg(
         connection,
         WireData(
             header=HEADERS.CMD_MSG_CONN,
@@ -291,7 +287,7 @@ async def _try_connecting(peer, this_peer_id) -> tuple[bool, ConnectionEvent | N
         )
     )
     try:
-        reply = await Wire.recv_msg(connection)
+        reply = await WireIO.recv_msg(connection)
     except InvalidPacket:
         return False, None
 
@@ -322,10 +318,7 @@ async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType = None) -> 
         raise CannotConnect("try again")
 
     msg_conn = _msg_conn_pool.add(conn_event.connection)
-    app_ctx.connections.dispatcher(
-        conn_event,
-        _task_name=acceptor.task_name(conn_event.handshake)
-    )
+    app_ctx.connections.dispatcher(conn_event)
     return msg_conn
 
 

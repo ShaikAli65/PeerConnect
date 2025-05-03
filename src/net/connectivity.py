@@ -4,11 +4,13 @@ import logging
 import struct
 import time
 
-from src.avails import InvalidPacket, RemotePeer, WireData, connect, const, use
-from src.avails.events import RequestEvent
+from src.avails import RemotePeer, WireData, const, use
+from src.avails.exceptions import InvalidPacket
 from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core.app import AppType, provide_app_ctx
+from src.core.events import RequestEvent
 from src.transfers import HEADERS
+from .connect import connect_to_peer
 
 _logger = logging.getLogger(__name__)
 
@@ -98,7 +100,7 @@ class Connectivity(QueueMixIn):
 
         try:
             request.status = ConnectivityCheckState.CON_CHECK
-            with await connect.connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
+            with await connect_to_peer(request.peer, timeout=const.PING_TIMEOUT) as sock:
                 await sock.asendall(struct.pack("!I", 0))
         except OSError:
             request.status = ConnectivityCheckState.COMPLETED
@@ -117,7 +119,7 @@ class Connectivity(QueueMixIn):
             if not fut.done():
                 fut.cancel()
 
-        await super().__aexit__(exc_type, exc_val, exc_tb)
+        return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
 def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:

@@ -1,16 +1,15 @@
+"""Bunch of low level connection utilities"""
+
 import asyncio as _asyncio
 import ipaddress
-import logging
 import socket as _socket
 import struct
 from typing import NamedTuple
 
-from src.avails import constants as const, useables  # noqa
-from src.avails._asocket import *  # noqa
-from src.avails._conn import *  # noqa
-from src.avails._netproto import *  # noqa
-
-_logger = logging.getLogger(__name__)
+from src.avails import const, use
+from ._asocket import *
+from ._conn import *
+from ._netproto import *
 
 
 class IPAddress(NamedTuple):
@@ -51,11 +50,11 @@ class IPAddress(NamedTuple):
         if ip.version == 6:
             ipaddr = str(ip)
             flow_info = 0
-            scope_id = 0 if int(self.scope_id) < 0 else int(self.scope_id)
+            scope_id = max(0, int(self.scope_id))
             return ipaddr, port, flow_info, scope_id
 
 
-Addr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
+NetAddr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
 
 
 def create_connection_sync(
@@ -96,7 +95,6 @@ def connect_to_peer(
     :param _peer_obj: RemotePeer object
     :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
             uses :param timeout: as initial value
-
     """
 
     addr = getattr(_peer_obj, to_which)
@@ -106,7 +104,7 @@ def connect_to_peer(
         return create_connection_sync(address)
 
     retry_count = 0
-    for timeout in useables.get_timeouts(timeout, max_retries=retries):
+    for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
             return create_connection_sync(
                 address, timeout=timeout
@@ -119,7 +117,7 @@ def connect_to_peer(
     raise OSError
 
 
-@useables.awaitable(connect_to_peer)
+@use.awaitable(connect_to_peer)
 async def connect_to_peer(
         _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ) -> Socket:
@@ -130,7 +128,7 @@ async def connect_to_peer(
     :param timeout: initial timeout to start from, in exponential retries
     :param to_which: specifies to what uri should the connection made
     :param _peer_obj: RemotePeer object
-    :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
+    :param retries: if given tries reconnecting with exponential backoff using :func:`use.get_timeouts`
     :param timeout: uses as initial value
     :returns: connected socket if successful
     :raises: OSError
@@ -142,7 +140,7 @@ async def connect_to_peer(
     if timeout is None:
         return await create_connection_async(address)
 
-    for timeout in useables.get_timeouts(timeout, max_retries=retries):
+    for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
             return await create_connection_async(address, timeout)
         except OSError:
@@ -187,7 +185,7 @@ def get_free_port(ip=None) -> int:
 
 
 def ipv4_multicast_socket_helper(
-        sock, local_addr, multicast_addr, *, loop_back=0, ttl=1, add_membership=True
+        sock, local_addr, multicast_addr, *, loop_back=0, ttl=1, add_membership=True, logger=None
 ):
     sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_TTL, ttl)
     sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_LOOP, loop_back)
@@ -205,11 +203,12 @@ def ipv4_multicast_socket_helper(
         "loop_back": loop_back,
         "ttl": ttl,
     }
-    _logger.debug(f"options for multicast {sock_options}, {sock}")
+    if logger:
+        logger.debug(f"options for multicast {sock_options}, {sock}")
 
 
 def ipv6_multicast_socket_helper(
-        sock, multicast_addr, *, loop_back=0, add_membership=True, hops=1
+        sock, multicast_addr, *, loop_back=0, add_membership=True, hops=1, logger=None
 ):
     sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_LOOP, loop_back)
     sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_HOPS, hops)
@@ -231,4 +230,5 @@ def ipv6_multicast_socket_helper(
         "loop_back": loop_back,
         "hops": hops,
     }
-    _logger.debug(f"options for multicast:{sock_options}")
+    if logger:
+        logger.debug(f"options for multicast:{sock_options}")

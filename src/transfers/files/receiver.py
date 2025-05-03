@@ -4,7 +4,8 @@ import os
 import struct
 from contextlib import aclosing, contextmanager
 
-from src.avails import const, use
+from src import net
+from src.avails import const
 from src.avails.exceptions import InvalidStateError, TransferIncomplete
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
@@ -100,7 +101,7 @@ class Receiver(
 
     async def _recv_file_item(self):
         try:
-            file_item_size = await use.recv_int(self.recv_func)
+            file_item_size = await net.recv_int(self.recv_func)
         except ValueError as ve:
             raise TransferIncomplete from ve
         try:

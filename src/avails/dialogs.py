@@ -9,7 +9,7 @@ try:
 except ImportError:
     tk = False
     filedialog = False
-tk = False
+
 import src.avails.constants as const
 
 

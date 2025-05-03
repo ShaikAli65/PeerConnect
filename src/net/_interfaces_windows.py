@@ -1,7 +1,7 @@
 import ctypes
 import socket
 
-from src.avails.connect import IPAddress
+from src.net import IPAddress
 
 AF_UNSPEC = 0
 GAA_FLAG_INCLUDE_PREFIX = 0x10

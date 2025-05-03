@@ -1,15 +1,16 @@
 import asyncio
 from typing import Awaitable, Callable, Self
 
-from src.avails import MsgConnection, RemotePeer, WireData, connect, const, use
-from src.avails.events import MessageEvent
+from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import FailedToSend, InvalidPacket, InvalidStateError
 from src.core.app import ReadOnlyAppType
+from src.core.events import MessageEvent
+from src.net import MsgConnection, MsgConnectionNoRecv
 from src.transfers import HEADERS
 from src.transfers._logger import logger as _logger
 
 RegisterReplyCallable = Callable[[str], asyncio.Future]
-ConnectorCallable = Callable[[RemotePeer], Awaitable[connect.MsgConnectionNoRecv]]
+ConnectorCallable = Callable[[RemotePeer], Awaitable[MsgConnectionNoRecv]]
 
 
 class MsgSender:

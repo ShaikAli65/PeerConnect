@@ -3,6 +3,7 @@ from asyncio import BaseTransport
 
 from src.avails import WireData, use
 from src.transfers import REQUESTS_HEADERS
+from .connect import NetAddr
 
 
 class RequestsTransport(BaseTransport):  # just for type hinting
@@ -31,7 +32,7 @@ class RequestsTransport(BaseTransport):  # just for type hinting
         self.transport = transport
         self.trigger = self._trigger or _event_trigger_header
 
-    def sendto(self, data: bytes, addr: tuple = None):
+    def sendto(self, data: bytes, addr: NetAddr = None):
         data_size = struct.pack('!I', len(req_data_in_bytes := bytes(data)))
         data_to_send = self._trigger + data_size + req_data_in_bytes
         return self.transport.sendto(data_to_send, addr)
@@ -45,7 +46,7 @@ class KademliaTransport(RequestsTransport):
     _trigger = REQUESTS_HEADERS.KADEMLIA
 
     @use.override
-    def sendto(self, data: bytes, addr: tuple[str, int] | tuple[str, int, int, int] = None):
+    def sendto(self, data: bytes, addr: NetAddr = None):
         formatted = bytes(WireData(data=data))
         return super().sendto(formatted, addr)
 

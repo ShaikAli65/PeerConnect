@@ -2,12 +2,12 @@ import asyncio
 from configparser import ConfigParser
 
 from src.avails import PeerDict
-from src.avails.connect import IPAddress
 from src.avails.mixins import AggregatingAsyncExitStack
 from src.core._kademlia import PeerServer
 from src.core.app import _ClassLevelDesc, _Connections, _Discovery, _GlobalGossip, _Messages, _RemotePeerDesc, _Requests
 from src.managers import ProfileManager
 from src.managers.statemanager import StateManager
+from src.net import IPAddress
 
 
 class MockApp(metaclass=_ClassLevelDesc):

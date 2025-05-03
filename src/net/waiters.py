@@ -1,9 +1,17 @@
 import os
 import socket
-
 from io import BufferedReader, BufferedWriter
 from typing import BinaryIO
+
+import select
+
 from src.avails import const
+
+__all__ = (
+    "Actuator",
+    "wait_for_sock_read",
+    "wait_for_sock_write",
+)
 
 
 def _waker_flag_windows():
@@ -122,6 +130,19 @@ class _ThreadActuator:
 Actuator = _ThreadActuator
 
 
-__all__ = (
-    'Actuator',
-)
+def wait_for_sock_read(sock, actuator, timeout):
+    reads, _, _ = select.select([sock, actuator], [], [], timeout)
+
+    if actuator.to_stop:
+        return (actuator,)
+
+    return reads
+
+
+def wait_for_sock_write(sock, actuator, timeout):
+    _, writes, _ = select.select([actuator, ], [sock, ], [], timeout)
+
+    if actuator.to_stop:
+        return [actuator, ]
+
+    return writes

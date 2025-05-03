@@ -26,7 +26,7 @@ class FrontEndSignalDispatcher(BaseDispatcher):
             logger.debug(f"invoking page signal handler {handler}")
             await handler(data_weaver)
         except Exception as exp:
-            logger.error(f"signal dispatcher data:{data_weaver}", exc_info=exp)
+            logger.error(f"signal dispatcher data:{data_weaver}, handler failed with:", exc_info=exp)
 
     def register_all(self):
         self.registry.update({

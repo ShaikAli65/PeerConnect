@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from itertools import count
 
-from src.avails.connect import Socket
+from src.net import Socket
 
 
 class Tree(ABC):

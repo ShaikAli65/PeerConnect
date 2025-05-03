@@ -54,7 +54,7 @@ class RemotePeerNotFound(Exception):
 
 
 class SearchExhausted(Exception):
-    """Search iterator is expired, cannot be iterated"""
+    """Search iterator is expired, cannot be iterated, This is different from StopIteration"""
 
 
 class FailedToSend(TransferIncomplete):

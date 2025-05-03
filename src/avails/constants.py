@@ -13,9 +13,9 @@ SERVER_IP = "127.0.0.1"
 THIS_IP = None
 
 if TYPE_CHECKING:
-    from src.avails import connect
+    from src.net import connect
 
-    THIS_IP: connect.IPAddress
+    THIS_IP: connect.IPAddress | None
 
 MULTICAST_IP_v4 = "239.1.11.11"
 MULTICAST_IP_v6 = "ff02::1:6"
@@ -69,7 +69,7 @@ debug = True
 PROTOCOL = None
 
 if TYPE_CHECKING:
-    from src.avails.connect import TCPProtocol
+    from src.net.connect import TCPProtocol
 
     PROTOCOL: Optional[TCPProtocol]
 
@@ -116,7 +116,7 @@ PING_TIME_CHECK_WINDOW = 3.0
 BYTES_PER_KB = 1024.0
 RATE_WINDOW = .0001
 
-BIND_FAILED = \
+BIND_FAILED_MSG = \
     f"\n\t\t{'*' * 77}\n" \
     "\n\t\tcannot bind address, try stopping other instances of this application\n" \
     f"\n\t\t{'*' * 77}" \

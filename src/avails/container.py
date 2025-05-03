@@ -1,3 +1,9 @@
+"""
+Contains simple storages used across the peer connect
+1. TransfersBookKeeper
+2. PeerDict
+"""
+
 import asyncio
 from collections import defaultdict
 from itertools import count
@@ -5,12 +11,6 @@ from typing import Iterable, TYPE_CHECKING, ValuesView
 from weakref import WeakSet
 
 from src.avails.bases import HasID, HasIdProperty, HasPeerId
-
-"""
-This module contains simple storages used across the peer connect
-1. TransfersBookKeeper
-2. PeerDict
-"""
 
 if TYPE_CHECKING:
     from src.avails import RemotePeer
@@ -21,7 +21,11 @@ else:
 
 __match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
 
+__all__ = (
+    "PeerDict",
+    "TransfersBookKeeper",
 
+)
 # (self, peer_id:  str, transfer_handle: HasID | HasIdProperty)
 
 

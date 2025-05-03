@@ -4,19 +4,12 @@ import functools
 import inspect
 import os
 import platform
-import socket
-import struct
 import subprocess
 import sys
 import traceback
-import typing
 import uuid
 from pathlib import Path
-from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from sys import _getframe  # noqa
-from typing import Annotated, Awaitable, Union
-
-import select
 
 if sys.version_info > (3, 12):
     from typing import override as _override
@@ -24,7 +17,7 @@ else:
     def _override(func):
         return func  # noqa
 
-from src.avails import const
+from src.avails import constants as const
 
 override = _override
 
@@ -38,10 +31,6 @@ def get_unique_id(_type: type = str, *, u_version="1"):
     if _type == bytes:
         return id_gen().bytes
     return _type(id_gen())
-
-
-SHORT_INT = 4
-LONG_INT = 8
 
 
 async def safe_cancel_task(task: asyncio.Task):
@@ -119,32 +108,6 @@ def shorten_path(path: Path, max_length):
     return os.path.sep.join(selected_parts)
 
 
-async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHORT_INT):
-    """Receives integer from get_bytes function
-
-    awaits on ``get_bytes``, gets bytes based on ``type`` argument
-    unpacks it using ``struct.unpack``
-
-    Args:
-        get_bytes (Callable[[int], Awaitable[bytes]]): function to receive bytes from
-        type: `SHORT_INT` and `LONG_INT`
-
-    Returns:
-        int: unpacked integer
-
-    Raises:
-        ValueError : on ConnectionResetError or struct.error
-    """
-    try:
-        byted_int = await get_bytes(type)
-        integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
-        return integer
-    except struct.error as se:
-        raise ValueError(f"unable to unpack integer from: {byted_int}") from se  # noqa
-    except ConnectionResetError as ce:
-        raise ValueError(f"unable to receive integer") from ce
-
-
 def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
     Generate exponential backoff timeout values.
@@ -219,24 +182,6 @@ def open_file(content):
     else:
         subprocess.run(["xdg-open", content])
     return None
-
-
-def wait_for_sock_read(sock, actuator, timeout):
-    reads, _, _ = select.select([sock, actuator], [], [], timeout)
-
-    if actuator.to_stop:
-        return (actuator,)
-
-    return reads
-
-
-def wait_for_sock_write(sock, actuator, timeout):
-    _, writes, _ = select.select([actuator, ], [sock, ], [], timeout)
-
-    if actuator.to_stop:
-        return [actuator, ]
-
-    return writes
 
 
 _CO_NESTED = inspect.CO_NESTED
@@ -325,7 +270,7 @@ def awaitable(syncfunc):
     return decorate
 
 
-class COLORS(enum.Enum):
+class COLORS(enum.StrEnum):
     RED = "\033[91m"
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
@@ -409,50 +354,6 @@ def search_relevant_peers(peer_list, search_string):
             continue  # Skip removed peer
         if peer.is_relevant(search_string):
             yield peer
-
-
-_AddressFamily = Annotated[AddressFamily, 'v4 or v6 family']
-_SockType = Annotated[Union[socket.SOCK_STREAM, socket.SOCK_DGRAM], 'STREAM OR UDP']
-_IpProto = Annotated[Union[IPPROTO_TCP, IPPROTO_UDP], "tcp or udp protocol"]
-_CannonName = Annotated[str, 'canonical name']
-_SockAddr = Annotated[Union[tuple[str, int], tuple[str, int, int, int]], "address tuple[2] if v4 tuple[4] if v6"]
-
-
-async def get_addr_info(
-        host: bytes | str | None,
-        port: bytes | str | int | None,
-        *,
-        family: int = 0,
-        type: int = 0,  # noqa
-        proto: int = 0,
-        flags: int = 0
-):
-    """Just a convenience for asynchronous name resolving
-
-    Args:
-        host: passed into get addr info
-        port: passed into get addr info
-        family: passed into get addr info
-        type: passed into get addr info
-        proto: passed into get addr info
-        flags: passed into get addr info
-
-    Yields:
-        tuple[
-            _AddressFamily,
-            _SockType,
-            _IpProto,
-            _CannonName,
-            _SockAddr,
-        ]
-    """
-
-    loop = asyncio.get_running_loop()
-    addresses = await loop.getaddrinfo(host, port, family=family, type=type,
-                                       proto=proto, flags=flags)
-
-    for family, sock_type, proto, canonname, addr in addresses:
-        yield family, sock_type, proto, canonname, addr
 
 
 class NotInUse:

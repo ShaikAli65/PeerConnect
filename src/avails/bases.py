@@ -10,7 +10,6 @@ else:
         ...
 
 from src.avails.wire import GossipMessage
-from src.avails.events import RequestEvent
 
 
 class _HasID(Protocol):
@@ -44,13 +43,6 @@ class BaseHandler(AbstractHandler):
 
     async def handle(self, event: NamedTuple):
         """called when event occurs"""
-
-
-class RequestHandler(BaseHandler):
-    __slots__ = ()
-
-    async def handle(self, event: RequestEvent):
-        pass
 
 
 class AbstractDispatcher(ABC):
@@ -100,7 +92,7 @@ class BaseDispatcher(AbstractDispatcher):
         return self.registry.pop(event_trigger)
 
 
-class RumorMessageList(ABC):
+class AbstractRumorMessageList(ABC):
     @abstractmethod
     def sample_peers(self, message_id, sample_count):
         pass
@@ -110,7 +102,7 @@ class RumorMessageList(ABC):
         pass
 
 
-class RumorPolicy(ABC):
+class AbstractRumorPolicy(ABC):
     @abstractmethod
     def __init__(self, protocol_class): ...
 
@@ -119,13 +111,12 @@ class RumorPolicy(ABC):
 
 
 __all__ = (
-    'RumorMessageList',
-    'RequestHandler',
+    'AbstractRumorMessageList',
     'AbstractHandler',
     'AbstractDispatcher',
     'BaseHandler',
     'BaseDispatcher',
-    'RumorPolicy',
+    'AbstractRumorPolicy',
     'HasIdProperty',
     'HasID',
     'HasPeerId'

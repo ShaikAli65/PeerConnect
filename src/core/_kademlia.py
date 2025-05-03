@@ -15,18 +15,18 @@ from rpcudp.protocol import RPCProtocol
 
 from src.avails import RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.events import RequestEvent
 from src.avails.useables import override
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import AppType, ReadOnlyAppType
+from src.core.events import RequestEvent
 from src.core.peerstore import Storage
+from src.net.transports import KademliaTransport
 from src.transfers import REQUESTS_HEADERS
-from src.transfers.transports import KademliaTransport
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
-    @use.override
+    @override
     def get_node_list(self):
         """
         Get the node list in the response.  If there's no value, this should
@@ -155,7 +155,7 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
                 for i in peer_list:
                     asyncio.create_task(self.call_store_peers_in_list(peer, list_key, [i, ]))
 
-    @use.override
+    @override
     def welcome_if_new(self, peer):
         if self.router.is_new_node(peer):
             self._send_peer_lists(peer)
@@ -167,13 +167,13 @@ class AnotherRoutingTable(routing.RoutingTable):
         super().__init__(*args, **kwargs)
         self._app_ctx: AppType = app_ctx
 
-    @use.override
+    @override
     def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
         self._app_ctx.peer_list.add_peer(peer)
         use.sync(webpage.update_peer(peer))
 
-    @use.override
+    @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
         peers.remove_peer(self._app_ctx, peer)
@@ -190,12 +190,12 @@ class PeerServer(network.Server):
         self.app_ctx = app_ctx
         self.state_dump_file = state_dump_file
 
-    @use.override
+    @override
     async def bootstrap_node(self, addr):
         result = await self.protocol.ping(addr, bytes(self.node))
         return RemotePeer.load_from(result[1]) if result[0] else None
 
-    @use.override
+    @override
     def _create_protocol(self):
         return self.protocol_class(self.app_ctx, self.node, self.storage, self.ksize)
 
@@ -246,7 +246,7 @@ class PeerServer(network.Server):
         async for _ in use.async_timeouts():
             if self.stopping:
                 break
-            if await self.store_nodes_in_list(closest_list_id, [self.node]):
+            if await self.__store_nodes_in_list(closest_list_id, [self.node]):
                 _logger.debug(f"added this peer object in list_id={closest_list_id}")
                 break
 
@@ -256,10 +256,10 @@ class PeerServer(network.Server):
         while not self.stopping:
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
             await self.app_ctx.in_network.wait()
-            if not await self.store_nodes_in_list(closest_list_id, [self.node]):
+            if not await self.__store_nodes_in_list(closest_list_id, [self.node]):
                 _logger.error("failed adding this peer object to lists")
 
-    async def store_nodes_in_list(self, list_key_id, peer_objs):
+    async def __store_nodes_in_list(self, list_key_id, peer_objs):
         list_key = RemotePeer(list_key_id)
         peer_objs = [bytes(x) for x in peer_objs]
 
@@ -399,3 +399,4 @@ def KademliaHandler(kad_server):
 crawling.RPCFindResponse = RPCFindResponse
 network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer
+

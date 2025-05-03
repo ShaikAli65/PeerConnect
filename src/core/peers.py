@@ -12,10 +12,10 @@ from src.avails import RemotePeer, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.conduit import webpage
-from src.core import connectivity
 from src.core.app import provide_app_ctx
 from src.core.peerstore import node_list_ids
 from src.core.search import SearchCrawler, get_gossip_searcher
+from src.net import connectivity
 
 _logger = logging.getLogger(__name__)
 

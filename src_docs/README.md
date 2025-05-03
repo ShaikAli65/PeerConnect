@@ -4,7 +4,7 @@
 
 PeerConnect follows an IPC-style design for seamless integration with the User Interface (React.js).
 
-[diagrams](<https://excalidraw.com/?#json=JwupHwQ7QuQyK1BEYFhdl,528_biXX7getTXAvT763uw>)
+[diagrams](<https://excalidraw.com/#json=oJh5_tBBe-uqjqTCuEpxO,Cj_blC3fZYub1TEwh0VUeA>)
 
 ## Table of Contents
 

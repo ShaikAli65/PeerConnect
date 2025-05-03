@@ -3,7 +3,7 @@ import socket as _socket
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from src.avails._asocket import Socket
+from ._asocket import Socket
 
 __all__ = "NetworkProtocol", "TCPProtocol", "UDPProtocol"
 

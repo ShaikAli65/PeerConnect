@@ -2,8 +2,8 @@ import asyncio
 from collections import defaultdict
 
 from src.avails import RemotePeer, const, use
-from src.avails.connect import Connection, Socket, is_socket_connected
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
+from .connect import Connection, Socket, is_socket_connected
 
 
 @singleton_mixin

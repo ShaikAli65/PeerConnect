@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from src.avails import const
-from src.avails.connect import IPAddress
+from src.net import IPAddress
 
 _logger = logging.getLogger(__name__)
 

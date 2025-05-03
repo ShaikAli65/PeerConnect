@@ -7,18 +7,23 @@ import logging
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from src.avails import RemotePeer, connect, const
+from src.avails import RemotePeer, const
 from src.avails.exceptions import CannotConnect, ResourceBusy
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
-from src.core import bandwidth
+from . import bandwidth
+from .connect import Connection, connect_to_peer
 
 _logger = logging.getLogger(__name__)
+
+__all__ = (
+    "Connector",
+)
 
 
 async def _create_conn(peer):
     """Connection helper for Connector.connect"""
     try:
-        socket = await connect.connect_to_peer(peer, timeout=1, retries=const.CONNECTION_RETRIES)
+        socket = await connect_to_peer(peer, timeout=1, retries=const.CONNECTION_RETRIES)
     except OSError as oe:
         raise CannotConnect from oe
     else:
@@ -30,12 +35,12 @@ class Connector(AExitStackMixIn):
     __slots__ = ()
     active_conns: dict[
         RemotePeer,  # peer object
-        set[connect.Connection],  # list of connections
+        set[Connection],  # list of connections
     ] = defaultdict(set)
 
     passive_conns: dict[
         RemotePeer,  # peer object
-        set[connect.Connection],  # list of connections
+        set[Connection],  # list of connections
     ] = defaultdict(set)
 
     conn_waiters: dict[
@@ -119,7 +124,7 @@ class Connector(AExitStackMixIn):
             return
 
         socket = await _create_conn(peer)
-        connection = connect.Connection.create_from(socket, peer)
+        connection = Connection.create_from(socket, peer)
         watcher.watch(socket, connection)
         self._global_conn_count += 1
 

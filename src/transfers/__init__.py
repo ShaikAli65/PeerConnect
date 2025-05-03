@@ -6,6 +6,9 @@ from src.transfers.rumor import *
 
 thread_pool_for_disk_io = ThreadPoolExecutor()
 
+TRANSFER_OK = b'\x01'
+TRANSFER_NOT_OK = b'\x00'
+
 
 class TransferState(enum.Enum):
     PREPARING = 1

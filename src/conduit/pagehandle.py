@@ -15,9 +15,9 @@ from typing import overload
 import websockets
 from websockets import ConnectionClosedError, WebSocketServerProtocol
 
-from src.avails import DataWeaver, InvalidPacket, const, use
+from src.avails import DataWeaver, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.exceptions import TransferIncomplete
+from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, \
     singleton_mixin
 from src.conduit import headers, logger
@@ -213,9 +213,9 @@ async def start_websocket_server():
     try:
         start_server = await websockets.serve(_handle_client_exp_logging_wrapper, const.WEBSOCKET_BIND_IP,
                                               const.PORT_PAGE)
-    except OSError:
-        print(const.BIND_FAILED)
-        logger.critical("failed to bind websocket", exc_info=True)
+    except OSError as oe:
+        print(const.BIND_FAILED_MSG)
+        logger.critical(f"failed to bind websocket: {oe}")
         sys.exit(-1)
 
     logger.info(f"[PAGE HANDLE] websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")

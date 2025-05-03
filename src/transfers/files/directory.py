@@ -2,11 +2,12 @@ import asyncio
 import struct
 from contextlib import aclosing
 from pathlib import Path
+
 import umsgpack
 
+from src import net
 from src.avails import const, use
 from src.avails.exceptions import TransferIncomplete
-from src.avails.useables import recv_int
 from src.transfers import TransferState
 from src.transfers._logger import logger
 from src.transfers.files._fileobject import FileItem
@@ -181,7 +182,7 @@ class DirReceiver(Receiver):
     async def _recv_file_item(self):
         parent, item_name = await self._recv_parts()
         try:
-            size = await use.recv_int(self.recv_func, use.LONG_INT)
+            size = await net.recv_int(self.recv_func, net.LONG_INT)
         except ValueError as ve:
             raise TransferIncomplete from ve
         file = FileItem(Path(self.download_path, parent, item_name), 0)
@@ -190,7 +191,7 @@ class DirReceiver(Receiver):
 
     async def _recv_parts(self):
         try:
-            code_len = await recv_int(self.recv_func)
+            code_len = await net.recv_int(self.recv_func)
             # print(f"{code_len=}")
             parent, item_name = umsgpack.loads(await self.recv_func(code_len))
             if const.IS_WINDOWS:

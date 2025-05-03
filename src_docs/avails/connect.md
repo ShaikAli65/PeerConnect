@@ -33,7 +33,7 @@ The module is organized into the following subcomponents:
   - **UDPProtocol:**  
     Implements the interface for UDP connections.
 
-- **High-Level Module Functions (connect):**  [src](/src/avails/connect.py)
+- **High-Level Module Functions (connect):**  [src](/src/net/connect.py)
   Offers a set of utilities for establishing and managing connections:
   - **IPAddress (NamedTuple):**  
     Represents an IP address.

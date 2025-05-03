@@ -1,10 +1,10 @@
 import logging
 
 from src.avails import BaseDispatcher, GossipMessage, const
-from src.avails.events import GossipEvent, RequestEvent
 from src.avails.mixins import QueueMixIn
 from src.core import search
 from src.core.app import AppType, ReadOnlyAppType
+from src.core.events import GossipEvent, RequestEvent
 from src.transfers import GOSSIP_HEADER, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
 
@@ -24,8 +24,8 @@ class GlobalGossipRumorMessageList(SimpleRumorMessageList):
 
 class GlobalRumorMonger(RumorMongerProtocol):
     def __init__(self, transport, global_peer_list):
-        super().__init__(transport, global_peer_list,
-                         GlobalGossipRumorMessageList(global_peer_list, const.NODE_POV_GOSSIP_TTL))
+        message_list = GlobalGossipRumorMessageList(global_peer_list, const.NODE_POV_GOSSIP_TTL)
+        super().__init__(transport, global_peer_list, message_list)
 
 
 def GlobalGossipMessageHandler(app_ctx: ReadOnlyAppType):

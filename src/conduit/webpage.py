@@ -1,7 +1,6 @@
 from src.avails import DataWeaver, use
 from src.conduit import headers
 from src.conduit.pagehandle import front_end_data_dispatcher
-from src.managers import ProfileManager
 
 
 async def ask_for_interface_choice(interfaces):
@@ -72,7 +71,7 @@ async def update_peer(peer):
     front_end_data_dispatcher(data)
 
 
-async def get_transfer_ok(profile: ProfileManager, peer_id):
+async def get_transfer_ok(profile, peer_id):
     if (agreed := profile.transfers_agreed.get(peer_id, None)) is not None:
         return agreed
 

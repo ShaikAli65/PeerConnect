@@ -5,6 +5,8 @@ import time
 import traceback
 from asyncio import CancelledError
 
+from src.avails.useables import COLORS
+
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -12,7 +14,8 @@ from src.core.app import App, AppType
 from src.avails import const
 from src.conduit import pagehandle
 from src.configurations import bootup, configure
-from src.core import acceptor, connectivity, eventloop, requests
+from src.core import acceptor, eventloop, requests
+from src.net import connectivity
 from src.core.async_runner import AnotherRunner
 from src.managers import logmanager, message, profilemanager
 from src.managers.statemanager import State, StateManager
@@ -65,45 +68,47 @@ def initial_states(app: AppType) -> tuple[State]:
     return tuple(states.values())
 
 
-def initiate(states, app):
-    cancellation_started = 0.0
+cancellation_started = 0.0
 
-    async def _async_initiate(_app):
 
-        await _app.state_manager_handle.put_states(states)
+async def _async_initiate_helper(states, app):
+    await app.state_manager_handle.put_states(states)
 
-        cancelled = None
-        async with _app.exit_stack:
-            try:
-                await _app.state_manager_handle.process_states()
-            except CancelledError as ce:
-                # cancelled = ce
-                # no point of passing cancelled error related to main task into exit_stack
-                # (which will be mostly related to keyboard interrupts)
+    cancelled = None
+    async with app.exit_stack:
+        try:
+            await app.state_manager_handle.process_states()
+        except CancelledError as ce:
+            cancelled = ce
+            # no point of passing cancelled error related to main task into exit_stack
+            # (which will be mostly related to keyboard interrupts)
 
-                nonlocal cancellation_started
-                cancellation_started = time.perf_counter()
-            except BaseException as be:
-                print("CRITICAL EXCEPTION NOT EXPECTING")
+            global cancellation_started
+            cancellation_started = time.perf_counter()
+        except BaseException as be:
+            if const.debug:
+                print(COLORS.RED, "CRITICAL EXCEPTION NOT EXPECTING", COLORS.RESET)
                 traceback.print_exc()
-                cancelled = be
+            cancelled = be
 
-        if cancelled is not None:
-            raise cancelled
+    if cancelled is not None:
+        raise cancelled
 
+
+def initiate(states, app):
     try:
         with AnotherRunner(app_ctx=app.read_only(), debug=const.debug) as runner:
             eventloop.set_eager_task_factory()
             app.state_manager_handle = StateManager()
-            runner.run(_async_initiate(app.read_only()))
-    except BaseException:
+            runner.run(_async_initiate_helper(states, app.read_only()))
+    except BaseException as be:
         if const.debug:
-            traceback.print_exc()
             print_str = f"{'-' * 80}\n" \
                         f"## PRINTING TRACEBACK, {const.debug=}\n" \
                         f"{'-' * 80}\n" \
                         f"clean exit completed within {time.perf_counter() - cancellation_started:.6f}s\n"
-            print(print_str)
+            be.add_note(print_str)
+            raise be
 
         sys.exit(-1)
 

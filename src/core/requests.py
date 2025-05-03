@@ -1,31 +1,27 @@
-import asyncio
-import functools
 import inspect
 import logging
-import socket
 
-from src.avails import InvalidPacket, const, unpack_datagram
+from src.avails import const
 from src.avails.bases import BaseDispatcher
-from src.avails.connect import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper
-from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import _kademlia, gossip
-from src.core.app import AppType, ReadOnlyAppType, provide_app_ctx
+from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
+from src.core.events import RequestEvent
 from src.managers.statemanager import State
+from src.net.requests import setup_endpoint
+from src.net.transports import RequestsTransport
 from src.transfers import REQUESTS_HEADERS
-from src.transfers.transports import RequestsTransport
 
 _logger = logging.getLogger(__name__)
 
 
 async def initiate(app: AppType):
-    # a discovery request packet is observed in wire shark but that packet is
-    # not getting delivered to application socket in linux when we bind to specific interface address
-
-    # TL;DR: causing some unknown behaviour in linux system
-
     if const.IS_WINDOWS:
+        # a discovery request packet is observed in wire shark but that packet is
+        # not getting delivered to application socket in linux when we bind to specific interface address
+
+        # TL;DR: causing some unknown behaviour in linux system
         const.BIND_IP = app.this_ip.ip
 
     bind_address = app.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
@@ -43,7 +39,7 @@ async def initiate(app: AppType):
         )
         _logger.debug("created requests transport")
     except OSError as oe:
-        print(const.BIND_FAILED)
+        print(const.BIND_FAILED_MSG)
         _logger.critical("failed to bind acceptor", exc_info=True)
         raise RuntimeError from oe
 
@@ -76,41 +72,6 @@ async def initiate(app: AppType):
 
     await app.state_manager_handle.put_state(discovery_state)
     await app.state_manager_handle.put_state(add_to_lists)
-
-
-async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ctx):
-    assert isinstance(bind_address, tuple) and isinstance(multicast_address,
-                                                          tuple), "expecting bind_address and multicast_address"
-    loop = asyncio.get_running_loop()
-
-    base_socket = UDPProtocol.create_async_server_sock(
-        loop, bind_address, family=const.IP_VERSION
-    )
-
-    _subscribe_to_multicast(base_socket, multicast_address)
-    base_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    transport, _ = await loop.create_datagram_endpoint(
-        functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
-        sock=base_socket
-    )
-    return transport
-
-
-def _subscribe_to_multicast(sock, multicast_addr):
-    if const.USING_IP_V4:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-        log = "registered request socket for broadcast"
-        if not sock.getsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST):
-            log = "not " + log
-        _logger.debug(log)
-
-        ipv4_multicast_socket_helper(sock, sock.getsockname(), multicast_addr)
-        _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
-    else:
-        ipv6_multicast_socket_helper(sock, multicast_addr)
-        _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
-    return sock
 
 
 class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
@@ -158,43 +119,6 @@ class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         These handlers mostly invoked when a datagram is sent using ``requests_transport``, that has root_code = REQUESTS_HEADERS.REQUEST
         """
         self.registry[REQUESTS_HEADERS.REQUEST][header] = handler
-
-
-class RequestsEndPoint(asyncio.DatagramProtocol):
-    __slots__ = 'transport', 'dispatcher', "_app_ctx"
-
-    def __init__(self, dispatcher, app_ctx):
-        """A Requests Endpoint
-
-            Handles all the requests/messages come to the application's requests endpoint
-            separates messages related to kademila and calls respective callbacks that are supposed to be called
-
-            Args:
-                dispatcher(RequestsDispatcher) : dispatcher object that gets `called` when a datagram arrives
-                app_ctx(ReadOnlyAppType): application context object to retrieve addr_tuple
-        """
-
-        self.transport = None
-        self.dispatcher = dispatcher
-        self._app_ctx = app_ctx
-
-    def connection_made(self, transport):
-        self.transport = transport
-        _logger.info(f"started requests endpoint at {transport.get_extra_info('socket')}")
-
-    def datagram_received(self, actual_data, addr):
-        if self._app_ctx.finalizing.is_set():
-            _logger.warning(f"application is finalizing, ignoring request packet from: {addr}")
-            return
-        code, stripped_data = actual_data[:1], actual_data[1:]
-        try:
-            req_data = unpack_datagram(stripped_data)
-        except InvalidPacket as ip:
-            _logger.info(f"error:", exc_info=ip)
-            return
-
-        event = RequestEvent(root_code=code, request=req_data, from_addr=self._app_ctx.addr_tuple(*addr[:2]))
-        self.dispatcher(event)
 
 
 @provide_app_ctx

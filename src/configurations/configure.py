@@ -10,10 +10,10 @@ from pathlib import Path
 
 from kademlia.utils import digest
 
-import src.avails.constants as const
-from src.avails import connect
+from src.avails import const
 from src.configurations import logger as _logger
 from src.core.app import AppType
+from src.net import TCPProtocol, UDPProtocol
 
 
 def print_app(app):
@@ -194,7 +194,7 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
     const.PAGE_SERVE_PORT = config_map.getint('NERD_OPTIONS', 'page_serve_port')
 
-    const.PROTOCOL = connect.TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else connect.UDPProtocol
+    const.PROTOCOL = TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else UDPProtocol
     const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
 
     const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
@@ -206,7 +206,7 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
     if const.IP_VERSION == socket.AF_INET6:
         const.USING_IP_V6 = True
         const.USING_IP_V4 = False
-        const.BIND_IP = const._BIND_IP_V6
+    const.BIND_IP = const._BIND_IP_V6
 
     return True
 

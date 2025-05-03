@@ -1,88 +1,5 @@
-"""
+"""High level module to search peers"""
 
-## How do we perform
-
-1. A distributed search
-2. Gather list of peers to display
-
-in a p2p network, working with kademila's routing protocol?
-
-### 1.1 If user can enter the peer id,
-    then we can go through the network in O(log n),
-    and get that peer details
-    cons - But it's the worst UX
-
-### 1.2 User enters a search string related to what ever he knows about other peer
-    - we use that string to relate to peer's info and get that (from where?)
-
-### 1.3 refer `2.3`
-
-### 1.4 perform a gossip-based search
-    - send a search request packet to the network
-    - maintain a state for that request in the memory
-    - if a peer relates to that string, it replies to that search request by sending a datagram containing its peer object
-    - gather all the replies and cache them in `Storage`
-
-    pros :
-    - fast and efficient
-    - can we scaled and pretty decentralized
-    - cool
-
-    cons :
-    - no control over the search query (like cancelling that query) once it is passed into network
-    - whole network will eventually respond to that search query
-    - we have to ignore those packets
-
-
-### 2.1 We need to display list of peers who are active in the network
-    *.1 Need to iterate over the network over kademlia's routing protocol,
-        for that we have to get the first id node in the network,
-        append all the nodes found to a priority queue marking them visited if already queried,
-        (sounds dfs or bfs), cache all that locally for a while
-
-        cons - we have so much redundant peer objects passing here and there
-
-    *.2 Full brute force
-        we have some details of our logically nearest peers,
-        so we brute force that list and get whatever they have
-        again queried the list of peers sent by them in loop
-
-        cons - we have so much redundant peer objects passing here and there
-
-### 2.2 Preferred solution
-    - we selected 20 buckets spaced evenly in the { 0 - 2 ^ 160 } node id space
-    - give the bucket authority to nearest peer (closer to that bucket id)
-    - each peer's adds themselves to that bucket when they join the network
-        - peer's even ping the bucket and re-enter themselves within a time window
-
-    - if a peer owns the bucket, another peer joins the network with the closest id to the bucket
-      then a redistribution of bucket to that nearest peer will happen and all the authority over that bucket is
-      transferred
-    - problem, what if someone is querying that bucket in the meanwhile?
-    (we can say that this is consistent hashing)
-
-    - we can now show list of peer's available in the network by,
-    step 1 : iterating over the `list of bucket id's`,
-    step 2 : communicating  to the peer that is responsible for that bucket
-    step 3 : perform a get list of peers RPC
-    step 4 : show the list of peers to user
-
-    - now we have peer gathering feature with paging
-
-### 2.3
-
-referring 1.3 :
-    we can iterate over `list of bucket id's`,
-    communicate to the peers that own bucket,
-    ask them to search for relevant peers that match the given search string,
-    return the list of peer's matched
-
-    never dos:
-        - cache the owner peer for a respective bucket as they can change pretty fast,
-          always use kademlia's search protocol to get latest peer data
-        - permanently cache peer's data received
-
-"""
 import asyncio
 import logging
 import time
@@ -91,11 +8,93 @@ from typing import AsyncIterator
 from kademlia import crawling
 
 from src.avails import GossipMessage, RemotePeer, WireData, const, use
-from src.avails.events import GossipEvent
 from src.avails.exceptions import SearchExhausted
 from src.core.app import provide_app_ctx
+from src.core.events import GossipEvent
 from src.core.peerstore import node_list_ids
 from src.transfers import GOSSIP_HEADER
+
+# ## How do we perform
+#
+# 1. A distributed search
+# 2. Gather list of peers to display
+#
+# in a p2p network, working with kademila's routing protocol?
+#
+# ### 1.1 If user can enter the peer id,
+#     then we can go through the network in O(log n),
+#     and get that peer details
+#     cons - But it's the worst UX
+#
+# ### 1.2 User enters a search string related to what ever he knows about other peer
+#     - we use that string to relate to peer's info and get that (from where?)
+#
+# ### 1.3 refer `2.3`
+#
+# ### 1.4 perform a gossip-based search
+#     - send a search request packet to the network
+#     - maintain a state for that request in the memory
+#     - if a peer relates to that string, it replies to that search request by sending a datagram containing its peer object
+#     - gather all the replies and cache them in `Storage`
+#
+#     pros :
+#     - fast and efficient
+#     - can we scaled and pretty decentralized
+#     - cool
+#
+#     cons :
+#     - no control over the search query (like cancelling that query) once it is passed into network
+#     - whole network will eventually respond to that search query
+#     - we have to ignore those packets
+#
+#
+# ### 2.1 We need to display list of peers who are active in the network
+#     *.1 Need to iterate over the network over kademlia's routing protocol,
+#         for that we have to get the first id node in the network,
+#         append all the nodes found to a priority queue marking them visited if already queried,
+#         (sounds dfs or bfs), cache all that locally for a while
+#
+#         cons - we have so much redundant peer objects passing here and there
+#
+#     *.2 Full brute force
+#         we have some details of our logically nearest peers,
+#         so we brute force that list and get whatever they have
+#         again queried the list of peers sent by them in loop
+#
+#         cons - we have so much redundant peer objects passing here and there
+#
+# ### 2.2 Preferred solution
+#     - we selected 20 buckets spaced evenly in the { 0 - 2 ^ 160 } node id space
+#     - give the bucket authority to nearest peer (closer to that bucket id)
+#     - each peer's adds themselves to that bucket when they join the network
+#         - peer's even ping the bucket and re-enter themselves within a time window
+#
+#     - if a peer owns the bucket, another peer joins the network with the closest id to the bucket
+#       then a redistribution of bucket to that nearest peer will happen and all the authority over that bucket is
+#       transferred
+#     - problem, what if someone is querying that bucket in the meanwhile?
+#     (we can say that this is consistent hashing)
+#
+#     - we can now show list of peer's available in the network by,
+#     step 1 : iterating over the `list of bucket id's`,
+#     step 2 : communicating  to the peer that is responsible for that bucket
+#     step 3 : perform a get list of peers RPC
+#     step 4 : show the list of peers to user
+#
+#     - now we have peer gathering feature with paging
+#
+# ### 2.3
+#
+# referring 1.3 :
+#     we can iterate over `list of bucket id's`,
+#     communicate to the peers that own bucket,
+#     ask them to search for relevant peers that match the given search string,
+#     return the list of peer's matched
+#
+#     never dos:
+#         - cache the owner peer for a respective bucket as they can change pretty fast,
+#           always use kademlia's search protocol to get latest peer data
+#         - permanently cache peer's data received
 
 _logger = logging.getLogger(__name__)
 
@@ -244,6 +243,8 @@ def GossipSearchReqHandler(searcher, transport, app_ctx,
 
     async def handle(event: GossipEvent):
         if not app_ctx.gossip.gossiper.is_seen(event.message):
+            # let this search request get forwarded to other peers
+            # if this is our first time seeing this message
             await gossip_handler(event)
         if reply := searcher.request_arrived(*event):
             return transport.sendto(reply, event.from_addr)
@@ -253,7 +254,7 @@ def GossipSearchReqHandler(searcher, transport, app_ctx,
 
 def GossipSearchReplyHandler(gossiper, gossip_searcher):
     async def handle(event: GossipEvent):
-        print("[GOSSIP][SEARCH] reply received:", event.message, "for", event.from_addr)
+        _logger.info("[GOSSIP][SEARCH] reply received:", event.message, "for", event.from_addr)
         gossiper.message_arrived(*event)
         return gossip_searcher.reply_arrived(*event)
 
@@ -265,6 +266,7 @@ def get_gossip_searcher():
 
 
 def register_handlers(app_ctx, g_dispatcher, gossip_message_handler, gossip_transport):
+    """Register search handlers into dispatcher"""
     gossip_searcher = get_gossip_searcher()
     req_handler = GossipSearchReqHandler(
         GossipSearch(),

@@ -4,13 +4,14 @@ import getpass
 import random
 from contextlib import asynccontextmanager
 
-from src.avails import const
+import net.requests
+from net.requests import RequestsEndPoint
 from src.avails.connect import IPAddress, UDPProtocol
+
+from src.avails import const
 from src.conduit import pagehandle, webpage
 from src.configurations import interfaces
-from src.core import requests
 from src.core.app import provide_app_ctx
-from src.core.requests import RequestsEndPoint
 from src.managers import ProfileManager, get_current_profile, profilemanager
 
 
@@ -92,7 +93,7 @@ async def mock_profile(config):
 
 
 def requests_endpoint_mock():
-    requests.setup_endpoint = setup_endpoint
+    net.requests.setup_endpoint = setup_endpoint
 
 
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher):

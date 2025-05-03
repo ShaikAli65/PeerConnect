@@ -1,10 +1,9 @@
 import ctypes
 import socket
 import struct
-import sys
 
-from src.avails.connect import IPAddress
 from src.avails import const
+from src.net import IPAddress
 
 IFF_LOOPBACK = 0x8
 IFF_UP = 0x1  # Interface is up.

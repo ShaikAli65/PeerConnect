@@ -3,8 +3,9 @@ from abc import ABC, abstractmethod
 from asyncio import CancelledError
 from contextlib import AbstractAsyncContextManager
 
-from src.avails import RemotePeer, connect
+from src.avails import RemotePeer
 from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
+from src.net import connect
 from src.transfers import TransferState
 from src.transfers._logger import logger
 

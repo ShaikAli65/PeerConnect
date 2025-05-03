@@ -4,15 +4,15 @@ import socket
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from pathlib import Path
 
-from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, Wire, WireData, connect, \
+from src import net
+from src.avails import OTMInformResponse, OTMSession, RemotePeer, TransfersBookKeeper, WireData, \
     const, get_dialog_handler
-from src.avails.events import ConnectionEvent
 from src.avails.exceptions import TransferIncomplete, TransferRejected
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
-from src.core.connector import Connector
-from src.transfers import HEADERS, TransferState, files, otm
+from src.core.events import ConnectionEvent
+from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState, files, otm
 from src.transfers.otm.relay import OTMFilesRelay
 from src.transfers.status import StatusMixIn
 
@@ -82,7 +82,7 @@ async def _sender_helper(file_sender, peer_id, *, this_peer_id):
             file_sender.connection_made(connection)
             accepted = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
             print(f"{accepted=}")  # debug
-            if accepted == b'\x00':
+            if accepted == TRANSFER_NOT_OK:
                 may_be_confirmed = False
         except OSError as oe:  # unable to connect
             await webpage.transfer_confirmation(peer_id, file_sender.id, False)
@@ -101,7 +101,7 @@ async def prepare_connection(sender_handle, this_peer_id):
     _logger.debug(f"changing state to connection")  # debug
     sender_handle.state = TransferState.CONNECTING
 
-    connector = Connector()
+    connector = net.Connector()
     async with connector.connect(sender_handle.peer_obj) as connection:
         connection.socket.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
         handshake = WireData(
@@ -111,7 +111,7 @@ async def prepare_connection(sender_handle, this_peer_id):
             peer_id=this_peer_id,
         )
         _logger.debug(f"authorization header sent for file connection {sender_handle.id}")
-        await Wire.send_msg(connection, handshake)
+        await net.WireIO.send_msg(connection, handshake)
 
         _logger.info(f"connection established")
         try:
@@ -139,7 +139,7 @@ async def send_big_file():
 
 
 @asynccontextmanager
-async def file_receiver(file_req: WireData, connection: connect.Connection, status_updater):
+async def file_receiver(file_req: WireData, connection: net.Connection, status_updater):
     """
     Just a wrapper which does bookkeeping for FileReceiver object
     """
@@ -172,39 +172,26 @@ def FileConnectionHandler(app_ctx):
         _logger.info(f"new file connection arrived transfer_id={file_req['file_id']}")
         if transfer_handle := transfers_book.check_running(file_req['file_id']):
             # if we have a transfer running with same id, just send that connection into running handle
-            transfer_handle.connection_made(event.connection)
-            return
+            return transfer_handle.connection_made(event.connection)
 
-        what = await webpage.get_transfer_ok(app_ctx.current_profile, event.handshake.peer_id)
-        if not what:
-            await event.connection.send(
-                b"\x00"
-            )
-            return
-        await event.connection.send(b"\x01")
+        if await webpage.get_transfer_ok(
+                app_ctx.current_profile,
+                event.handshake.peer_id
+        ) is False:
+            return await event.connection.send(TRANSFER_NOT_OK)
+
+        await event.connection.send(TRANSFER_OK)  # accepted receiving
 
         _logger.debug(f"scheduling file transfer request {file_req!r}")
 
         try:
             async with AsyncExitStack() as exit_stack:
-                status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
-                receiver_handle = await exit_stack.enter_async_context(file_receiver(
+                receiver_handle = await receiver_and_update(
+                    event,
+                    exit_stack,
                     file_req,
-                    event.connection,
-                    status_updater,
-                ))
-                receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
+                )
 
-                yield_decision = status_updater.should_yield
-                async for _ in receiver:
-                    if yield_decision():
-                        await webpage.transfer_update(
-                            file_req.peer_id,
-                            receiver_handle.id,
-                            receiver_handle.current_file
-                        )
-
-            status_updater.close()
         except TransferIncomplete as e:
             await webpage.transfer_incomplete(
                 file_req.peer_id,
@@ -212,6 +199,26 @@ def FileConnectionHandler(app_ctx):
                 receiver_handle.current_file,
                 detail=e
             )
+
+    async def receiver_and_update(event, exit_stack, file_req):
+        status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
+        receiver_handle = await exit_stack.enter_async_context(file_receiver(
+            file_req,
+            event.connection,
+            status_updater,
+        ))
+        receiver = await exit_stack.enter_async_context(aclosing(receiver_handle.recv_files()))
+        yield_decision = status_updater.should_yield
+        async for _ in receiver:
+            if yield_decision():
+                await webpage.transfer_update(
+                    file_req.peer_id,
+                    receiver_handle.id,
+                    receiver_handle.current_file
+                )
+
+        status_updater.close()
+        return receiver_handle
 
     return handler
 
@@ -270,7 +277,7 @@ def new_otm_request_arrived(req_data: WireData, _, *, app_ctx):
         chunk_size=req_data['chunk_size'],
     )
     this_peer = app_ctx.this_remote_peer
-    passive_endpoint_address = (this_peer.ip, connect.get_free_port())
+    passive_endpoint_address = (this_peer.ip, net.get_free_port())
     receiver = otm.FilesReceiver(
         session,
         app_ctx.this_remote_peer,
