@@ -1,13 +1,12 @@
-import traceback
+import asyncio
 from pathlib import Path
 
-from src.avails import BaseDispatcher, DataWeaver, WireData, const
-from src.conduit import logger
+from src.avails import BaseDispatcher, DataWeaver, RemotePeer
+from src.avails.exceptions import FailedToSend
+from src.conduit import logger, webpage
 from src.conduit.headers import HANDLE
 from src.core import peers
-from src.core.public import get_this_remote_peer
 from src.managers import directorymanager, filemanager, message
-from src.transfers import HEADERS
 
 
 class FrontEndDataDispatcher(BaseDispatcher):
@@ -26,9 +25,16 @@ class FrontEndDataDispatcher(BaseDispatcher):
                 HANDLE.SEND_FILE: send_file,
                 HANDLE.SEND_TEXT: send_text,
                 HANDLE.SEND_FILE_TO_MULTIPLE_PEERS: send_files_to_multiple_peers,
-                HANDLE.SEND_DIR_TO_MULTIPLE_PEERS: send_dir_to_multiple_peers,
+                HANDLE.CONNECT_USER: connect_user
             }
         )
+
+
+async def connect_user(data: DataWeaver):
+    if await message.connect_ahead(data.peer_id):
+        await webpage.peer_connected(data.peer_id)
+    else:
+        await webpage.failed_to_reach(data.peer_id)
 
 
 async def new_dir_transfer(command_data: DataWeaver):
@@ -41,7 +47,7 @@ async def new_dir_transfer(command_data: DataWeaver):
         return
 
     peer_id = command_data.peer_id
-    remote_peer = await peers.get_remote_peer_at_every_cost(peer_id)
+    remote_peer = await peers.get_remote_peer(peer_id)
     if not remote_peer:
         raise Exception(f"cannot find remote peer object for given id{peer_id}")
 
@@ -61,26 +67,18 @@ async def send_file(command_data: DataWeaver):
     try:
         async with send_files as sender:
             print(sender)  # debug
-    except OSError as e:
-        if const.debug:
-            traceback.print_exc()
-            print("{error}", e)  # debug
-        # page_handle.dispatch_data(DataWeaver)
+    except OSError:
+        logger.error("send files failed with: ", exc_info=True)
 
 
 async def send_text(command_data: DataWeaver):
-    peer_obj = await peers.get_remote_peer_at_every_cost(command_data.peer_id)
-    if peer_obj is None:
-        return  # send data to page that peer is not reachable
-
-    async with message.get_msg_conn(peer_obj) as conn:
-        data = WireData(
-            header=HEADERS.CMD_TEXT,
-            msg_id=get_this_remote_peer().peer_id,
-            message=command_data.content,
-        )
-        # TODO: wrap around with try except, signal page status update
-        await conn.send(bytes(data))
+    peer_id = command_data.peer_id
+    if isinstance(peer_id, list):
+        peer_id = peer_id[0]
+    try:
+        return await message.send_message(command_data.content, peer_id)
+    except FailedToSend as fts:
+        await webpage.failed_to_send_message(fts.item.msg_id, peer_id)
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
@@ -88,13 +86,19 @@ async def send_files_to_multiple_peers(command_data: DataWeaver):
     if not selected_files:
         return
     peer_ids = command_data.content["peerList"]
-    peer_objects = [(await peers.get_remote_peer_at_every_cost(peer_id)) for peer_id in peer_ids]
+    peer_objs = await asyncio.gather(*((peers.get_remote_peer(peer_id)) for peer_id in peer_ids),
+                                     return_exceptions=True)
+    success, failed = [], []
+
+    for peer in peer_objs:
+        if isinstance(peer, RemotePeer):
+            success.append(peer)
+        else:
+            failed.append(peer)
+
     selected_files = [Path(x) for x in selected_files]
-    file_sender = filemanager.start_new_otm_file_transfer(selected_files, peer_objects)
+    file_sender = filemanager.start_new_otm_file_transfer(selected_files, success)
 
     async for update in file_sender.start():
         print(update)
         # TODO: feed updates to frontend
-
-
-async def send_dir_to_multiple_peers(_: DataWeaver): ...

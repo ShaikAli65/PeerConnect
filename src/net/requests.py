@@ -1,0 +1,92 @@
+import asyncio
+import functools
+import socket
+from logging import getLogger
+
+from src.avails import const
+from src.avails.exceptions import InvalidPacket
+from src.core.events import RequestEvent
+from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
+
+_logger = getLogger(__name__)
+
+
+class RequestsEndPoint(asyncio.DatagramProtocol):
+    __slots__ = 'transport', 'dispatcher', "_app_ctx"
+
+    def __init__(self, dispatcher, app_ctx):
+        """A Requests Endpoint
+
+            Handles all the requests/messages come to the application's requests endpoint
+            separates messages related to kademila and calls respective callbacks that are supposed to be called
+
+            Args:
+                dispatcher(RequestsDispatcher) : dispatcher object that gets `called` when a datagram arrives
+                app_ctx(ReadOnlyAppType): application context object to retrieve addr_tuple
+        """
+
+        self.transport = None
+        self.dispatcher = dispatcher
+        self._app_ctx = app_ctx
+
+    def connection_made(self, transport):
+        self.transport = transport
+        _logger.info(f"started requests endpoint at {transport.get_extra_info('socket')}")
+
+    def datagram_received(self, actual_data, addr):
+        if self._app_ctx.finalizing.is_set():
+            _logger.warning(f"application is finalizing, ignoring request packet from: {addr}")
+            return
+        code, stripped_data = actual_data[:1], actual_data[1:]
+        try:
+            req_data = unpack_datagram(stripped_data)
+        except InvalidPacket as ip:
+            _logger.info(f"error:", exc_info=ip)
+            return
+
+        event = RequestEvent(root_code=code, request=req_data, from_addr=self._app_ctx.addr_tuple(*addr[:2]))
+        self.dispatcher(event)
+
+
+async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ctx):
+    assert isinstance(bind_address, tuple) and isinstance(multicast_address,
+                                                          tuple), "expecting bind_address and multicast_address"
+    loop = asyncio.get_running_loop()
+
+    base_socket = UDPProtocol.create_async_server_sock(
+        loop, bind_address, family=const.IP_VERSION
+    )
+
+    _subscribe_to_multicast(base_socket, multicast_address)
+    base_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    transport, _ = await loop.create_datagram_endpoint(
+        functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
+        sock=base_socket
+    )
+    return transport
+
+
+def _subscribe_to_multicast(sock, multicast_addr):
+    if const.USING_IP_V4:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        log = "registered request socket for broadcast"
+        if not sock.getsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST):
+            log = "not " + log
+        _logger.debug(log)
+
+        ipv4_multicast_socket_helper(
+            sock,
+            sock.getsockname(),
+            multicast_addr,
+            logger=_logger
+        )
+        _logger.debug(f"registered request socket for multicast v4 {multicast_addr}")
+    else:
+        ipv6_multicast_socket_helper(
+            sock,
+            multicast_addr,
+            logger=_logger
+        )
+        _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
+    return sock

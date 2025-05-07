@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 import sys
 from asyncio import TaskGroup
 from contextlib import AsyncExitStack
@@ -12,27 +11,36 @@ from src.avails import HasID, use
 class ReplyRegistryMixIn:
     """Provides reply functionality
 
-    an id_factory is provided that can be used to set a unique id to messages
-
     Methods:
-        msg_arrived: sets the registered future corresponding to expected reply
-        register_reply: returns a future that gets set when msg_arrived is called with expected id
+        reply_arrived: sets the registered future corresponding to expected reply
+        register_reply: returns a future that gets set when reply_arrived is called with expected id
 
     """
-
-    _id_factory = itertools.count()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._reply_registry = {}
 
-    def msg_arrived(self, message: HasID):
-        if message.id not in self._reply_registry:
+    def reply_arrived(self, message: HasID):
+        if not self.is_registered(message):
             return
 
         fut = self._reply_registry.pop(message.id)
         if not fut.done():
             return fut.set_result(message)
+        loop = asyncio.get_running_loop()
+        loop.call_soon(self.__prune_done_futures, self._reply_registry)
+
+    @staticmethod
+    def __prune_done_futures(container):
+        removes = []
+        append = removes.append
+        for msg_id, fut in container.items():
+            if fut.done():
+                append(msg_id)
+
+        for msg_id in removes:
+            container.pop(msg_id)
 
     def register_reply(self, reply_id):
         fut = asyncio.get_running_loop().create_future()
@@ -40,11 +48,7 @@ class ReplyRegistryMixIn:
         return fut
 
     def is_registered(self, message: HasID):
-        return message.id in self._reply_registry
-
-    @property
-    def id_factory(self):
-        return str(next(self._id_factory))
+        return str(message.id) in self._reply_registry
 
 
 class QueueMixIn:
@@ -65,8 +69,8 @@ class QueueMixIn:
         if not hasattr(self, 'submit'):
             raise ValueError("submit method not found")
 
-    def __call__(self, *args, **kwargs):
-        return self._task_group.create_task(self.submit(*args, **kwargs))  # noqa
+    def __call__(self, *args, _task_name=None, **kwargs):
+        return self._task_group.create_task(self.submit(*args, **kwargs), name=_task_name)  # noqa
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
@@ -76,10 +80,40 @@ class QueueMixIn:
         """A handy way to enter task group context synchronously, Useful in constructors """
         use.sync(self._task_group.__aenter__())
 
+    def is_healthy(self):
+        async def do_nothing():
+            pass
+
+        try:
+            self(do_nothing())
+            return True
+        except RuntimeError:
+            return False
+
+    async def repair(self, logger):
+        try:
+            await self._task_group.__aexit__(None, None, None)
+        except ExceptionGroup:
+            logger.warning(f"{self.__class__.__name__}, skipping these errors, creating new task group", exc_info=True)
+
+        self._task_group = TaskGroup()
+        await self.__aenter__()
+
+    async def _handle_runtime_error(self, logger):
+        logger.warning(f"got unexpected runtime error, checking {self.__class__.__name__} queue")
+        if self.is_healthy():
+            logger.info("requests dispatcher queue healthy, raise error again")
+            raise
+        else:
+            logger.warning("requests dispatcher queue not healthy", exc_info=True)
+            logger.debug("recovering...")
+            await self.repair(logger)
+            logger.debug("recovery done")
+
     async def __aexit__(self, *exp_details):
         try:
             return await self._task_group.__aexit__(*exp_details)
-        except Exception as exp:
+        except BaseException as exp:
             exp.add_note(f"from {type(self)}")
             raise exp
 
@@ -97,7 +131,7 @@ class AExitStackMixIn:
     async def __aexit__(self, *exp_details):
         try:
             return await self._exit_stack.__aexit__(*exp_details)  # noqa
-        except Exception as exp:
+        except BaseException as exp:
             exp.add_note(f"from {type(self)}")
             raise exp
 
@@ -106,8 +140,8 @@ class AggregatingAsyncExitStack(AsyncExitStack):
     """An async context manager that aggregates exceptions from nested context managers.
 
     Extends `AsyncExitStack` to collect all exceptions raised during stack unwinding
-    and re-raise them as an `ExceptionGroup`. This ensures all cleanup errors are
-    reported rather than just the first encountered exception.
+    and print them as an `ExceptionGroup`. This ensures all cleanup errors are
+    exposed rather than just the first encountered exception.
 
     Key features:
     - Maintains LIFO order for callback execution
@@ -164,77 +198,29 @@ class AggregatingAsyncExitStack(AsyncExitStack):
                 exc = new_exc
                 aggregated.append(new_exc)
 
-        if pending_raise and aggregated:
-            raise ExceptionGroup("Aggregating Multiple exceptions in __aexit__", aggregated)
+        if aggregated:
+            e = BaseExceptionGroup("Aggregating Multiple exceptions in __aexit__", aggregated)
+            # print_exception(e.__class__, e, e.__traceback__)
+            raise e
+
+        if pending_raise:
+            fixed_ctx = None
+            try:
+                # bare "raise exc" replaces our carefully
+                # set-up context
+                fixed_ctx = exc.__context__
+                raise exc
+            except BaseException:
+                exc.__context__ = fixed_ctx
+                raise
 
         return received_exc and suppressed_exc
 
 
-class AsyncMultiContextManagerMixIn:
-    """Mixin for managing multiple async context managers in complex inheritance hierarchies.
-
-    Provides unified context management for classes with multiple parent classes
-    implementing async context managers. Ensures proper entry/exit order and
-    aggregates exceptions from all context exits.
-
-    Features:
-    - Automatic MRO-aware context management
-    - Exception aggregation through `AggregatingAsyncExitStack`
-    - Safe __aenter__/__aexit__ chaining
-    - Compatible with standard async context manager patterns
-
-    Usage:
-    Inherit this mixin first in your class definition:
-
-    class MyClass(AsyncMultiContextManagerMixIn, ParentA, ParentB):
-        ...
-
-    This ensures all parent class contexts are properly entered/exited and any
-    exit exceptions are aggregated into an ExceptionGroup.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._aexit_stack = AggregatingAsyncExitStack()
-
-    async def __aenter__(self):
-        await self._aexit_stack.__aenter__()
-
-        # Walk the MRO (excluding this mixin) and for each class:
-        # 1. Register its __aexit__ (if any) with push_async_callback.
-        # 2. Call its __aenter__ (if any).
-
-        mro = type(self).mro()
-        mro.remove(AsyncMultiContextManagerMixIn)
-        # two ways to reach here
-        # 1. subclass does not have aenter
-        # 2. subclass used super call in it's aenter method
-        # in both of the cases no need to re-enter subclass's context again (we get recursion if we are lucky enough)
-        mro.remove(type(self))
-
-        for cls in mro:
-            aexit_method = cls.__dict__.get("__aexit__")
-            if aexit_method:
-                # Capture the current aexit_method in the lambda default argument to prevent late binding.
-                self._aexit_stack.push_async_exit(
-                    lambda *args, exit_method=aexit_method: exit_method(self, *args)  # noqa
-                )
-            aenter_method = cls.__dict__.get("__aenter__")
-            if aenter_method:
-                result = aenter_method(self)
-                if asyncio.iscoroutine(result):
-                    await result
-        return self
-
-    async def __aexit__(self, *args):
-        """Delegates all __aexit__ calls to the internal ExitStack for proper handling."""
-        return await self._aexit_stack.__aexit__(*args)
+_T = TypeVar('_T')
 
 
-T = TypeVar('T')
-
-
-def singleton_mixin(cls: Type[T]) -> Type[T]:
+def singleton_mixin(cls: Type[_T]) -> Type[_T]:
     """Singleton decorator
 
         Note:
@@ -244,7 +230,7 @@ def singleton_mixin(cls: Type[T]) -> Type[T]:
     instance = None  # how to remove this reference in the end ?
 
     @wraps(cls)
-    def get_instance(*args, **kwargs) -> T:
+    def get_instance(*args, **kwargs) -> _T:
         nonlocal instance
         if instance is None:
             instance = cls(*args, **kwargs)

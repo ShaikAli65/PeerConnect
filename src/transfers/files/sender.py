@@ -5,8 +5,9 @@ import struct
 from contextlib import aclosing
 from pathlib import Path
 
-from src.avails import const, use
+from src.avails import const
 from src.avails.exceptions import InvalidStateError
+from src.net.utils import LONG_INT, recv_int
 from src.transfers import TransferState, thread_pool_for_disk_io
 from src.transfers._logger import logger as _logger
 from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonCancelMixIn, CommonExceptionHandlersMixIn, \
@@ -108,7 +109,7 @@ class Sender(
         interrupted_file = self.file_list[self._current_file_index]
         # synchronizing last file sent
         try:
-            interrupted_file.seeked = await use.recv_int(self.recv_func, use.LONG_INT)
+            interrupted_file.seeked = await recv_int(self.recv_func, LONG_INT)
         except ValueError as ve:
             self._raise_transfer_incomplete_and_change_state(ve)
         else:

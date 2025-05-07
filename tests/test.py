@@ -1,21 +1,15 @@
 import argparse
 import asyncio
-import functools
 import multiprocessing
 import os
 import traceback
 
 import _path  # noqa
-from src.__main__ import initiate
+from src.__main__ import initial_states, initiate
 from src.avails import RemotePeer
-from src.conduit import pagehandle
-from src.configurations import bootup, configure
-from src.core import acceptor, connectivity, requests
-from src.core.public import Dock
-from src.managers import get_current_profile, logmanager, message, profilemanager
+from src.core.app import App, provide_app_ctx
 from src.managers.statemanager import State
 from tests import multicast_stub
-from tests.mock import mock
 
 
 def _str2bool(value):
@@ -46,93 +40,44 @@ parser.add_argument(
 parser.add_argument(
     '--peers',
     type=int,
-    required=True,
+    default=2,
     help="Number of peers (an integer)."
 )
 parser.add_argument(
     '--mock-multicast',
     type=_str2bool,
-    required=True,
+    default='t',
     help="Enable mock multicast (True or False)."
 )
 
 config = parser.parse_args()
 
 
-def get_a_peer() -> RemotePeer | None:
+@provide_app_ctx
+def get_a_peer(app_ctx=None) -> RemotePeer | None:
     try:
-        p = next(iter(Dock.peer_list))
+        p = next(iter(app_ctx.peer_list))
     except StopIteration:
         print("no peers available")
         return None
     return p
 
 
-def test_initial_states():
-    set_paths = State("set paths", configure.set_paths)
-    log_config = State("initiating logging", logmanager.initiate,lazy_args=(lambda:Dock,))
-    set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack, lazy_args=(lambda:Dock,))
-    load_config = State("loading configurations", configure.load_configs, lazy_args=(lambda:Dock,))
-    load_profiles = State(
-        "loading profiles",
-        profilemanager.load_profiles_to_program,
-        lazy_args=(lambda: Dock.current_config,)
-    )
-    mock_state = State("mocking", functools.partial(mock, config))
+def test_initial_states(app):
+    states = list(initial_states(app))
+    removes = {"launching webpage", "loading profiles"}
 
-    page_handle = State("initiating page handle", pagehandle.initiate_page_handle, lazy_args=(lambda: Dock.exit_stack,))
+    for state in states.copy():
+        if state.name in removes:
+            states.remove(state)
 
-    boot_up = State("boot_up initiating", bootup.set_ip_config, lazy_args=(get_current_profile,))
-
-    configure_rm = State(
-        "configuring this remote peer object",
-        bootup.configure_this_remote_peer,
-        lazy_args=(get_current_profile,)
-    )
-
-    print_config = State("printing configurations", configure.print_constants)
-
-    comms = State(
-        "initiating comms",
-        acceptor.initiate_acceptor,
-        lazy_args=(lambda: Dock,)
-    )
-
-    msg_con = State(
-        "starting message connections",
-        message.initiate,
-        lazy_args=(lambda: Dock.exit_stack, Dock.dispatchers, Dock.finalizing)
-    )
-
-    ini_request = State(
-        "initiating requests",
-        requests.initiate,
-        lazy_args=(lambda: Dock,),
-        is_blocking=True
-    )
-    
-    connectivity_check = State("connectivity checker", connectivity.initiate, lazy_args=(lambda: Dock,))
-
-    # s1 = State("set paths", configure.set_paths)
-    # log_config = State("initiating logging", logmanager.initiate)
-    # set_exit_stack = State("setting Dock.exit_stack", bootup.set_exit_stack)
-    # s2 = State("loading configurations", configure.load_configs)
-    # s3 = State("loading profiles", profilemanager.load_profiles_to_program)
-    # s5 = State("mocking", functools.partial(mock, config))
-    # s4 = State("launching webpage", pagehandle.initiate_page_handle)
-    # s6 = State("boot up", bootup.initiate_bootup)
-    # s7 = State("configuring this remote peer object", bootup.configure_this_remote_peer)
-    # s8 = State("printing configurations", configure.print_constants)
-    # s9 = State("initiating requests", requests.initiate)
-    # s10 = State("initiating comms", acceptor.initiate_acceptor)
-    # s11 = State("connectivity checker", connectivity.initiate)
-    return tuple(locals().values())
+    return tuple(states)
 
 
 def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     try:
-        initiate(test_initial_states() + other_states)
+        initiate(test_initial_states(App) + other_states, App)
     except KeyboardInterrupt:
         return
 

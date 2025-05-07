@@ -75,13 +75,13 @@
       "level": "INFO"
     },
     "src.core.requests": {
-      "propagate": false
+      "propagate": true
     },
     "kademlia.protocol": {
-      "propagate": false
+      "propagate": true
     },
     "kademlia.crawling": {
-      "propagate": false
+      "propagate": true
     },
     "src.core.discover": {
       "handlers": [

@@ -5,7 +5,6 @@ from pathlib import Path
 import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, const, use
-from src.core.public import get_this_remote_peer
 from src.transfers import HEADERS
 from src.transfers.files._fileobject import FileItem, calculate_chunk_size
 from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
@@ -13,24 +12,23 @@ from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
 
 class FilesSender:
 
-    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], all_peers_list, timeout):
+    def __init__(self, file_list: list[Path | str], peers: list[RemotePeer], this_peer, timeout):
         self.peer_list = peers
         self.file_items = [FileItem(file_path, 0) for file_path in file_list]
         self.timeout = timeout
-
+        self.this_peer = this_peer
         self.session = self._make_session()
         self.palm_tree = OTMPalmTreeProtocol(
-            get_this_remote_peer(),
+            this_peer,
             self.session,
             peers,
-            all_peers_list,
         )
 
-        self.relay: OTMFilesRelay = self.palm_tree.relay
+        self.relay: OTMFilesRelay = self.palm_tree.relay  # localize for ease of access
 
     def _make_session(self):
         return OTMSession(
-            originate_id=get_this_remote_peer().peer_id,
+            originate_id=self.this_peer.peer_id,
             session_id=use.get_unique_id(),
             key=use.get_unique_id(),
             fanout=const.DEFAULT_GOSSIP_FANOUT,  # make this linearly scalable based on file count and no.of recipients
@@ -61,7 +59,7 @@ class FilesSender:
         # ========> debug
         print_signal = WireData(
             header='gossip_print_every_onces_states',
-            msg_id=get_this_remote_peer().peer_id,
+            msg_id=self.this_peer.peer_id,
         )
         await asyncio.sleep(1)  # debug
         await self.relay.gossip_print_every_onces_states(print_signal, tuple())
@@ -91,7 +89,7 @@ class FilesSender:
     def _create_inform_packet(self):
         return WireData(
             header=HEADERS.OTM_FILE_TRANSFER,
-            msg_id=get_this_remote_peer().peer_id,
+            msg_id=self.this_peer.peer_id,
             protocol1=str(self.__class__),
             protocol2=str(self.palm_tree.__class__),
             session_id=self.session.session_id,

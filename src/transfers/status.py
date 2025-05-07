@@ -1,10 +1,10 @@
 import asyncio
-from typing import AsyncIterable, override
+from typing import AsyncIterable
 
 from tqdm import tqdm
 
 from src.transfers.abc import AbstractStatusMix
-
+from src.avails.useables import override
 
 # design decision:
 # two things we can provide to transfer API

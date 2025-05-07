@@ -2,11 +2,11 @@ import asyncio
 import random
 import time
 
-from src.avails import GossipMessage, RumorMessageItem, RumorMessageList, RumorPolicy, const
-from src.transfers.transports import GossipTransport
+from src.avails import AbstractRumorMessageList, AbstractRumorPolicy, GossipMessage, RumorMessageItem, const
+from src.net.transports import GossipTransport
 
 
-class SimpleRumorMessageList(RumorMessageList):
+class SimpleRumorMessageList(AbstractRumorMessageList):
     __slots__ = '_message_list', 'ttl', 'dropped'
 
     def __init__(self, ttl):
@@ -76,7 +76,7 @@ class SimpleRumorMessageList(RumorMessageList):
         return reservoir
 
 
-class DefaultRumorPolicy(RumorPolicy):
+class DefaultRumorPolicy(AbstractRumorPolicy):
     global_gossip_ttl = const.GLOBAL_TTL_FOR_GOSSIP
     min_chance = 0.6
 
@@ -111,7 +111,7 @@ class RumorMongerProtocol:
     """
 
     alpha = 3
-    policy_class: RumorPolicy = DefaultRumorPolicy
+    policy_class: AbstractRumorPolicy = DefaultRumorPolicy
 
     def __init__(self, datagram_transport: GossipTransport, global_peer_list, message_list: SimpleRumorMessageList):
         self.message_list = message_list
@@ -124,10 +124,10 @@ class RumorMongerProtocol:
 
         if not data.fields_check():
             print(f"fields missing, ignoring message: {data.actual_data}")
-            return
+            return False
 
         if not self.policy.should_rumor(data):
-            return
+            return False
 
         if data.id in self.message_list:
             # no need to re-enter message into list, this refreshes timer of that message
@@ -135,8 +135,9 @@ class RumorMongerProtocol:
             self._gossip_forward(message=data)
         else:
             self.gossip_message(data)
-
         print("[GOSSIP] message received and processed: %s" % data)
+
+        return True
 
     def __forward_payload(self, message, peer_id):
         peer_obj = self.global_peer_list.get_peer(peer_id)
@@ -161,9 +162,6 @@ class RumorMongerProtocol:
 
     def is_seen(self, message: GossipMessage):
         return message.id in self.message_list
-
-    def __del__(self):
-        self.transport.close()
 
     def __repr__(self):
         return str(f"<RumorMongerProtocol initiated={self._is_initiated}>")

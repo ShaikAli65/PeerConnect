@@ -11,7 +11,7 @@ Provides functionality for transferring entire directories between peers. It exp
 - **rename_directory_with_increment** – (Helper Function)  
   *Renames a directory by appending an increment if the target path already exists. This ensures that incoming directory transfers do not overwrite existing data.*
 
-### Overview
+## Overview
 
 The directory module is designed to complement the file transfer system by providing support for hierarchical data. When a directory transfer is initiated (for example, via a user sharing a folder), the module:
 

@@ -1,6 +1,6 @@
 """Interaction with webpage and management of comms with frontend
 
-* ``webpage`` module to be used for interacting with frontend
+* ``webpage`` module is used for interacting with frontend
 
 Conduit: a natural or artificial channel through which something (such as a fluid) is conveyed
 

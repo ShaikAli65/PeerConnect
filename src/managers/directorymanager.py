@@ -1,16 +1,15 @@
 import asyncio
 import logging
-import traceback
 from contextlib import aclosing
 from pathlib import Path
 
-from src.avails import TransfersBookKeeper, Wire, WireData, const, get_dialog_handler, use
-from src.avails.events import ConnectionEvent
+from src.avails import TransfersBookKeeper, WireData, const, get_dialog_handler, use
 from src.avails.exceptions import TransferRejected
 from src.conduit import webpage
-from src.core.connector import Connector
-from src.core.public import get_this_remote_peer
-from src.transfers import HEADERS
+from src.core.app import ReadOnlyAppType, provide_app_ctx
+from src.core.events import ConnectionEvent
+from src.net import Connector, WireIO
+from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState
 from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
 from src.transfers.status import StatusMixIn
 
@@ -24,21 +23,20 @@ async def open_dir_selector():
     return await result
 
 
-async def send_directory(remote_peer, dir_path):
+@provide_app_ctx
+async def send_directory(remote_peer, dir_path, *, app_ctx=None):
     dir_path = Path(dir_path)
     transfer_id = transfers_book.get_new_id()
     dir_recv_signal_packet = WireData(
         header=HEADERS.CMD_RECV_DIR,
-        peer_id=get_this_remote_peer().peer_id,
+        peer_id=app_ctx.this_peer_id,
         transfer_id=transfer_id,
         dir_name=dir_path.name,
     )
-    # from src.core.connections import Connector
-    # connection = await Connector.get_connection(remote_peer)
     connector = Connector()
 
     async with connector.connect(remote_peer) as connection:
-        await Wire.send_msg(connection, dir_recv_signal_packet)
+        await WireIO.send_msg(connection, dir_recv_signal_packet)
         await _get_confirmation(connection)
 
         status_mixin = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
@@ -64,17 +62,18 @@ async def send_directory(remote_peer, dir_path):
 
 
 async def _get_confirmation(connection):
-    timeout = 100000  # TODO: structure better
     try:
-        confirmation = await connection.recv(1)
-        if confirmation == b'\x00':
+        confirmation = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
+        if confirmation == TRANSFER_NOT_OK:
             _logger.info("not sending directory, other end rejected")
             raise TransferRejected()
+        assert confirmation == TRANSFER_OK, "expected b'\x01' as confirmation response"
+
     except asyncio.TimeoutError:
-        _logger.info(f"not sending directory, did not receive confirmation within {timeout} seconds")
+        _logger.info(f"not sending directory, did not receive confirmation within {const.DEFAULT_TRANSFER_TIMEOUT}s")
         raise
     except ConnectionResetError:
-        _logger.error("not sending directory", exc_info=True)
+        _logger.debug("not sending directory", exc_info=True)
         raise
 
 
@@ -87,7 +86,7 @@ def pause_transfer(peer_id, transfer_id):
     transfers_book.add_to_continued(peer_id, transfer_handle)
 
 
-def DirConnectionHandler(app_ctx):
+def DirConnectionHandler(app_ctx: ReadOnlyAppType):
     async def handler(event: ConnectionEvent):
         connection = event.connection
 
@@ -108,7 +107,11 @@ def DirConnectionHandler(app_ctx):
         receiver.connection_made(connection)
         try:
             async with connection:  # acquire lock
-                await connection.send(b'\x01')  # TODO: get confirmation from user
+                what = await webpage.get_transfer_ok(app_ctx.current_profile, peer.peer_id)
+                if not what:
+                    return await connection.send(TRANSFER_NOT_OK)
+
+                await connection.send(TRANSFER_OK)
                 transfers_book.add_to_current(transfer_id, receiver)
                 _logger.info(
                     f"receiving directory from {peer}, saving at {use.shorten_path(dir_path, 40)}"
@@ -125,9 +128,10 @@ def DirConnectionHandler(app_ctx):
                 _logger.info(f"directory received from {peer}")
                 transfers_book.add_to_completed(transfer_id, receiver)
         except Exception as e:
-            if const.debug:
-                traceback.print_exc()
-            print("*" * 80, e)  # debug
+            _logger.debug("receiving directory failed with", exc_info=e)
+            if receiver.state == TransferState.PAUSED:
+                transfers_book.add_to_continued(transfer_id, receiver)
+            if receiver.state == TransferState.ABORTING:
+                transfers_book.add_to_completed(transfer_id, receiver)
 
     return handler
-

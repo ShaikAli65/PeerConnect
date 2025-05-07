@@ -1,11 +1,11 @@
 import asyncio
 import collections
 from contextlib import aclosing
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING
 
 from src.avails import WireData, constants as const
-from src.avails.useables import LONG_INT, recv_int
-from src.core.public import get_this_remote_peer
+from src.avails.useables import override
+from src.net.utils import LONG_INT, recv_int
 from src.transfers import HEADERS
 from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
 
@@ -144,7 +144,7 @@ class OTMFilesRelay(PalmTreeRelay):
     def _make_update_stream_link_packet(self):
         h = WireData(
             header=HEADERS.OTM_UPDATE_STREAM_LINK,
-            msg_id=get_this_remote_peer().peer_id,
+            msg_id=self.this_peer.peer_id,
             session_id=self.session.session_id,
             peer_addr=self.passive_endpoint_addr,
         )

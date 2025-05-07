@@ -3,6 +3,10 @@ configs/profiles/*
 logs
 *.log
 
+dist
+*.pkl
+build
+
 .idea
 .vscode
 __pycache__/*
@@ -245,3 +249,5 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+app_config
+log_configs

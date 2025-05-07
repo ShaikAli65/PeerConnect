@@ -83,26 +83,6 @@ Main WebSocket connection handler
 - parses data to [DataWeaver](/src_docs/avails/wire.md#dataweaver)
 - submit that into [MessageFromFrontEndDispatcher](#messagefromfrontenddispatcher)
 
-### start_websocket_server
-
-```python
-async def start_websocket_server()
-```
-
-Starts WebSocket server on port [const.PORT_PAGE](/src_docs/avails/constants.md)
-
-- Uses `websockets` library
-- Handles UI connections
-
-### run_page_server
-
-```python
-@asynccontextmanager
-async def run_page_server(host="localhost"):
-```
-
-- context manager that runs python's `http.server` in a subprocess and finalizes when application quits
-- serves [webpage](/webpage/index.html)
 
 ### initiate_page_handle
 
@@ -114,11 +94,6 @@ async def initiate_page_handle(exit_stack):
 - Starts websocket server
 - Starts page serving server
 
-### exit_stack
-
-```py
-_exit_stack = AsyncExitStack()
-```
 
 PageHandle maintains it's own [exit_stack](<https://www.google.com/search?q=asyncexitstack+site:python.org>) to maintain [dispatchers](#dispatchers) life time
 

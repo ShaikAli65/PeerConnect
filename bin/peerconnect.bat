@@ -9,15 +9,16 @@ set "venv_dir=%base_dir%\.venv"
 set "req_file=%base_dir%\requirements.txt"
 set "flag_file=%script_dir%.setup_completed"
 set "app_module=src"
+set "PYTHONPATH=%base_dir%;%PYTHONPATH%"
+
+set "activate_path=%venv_dir%\Scripts\activate.bat"
+set "deactivate_path=%venv_dir%\Scripts\deactivate.bat"
 
 :: Check for existing setup
 if exist "%flag_file%" (
     echo Existing setup detected. Launching application...
-    call "%venv_dir%\Scripts\activate.bat" && (
-        cd /d "%base_dir%"
-        python -m "%app_module%"
-        deactivate
-    )
+    call :execute
+    call :cleanup
     exit /b 0
 )
 
@@ -45,15 +46,24 @@ if not exist "%req_file%" (
 :: Setup process
 echo Initializing new setup...
 echo Creating virtual environment...
-%py_cmd% -m venv "%venv_dir%" || (
-    echo Failed to create virtual environment
-    exit /b 1
+if not exist "%venv_dir%" (
+    %py_cmd% -m venv "%venv_dir%" || (
+        echo Failed to create virtual environment
+        exit /b 1
+    )
+) else (
+    echo Found an environment, skipping creation 
 )
 
-call "%venv_dir%\Scripts\activate.bat"
+call :checkvenv
+if errorlevel 1 (
+    exit /b "%errorlevel%"
+)
+:: TODO: fails if not Scripts dir found in venv
 echo Installing dependencies...
+echo Upgrading pip...
 python -m pip install --upgrade pip --quiet
-python -m pip install -r "%req_file%" --quiet || (
+python -m pip install -r "%req_file%" || (
     echo Failed to install requirements
     exit /b 1
 )
@@ -63,16 +73,38 @@ echo. > "%flag_file%"
 echo Setup completed successfully. Created verification flag.
 
 :: Launch application
-cd /d "%base_dir%"
-python -m "%app_module%" || (
-    echo Application failed to start
-    exit /b 1
+
+:execute
+call :checkvenv
+if errorlevel 1 (
+    exit /b "%errorlevel%"
 )
+cd /d "%base_dir%"
+python -m "%app_module%"
+call "%deactivate_path%"
+exit /b 0
+
+:checkvenv
+if not exist "!activate_path!" (
+    if exist "%venv_dir%\bin\activate" (
+        echo Virtual environment created is not purely based on Windows, check your Python path
+        rmdir /s /q "%venv_dir%"
+        exit /b 1
+
+    ) else (
+        echo "failed to activate venv, exiting"
+        exit /b 1
+    )
+    exit /b 0
+)
+call "%activate_path%"
+exit /b 0
 
 :: Cleanup
-deactivate
+:cleanup
+call "%deactivate_path%"
+
 echo.
 set /p "clear=Clear screen? [y/N]: "
 if /i "!clear!"=="y" cls
-
 endlocal

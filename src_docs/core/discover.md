@@ -45,7 +45,7 @@ Initiate → Register Handlers → Send Requests → Bootstrap Check → [Passiv
 
 ```python
 async def _try_asking_user():
-    if peer_name := await webpage.ask_user_for_a_peer():
+    if peer_name := await webpage.ask_user_peer_name_for_discovery():
 # Attempt direct connection
 ```
 

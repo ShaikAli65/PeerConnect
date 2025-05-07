@@ -1,3 +1,5 @@
+from typing import Self
+
 import umsgpack
 
 from src.avails import const
@@ -34,7 +36,7 @@ class RemotePeer:
         'id': bytes,
     }
 
-    __slots__ = 'username', '_conn_port', 'status', '_req_port', 'id', 'ip', 'long_id', '_byte_cache'
+    __slots__ = 'id', 'username', 'ip', '_conn_port', '_req_port', 'status', 'long_id', '_byte_cache'
 
     def __init__(self,
                  byte_id=b'\x00',
@@ -61,27 +63,6 @@ class RemotePeer:
         """
         return self.long_id ^ node.long_id
 
-    def __iter__(self):
-        """
-        Enables use of RemotePeer as a tuple - i.e., tuple(node) works.
-        """
-        return iter([
-            self.id,
-            self.username,
-            self.ip,
-            self._conn_port,
-            self._req_port,
-            self.status,
-        ])
-
-    @property
-    def uri(self):
-        return const.THIS_IP.addr_tuple(port=self._conn_port, ip=self.ip)
-
-    @property
-    def req_uri(self):
-        return const.THIS_IP.addr_tuple(port=self._req_port, ip=self.ip)
-
     @classmethod
     def load_from(cls, data: bytes):
         list_of_attrs = umsgpack.loads(data)
@@ -93,9 +74,18 @@ class RemotePeer:
         """
         return match_string in self.username
 
-    def __bytes__(self):
-        list_of_attributes = list(self)
-        return umsgpack.dumps(list_of_attributes)
+    def update(self, other: Self):
+        assert other.id == self.id, "ids need to be same to update"
+        for attr in other.__slots__:
+            setattr(self, attr, getattr(other, attr))
+
+    @property
+    def uri(self):
+        return const.THIS_IP.addr_tuple(port=self._conn_port, ip=self.ip)
+
+    @property
+    def req_uri(self):
+        return const.THIS_IP.addr_tuple(port=self._req_port, ip=self.ip)
 
     @property
     def peer_id(self):
@@ -113,6 +103,50 @@ class RemotePeer:
 
         return r
 
+    @property
+    def is_online(self):
+        return self.status == self.ONLINE
+
+    def __iter__(self):
+        """
+        Enables use of RemotePeer as a tuple - i.e., tuple(node) works.
+
+        Note:
+            Does Not Include: 'long_id', '_byte_cache'
+        """
+        return iter(tuple(getattr(self, x) for x in self.__slots__)[:-2])
+        # return iter([
+        #     self.id,
+        #     self.username,
+        #     self.ip,
+        #     self._conn_port,
+        #     self._req_port,
+        #     self.status,
+        # ])
+
+    def __bytes__(self):
+        list_of_attributes = list(self)
+        return umsgpack.dumps(list_of_attributes)
+
+    def __bool__(self):
+        return bool(self.username or self.id or self.req_uri or self.uri)
+
+    def __hash__(self) -> int:
+        return hash(self.uri) ^ hash(self.id)
+
+    def __eq__(self, obj) -> bool:
+        if not isinstance(obj, RemotePeer):
+            return NotImplemented
+        return self.uri == obj.uri and self.username == obj.username and self.id == obj.id
+
+    def __lt__(self, obj) -> bool:
+        if not isinstance(obj, RemotePeer):
+            return NotImplemented
+        return self.long_id < obj.long_id
+
+    def __str__(self):
+        return repr(self)
+
     def __repr__(self):
         return (
             f'RemotePeer('
@@ -123,27 +157,8 @@ class RemotePeer:
             f' st={self.status})'
         )
 
-    def __bool__(self):
-        return bool(self.username or self.id or self.req_uri or self.uri)
-
-    def __str__(self):
-        return repr(self)
-
-    def __hash__(self) -> int:
-        return hash(self.uri)
-
-    def __eq__(self, obj) -> bool:
-        if not isinstance(obj, RemotePeer):
-            return NotImplemented
-        return self.uri == obj.uri and self.username == obj.username
-
-    def __lt__(self, obj) -> bool:
-        if not isinstance(obj, RemotePeer):
-            return NotImplemented
-        return self.long_id < obj.long_id
-
 
 def convert_peer_id_to_byte_id(peer_id: str):
     int_ed = int(peer_id)
-    byt_ed = int_ed.to_bytes(16)
+    byt_ed = int_ed.to_bytes(20)
     return byt_ed

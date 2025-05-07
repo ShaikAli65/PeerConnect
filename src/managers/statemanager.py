@@ -4,12 +4,11 @@ import inspect
 import logging
 import math
 import threading
-from asyncio import CancelledError, Queue as _queue
+from asyncio import Queue as _queue
 from typing import Iterable, Optional
 
-from src.avails import useables
+from src.avails import use
 from src.avails.mixins import singleton_mixin
-from src.avails.useables import awaitable
 
 _logger = logging.getLogger(__name__)
 
@@ -48,6 +47,7 @@ class State:
         event(asyncio.Event): event to wait before calling func
 
     """
+
     def __init__(self, name, func, *args, is_blocking=False, lazy_args=(), event_to_wait: asyncio.Event = None):
         self.name = name
         self.is_blocking = is_blocking
@@ -56,6 +56,7 @@ class State:
         self.args = args
         self.lazy_args = lazy_args
         self._func_async_task = None
+        self._entered = False
 
     async def _make_function(self):
         func = self.func
@@ -75,8 +76,8 @@ class State:
 
         @functools.wraps(func)
         async def wrap_in_task(_func):
-            f = useables.wrap_with_tryexcept(_func, *self.args)
-            self._func_async_task = asyncio.create_task(f())
+            f = use.wrap_with_tryexcept(_func, *self.args)
+            self._func_async_task = asyncio.create_task(f(), name=self.func_name)
 
         @functools.wraps(func)
         def wrap_in_thread(_func):
@@ -87,11 +88,12 @@ class State:
         if self.is_blocking:
             self.func = functools.partial(wrap_in_task if self.is_coro else wrap_in_thread, func)
         else:
-            self.func = functools.partial(func,*self.args)
+            self.func = functools.partial(func, *self.args)
 
         self.func_name = _get_func_name(func)
 
     async def enter_state(self):
+        self._entered = True
         await self._make_function()
 
         loop = asyncio.get_event_loop()
@@ -109,7 +111,7 @@ class State:
         return ret_val
 
     def __repr__(self):
-        return f"<State({self.name})>"
+        return f"<State({self.name=},{self._entered=})>"
 
     async def stop_if_running(self):
         if not self._func_async_task:
@@ -117,14 +119,8 @@ class State:
 
         if self._func_async_task.done():
             return
-        
-        self._func_async_task.cancel(sentinel := object())      
-        try:
-            await self._func_async_task
-        except CancelledError as ce:
-            if any(ce.args) and ce.args[0] is sentinel:
-                return
-            raise
+        await use.safe_cancel_task(self._func_async_task)
+
 
 @singleton_mixin
 class StateManager:
@@ -139,12 +135,20 @@ class StateManager:
         self.states = []
         self.close = False
         self.all_tasks: list[asyncio.Task] = []
+        self.stopped = False
 
     async def signal_stopping(self):
+        if self.stopped:
+            return
+
         self.close = True
-        self.state_queue.put(None)  # stop processing, this will end the `process_states` and `exit_stack` is invoked 
+        await self.state_queue.put(
+            None)  # stop processing, this will end the `process_states` and `exit_stack` is invoked
         for state in reversed(self.states):
             await state.stop_if_running()
+
+        self.states.clear()
+        self.stopped = True
 
     async def put_state(self, state: Optional[State]):
         await self.state_queue.put(state)
@@ -160,8 +164,14 @@ class StateManager:
         Main event loop for the program
         different points in code wrap functions in states to get processed
         """
-        while self.close is False:
-            current_state: State = await self.state_queue.get()
-            self.states.append(current_state)
-            r = await current_state.enter_state()
-            assert r is None, "state returned non None value"
+        try:
+            while self.close is False:
+                current_state: State = await self.state_queue.get()
+                if current_state is None:
+                    return
+
+                self.states.append(current_state)
+                r = await current_state.enter_state()
+                assert r is None, "state returned non None value"
+        finally:
+            await self.signal_stopping()

@@ -1,6 +1,9 @@
+import asyncio
+
 from src.avails import DataWeaver
 from src.conduit import logger, webpage
 from src.conduit.pagehandle import PROFILE_WAIT
+from src.configurations import interfaces
 from src.configurations.interfaces import get_interfaces
 from src.managers import (
     ProfileManager,
@@ -9,16 +12,18 @@ from src.managers import (
     refresh_profile_list, set_current_profile,
 )
 
+_alignment_done = asyncio.Event()
+
 
 async def align_profiles(_: DataWeaver):
-    logger.info("::[PROFILES] sending profiles")
+    interfaces.reset()
+    _alignment_done.clear()
+    logger.info("[PROFILES] sending profiles")
     updated_profiles = await webpage.send_profiles_and_get_updated_profiles(
-        all_profiles(),
-        dict(
-            enumerate(get_interfaces())))
+        all_profiles(), get_interfaces()
+    )
     await configure_further_profile_data(updated_profiles)
-    await refresh_profile_list()
-    PROFILE_WAIT.set()
+    _alignment_done.set()
 
 
 async def configure_further_profile_data(profiles_data):
@@ -58,22 +63,38 @@ async def configure_further_profile_data(profiles_data):
         profile_object = get_profile_from_profile_file_name(may_be_profile_name)
         if profile_object is None:
             profile_settings['USER']['id'] = int(profile_settings['USER']['id'])  # = new_remote_peer_id()
-            profile_name = profile_settings['USER']['name']
+            preferred_ip = interfaces.get_ip_with_ifname(profile_settings["INTERFACE"]["if_name"])
+            profile_settings["INTERFACE"] = getattr(preferred_ip, '_asdict')()
 
             # new profile does not have any id associated with it
+            profile_name = profile_settings['USER']['name']
             await ProfileManager.add_profile(profile_name, profile_settings)
             logger.info(f"[HANDLE PROFILE] added profile :{may_be_profile_name}, {profile_settings}")
             continue
 
         for header, content in profile_settings.items():
+            preferred_ip = interfaces.get_ip_with_ifname(profile_settings["INTERFACE"]["if_name"])
+            profile_settings["INTERFACE"] = getattr(preferred_ip, '_asdict')()
             await profile_object.edit_profile(header, content)
 
 
 async def set_selected_profile(page_data: DataWeaver):
-    selected_profile = page_data
+    await _alignment_done.wait()
+    if PROFILE_WAIT.done():
+        logger.warning(f"current profile is already set, ignoring choice {page_data}")
+        return
+    
+    await refresh_profile_list()
     for profile in ProfileManager.PROFILE_LIST:
-        if profile == selected_profile.content:
-            selected_profile = profile
-            break
-    await set_current_profile(selected_profile)
-    logger.info(f"profile selected and updated {selected_profile=}")
+        profile: ProfileManager
+        if profile == page_data.content:
+            assert profile.interface is not None, "interface not configured properly can't select this profile"
+            assert bool(profile.file_name) is True, "file name not configured properly can't select this profile"
+            assert bool(profile.id) is True, "id not configured properly can't select this profile"
+
+            await set_current_profile(profile)
+            logger.info(f"profile selected and updated {profile=}")
+            PROFILE_WAIT.set_result(profile)
+            return
+
+    logger.critical("selected profile not found in current list")

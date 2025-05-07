@@ -1,38 +1,97 @@
 import asyncio
+import enum
 import functools
 import inspect
 import os
 import platform
-import socket
-import struct
 import subprocess
 import sys
-import threading
 import traceback
-import typing
+import uuid
 from pathlib import Path
-from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from sys import _getframe  # noqa
-from typing import Annotated, Awaitable, Final
-from uuid import uuid4
 
-import select
+if sys.version_info > (3, 12):
+    from typing import override as _override
+else:
+    def _override(func):
+        return func  # noqa
 
-from src.avails import const
+from src.avails import constants as const
+
+override = _override
 
 
 def func_str(func_name):
     return f"{func_name.__name__}()\\{os.path.relpath(func_name.__code__.co_filename)}"
 
 
-def get_unique_id(_type: type = str):
+def get_unique_id(_type: type = str, *, u_version="1"):
+    id_gen = getattr(uuid, "uuid" + u_version)
     if _type == bytes:
-        return uuid4().bytes
-    return _type(uuid4())
+        return id_gen().bytes
+    return _type(id_gen())
 
 
-SHORT_INT = 4
-LONG_INT = 8
+async def safe_cancel_task(task: asyncio.Task):
+    """Cancels task and waits until it returns
+
+    * Handles the case when the parent task gets cancelled and catching that cancelled error misjudges event loop
+
+    * If the task containing this function call gets cancelled then, this function raises cancellation and returns
+      irrespective of the completion of `:param task:` (even though it is probably cancelled)
+
+    * Assumes that task will always re-raise the same cancelled error that was passed in, as per asyncio standard
+      if not this function does not work as expected
+
+    Notes:
+        Make sure that ``task`` is active and not done, if it's result already available then we may get an invalid
+        state exception
+    Args:
+        task(asyncio.Task): task to cancel
+    """
+    return task.cancel()
+    # await _safe_cancel1(task=task)
+
+
+async def _safe_cancel1(task):
+    class CancelFlag(object):
+        task_name = None
+
+        def __repr__(self):
+            return f"<{self.__class__.__name__}(task_name={self.task_name},id={id(self)})>"
+
+    assert isinstance(task, asyncio.Task), "expected asyncio.Task instance"
+    task.cancel(sentinel := CancelFlag())
+    sentinel.task_name = task.get_name()
+
+    f = asyncio.shield(task)
+
+    try:
+        await asyncio.sleep(0)
+        if task.done():
+            return
+
+        # it's not a good choice to pass cancelled error of outer function
+        # into an already-expected-to-be cancelled task
+        return await f  # wait until return
+    except asyncio.CancelledError as ce:
+        curr = asyncio.current_task()
+        if not task.done():
+            # this means `ce` is not raised by completion of task
+            # and `ce` belongs to current task
+            raise ce
+
+        try:
+            # we lose our sentinel inside shield as it plays cleverly with futures
+            task.exception()  # unwrap
+        except asyncio.CancelledError as ce_task:
+            if sentinel in ce_task.args:
+                if curr.cancelling():
+                    # edge case where task gets done immediately after cancellation
+                    # and `ce` belongs to current task
+                    raise ce
+                return
 
 
 def shorten_path(path: Path, max_length):
@@ -47,32 +106,6 @@ def shorten_path(path: Path, max_length):
 
     selected_parts.insert(1, '..')
     return os.path.sep.join(selected_parts)
-
-
-async def recv_int(get_bytes: typing.Callable[[int], Awaitable[bytes]], type=SHORT_INT):
-    """Receives integer from get_bytes function
-
-    awaits on ``get_bytes``, gets bytes based on ``type`` argument
-    unpacks it using ``struct.unpack``
-
-    Args:
-        get_bytes (Callable[[int], Awaitable[bytes]]): function to receive bytes from
-        type: `SHORT_INT` and `LONG_INT`
-
-    Returns:
-        int: unpacked integer
-
-    Raises:
-        ValueError : on ConnectionResetError or struct.error
-    """
-    try:
-        byted_int = await get_bytes(type)
-        integer = struct.unpack('!I' if type == SHORT_INT else '!Q', byted_int)[0]
-        return integer
-    except struct.error as se:
-        raise ValueError(f"unable to unpack integer from: {byted_int}") from se
-    except ConnectionResetError as ce:
-        raise ValueError(f"unable to receive integer") from ce
 
 
 def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
@@ -129,7 +162,7 @@ def echo_print(*args, **kwargs):
         *args: The arguments to print.
     """
     # with LOCK_PRINT:
-    return print(*args, COLOR_RESET, **kwargs)
+    return print(*args, COLORS.RESET, **kwargs)
 
 
 def async_input(helper_str=""):
@@ -139,7 +172,7 @@ def async_input(helper_str=""):
 def open_file(content):
     if platform.system() == "Windows":
         powershell_script = f"""
-        $file = "{content}"
+        $file = '{content}'
         Invoke-Item $file
         """
         result = subprocess.run(["powershell.exe", "-Command", powershell_script], stdout=subprocess.PIPE, text=True)
@@ -149,24 +182,6 @@ def open_file(content):
     else:
         subprocess.run(["xdg-open", content])
     return None
-
-
-def wait_for_sock_read(sock, actuator, timeout):
-    reads, _, _ = select.select([sock, actuator], [], [], timeout)
-
-    if actuator.to_stop:
-        return (actuator,)
-
-    return reads
-
-
-def wait_for_sock_write(sock, actuator, timeout):
-    _, writes, _ = select.select([actuator, ], [sock, ], [], timeout)
-
-    if actuator.to_stop:
-        return [actuator, ]
-
-    return writes
 
 
 _CO_NESTED = inspect.CO_NESTED
@@ -255,15 +270,13 @@ def awaitable(syncfunc):
     return decorate
 
 
-COLORS: Final[list[str]] = [
-    "\033[91m",  # Red
-    "\033[92m",  # Green
-    "\033[93m",  # Yellow
-    "\033[94m",  # Blue
-    "\033[95m",  # Magenta
-]
-
-COLOR_RESET: Final[str] = "\033[0m"
+class COLORS(enum.StrEnum):
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    RESET = "\033[0m"
 
 
 def wrap_with_tryexcept(func, *args, **kwargs):
@@ -286,21 +299,21 @@ def wrap_with_tryexcept(func, *args, **kwargs):
             return await func(*args, **kwargs)
         except Exception as e:
 
-            print(f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+            print(f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
             traceback.print_exc()
             tb = traceback.extract_tb(e.__traceback__)
             filtered_tb = [frame for frame in tb if "wrapped_with_tryexcept" not in frame.name]
 
             print(
-                f"{COLORS[1]}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
+                f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
                 file=sys.stderr,
             )
             # Print the filtered traceback
             for frame in filtered_tb:
-                print(f"  File \"{frame.filename}\", line {frame.lineno}, in {frame.name}")
+                print(f"  File \'{frame.filename}\', line {frame.lineno}, in {frame.name}")
                 if frame.line:
                     print(f"    {frame.line}")
-            print(COLOR_RESET)
+            print(COLORS.RESET)
             raise
 
     return wrapped_with_tryexcept
@@ -331,8 +344,6 @@ def search_relevant_peers(peer_list, search_string):
     Yields:
         list: peers
     """
-    if not hasattr(peer_list, '_gil_safe'):  # Check if GIL safety has been determined
-        peer_list._gil_safe = hasattr(threading, 'get_ident')  # Check for GIL
 
     peer_ids = list(peer_list.keys())
 
@@ -343,50 +354,6 @@ def search_relevant_peers(peer_list, search_string):
             continue  # Skip removed peer
         if peer.is_relevant(search_string):
             yield peer
-
-
-_AddressFamily = Annotated[AddressFamily, 'v4 or v6 family']
-_SockType = Annotated[socket.SOCK_STREAM | socket.SOCK_DGRAM, 'STREAM OR UDP']
-_IpProto = Annotated[IPPROTO_TCP | IPPROTO_UDP, "tcp or udp protocol"]
-_CannonName = Annotated[str, 'canonical name']
-_SockAddr = Annotated[tuple[str, int] | tuple[str, int, int, int], "address tuple[2] if v4 tuple[4] if v6"]
-
-
-async def get_addr_info(
-        host: bytes | str | None,
-        port: bytes | str | int | None,
-        *,
-        family: int = 0,
-        type: int = 0,  # noqa
-        proto: int = 0,
-        flags: int = 0
-):
-    """Just a convenience for asynchronous name resolving
-
-    Args:
-        host: passed into get addr info
-        port: passed into get addr info
-        family: passed into get addr info
-        type: passed into get addr info
-        proto: passed into get addr info
-        flags: passed into get addr info
-
-    Yields:
-        tuple[
-            _AddressFamily,
-            _SockType,
-            _IpProto,
-            _CannonName,
-            _SockAddr,
-        ]
-    """
-
-    loop = asyncio.get_running_loop()
-    addresses = await loop.getaddrinfo(host, port, family=family, type=type,
-                                       proto=proto, flags=flags)
-
-    for family, sock_type, proto, canonname, addr in addresses:
-        yield family, sock_type, proto, canonname, addr
 
 
 class NotInUse:

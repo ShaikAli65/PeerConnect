@@ -35,74 +35,72 @@ Discovery State Machine
 
 import asyncio
 import logging
-import traceback
 from typing import TYPE_CHECKING
 
+import src.net.utils as net_util
 from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.events import RequestEvent
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.conduit import webpage
-from src.core.public import DISPATCHS, addr_tuple, get_this_remote_peer
+from src.core.app import AppType, ReadOnlyAppType
+from src.core.events import RequestEvent
+from src.net.transports import DiscoveryTransport
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
-from src.transfers.transports import DiscoveryTransport
 
 _logger = logging.getLogger(__name__)
 
 
 async def discovery_initiate(
-        kad_server,
         multicast_address,
+        app_ctx: AppType,
         transport,
-        req_dispatcher,
-        app_ctx,
 ):
     discover_dispatcher = DiscoveryDispatcher()
     discovery_transport = DiscoveryTransport(transport)
     await app_ctx.exit_stack.enter_async_context(discover_dispatcher)
-    req_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
-    app_ctx.dispatchers[DISPATCHS.DISCOVER] = discover_dispatcher
+    app_ctx.requests.dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
 
-    discovery_reply_handler = DiscoveryReplyHandler(kad_server)
-    discovery_req_handler = DiscoveryRequestHandler(discovery_transport)
+    app_ctx.discovery.dispatcher = discover_dispatcher
+    app_ctx.discovery.transport = discovery_transport
+
+    discovery_reply_handler = DiscoveryReplyHandler(app_ctx.read_only())
+    discovery_req_handler = DiscoveryRequestHandler(app_ctx.read_only())
 
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
     await send_discovery_requests(
-        discovery_transport,
         multicast_address,
         app_ctx,
     )
 
 
-def DiscoveryReplyHandler(kad_server):
+def DiscoveryReplyHandler(app_ctx: ReadOnlyAppType):
     async def handle(event: RequestEvent):
-        if event.from_addr[0] == const.THIS_IP:
+        if event.from_addr[0] == app_ctx.this_ip.ip:
             return
         connect_address = tuple(event.request["connect_uri"])
-        _logger.debug(f"bootstrapping kademlia {connect_address}")
-        if any(await kad_server.bootstrap([connect_address])):
+        _logger.debug(f"from: {event.from_addr}, {connect_address=}")
+        if any(await app_ctx.kad_server.bootstrap([connect_address])):
             _logger.debug("bootstrapping completed")
 
     return handle
 
 
-def DiscoveryRequestHandler(discovery_transport):
+def DiscoveryRequestHandler(app_ctx: ReadOnlyAppType):
     async def handle(event: RequestEvent):
         req_packet = event.request
-        if req_packet["reply_addr"][0] == const.THIS_IP:
-            _logger.debug("ignoring echo")
+        if req_packet["reply_addr"][0] == app_ctx.this_ip.ip[0]:
+            _logger.debug(f"ignoring echo, {req_packet['reply_addr']}")
             return
         _logger.info(f"discovery replying to req: {req_packet.body}")
-        this_rp = get_this_remote_peer()
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
-            msg_id=this_rp.peer_id,
-            connect_uri=this_rp.req_uri[:2],
+            msg_id=app_ctx.this_peer_id,
+            connect_uri=app_ctx.this_remote_peer.req_uri[:2],
         )
-        discovery_transport.sendto(
-            bytes(data_payload), addr_tuple(*req_packet["reply_addr"][:2])
+        app_ctx.discovery.transport.sendto(
+            bytes(data_payload), app_ctx.addr_tuple(*req_packet["reply_addr"][:2])
         )
 
     return handle
@@ -115,44 +113,48 @@ class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
 
     async def submit(self, event: RequestEvent):
         wire_data = event.request
-        self.msg_arrived(wire_data)
-        handle = self.registry[wire_data.header]
+        self.reply_arrived(wire_data)
+        handle = self.registry.get(wire_data.header, None)
+        if handle is None:
+            return
+
         _logger.debug(f"dispatching request {handle}")
         try:
             await handle(event)
-        except Exception:
-            if const.debug:
-                traceback.print_exc()
-            raise
+        except RuntimeError:
+            await self._handle_runtime_error(_logger)
+        except Exception as exp:
+            _logger.error(f"{handle} failed with :", exc_info=exp)
 
 
-async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr, app_ctx):
-    kad_server = app_ctx.kademlia_network_server
+async def send_discovery_requests(multicast_addr, app_ctx):
+    kad_server = app_ctx.kad_server
     in_network = app_ctx.in_network
+    finalizing = app_ctx.finalizing
+    transport = app_ctx.discovery.transport
 
-    this_rp = get_this_remote_peer()
     ping_data = bytes(
         WireData(
             DISCOVERY.NETWORK_FIND,
-            this_rp.peer_id,
-            reply_addr=this_rp.req_uri[:2]
+            app_ctx.this_peer_id,
+            reply_addr=app_ctx.this_remote_peer.req_uri[:2]
         )
     )
 
     async def send_discovery_packet():
 
         async for _ in use.async_timeouts(initial=0.1, max_retries=const.DISCOVER_RETRIES):
-            transport.sendto(ping_data, multicast_addr)
             if kad_server.is_bootstrapped:
                 in_network.set()  # set the signal informing that we are in network
                 break
+            transport.sendto(ping_data, multicast_addr)
 
         _logger.debug(f"sent discovery request to multicast {multicast_addr}")
 
     async def enter_passive_mode():
         _logger.info(f"entering passive mode for discovery after waiting for {const.DISCOVER_TIMEOUT}s")
         async for _ in use.async_timeouts(initial=0.1, max_retries=-1, max_value=const.DISCOVER_TIMEOUT):
-            if app_ctx.finalizing.is_set():
+            if finalizing.is_set():
                 return
             if kad_server.is_bootstrapped:
                 in_network.set()  # set the signal informing that we are in network
@@ -163,7 +165,7 @@ async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr,
 
     await send_discovery_packet()
 
-    task = asyncio.create_task(enter_passive_mode())
+    task = asyncio.create_task(enter_passive_mode(), name="discovery-passive-mode")
 
     await asyncio.sleep(const.DISCOVER_TIMEOUT)  # wait a bit
     # stay in passive mode and keep sending discovery requests
@@ -173,13 +175,23 @@ async def send_discovery_requests(transport: DiscoveryTransport, multicast_addr,
         _logger.debug(f"requesting user for peer name after waiting for {const.DISCOVER_TIMEOUT}s")
         await _try_asking_user(transport, ping_data)
 
-    await task
+    if not task.done():
+        await task
 
 
 async def _try_asking_user(transport, discovery_packet):
-    if peer_name := await webpage.ask_user_for_a_peer():
-        try:
-            async for family, sock_type, proto, _, addr in use.get_addr_info(peer_name, const.PORT_REQ):
-                transport.sendto(discovery_packet, addr)
-        except OSError:
-            await webpage.failed_to_reach(peer_name)
+    reason = None
+    while True:
+        if peer_name := await webpage.ask_user_peer_name_for_discovery(reason):
+            try:
+                async for family, sock_type, proto, _, addr in net_util.get_addr_info(
+                        peer_name,
+                        const.PORT_REQ,
+                        family=const.IP_VERSION
+                ):
+                    transport.sendto(discovery_packet, addr)
+                    return
+            except OSError:
+                reason = "failed to reach peer or name look up failed"
+        else:
+            break  # if the use is not interested in providing a username

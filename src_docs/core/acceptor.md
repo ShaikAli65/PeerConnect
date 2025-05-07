@@ -69,7 +69,7 @@ refer [here](/src_docs/core/bandwidth.md#incoming-and-outgoing-connections) for 
 
 **References:**
 
-- connector [docs](/src_docs/core/connector.md) [src](/src/core/connector.py)
-- bandwidth [docs](/src_docs/core/bandwidth.md) [src](/src/core/bandwidth.py)
+- connector [docs](/src_docs/core/connector.md) [src](/src/net/connector.py)
+- bandwidth [docs](/src_docs/core/bandwidth.md) [src](/src/net/bandwidth.py)
 
 > [back](/src_docs/core)

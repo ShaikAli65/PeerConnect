@@ -11,13 +11,15 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 - **Protocols**: Implements several distributed protocols to optimize communication and data sharing between peers.
 - **Standard Library Use**: Core functionality implemented using Python’s standard library to avoid unnecessary dependencies.
 
+## Installation
+
+  Visit installation wiki [here](https://github.com/ShaikAli65/PeerConnect/wiki/Installation)
+
 ## Internals
 
 - **Network Discovery**: Finds other peers incrementally in the local network and lists them to the user
 - **Kademlia**: Is used in the overlay routing
 - **Messaging**: Direct messaging is used, a combination of datagram and stream protocols are used
-
-> Visit [here](<https://excalidraw.com/?#json=JwupHwQ7QuQyK1BEYFhdl,528_biXX7getTXAvT763uw>) for diagrams
 
 ### What it Lacks
 
@@ -26,43 +28,32 @@ The primary goal of PeerConnect is to provide fast and efficient data transfers 
 - A good test suite
 - Application is not Chaos-Tested for network partitions
 
-## Usage
+## Usage for source clone
 
-  TBD
+```sh
+git clone https://github.com/ShaikAli65/PeerConnect.git
+cd PeerConnect
+```
 
 ### Windows
 
-```
-peerconnect.bat
+```cmd
+bin\peerconnect.bat
 ```
 
 ### Linux
 
-```
-peerconnect.sh
+```sh
+bin/peerconnect.sh
 ```
 
 - Run the script, if any errors occur raise an issue and include stdout of the script
 
-### Future Plans
+## Future Plans and Improvements
 
-- **Further Protocol Optimization**: Continue developing and refining the custom gossip protocol for enhanced scalability.
-- **Sockets Multiplexer**: Introduce an async sockets multiplexer which works on multiple connections connected to same addr and provide high level functions that expose functions like send and recv as single connection,
-  but underlying mechanism select which socket to send data on, and on receive side the data should be and ordered stream,
-  should respect backpressure, utilizing maximum bandwidth
-
-### More Features
-
-These are not planned for completion but code (Internal High Level APIs) tries it's best to be extensible to include various functionalities
-
-- **Shared directory**: Allow users to share a directory and other peers can search for files they want
-
-- **Building Reputation System**: Not planned to be made, will take forever
-
-- **Calls**: Voice and Video Calls
+visit [here](/src_docs/PLANS.md)
 
 ## Branch Info
-
 
 ### Main Branch
 
@@ -81,6 +72,8 @@ The code in the main branch is a functional version of PeerConnect. It employs a
 
 ### Dev Branch
 
+*default*
+
 The dev branch is a complete rewrite using Python’s asynchronous features, aiming to scale PeerConnect for **larger, distributed networks** without a centralized entity. This branch includes:
 
 - **Distributed Hash Tables (DHT)**: Implements the **Kademlia** protocol for maintaining decentralized peer connections.
@@ -97,3 +90,10 @@ The dev branch is a complete rewrite using Python’s asynchronous features, aim
 #### Additional Dependencies
 
 - **[kademlia](https://github.com/bmuller/kademlia)**: A distributed hash table implementation used for decentralized peer discovery.
+
+### Building
+
+- Github Action named `Build and Release` gets run every time a *PR* is made to `release` branch
+- Builds a *setup* executable for windows and creates a tarball zip for linux installation ([more](#installation))
+- Creates a release, for now releases use run number provided by github to increment patch number
+- Releases are planned to use semantic versioning as mentioned in [semver.org](<https://semver.org/>)

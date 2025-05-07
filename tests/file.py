@@ -8,7 +8,7 @@ from pathlib import Path
 import _path  # noqa
 from src.avails import DataWeaver, const
 from src.conduit import handledata, headers
-from src.core.public import Dock
+from src.core.app import provide_app_ctx
 from src.managers.statemanager import State
 from test import config, get_a_peer, start_test1
 
@@ -32,9 +32,10 @@ def hasher(file_paths):
     return hash_tasks
 
 
-async def test_file_transfer(_config):
+@provide_app_ctx
+async def test_file_transfer(_config, *, app_ctx=None):
     file_paths = "D:\\Movies\\Schindlers List 1993 720p UHD BluRay x264 6CH-Pahe.mkv", "D:\\Movies\\Businessman_2012_Telugu_Blu_Ray_1080p_AVC_x264_DD5_1_448Kbps_+_ESub.mkv"
-    await Dock.in_network.wait()
+    await app_ctx.in_network.wait()
     peer = get_a_peer()
     data = DataWeaver(
         header=headers.HANDLE.SEND_FILE,
@@ -45,6 +46,7 @@ async def test_file_transfer(_config):
     )
     if _config.test_mode == "host":
         hash_tasks = hasher(file_paths)
+
     try:
         print("starting file transfer test")
         await handledata.send_file(data)
@@ -54,7 +56,7 @@ async def test_file_transfer(_config):
         raise
 
     if _config.test_mode == "host":
-        hashes = await asyncio.gather(*hash_tasks)
+        hashes = await asyncio.gather(*hash_tasks)  # noqa
         sent_file_paths = [const.PATH_DOWNLOAD / Path(x).name for x in file_paths]
 
         sent_hashes = await asyncio.gather(*hasher(sent_file_paths))

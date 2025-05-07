@@ -1,11 +1,13 @@
-import asyncio
+import logging
 
 import _path  # noqa
 from src.avails.useables import async_input
 from src.core import peers
-from src.core.public import Dock
+from src.core.app import provide_app_ctx
 from src.managers.statemanager import State
 from tests.test import start_test
+
+_logger = logging.getLogger(__name__)
 
 
 async def test_list_of_peers():
@@ -15,9 +17,12 @@ async def test_list_of_peers():
         print(peer_list)
 
 
-async def test_members():
-    await asyncio.sleep(2)
-    print("[INFO] members:", Dock.peer_list)
+@provide_app_ctx
+async def test_members(app_ctx=None):
+    await app_ctx.in_network.wait()
+    assert len(app_ctx.peer_list) > 0, "expected some members in peer_list after entering into network"
+    _logger.info("[TEST PASSED] found peers")
+    print("[INFO] members:", app_ctx.peer_list)
 
 
 if __name__ == "__main__":

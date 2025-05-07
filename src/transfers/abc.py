@@ -1,9 +1,11 @@
 import asyncio
 from abc import ABC, abstractmethod
+from asyncio import CancelledError
 from contextlib import AbstractAsyncContextManager
 
-from src.avails import RemotePeer, connect, const
+from src.avails import RemotePeer
 from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
+from src.net import connect
 from src.transfers import TransferState
 from src.transfers._logger import logger
 
@@ -73,9 +75,11 @@ class CommonCancelMixIn:
         if self.state not in (TransferState.SENDING, TransferState.RECEIVING, TransferState.PAUSED):
             raise InvalidStateError(f"state is not expected to be in {self.state=}")
 
+        assert self.main_task.done() is False, "main task is done"
+
         self.to_stop = True
         self._expected_errors.add(ct := CancelTransfer())
-        self.main_task.set_exception(ct)
+        self.main_task.cancel(ct)
         await self.main_task
 
 
@@ -101,22 +105,28 @@ class CommonAExitMixIn(AbstractAsyncContextManager):
     __slots__ = ()
 
     async def __aexit__(self, exc_type, exc_value, traceback, /):
+
+        # extract the hidden cancel transfer put by CommonCancelMixIn.cancel
+        # if present
+        to_return = None
+        if exc_type is CancelledError and any(exc_value.args):
+
+            if isinstance(cancel_transfer := exc_value.args[0], CancelTransfer) \
+                    and self.state is TransferState.ABORTING \
+                    and cancel_transfer in self._expected_errors:
+                return
+
         if exc_type not in self._expected_errors:
             return
 
-        to_return = None
         if exc_type is TransferIncomplete and self.state is not TransferState.PAUSED:
             logger.warning(
-                f"state miss match at files.Receiver, conditions {exc_type=},{exc_value=}, "
+                f"state miss match at files.AbstractTransferHandle, conditions {exc_type=},{exc_value=}, "
                 f"expected state to be PAUSED, "
                 f"found {self.state=}"
             )
             to_return = True
 
-        if exc_type is CancelTransfer and self.state is TransferState.ABORTING:
-            if const.debug:
-                print("SUPPRESSING error cause its expected", traceback)
-            to_return = True
         self._expected_errors.clear()
         return to_return
 
@@ -154,6 +164,7 @@ class CommonExceptionHandlersMixIn:
         raise err
 
     def handle_exception(self, exp):
+
         if isinstance(exp, CancelTransfer):
             self._handle_cancel_transfer(exp)
         if isinstance(exp, TransferIncomplete):

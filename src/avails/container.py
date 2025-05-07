@@ -1,3 +1,9 @@
+"""
+Contains simple storages used across the peer connect
+1. TransfersBookKeeper
+2. PeerDict
+"""
+
 import asyncio
 from collections import defaultdict
 from itertools import count
@@ -6,15 +12,20 @@ from weakref import WeakSet
 
 from src.avails.bases import HasID, HasIdProperty, HasPeerId
 
-"""
-This module contains simple storages used across the peer connect
-1. TransfersBookKeeper
-2. PeerDict
-"""
+if TYPE_CHECKING:
+    from src.avails import RemotePeer
 
-match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
+    RemotePeer = RemotePeer
+else:
+    RemotePeer = None
 
+__match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
 
+__all__ = (
+    "PeerDict",
+    "TransfersBookKeeper",
+
+)
 # (self, peer_id:  str, transfer_handle: HasID | HasIdProperty)
 
 
@@ -26,18 +37,25 @@ class PeerDict(dict):
         # self.__lock = threading.Lock()
         self.__lock = asyncio.Lock()
 
-    if TYPE_CHECKING:
-        from src.avails import RemotePeer
-        RemotePeer = RemotePeer
-    else:
-        RemotePeer = None
-
     def get_peer(self, peer_id) -> RemotePeer:
         return self.get(peer_id, None)
 
     def add_peer(self, peer_obj: RemotePeer | HasPeerId):
-        # with self.__lock:
-        self[peer_obj.peer_id] = peer_obj
+        """Adds peer to dictionary
+
+        If peer_obj with peer_id is already there in dict, then calls `RemotePeer.update` that
+        changes/updates underlying attribute values inplace, this ensures that object references are maintained as-is.
+
+        If you want to force the addition, call remove_peer first.
+
+        Args:
+            peer_obj(RemotePeer): peer object to add into dict.
+        """
+
+        if peer := self.get(peer_obj.peer_id, None):
+            peer.update(peer_obj)
+        else:
+            self[peer_obj.peer_id] = peer_obj
 
     def extend(self, iterable_of_peer_objects: Iterable[RemotePeer | HasPeerId]):
         for peer_obj in iterable_of_peer_objects:

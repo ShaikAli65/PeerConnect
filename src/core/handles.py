@@ -63,3 +63,7 @@ class TaskHandleProxy(BaseProxy):
 
 class FileTaskHandle(TaskHandle, ABC):
     pass
+
+
+class DirectoryTaskHandle(TaskHandle, ABC):
+    pass

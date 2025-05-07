@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 
 class DispatcherFinalizing(Exception):
@@ -45,3 +46,17 @@ class ResourceBusy(Exception):
 
     """
     available_after: asyncio.Condition
+
+
+class RemotePeerNotFound(Exception):
+    """RemotePeer object not found anywhere"""
+    peer_id: str
+
+
+class SearchExhausted(Exception):
+    """Search iterator is expired, cannot be iterated, This is different from StopIteration"""
+
+
+class FailedToSend(TransferIncomplete):
+    """Failed to Send Something"""
+    item: Any

@@ -33,12 +33,7 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
 Custom routing table with peer management integration:
 
 ```python
-class AnotherRoutingTable(routing.RoutingTable):
-    @override
-    def add_contact(self, peer: RemotePeer):
-        # Integrates with peer discovery system
-        super().add_contact(peer)
-        peers.new_peer(peer)
+class AnotherRoutingTable(routing.RoutingTable): ...
 ```
 
 ### 3. Server Implementation

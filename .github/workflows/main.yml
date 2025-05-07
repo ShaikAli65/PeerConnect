@@ -1,0 +1,30 @@
+name: Raise PR to original repo on frontend build commit
+on:
+  push:
+    branches:
+      - "actions-test"
+  workflow_dispatch:
+
+jobs:
+  raise-pr:
+    runs-on: ubuntu-latest
+    env:
+      BASE_REPO: "ShaikAli65/PeerConnect"
+      SRC_BRANCH: "actions-test"
+      TGT_BRANCH: "dev"
+      GH_TOKEN: ${{secrets.PR_TOKEN}}
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
+      - name: Create Pull Request
+        # env:
+          # GH_TOKEN: ${{ github.token }}
+        run: |
+          echo ${{ github.repository }}:${{ env.SRC_BRANCH }}
+          gh pr create \
+            --repo "${{ env.BASE_REPO }}" \
+            --head "${{ github.repository_owner }}:${{ env.SRC_BRANCH }}" \
+            --base "${{ env.TGT_BRANCH }}" \
+            --title "Auto PR: Sync ${{ env.SRC_BRANCH }} from Fork" \
+            --body "Automated PR created from forked frontend build repo."

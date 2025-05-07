@@ -102,6 +102,7 @@ class FileItem:
         new_path = self.path.with_suffix(error_ext)
         self.path.rename(new_path)
         self._name = self.path.name
+        return self._name
 
     def remove_error_ext(self):
         """
@@ -124,6 +125,8 @@ class FileItem:
 
         self.path.rename(original_path)
         self._name = original_path.name  # Update the name attribute
+        del self.original_ext
+        return self._name
 
     def __getitem__(self, item):
         return (self.name, self.size, self.path)[item]

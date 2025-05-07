@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import webbrowser
@@ -6,82 +7,49 @@ from pathlib import Path
 from kademlia.utils import digest
 
 import src.core.async_runner  # noqa
+from src import net
 from src.avails import RemotePeer, constants as const, use
-from src.avails.connect import IPAddress
-from src.avails.mixins import AggregatingAsyncExitStack
-from src.conduit import webpage
+from src.avails.useables import COLORS
+from src.conduit import pagehandle
 from src.configurations import interfaces as _interfaces, logger as _logger
-from src.core.public import set_current_remote_peer_object
+from src.core.app import AppType
 
 
-async def set_ip_config(current_profile):
-    clear_logs() if const.CLEAR_LOGS else None
-    ip_addr = await get_ip(current_profile)
+async def set_ip_config(app_ctx: AppType):
+    _clear_logs() if const.CLEAR_LOGS else None
 
-    # _logger.critical("getting ip interfaces failed, trying fallback options", exc_info=exp)
-    # from src.configurations import getip
-    # if const.USING_IP_V4:
-    #     ip_addr = await getip.get_v4()
-    # else:
-    #     ip_addr = await getip.get_v6()
+    _logger.debug("waiting for profile selection")
 
-    const.THIS_IP = ip_addr
-    # const.WEBSOCKET_BIND_IP = const.THIS_IP
-    _logger.info(f"{const.THIS_IP=}")
+    app_ctx.current_profile = await pagehandle.PROFILE_WAIT
+
+    app_ctx.this_ip = app_ctx.current_profile.interface
+
+    const.THIS_IP = app_ctx.current_profile.interface
+
+    _logger.info(f"{app_ctx.this_ip=}")
 
 
-def set_exit_stack(app):
-    app.exit_stack = AggregatingAsyncExitStack() if const.debug else app.exit_stack
-    # use aggregating exit stack if we are in debug, this prints tracebacks more aggressively
-
-
-async def get_ip(current_profile) -> IPAddress:
-    interfaces = dict(enumerate(_interfaces.get_interfaces()))
-    if const.debug:
-        print("-" * 100)
-        print(f"interfaces found:",*interfaces.values(), sep="\n")
-        print("-" * 100)
-
-    assert current_profile is not None, "profile not set exiting"
-
-    default_interface = next(iter(interfaces.values()))
-
-    # Determine if we need to ask user
-    current_interface = current_profile.interface
-    ask_user = current_interface is None or current_interface.scope_id not in interfaces
-    print(f"{current_profile}")
-    if not ask_user:
-        _logger.info(f"using {(i := interfaces[current_interface.scope_id])}")
-        return i
-
-    _logger.debug(f"Previously selected interface {current_interface} not found, re-asking user")
-    if (chosen_interface_index := await webpage.ask_for_interface_choice(interfaces)) is not None:
-        chosen_interface = interfaces[chosen_interface_index]
-        _logger.info(f"using {chosen_interface}")
-        # asyncio.create_task()
-        await current_profile.write_interface(chosen_interface)
-        return chosen_interface
-
-    _logger.info("Using first interface, no choice made")
-    return default_interface
-
-
-def clear_logs():
+def _clear_logs():
     for path in Path(const.PATH_LOG).glob("*.log*"):
         Path(path).write_text("")
 
 
-def configure_this_remote_peer(current_profile):
-    rp = make_this_remote_peer(current_profile)
-    set_current_remote_peer_object(rp)
+async def load_interfaces(app: AppType):
+    app.interfaces = _interfaces.get_interfaces()
+    _logger.debug(f"loaded interfaces: {app.interfaces=}")
+
+
+def configure_this_remote_peer(app: AppType):
+    rp = _make_this_remote_peer(app.current_profile)
+    app.this_remote_peer = rp
     const.USERNAME = rp.username
 
 
-def make_this_remote_peer(profile):
+def _make_this_remote_peer(profile):
     rp = RemotePeer(
         byte_id=digest(profile.id),
         username=profile.username,
-        ip=const.THIS_IP.ip,
+        ip=profile.interface.ip,
         conn_port=const.PORT_THIS,
         req_port=const.PORT_REQ,
         status=1,
@@ -122,6 +90,15 @@ def retrace_browser_path():
 async def launch_web_page():
     page_url = f"http://localhost:{const.PORT_PAGE_SERVE}/?port={const.PORT_PAGE}"
 
+    if const.IS_LINUX:
+        bridged, comment = await net.is_wsl_bridged()
+        if bridged is True:
+            await _open_page_in_win_shell(page_url)
+            return
+        if bridged is False:
+            print(COLORS.RED, "cannot launch UI:", comment, COLORS.RESET)
+            return
+
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
@@ -130,3 +107,12 @@ async def launch_web_page():
 
         elif const.IS_LINUX or const.IS_DARWIN:
             subprocess.Popen(['xdg-open', page_url])
+
+
+async def _open_page_in_win_shell(page_url):
+    p = await asyncio.create_subprocess_exec(
+        'powershell.exe',
+        '-Command',
+        f'start {page_url}'
+    )
+    await p.wait()

@@ -12,119 +12,26 @@ Any Class that wraps data is immutable, once created not modifications are allow
 
 import dataclasses
 import json as _json
-import struct
-from asyncio import BaseTransport
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Coroutine, NamedTuple, Optional, Union
+from typing import NamedTuple, Union
 
 import umsgpack
 
-from src.avails.connect import Connection, MsgConnection, Socket as _Socket, is_socket_connected
+from src.avails import const as _const
 from src.avails.exceptions import InvalidPacket
-from src.avails.useables import recv_int, wait_for_sock_read
-from src.avails.waiters import Actuator, const as _const
 
-_controller = Actuator()
-
-
-class Wire:
-    @staticmethod
-    async def send_async(sock: _Socket, data: bytes):
-        data_size = struct.pack("!I", len(data))
-        return await sock.asendall(data_size + data)
-
-    @staticmethod
-    def send_msg(connection, msg):
-        """
-
-        Args:
-            connection(Connection): connection object
-            msg(WireData):data to send
-
-        """
-        messaged = MsgConnection(connection)
-        return messaged.send(msg)
-
-    @staticmethod
-    def recv_msg(connection) -> Coroutine:
-        """
-        Args:
-            connection(Connection): connection object
-        Returns:
-            WireData: on successful receive
-        """
-        msg_con = MsgConnection(connection)
-        return msg_con.recv()
-
-    @staticmethod
-    def send(sock: _Socket, data: bytes):
-        data_size = struct.pack("!I", len(data))
-        return sock.sendall(data_size + data)
-
-    @staticmethod
-    def send_datagram(sock: _Socket | BaseTransport, address, data: bytes):
-        if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
-            raise ValueError(
-                f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
-                f"got a packet of size {len(data)} + 4bytes size"
-            )
-
-        data_size = struct.pack("!I", len(data))
-        return sock.sendto(data_size + data, address)
-
-    @staticmethod
-    async def receive_async(sock: _Socket):
-        try:
-            data_size = await recv_int(sock.arecv)
-            data = await sock.arecv(data_size)
-            return data
-        except ValueError:
-            if not is_socket_connected(sock):
-                raise OSError("connection error")
-            raise
-
-    @staticmethod
-    def receive(sock: _Socket, timeout=None, controller=_controller):
-        b = sock.getblocking()
-        length_buf = bytearray()
-        while len(length_buf) < 4:
-            try:
-                data = sock.recv(4 - len(length_buf))
-                if data == b"":  # If socket connection is closed prematurely
-                    sock.setblocking(b)
-                    raise ConnectionError("got empty bytes in a stream socket")
-                length_buf += data
-            except BlockingIOError:
-                wait_for_sock_read(sock, controller, timeout)
-        data_length = struct.unpack("!I", length_buf)[0]
-
-        received_data = bytearray()
-        while len(received_data) < data_length:
-            try:
-                chunk = sock.recv(data_length - len(received_data))
-                if chunk == b"":  # Again, handle premature disconnection
-                    raise ConnectionError("connection closed during data reception")
-                received_data += chunk
-            except BlockingIOError:
-                wait_for_sock_read(sock, controller, timeout)
-        sock.setblocking(b)
-        return received_data
-
-    @staticmethod
-    def recv_datagram(sock: _Socket):
-        data, addr = sock.recvfrom(_const.MAX_DATAGRAM_RECV_SIZE)
-        return Wire.load_datagram(data), addr
-
-    @staticmethod
-    def load_datagram(data_payload) -> bytes:
-        data_size = struct.unpack("!I", data_payload[:4])[0]
-        return data_payload[4: data_size + 4]
-
-    @staticmethod
-    async def recv_datagram_async(sock: _Socket) -> tuple[bytes, tuple[str, int]]:
-        data, addr = await sock.arecvfrom(_const.MAX_DATAGRAM_RECV_SIZE)
-        return Wire.load_datagram(data), addr
+__all__ = (
+    "WireData",
+    "DataWeaver",
+    "GossipMessage",
+    "RumorMessageItem",
+    "PalmTreeInformResponse",
+    "PalmTreeSession",
+    "OTMSession",
+    "OTMInformResponse",
+    "OTMChunk",
+)
 
 
 class WireData:
@@ -151,11 +58,14 @@ class WireData:
 
     @classmethod
     def load_from(cls, data: bytes):
+        list_of_attributes = None
         try:
             list_of_attributes = umsgpack.loads(data)
             header, _id, version, body, peer_id = list_of_attributes
-        except (ValueError, umsgpack.UnpackException) as exp:
-            raise InvalidPacket from exp
+        except (ValueError, umsgpack.UnpackException, TypeError) as exp:
+            ip = InvalidPacket()
+            ip.add_note(f"items={list_of_attributes}")
+            raise ip from exp
 
         return cls(header, _id, peer_id, version=version, **body)
 
@@ -187,34 +97,10 @@ class WireData:
         }
 
     def __str__(self):
-        return f"<WireData(header={self._header}, id={self.id}, body={self.body})>"
+        return f"<WireData(header={self._header}, id={self.id}, body={repr(self.body)[:30]})>"
 
     def __repr__(self):
         return str(self)
-
-
-def unpack_datagram(data_payload) -> Optional[WireData]:
-    """Utility function to unpack raw datagram
-
-        from `datagram_received` callback from asyncio' s DatagramProtocol
-        or any other datagram transferred using wire protocol
-        Unpack the raw data received using peer-connect' s wire protocol
-        into WireData and handle exceptions
-    Args:
-        data_payload(bytes) : byte string to unpack
-    Raises:
-        InvalidPacket if unpacking failed
-    """
-    try:
-        data = Wire.load_datagram(data_payload)
-        loaded = WireData.load_from(data)
-        return loaded
-    except umsgpack.UnpackException as ue:
-        raise InvalidPacket("Ill-formed data: %s. Error: %s" % (data_payload, ue)) from ue
-    except TypeError as tp:
-        raise InvalidPacket("Type error, possibly ill-formed data: %s. Error: %s" % (data_payload, tp)) from tp
-    except struct.error as se:
-        raise InvalidPacket("struct error, possibly ill-formed data: %s. Error: %s" % (data_payload, se)) from se
 
 
 class DataWeaver:
@@ -277,47 +163,45 @@ class DataWeaver:
     def content(self):
         return self.__data["content"]
 
-    @content.setter
-    def content(self, _content):
-        self.__data["content"] = _content
-
     @property
     def header(self):
         return self.__data["header"]
-
-    @header.setter
-    def header(self, _header):
-        self.__data["header"] = _header
 
     @property
     def peer_id(self):
         return self.__data["peerId"]
 
-    @peer_id.setter
-    def peer_id(self, peer_id):
-        self.__data["peerId"] = peer_id
-
     @property
     def msg_id(self):
         return self.__data["msgId"]
 
-    @msg_id.setter
-    def msg_id(self, message_id):
-        self.__data["msgId"] = message_id
-
     @property
-    def id(self):  # just for compatibility with registry mix in class
+    def id(self):  # just for compatibility with reply-registry-mix-in class
         return self.msg_id
 
     @property
     def type(self):
-        return str(self.header[0])
+        return str(self.header)[0]
 
     def __str__(self):
         return _json.dumps(self.__data)
 
     def __repr__(self):
-        return f"DataWeaver({self.__data})"
+        data = self.__data.copy()
+        content = data.pop("content")
+
+        if content is None:
+            data["content"] = None
+        elif isinstance(content, dict):
+            data["content"] = {}
+            for k, v in content.items():
+                data["content"][k] = repr(v)[:20]
+        elif isinstance(content, str):
+            data["content"] = content[:30]
+        else:
+            data["content"] = content
+
+        return f"DataWeaver({data})"
 
     def field_check(self):
         match self.__data:
@@ -343,41 +227,21 @@ class GossipMessage:
     def message(self):
         return self.actual_data.body.get("message", None)
 
-    @message.setter
-    def message(self, data):
-        self.actual_data.body["message"] = data
-
     @property
     def ttl(self):
         return self.actual_data.body.get("ttl", None)
-
-    @ttl.setter
-    def ttl(self, ttl):
-        self.actual_data.body["ttl"] = ttl
 
     @property
     def created(self):
         return self.actual_data.body.get("created", None)
 
-    @created.setter
-    def created(self, value):
-        self.actual_data.body["created"] = value
-
     @property
     def header(self):
         return self.actual_data.header
 
-    @header.setter
-    def header(self, value):
-        self.actual_data._header = value
-
     @property
     def id(self):
-        return self.actual_data.id
-
-    @id.setter
-    def id(self, value):
-        self.actual_data.id = value
+        return self.actual_data.msg_id
 
     def fields_check(self):
         wire_data = self.actual_data

@@ -74,7 +74,7 @@ async def set_ip_config()
 - Remote peer initialization
 - Web interface launching
 
-### 4. Fallback IP Detection (`getip.py`)  [src](/src/configurations/getip.py)
+### 4. Fallback IP Detection (`getip.py`)  [src](/src/net/getip.py)
 
 ```python
 async def get_v4()
