@@ -1,18 +1,108 @@
 import asyncio
+import typing
 from abc import ABC, abstractmethod
-from asyncio import CancelledError
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from pathlib import Path
+from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING
 
 from src.avails import RemotePeer
-from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
-from src.net import connect
-from src.transfers import TransferState
-from src.transfers._logger import logger
+from src.net import Connection
+from . import TransferState
+
+
+class AbstractRWBase(ABC):
+
+    @abstractmethod
+    async def close(self, *args): ...
+
+    @abstractmethod
+    async def set_bounds(self, start: int, end: int): ...
+
+    @property
+    def seek_pos(self):
+        """Current position of seek, relative to starting of the reader/writer"""
+        return NotImplemented
+
+    @property
+    def seek_end_pos(self):
+        return NotImplemented
+
+    @property
+    def seek_start_pos(self):
+        return NotImplemented
+
+    @property
+    def size(self):
+        return NotImplemented
+
+
+class AbstractReader(AbstractRWBase):
+
+    @asynccontextmanager
+    @abstractmethod
+    async def start_reading(self):
+        """Start the Reader
+            This is usually a context manager
+
+        Usage::
+
+            async with reader.start_reading() as reading:
+                async for chunk in reading:
+                    ...
+
+        """
+        return NotImplemented
+
+    @property
+    @abstractmethod
+    def reader(self) -> typing.Generator[bytes, None, None] | None: ...
+
+
+class AbstractWriter(AbstractRWBase):
+
+    @asynccontextmanager
+    @abstractmethod
+    async def start_writing(self): ...
+
+    @abstractmethod
+    async def write(self, data: bytes) -> int: ...
 
 
 class AbstractStatusMix(ABC):
+    current_status: int
+
     @abstractmethod
-    def update_status(self, status): ...
+    def update_status(self, status):
+        """
+        Update the progress bar using an absolute progress value.
+
+        This method is used when the current progress is known exactly.
+        It computes the delta from the previous known state and advances
+        the progress bar accordingly.
+
+        Preferred when:
+            - You're syncing to a known file position (e.g., `file_reader.seek_pos`).
+            - You want to enforce a correct state, even if skipped bytes were involved.
+
+        Args:
+            status (int): The absolute number of bytes transferred so far.
+        """
+
+    @abstractmethod
+    def write_update(self, update):
+        """
+        Increment the progress bar by a relative value.
+
+        This method is used when you know how many bytes were just written or read,
+        but not the total. It simply bumps the progress forward.
+
+        Preferred when:
+            - You're pushing updates based on read/send chunk sizes.
+            - The transfer logic doesn't track cumulative progress externally.
+
+        Args:
+            update (int): Number of bytes just transferred.
+        """
 
     @abstractmethod
     def should_yield(self): ...
@@ -24,31 +114,45 @@ class AbstractStatusMix(ABC):
     def close(self): ...
 
 
+class AbstractStatusIterator(AbstractStatusMix, AsyncIterable, ABC):
+    """Status mix in that can be iterated over to yield status"""
+
+
 class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
-    status_updater: AbstractStatusMix
+    status_updater: AbstractStatusMix | AbstractStatusIterator
     peer: RemotePeer
     state: TransferState
-    to_stop: bool
-    _expected_errors: set
-    main_task: asyncio.Task | None
+    should_stop: bool
+    _expected_exps: set
+    transfer_task: asyncio.Task | None
 
     @abstractmethod
-    async def continue_transfer(self):
+    def start_transfer(self) -> AsyncGenerator[Any] | AsyncIterable[Any]:
+        """Start the transfer
+
+        Sends a final flag when done, commiting the transfer completion.
+
+        Yields:
+            Chunk progress indicator for external observers.
+        """
+
+    @abstractmethod
+    async def resume_transfer(self):
         """When some error happens in the initial state and that error has been recovered
         """
 
     @abstractmethod
-    def connection_made(self, connection: connect.Connection):
+    def connection_made(self, connection: Connection):
         """Connection has arrived that is related to this handle
         """
 
     @abstractmethod
     def pause(self):
-        """Pause send/recv for a moment, usually until resume is called"""
+        """Temporarily pause send/recv for a moment, usually until resume is called"""
 
     @abstractmethod
     def resume(self):
-        """Resume send/recv"""
+        """Temporarily resume send/recv"""
 
     @abstractmethod
     async def cancel(self):
@@ -69,117 +173,19 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         return f"[{self.__class__}]"
 
 
-class CommonCancelMixIn:
-    async def cancel(self):
-        """Cancel the transfer"""
-        if self.state not in (TransferState.SENDING, TransferState.RECEIVING, TransferState.PAUSED):
-            raise InvalidStateError(f"state is not expected to be in {self.state=}")
-
-        assert self.main_task.done() is False, "main task is done"
-
-        self.to_stop = True
-        self._expected_errors.add(ct := CancelTransfer())
-        self.main_task.cancel(ct)
-        await self.main_task
+if TYPE_CHECKING:
+    from src.transfers.files._fileobject import FileItem
+else:
+    FileItem = None
 
 
 class AbstractSender(AbstractTransferHandle):
     @abstractmethod
-    def __init__(self, peer_obj, transfer_id, file_list, status_updater): ...
-
-    @abstractmethod
-    async def send_files(self):
-        """Send files passed into object's constructor"""
+    def __init__(self, peer_obj, transfer_id, file_list: list[FileItem | AbstractReader],
+                 status_updater: AbstractStatusMix | AbstractStatusIterator): ...
 
 
 class AbstractReceiver(AbstractTransferHandle):
     @abstractmethod
-    def __init__(self, peer_obj, transfer_id, download_path, status_updater): ...
-
-    @abstractmethod
-    async def recv_files(self):
-        """Receive files"""
-
-
-class CommonAExitMixIn(AbstractAsyncContextManager):
-    __slots__ = ()
-
-    async def __aexit__(self, exc_type, exc_value, traceback, /):
-
-        # extract the hidden cancel transfer put by CommonCancelMixIn.cancel
-        # if present
-        to_return = None
-        if exc_type is CancelledError and any(exc_value.args):
-
-            if isinstance(cancel_transfer := exc_value.args[0], CancelTransfer) \
-                    and self.state is TransferState.ABORTING \
-                    and cancel_transfer in self._expected_errors:
-                return
-
-        if exc_type not in self._expected_errors:
-            return
-
-        if exc_type is TransferIncomplete and self.state is not TransferState.PAUSED:
-            logger.warning(
-                f"state miss match at files.AbstractTransferHandle, conditions {exc_type=},{exc_value=}, "
-                f"expected state to be PAUSED, "
-                f"found {self.state=}"
-            )
-            to_return = True
-
-        self._expected_errors.clear()
-        return to_return
-
-
-class CommonExceptionHandlersMixIn:
-    def _raise_transfer_incomplete_and_change_state(self, prev_error=None, detail=""):
-        logger.debug(f'{self._log_prefix} changing state to paused')
-        self.state = TransferState.PAUSED
-        err = TransferIncomplete(detail)
-        err.__cause__ = prev_error
-        self._expected_errors.add(err)
-        raise err from prev_error
-
-    def _handle_os_error(self, err, detail=""):
-        logger.error(f"{self._log_prefix} got error, pausing transfer", exc_info=True)
-        self.state = TransferState.PAUSED
-        ti = TransferIncomplete(detail)
-        self._expected_errors.add(ti)
-        raise ti from err
-
-    def _handle_cancel_transfer(self, ct):
-        if ct in self._expected_errors:
-            # we definitely reach here if we are cancelled using AbstractTransferHandle.cancel
-            logger.error(f"{self._log_prefix} cancelled receiving, changing state to ABORTING", exc_info=True)
-            self.state = TransferState.ABORTING
-        else:
-            raise
-
-    def _handle_transfer_incomplete(self, err):
-        if err in self._expected_errors:
-            raise
-        self._expected_errors.add(err)
-        logger.error(f"{self._log_prefix} got error, pausing transfer", exc_info=True)
-        self.state = TransferState.PAUSED
-        raise err
-
-    def handle_exception(self, exp):
-
-        if isinstance(exp, CancelTransfer):
-            self._handle_cancel_transfer(exp)
-        if isinstance(exp, TransferIncomplete):
-            self._handle_transfer_incomplete(exp)
-        if isinstance(exp, OSError):
-            self._handle_os_error(exp)
-
-        raise exp
-
-
-class PauseMixIn:
-    __slots__ = ()
-
-    def pause(self):
-        self.state = TransferState.PAUSED
-        self.send_func.pause()
-        self.recv_func.pause()
-        self.to_stop = True
+    def __init__(self, peer_obj: RemotePeer, transfer_id: int | str, download_path: Path,
+                 status_updater: AbstractStatusIterator | AbstractStatusMix): ...

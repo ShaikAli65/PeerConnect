@@ -10,7 +10,6 @@ from typing import Optional
 from src.avails import WireData, const, use
 from src.avails.exceptions import InvalidPacket
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
-from src.core import peers
 from src.core.app import ReadOnlyAppType
 from src.core.events import ConnectionEvent
 from . import bandwidth
@@ -79,6 +78,8 @@ class Acceptor(AExitStackMixIn):
         self._exit_stack.enter_context(sock)
 
     async def __accept_connection(self, initial_conn):
+        from src.core import peers
+
         handshake = await self._perform_handshake(initial_conn)
         if not handshake:
             return

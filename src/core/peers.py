@@ -8,7 +8,7 @@ from typing import AsyncIterator, Optional
 
 from kademlia import crawling
 
-from src.avails import RemotePeer, use
+from src.avails import RemotePeer, const, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.conduit import webpage
@@ -83,11 +83,11 @@ def search_for_peers_with_name(search_string, *, app_ctx):
 async def get_remote_peer_from_network(peer_network, peer_id):
     """Gets the ``RemotePeer`` object corresponding to ``:func RemotePeer.peer_id:`` from the network
 
-    Just a wrapper around ``:method kademlia_network_server.get_remote_peer:``
-    with conversions related to ids
+    Wrapper around ``:method kademlia_network_server.get_remote_peer:``
+    with conversions related to ids, retries on failure
 
     This call is expensive as it performs a distributed search across the network
-    try using ``Dock.peer_list`` instead
+    try using ``App.peer_list`` instead
 
     Args:
         peer_id(str): id to search for
@@ -97,13 +97,16 @@ async def get_remote_peer_from_network(peer_network, peer_id):
     """
     byte_id = convert_peer_id_to_byte_id(peer_id)
     _logger.debug(f"getting peer with id {peer_id} from network")
-    return await peer_network.get_remote_peer(byte_id)
+    async for _ in use.async_timeouts(max_retries=const.PEER_SEARCH_RETRIES):
+        peer = await peer_network.get_remote_peer(byte_id)
+        if peer is not None:
+            return peer
 
 
 @provide_app_ctx
 async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
     """
-    Just a helper, tries to check for peer_id in cached Dock.peer_list
+    Just a helper, tries to check for peer_id in cached App.peer_list
     if there is a chance that cached remote peer object is expired then use ``:func: peers.get_remote_peer``
     if not found the performs a distributed search in the network
     """

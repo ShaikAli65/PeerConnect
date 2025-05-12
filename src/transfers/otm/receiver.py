@@ -8,8 +8,8 @@ from typing import AsyncGenerator, BinaryIO
 import umsgpack
 
 from src.avails import OTMSession, const
-from src.transfers.files._fileobject import FileItem
-from src.transfers.otm.relay import OTMFilesRelay
+from src.transfers.files import FileItem
+from .relay import OTMFilesRelay
 
 
 class FilesReceiver:

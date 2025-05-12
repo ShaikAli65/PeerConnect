@@ -6,8 +6,8 @@ from src.avails.exceptions import FailedToSend, InvalidPacket, InvalidStateError
 from src.core.app import ReadOnlyAppType
 from src.core.events import MessageEvent
 from src.net import MsgConnection, MsgConnectionNoRecv
-from src.transfers import HEADERS
-from src.transfers._logger import logger as _logger
+from . import _logger
+from ._headers import HEADERS
 
 RegisterReplyCallable = Callable[[str], asyncio.Future]
 ConnectorCallable = Callable[[RemotePeer], Awaitable[MsgConnectionNoRecv]]
@@ -85,8 +85,7 @@ class MsgSender:
 
     async def _message_sender(self):
         self._started = True
-        fut = None
-        message = None
+        message, fut = None, None
         try:
             while True:
                 message, fut = await self._msg_queue.get()
@@ -112,8 +111,8 @@ class MsgSender:
                     await self._message_sender()
                     break  # if it's smooth exit, then we are done
                 except OSError:
-                    self._connected.clear()
                     _logger.debug("~ changing message connection status to False")
+                    self._connected.clear()
                     await self._retry_connecting()
         finally:
             _logger.debug("sender manager exiting...")
@@ -154,7 +153,7 @@ class MsgSender:
 
         if msg.msg_id is None:
             raise InvalidPacket("expecting a `msg` with some unique id")
-        _logger.debug(f"queueing message packet for, peer={self.peer}")
+        _logger.debug(f">! queueing message packet for, peer={self.peer}")
         await self._msg_queue.put((
             msg,
             fut := self._ack_counter_part(msg.msg_id)

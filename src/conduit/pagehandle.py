@@ -7,6 +7,7 @@ Interfacing with UI using websockets
 import asyncio
 import asyncio as _asyncio
 import sys
+from asyncio import CancelledError
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -26,7 +27,7 @@ from src.core.app import AppType
 PROFILE_WAIT: _asyncio.Future | None = None
 
 # maintain separate exit stack, so that we can maintain nested exits in a better way
-# without filling up Dock.exit_stack which has more critical exit ordering
+# without filling up App.exit_stack which has more critical exit ordering
 _exit_stack = AsyncExitStack()
 
 
@@ -108,7 +109,6 @@ class FrontEndWebSocket:
 
         if self.transport:
             await self.transport.close()
-
         if (t := getattr(self, '_buffer_sender_task', None)) and not t.done():
             await use.safe_cancel_task(t)
 
@@ -143,11 +143,29 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
 class MessageFromFrontEndDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
     __slots__ = ()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     async def submit(self, data_weaver):
-        await self.registry[data_weaver.type](data_weaver)
+        handler = self.registry[data_weaver.type]
+        try:
+            await handler(data_weaver)
+        except Exception as exp:
+            logger.debug(f"{handler=} failed with", exc_info=exp)
+
+    async def __aexit__(self, *args):
+        async def bomb():
+            raise InterruptedError
+
+        self._task_group.create_task(bomb())
+
+        try:
+            await asyncio.sleep(0)
+        except CancelledError:
+            logger.warning("suppressing expected canceller error at aexit")
+            return
+
+        try:
+            return await super().__aexit__(*args)
+        except* InterruptedError:
+            logger.debug("suppressing expected interrupted error at aexit")
 
 
 async def validate_connection(web_socket, *, _exit_stack=_exit_stack):
@@ -178,7 +196,6 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
     except ConnectionError:
         return
     front_end_data_disp = MessageFromFrontEndDispatcher()
-    is_registered_for_reply = front_end_data_disp.is_registered
     recv = web_socket.recv
 
     while True:
@@ -193,7 +210,7 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
             logger.debug("[PAGE HANDLE]", exc_info=ip)
             continue
 
-        if is_registered_for_reply(parsed_data):
+        if front_end_data_disp.is_registered(parsed_data):
             logger.debug(f"a reply is registered for {parsed_data.msg_id}")
             front_end_data_disp.reply_arrived(parsed_data)
             continue
@@ -261,7 +278,9 @@ async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
 
     await app.exit_stack.enter_async_context(_exit_stack)
 
+    # responsible for sending messages to frontend, composed with multiple FrontEndWebSockets
     front_end = FrontEndDispatcher()
+
     # these transports will get, set later when websocket connection from frontend arrives
     await front_end.add_websocket(headers.DATA, fEwSd := FrontEndWebSocket())
     await _exit_stack.enter_async_context(fEwSd)
@@ -277,11 +296,13 @@ async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
     data_disp.register_all()
 
     msg_disp = MessageFromFrontEndDispatcher()
-
+    # messages from front end fed into this dispatcher, and it dispatches
+    # them to respectively modules' dispatchers
     msg_disp.register_handler(headers.DATA, data_disp.submit)
     msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
 
     run_page_server()
+
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(start_websocket_server())

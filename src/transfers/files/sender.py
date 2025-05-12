@@ -1,115 +1,136 @@
 import asyncio
-import functools
-import mmap
 import struct
 from contextlib import aclosing
-from pathlib import Path
 
+from src import net
 from src.avails import const
 from src.avails.exceptions import InvalidStateError
-from src.net.utils import LONG_INT, recv_int
-from src.transfers import TransferState, thread_pool_for_disk_io
-from src.transfers._logger import logger as _logger
-from src.transfers.abc import AbstractSender, CommonAExitMixIn, CommonCancelMixIn, CommonExceptionHandlersMixIn, \
-    PauseMixIn
-from src.transfers.files._fileobject import FileItem, calculate_chunk_size
+from src.transfers import HEADERS, TransferState, _logger
+from src.transfers.abc import AbstractSender
+from src.transfers.mixins import *
+from ._fileio import AbstractReader, FileItemReader
+from ._fileobject import FileItem
 
 
 # nah, this is not a function definition
-
 class Sender(
-    CommonExceptionHandlersMixIn,  # keep at the top of the mro, cause calls to these methods are more
+    ExceptionRouterMixIn,  # keep at the top of the mro, cause calls to these methods are more
     # probably called only once or twice
-    PauseMixIn,
+    ControlMixIn,
     CommonAExitMixIn,
     # probably called on rare occasion
-    CommonCancelMixIn,
+    CancelOperationMixIn,
     AbstractSender
 ):
+    """Send a bunch of files
+
+    Transfer layout::
+
+        [{1} b'1'] -> [{2} file metadata] -> [{3} file contents] -(ok)-> [more ?] ->[{1}]
+                                                      |               |
+                                                  (exception)       [{4} b'0']
+                                                      |                |
+                                            [{5} preserve status]  [{7} finalize]
+                                                      |
+                                                [{6} pause]
+
+    """
     version = const.VERSIONS['FO']
     timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
     def __init__(self, peer_obj, transfer_id, file_list, status_updater):
-        self.main_task = None
+        self.transfer_task = None
         self.state = TransferState.PREPARING
-        self.file_list = [
-            FileItem(Path(x), seeked=0) for x in file_list
-        ]
-        self._file_id = transfer_id
-        self.peer_obj = peer_obj
+        self.files_to_send = file_list
+        self._transfer_id = transfer_id
+        self.peer = peer_obj
         self.status_updater = status_updater
-        self.to_stop = False
-        self.socket = None
-        self._current_file_index = -1
-        self.send_func = None
-        self.recv_func = None
-        self._expected_errors = set()
+        self.should_stop = False
+        self._current_file_idx = -1
+        self.net_sender = None
+        self.net_receiver = None
+        self._expected_exps = set()
 
-    async def send_files(self):
+    async def start_transfer(self):
+
         _logger.debug(f'{self._log_prefix} changing state to sending')
         self.state = TransferState.SENDING
-        self.main_task = asyncio.current_task()
+        self.transfer_task = asyncio.current_task()
 
-        while self._current_file_index < len(self.file_list) - 1 and self.to_stop is False:
+        while self._current_file_idx < len(self.files_to_send) - 1 and self.should_stop is False:
+            self._current_file_idx += 1
+            await self.wrap_exp_handling(self.net_sender, HEADERS.CONTINUE_TRANSFER)
 
-            self._current_file_index += 1
+            await self.send_file_metadata(self.current_file)
 
-            file_item = self.file_list[self._current_file_index]
-            await self._send_file_item(file_item)
-            async with aclosing(self.send_one_file(file_item)) as loop:
-                async for _ in loop:
-                    yield _
-            print("file sent", file_item)  # debug
+            file_reader = FileItemReader(self.current_file)
+            self.setup_status(file_reader)
+
+            async with aclosing(self.send_one_file(file_reader)) as loop:
+                try:
+                    updater = self.status_updater.update_status  # localize function
+                    async for _ in loop:
+                        updater(file_reader.seek_pos)
+                        yield _
+                finally:
+                    self.current_file.seeked += file_reader.seek_pos
+
+            _logger.info(f"file sent {self.current_file}")
 
         # end of transfer, signalling that there are no more files
-        try:
-            await self.send_func(b'\x00')
-        except Exception as exp:
-            self.handle_exception(exp)
+        await self.wrap_exp_handling(self.net_sender, HEADERS.END_OF_TRANSFER)
 
         _logger.info(f"{self._log_prefix} sent final flag, completed sending")
         self.state = TransferState.COMPLETED
 
-    async def send_one_file(self, file_item):
+    def setup_status(self, file_reader):
+        return self.status_updater.status_setup(
+            prefix=f"sending: {file_reader}",
+            initial_limit=file_reader.seek_start_pos,
+            final_limit=file_reader.seek_end_pos
+        )
+
+    async def send_file_metadata(self, file_item):
+        """
+        Sends metadata for the given file to the remote peer.
+
+        Encodes the file metadata into a binary packet and sends it.
+
+        Args:
+            file_item (FileItem): File whose metadata is being sent.
+        """
+        file_object = bytes(file_item)
+        file_packet = struct.pack('!I', len(file_object)) + file_object
+        await self.wrap_exp_handling(self.net_sender, file_packet)
+
+    async def send_one_file(self, file_reader: AbstractReader):
+        """
+        Transfers a single file using the given file reader.
+
+        Args:
+            file_reader (FileItemReader): File reader abstraction handling chunk reads.
+
+        Yields:
+            None: Used for async progress hooks.
+        """
         try:
-            self.status_updater.status_setup(
-                prefix=f"sending: {file_item}",
-                initial_limit=file_item.seeked,
-                final_limit=file_item.size
-            )
-            updater = self.status_updater.update_status
-            async with aclosing(send_actual_file(
-                    self.send_func,
-                    file_item,
-            )) as send_file:
-                async for seeked in send_file:
-                    updater(seeked)
-                    if self.to_stop:
-                        break
-                    yield seeked
+            async with file_reader.start_reading() as reading:
+                async for chunk in reading:
+                    yield await self.net_sender(chunk)
+
         except Exception as exp:
             self.handle_exception(exp)
 
-    async def _send_file_item(self, file_item):
-        try:
-            # a signal that says there is more to receive
-            await self.send_func(b'\x01')
-            file_object = bytes(file_item)
-            file_packet = struct.pack('!I', len(file_object)) + file_object
-            await self.send_func(file_packet)
-        except Exception as exp:
-            self.handle_exception(exp)
+    async def resume_transfer(self):
+        if not self.state == TransferState.PAUSED or self.should_stop is True:
+            raise InvalidStateError(f"{self.state=}, {self.should_stop=}")
 
-    async def continue_transfer(self):
-        if not self.state == TransferState.PAUSED or self.to_stop is True:
-            raise InvalidStateError(f"{self.state=}, {self.to_stop=}")
-
-        _logger.debug(f'FILE[{self._file_id}] changing state to sending')
+        _logger.debug(f'FILE[{self._transfer_id}] changing state to sending')
         self.state = TransferState.SENDING
-        interrupted_file = self.file_list[self._current_file_index]
+        interrupted_file = self.files_to_send[self._current_file_idx]
         # synchronizing last file sent
         try:
-            interrupted_file.seeked = await recv_int(self.recv_func, LONG_INT)
+            interrupted_file.seeked = await net.recv_int(self.net_receiver, net.LONG_INT)
         except ValueError as ve:
             self._raise_transfer_incomplete_and_change_state(ve)
         else:
@@ -118,80 +139,30 @@ class Sender(
                                                  interrupted_file.size)
             else:
                 # we got interrupted exactly when next file's file item is being sent
-                self._current_file_index += 1
+                self._current_file_idx += 1
 
         # continuing with remaining transfer
-        async with aclosing(self.send_files()) as file_sender:
+        async with aclosing(self.start_transfer()) as file_sender:
             async for items in file_sender:
                 yield items
 
-    def attach_files(self, paths_list):
-        if self.state not in (TransferState.PAUSED, TransferState.SENDING):
-            raise InvalidStateError(
-                f"expected state to be {(TransferState.PAUSED, TransferState.SENDING)}, found {self.state=}")
-
-        self.file_list.extend(FileItem(Path(path), 0) for path in paths_list)
-
-    def resume(self):
-        if self.state is not TransferState.PAUSED:
-            return
-        self.state = TransferState.SENDING
-        self.recv_func.resume()
-        self.send_func.resume()
+    def append_files(self, *file_items):
+        if self.state in (TransferState.ABORTING, TransferState.COMPLETED):
+            raise InvalidStateError(f"cannot append files when the transfer state={self.state}")
+        self.files_to_send.extend(file_items)
 
     def connection_made(self, connection):
-        self.send_func = connection.send
-        self.recv_func = connection.recv
+        self.net_sender = connection.send
+        self.net_receiver = connection.recv
 
     @property
     def id(self):
-        return self._file_id
+        return self._transfer_id
 
     @property
     def current_file(self):
-        return self.file_list[self._current_file_index]
+        return self.files_to_send[self._current_file_idx]
 
-
-async def send_actual_file(
-        send_function,
-        file,
-        *,
-        chunk_len=None,
-        timeout=10,
-        th_pool=thread_pool_for_disk_io,
-):
-    """Sends file to other end using ``send_function``
-
-    Opens file in **rb** mode from the ``path`` attribute from ``file item``
-    reads ``seeked`` attribute of ``file item`` to start the transfer from
-    calls ``send_function`` and awaits on it every time this function tries to send a chunk
-    if chunk_size parameter is not provided then calculates chunk size by calling ``calculate_chunk_size``
-
-    Args:
-        send_function(Callable): function to call when a chunk is ready
-        file(FileItem): file to send
-        chunk_len(int): length of each chunk passed into ``send_function`` for each call
-        timeout(int): timeout in seconds used to wait upon send_function
-        th_pool(ThreadPoolExecutor): thread pool executor to use while reading the file
-
-    Yields:
-        number indicating the file size sent
-    """
-
-    chunk_size = chunk_len or calculate_chunk_size(file.size)
-    with open(file.path, 'rb') as f:
-        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as f_mapped:
-            seek = file.seeked
-            asyncify = functools.partial(
-                asyncio.get_running_loop().run_in_executor,
-                th_pool,
-                f_mapped.__getitem__
-            )
-
-            for offset in range(seek, file.size, chunk_size):
-                chunk = await asyncify(slice(offset, offset + chunk_size))
-
-                await asyncio.wait_for(send_function(chunk), timeout)
-                seek += len(chunk)
-                file.seeked = seek
-                yield seek
+    def __aenter__(self):
+        self.state = TransferState.CONNECTING
+        return self

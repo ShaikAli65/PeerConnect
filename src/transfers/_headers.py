@@ -1,4 +1,7 @@
 class HEADERS:
+    END_OF_TRANSFER = b'\x00'
+    CONTINUE_TRANSFER = b'\x01'
+
     REQ_FOR_LIST = b"list of users  "
     REDIRECT = b"redirect        "
     SERVER_OK = b"connect accepted"
@@ -18,6 +21,7 @@ class HEADERS:
     CMD_TEXT = b"this is message "
     CMD_RECV_DIR = b"cmd to recv dir "
     CMD_FILE_CONN = b"connection for file transfer"
+    CMD_BIG_FILE_CONN = b"connection for big file transfer"
     CMD_DIR_CONN = b"connection for dir transfer"
 
     GOSSIP_CREATE_SESSION = b"gossip_session_activate"

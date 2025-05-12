@@ -8,12 +8,13 @@ import umsgpack
 from src import net
 from src.avails import const, use
 from src.avails.exceptions import TransferIncomplete
-from src.transfers import TransferState
-from src.transfers._logger import logger
-from src.transfers.files._fileobject import FileItem
-from src.transfers.files.receiver import Receiver
-from src.transfers.files.sender import Sender
+from src.avails.useables import override
+from src.transfers import TransferState, _logger
 from src.transfers.status import StatusMixIn
+from ._fileio import FileItemReader
+from ._fileobject import FileItem
+from .receiver import Receiver
+from .sender import Sender
 
 _FILE_CODE = b'\x01'
 _PATH_CODE = b'\x02'
@@ -31,7 +32,7 @@ def rename_directory_with_increment(root_path: Path, relative_path: Path):
     abs_path = root_path / relative_path
 
     if not root_path.exists() or not root_path.is_dir():
-        logger.error(f"The directory {abs_path} does not exist or is not a directory.")
+        _logger.error(f"The directory {abs_path} does not exist or is not a directory.")
         return
 
     parent_dir = abs_path.parent
@@ -75,11 +76,12 @@ class DirSender(Sender):
         self.dir_iterator = self.root_path.rglob('*')
         self._current_file = None
 
-    async def send_files(self):
-        self.send_files_task = asyncio.current_task()
+    @override
+    async def start_transfer(self):
+        self.transfer_task = asyncio.current_task()
 
         for item in self.dir_iterator:
-            if self.to_stop:
+            if self.should_stop:
                 break
 
             if item.is_dir():
@@ -88,21 +90,29 @@ class DirSender(Sender):
                 continue
 
             if item.is_file():
-                self._current_file = await self._send_file_item(item)
-                if self.current_file.size > 0:
-                    async with aclosing(self.send_one_file(self.current_file)) as sender:
-                        async for i in sender:
-                            yield i
-                assert (await self.recv_func(1)) == _FILE_CODE
-                # print("OK" if await self.recv_func(1) == _FILE_CODE else "NOT OK")
+                self._current_file = await self.send_file_metadata(item)
+                if self._current_file.size <= 0:
+                    assert (await self.net_receiver(1)) == _FILE_CODE
+                    continue
 
-        await self.send_func(b'\x00')  # code to inform end of transfer
+                f_reader = FileItemReader(self._current_file)
+                self.setup_status(f_reader)
+
+                async with aclosing(self.send_one_file(f_reader)) as sender:
+                    updater = self.status_updater.update_status  # localize function
+                    async for i in sender:
+                        updater(f_reader.seek_pos)
+                        yield i
+
+                assert (await self.net_receiver(1)) == _FILE_CODE
+
+        await self.net_sender(b'\x00')  # code to inform end of transfer
 
     @use.override
-    async def _send_file_item(self, file_path):
+    async def send_file_metadata(self, file_path):
         await self.__send_code_parts(_FILE_CODE, file_path)
         file_item = FileItem(file_path, 0)
-        await self.send_func(struct.pack('!Q', file_item.size))
+        await self.wrap_exp_handling(self.net_sender, struct.pack('!Q', file_item.size))
         return file_item
 
     async def __send_code_parts(self, code, path: Path):
@@ -118,46 +128,42 @@ class DirSender(Sender):
 
         dumped_code = umsgpack.dumps((parent, name))
         try:
-            await self.send_func(code)  # code to inform that there are more files to get
-            await self.send_func(struct.pack('!I', len(dumped_code)) + dumped_code)
-            # print(f"code_len={len(dumped_code)}")
+            await self.net_sender(code)  # code to inform that there are more files to get
+            await self.net_sender(struct.pack('!I', len(dumped_code)) + dumped_code)
 
         except Exception as exp:
             self.handle_exception(exp)
 
         return parent, name
 
-    def continue_transfer(self):
-        pass
+    def resume_transfer(self):
+        raise NotImplementedError
 
     @property
-    def current_file(self):
+    def current_file(self) -> FileItem:
         return self._current_file
 
 
 class DirReceiver(Receiver):
     """
-    Data Layout:
+    Data Layout::
 
-                                     ------------------------------------------------
+                                     -------------------------------------------------------
                               (FILE) INT(4) | parents | name | FILE SIZE(8) | FILE_CONTENTS
-                              |      -------------------------------------------------
+                              |      -------------------------------------------------------
                               |
         (1 byte) STOP or FILE
                               |
                               |
-                              |      ----------------------
+                              |      ------------------------
                               (PATH) INT(4) | parents | name
-                                     ----------------------
+                                     ------------------------
 
     """
 
-    def __init__(self, peer_obj, transfer_id, download_path, status_iter):
-        super().__init__(peer_obj, transfer_id, download_path, status_iter)
-
-    async def recv_files(self):
+    async def start_transfer(self):
         self.state = TransferState.RECEIVING
-        self.recv_files_task = asyncio.current_task()
+        self.transfer_task = asyncio.current_task()
 
         while True:
             if not (code := await self._should_proceed()):
@@ -168,7 +174,7 @@ class DirReceiver(Receiver):
                     # print(self.current_file)  # debug
                     async for _ in loop:
                         yield _
-                await self.send_func(code)
+                await self.net_sender(code)
 
             elif code == _PATH_CODE:
                 parent, item_name = await self._recv_parts()
@@ -182,7 +188,7 @@ class DirReceiver(Receiver):
     async def _recv_file_item(self):
         parent, item_name = await self._recv_parts()
         try:
-            size = await net.recv_int(self.recv_func, net.LONG_INT)
+            size = await net.recv_int(self.net_receiver, net.LONG_INT)
         except ValueError as ve:
             raise TransferIncomplete from ve
         file = FileItem(Path(self.download_path, parent, item_name), 0)
@@ -191,14 +197,13 @@ class DirReceiver(Receiver):
 
     async def _recv_parts(self):
         try:
-            code_len = await net.recv_int(self.recv_func)
-            # print(f"{code_len=}")
-            parent, item_name = umsgpack.loads(await self.recv_func(code_len))
+            code_len = await net.recv_int(self.net_receiver)
+            parent, item_name = umsgpack.loads(await self.net_receiver(code_len))
             if const.IS_WINDOWS:
                 item_name = item_name.replace("\\", "_")
             return parent, item_name
         except (struct.error, umsgpack.UnpackException) as exp:
             raise TransferIncomplete("failed to receive item code") from exp
 
-    async def continue_transfer(self):
-        self.state = TransferState.RECEIVING
+    async def resume_transfer(self):
+        return NotImplemented

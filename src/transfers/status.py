@@ -1,10 +1,10 @@
 import asyncio
-from typing import AsyncIterable
 
 from tqdm import tqdm
 
-from src.transfers.abc import AbstractStatusMix
 from src.avails.useables import override
+from .abc import AbstractStatusIterator, AbstractStatusMix
+
 
 # design decision:
 # two things we can provide to transfer API
@@ -51,6 +51,18 @@ from src.avails.useables import override
 
 
 class StatusMixIn(AbstractStatusMix):
+    """
+    A mixin that tracks progress of a file transfer and provides status updates
+    to the user via a tqdm progress bar. Also determines when to yield control
+    based on the configured yield frequency.
+
+    This is designed for integration into sender/receiver classes that call
+    `update_status()` and use `should_yield()` to determine yield points.
+
+    Args:
+        yield_freq (int): Number of yield points desired during the transfer.
+    """
+
     __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
 
     def __init__(self, yield_freq):
@@ -65,7 +77,18 @@ class StatusMixIn(AbstractStatusMix):
         # update only the increment b/w before and after
         self.current_status = status
 
+    def write_update(self, update):
+        self.progress_bar.update(update)
+        self.current_status += update
+
     def should_yield(self):
+        """
+        Check whether the transfer should yield control at this point,
+        based on the internal progress and yield frequency.
+
+        Returns:
+            bool: True if yielding is appropriate now, False otherwise.
+        """
         if self.current_status > self.next_yield_point:
             self.next_yield_point = next(self._yield_iterator)
             return True
@@ -103,7 +126,17 @@ class StatusMixIn(AbstractStatusMix):
         self.close()
 
 
-class StatusIterator(StatusMixIn, AsyncIterable):
+class StatusIterator(StatusMixIn, AbstractStatusIterator):
+    """
+    An asynchronous iterator that yields progress updates during a transfer.
+    It wraps `StatusMixIn` and enqueues updates when `should_yield()` returns True.
+
+    Useful when multiple concurrent generators must report progress
+    independently but through a shared interface.
+
+    Args:
+        yield_freq (int): Number of updates to yield across the transfer.
+    """
     __slots__ = "_queue", "exp"
     _sentinel = object()
 
@@ -115,13 +148,26 @@ class StatusIterator(StatusMixIn, AsyncIterable):
     @override
     def update_status(self, status):
         super().update_status(status)
-        if self.should_yield():
-            self._queue.put(self.current_status)
+        self._queue.put(self.current_status)
+
+    @override
+    def write_update(self, update):
+        super().write_update(update)
+        self._queue.put(self.current_status)
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
+        """
+        Async generator interface. Yields next progress update or raises
+        StopAsyncIteration or a stored exception to stop iteration.
+
+        Returns:
+            int: Current progress value.
+        Raises:
+            StopAsyncIteration or Exception: If stopped externally.
+        """
         item = await self._queue.get()
 
         if item == self._sentinel:
@@ -133,11 +179,19 @@ class StatusIterator(StatusMixIn, AsyncIterable):
 
     async def stop(self, any_exp=None):
         """
+        Signals the iterator to stop, optionally raising an exception
+        on the next iteration.
+
+        Directly responsible for raising exception in the iterator and is *reentrant*
 
         Args:
-            any_exp: Exception to raise inside async iterator part
-                if not provided then *StopAsyncIteration* is raised inside iterator
-
+            any_exp (Exception, optional): If provided, this exception is raised
+                                           in `__anext__()`. Otherwise, iteration ends.
         """
         self.exp = any_exp or self._sentinel
         await self._queue.put(self.exp)
+
+    @override
+    async def close(self):
+        await self.stop()
+        super().close()

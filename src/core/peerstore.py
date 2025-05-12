@@ -26,8 +26,10 @@ node_list_ids = [
     b'\xf3333333333333333333$',
 ]
 
+ForgetfulStorage = storage.ForgetfulStorage
 
-class Storage(storage.ForgetfulStorage):
+
+class Storage(ForgetfulStorage):
     # TODO: introduce diff based reads
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)

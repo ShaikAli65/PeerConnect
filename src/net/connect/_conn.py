@@ -2,10 +2,10 @@ import asyncio as _asyncio
 import struct
 import time
 from asyncio.trsock import TransportSocket
-from typing import Any, NamedTuple, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
 
 from src.avails import const, wire
-from src.avails.exceptions import InvalidPacket
+from src.avails.exceptions import FailedToReceive, InvalidPacket
 from ._asocket import Socket
 
 __all__ = (
@@ -15,6 +15,7 @@ __all__ = (
     'Connection',
     'MsgConnection',
     'MsgConnectionNoRecv',
+    'ChunkedReceiver',
 )
 
 
@@ -129,6 +130,45 @@ class Receiver(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
 
     def __repr__(self):
         return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
+
+
+ReceiverType = Receiver | Callable[[int], Awaitable[bytes]]
+
+
+async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
+    """
+    Asynchronously receives data in chunks from a Receiver or compatible callable.
+
+    This function is a generator that yields chunks of received data until the
+    specified total `size` is received. It repeatedly calls the `receiver` with
+    chunk sizes, adjusted dynamically to avoid over-reading near the end.
+
+    Useful when live control is needed upon receiving data
+
+    Args:
+        receiver (ReceiverType): Either an instance of `Receiver` or an async callable
+                                 accepting a byte count and returning `bytes`.
+        size (int): Total number of bytes expected to be received.
+        chunk_size (int): Maximum size of each chunk to be received.
+
+    Yields:
+        bytes: A chunk of received data (never larger than `chunk_size`).
+
+    Raises:
+        FailedToReceive: If the connection is interrupted and total expected data
+                         could not be received.
+                        (`FailedToReceive.received` field can be used to check for
+                         how much data is received sucessfully).
+
+    """
+
+    remaining_bytes = size
+    while remaining_bytes > 0:
+        data = await receiver(min(chunk_size, remaining_bytes))
+        if not data:
+            raise FailedToReceive(size - remaining_bytes)
+        remaining_bytes -= len(data)
+        yield data
 
 
 class Connection(NamedTuple):
