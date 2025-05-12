@@ -16,7 +16,7 @@ from src.avails.mixins import QueueMixIn
 from src.core.app import AppType
 from src.core.events import ConnectionEvent
 from src.managers.directorymanager import DirConnectionHandler
-from src.managers.filemanager import FileConnectionHandler, OTMConnectionHandler
+from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
 from src.net import Acceptor, WireIO, bandwidth
 from src.transfers import HEADERS
 
@@ -27,6 +27,7 @@ async def initiate_acceptor(app_ctx: AppType):
     connection_dispatcher = ConnectionDispatcher()
     c_reg_handler = connection_dispatcher.register_handler
     c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(app_ctx.read_only()))
+    c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(app_ctx.read_only()))
     c_reg_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler(app_ctx.read_only()))
     c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
     c_reg_handler(HEADERS.PING, PingHandler(app_ctx.this_remote_peer))
@@ -50,7 +51,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
 
         [s1 dispatcher(con_event)] (QueueMixIn creates a task)
                 |
-        [s2 ConnectionDispatcher.submit] (connection event is sent to registered handler by spawing another task `see{1}`)
+        [s2 ConnectionDispatcher.submit] (connection event is sent to registered handler by spawning another task `see{1}`)
                 |
         [s3 handler returns]
                 |
@@ -87,7 +88,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             else:
                 event = ConnectionEvent(connection, service_header)
                 self._parking_lot.pop(connection)  # remove from passive mode
-                self(event)  # this spawns a seperate Task with self.submit
+                self(event)  # this spawns a separate Task with self.submit
 
         item = self._parked_item(
             connection,
@@ -137,7 +138,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
         except TimeoutError:
             _logger.error(f"failed to acquire connection lock from {handler}, closing connection")
             await conn_watcher.request_closing(connection)
-            # DESICION, whether we should forcefully release using
+            # DECISION, whether we should forcefully release using
             # connection.lock.release() and park,
             # or to close connection itself
             return

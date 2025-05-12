@@ -33,6 +33,7 @@ class HANDLE(enum.StrEnum):
     GET_INTERFACE_CHOICE = "0select interface"
     SEND_DIR = "0send a directory"
     SEND_FILE = "0send file to peer"
+    SEND_BIGFILE = "0send big file to peer"
     SEND_TEXT = "0send text"
     RECEIVED_TEXT = "0received text"
     SEND_FILE_TO_MULTIPLE_PEERS = "0send_file_to_multiple_peers"
@@ -71,7 +72,9 @@ if TYPE_CHECKING:
     GET_INTERFACE_CHOICE = "0select interface"
     SEND_DIR = "0send_a_directory"
     SEND_FILE = "0send_file_to_peer"
+    SEND_BIGFILE = "0send big file to peer"
     SEND_TEXT = "0send_text"
+
     RECEIVED_TEXT = "0received text"
     SEND_FILE_TO_MULTIPLE_PEERS = "0send_file_to_multiple_peers"
     SEND_DIR_TO_MULTIPLE_PEERS = "0send_dir_to_multiple_peers"
