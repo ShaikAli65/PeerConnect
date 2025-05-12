@@ -113,24 +113,20 @@ async def load_configs(app: AppType):
         with open(const.PATH_CONFIG_FILE, 'w+') as fp:
             config_map.write(fp)  # noqa
 
-    async def finalize_config():
+    def finalize_config():
+        _logger.debug(f"writing configurations to {const.PATH_CONFIG_FILE}")
 
-        def _finalize_config_helper():
-            _logger.debug(f"writing configurations to {const.PATH_CONFIG_FILE}")
+        config_dict = {section: dict(config_map.items(section)) for section in config_map.sections()}
+        _logger.debug(json.dumps(config_dict, indent=4))
 
-            config_dict = {section: dict(config_map.items(section)) for section in config_map.sections()}
-            _logger.debug(json.dumps(config_dict, indent=4))
-
-            with open(const.PATH_CONFIG_FILE, 'w+') as fp:
-                config_map.write(fp)  # noqa
-                # write the final state of configuration when exiting application
-
-        return await asyncio.to_thread(_finalize_config_helper)
+        with open(const.PATH_CONFIG_FILE, 'w+') as fp:
+            config_map.write(fp)  # noqa
+            # write the final state of configuration when exiting application
 
     await asyncio.to_thread(_helper)
     set_constants(config_map)
     app.current_config = config_map
-    app.exit_stack.push_async_callback(finalize_config)
+    app.exit_stack.callback(finalize_config)
 
 
 def _write_default_configurations(path):

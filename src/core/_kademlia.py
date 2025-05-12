@@ -20,7 +20,7 @@ from src.conduit import webpage
 from src.core import peers
 from src.core.app import AppType, ReadOnlyAppType
 from src.core.events import RequestEvent
-from src.core.peerstore import Storage
+from src.core.peerstore import ForgetfulStorage, Storage
 from src.net.transports import KademliaTransport
 from src.transfers import REQUESTS_HEADERS
 
@@ -282,24 +282,36 @@ class PeerServer(network.Server):
         results = [self.protocol.call_store_peers_in_list(n, list_key, peer_objs) for n in relevant_peers]
         return any(await asyncio.gather(*results))
 
-    async def get_remote_peer(self, byte_id):
+    async def get_remote_peer(self, byte_id, _cache=ForgetfulStorage(60)):
         """Gets Remote Peer Object from network using byte id of that peer
 
         Every call to this function not only gathers remote_peer object corresponding to peer_id
-        but also updates `Dock.peer_list` cache, by reassigning all the peer objects that go through this network
+        but also updates `.peer_list` cache, by reassigning all the peer objects that go through this network
         crawling process which helps in keeping cache upto date to some extent
 
         Args:
             byte_id(bytes): peer id in bytes to perform search
+            _cache:...
         """
+        if peer := _cache.get(byte_id):
+            if peer.is_online:
+                return peer
+            else:
+                del _cache.data[byte_id]
+
         peer = RemotePeer(byte_id=byte_id)
         nodes = self.protocol.router.find_neighbors(peer)
         spider = NodeSpiderCrawl(self.protocol, peer, nodes,
                                  self.ksize, self.alpha)
         found_peers = await spider.find()
+
+        peer_to_return = None
         for peer in found_peers:
+            _cache[peer.id] = peer
             if peer.id == byte_id:
-                return peer
+                peer_to_return = peer
+
+        return peer_to_return
 
     @property
     def transport(self):
@@ -399,4 +411,3 @@ def KademliaHandler(kad_server):
 crawling.RPCFindResponse = RPCFindResponse
 network.Server.protocol_class = KadProtocol
 kademlia.node.Node = RemotePeer
-
