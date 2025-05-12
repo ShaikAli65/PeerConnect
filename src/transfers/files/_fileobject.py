@@ -21,7 +21,6 @@ class FileItem:
     It provides methods to manage file renaming, error handling, and serialization.
 
     Attributes:
-        __slots__: Used for memory optimization, defining the attributes the class can have.
         _name: The name of the file.
         size: The size of the file in bytes.
         path: The Path object representing the file's path.
@@ -55,6 +54,7 @@ class FileItem:
 
     @name.setter
     def name(self, value):
+        """Updates name and path accordingly"""
         self._name = value
         self.path = self.path.with_name(self._name)
 

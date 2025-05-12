@@ -10,7 +10,7 @@ from src.avails.wire import PalmTreeSession
 from src.core import peers
 from src.net import UDPProtocol, WireIO, create_connection_async, get_free_port, unpack_datagram
 from src.transfers import HEADERS
-from src.transfers.otm.tree import TreeLink
+from .tree import TreeLink
 
 
 class PalmTreeLink(TreeLink):

@@ -6,8 +6,8 @@ import umsgpack
 
 from src.avails import OTMSession, RemotePeer, WireData, const, use
 from src.transfers import HEADERS
-from src.transfers.files._fileobject import FileItem, calculate_chunk_size
-from src.transfers.otm.relay import OTMFilesRelay, OTMPalmTreeProtocol
+from src.transfers.files import FileItem, calculate_chunk_size
+from .relay import OTMFilesRelay, OTMPalmTreeProtocol
 
 
 class FilesSender:

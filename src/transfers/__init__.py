@@ -1,10 +1,11 @@
 import enum
 from concurrent.futures.thread import ThreadPoolExecutor
 
+from src.core.events import ConnectionEvent
 from src.transfers._headers import *
 from src.transfers.rumor import *
 
-thread_pool_for_disk_io = ThreadPoolExecutor()
+thread_pool_for_disk_io = ThreadPoolExecutor(thread_name_prefix="transfers-diskio-thread-")
 
 TRANSFER_OK = b'\x01'
 TRANSFER_NOT_OK = b'\x00'
@@ -18,3 +19,8 @@ class TransferState(enum.Enum):
     PAUSED = 5
     ABORTING = 6
     COMPLETED = 7
+
+
+def get_transfer_id(event: ConnectionEvent) -> str:
+    file_req = event.handshake
+    return f"{file_req['peer_id']};{file_req['file_id']}"

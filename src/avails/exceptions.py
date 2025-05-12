@@ -60,3 +60,11 @@ class SearchExhausted(Exception):
 class FailedToSend(TransferIncomplete):
     """Failed to Send Something"""
     item: Any
+
+
+class FailedToReceive(TransferIncomplete):
+    """Failed to receive completely"""
+
+    def __init__(self, received=0, *args):
+        super().__init__(received, *args)
+        self.received = received

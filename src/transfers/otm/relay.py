@@ -7,7 +7,7 @@ from src.avails import WireData, constants as const
 from src.avails.useables import override
 from src.net.utils import LONG_INT, recv_int
 from src.transfers import HEADERS
-from src.transfers.otm.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
+from .palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
 
 
 class OTMFilesRelay(PalmTreeRelay):
