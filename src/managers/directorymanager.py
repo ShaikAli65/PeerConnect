@@ -6,6 +6,7 @@ from pathlib import Path
 from src.avails import TransfersBookKeeper, WireData, const, get_dialog_handler, use
 from src.avails.exceptions import TransferRejected
 from src.conduit import webpage
+from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.core.events import ConnectionEvent
 from src.net import Connector, WireIO
@@ -49,14 +50,10 @@ async def send_directory(remote_peer, dir_path, *, app_ctx=None):
         sender.connection_made(connection)
         _logger.info(f"sending directory: {dir_path} to {remote_peer}")
         yield_decision = status_mixin.should_yield
-        async with aclosing(sender.send_files()) as s:
+        async with aclosing(sender.start_transfer()) as s:
             async for _ in s:
                 if yield_decision():
-                    await webpage.transfer_update(
-                        remote_peer.peer_id,
-                        transfer_id,
-                        sender.current_file,
-                    )
+                    await webpage.transfer_update(sender)
         status_mixin.close()
         _logger.info(f"completed sending directory {dir_path} to {remote_peer}")
 
@@ -91,8 +88,8 @@ def DirConnectionHandler(app_ctx: ReadOnlyAppType):
         connection = event.connection
 
         transfer_id = event.handshake.body['transfer_id']
-        peer = app_ctx.peer_list.get_peer(event.handshake.peer_id)
-        transfer_id = peer.peer_id + transfer_id
+        peer = await peers.get_remote_peer(event.handshake.peer_id)
+        transfer_id = peer.peer_id + ';' + transfer_id
 
         dir_name = event.handshake.body['dir_name']
         dir_path = rename_directory_with_increment(const.PATH_DOWNLOAD, Path(dir_name))
@@ -116,15 +113,12 @@ def DirConnectionHandler(app_ctx: ReadOnlyAppType):
                 _logger.info(
                     f"receiving directory from {peer}, saving at {use.shorten_path(dir_path, 40)}"
                 )
-                async with aclosing(receiver.recv_files()) as loop:
+                async with aclosing(receiver.start_transfer()) as loop:
                     yield_decision = status_iter.should_yield
                     async for _ in loop:
                         if yield_decision():
-                            await webpage.transfer_update(
-                                peer.peer_id,
-                                transfer_id,
-                                receiver.current_file
-                            )
+                            await webpage.transfer_update(receiver)
+
                 _logger.info(f"directory received from {peer}")
                 transfers_book.add_to_completed(transfer_id, receiver)
         except Exception as e:
