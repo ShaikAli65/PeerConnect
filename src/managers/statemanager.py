@@ -5,6 +5,7 @@ import logging
 import math
 import threading
 from asyncio import Queue as _queue
+from inspect import iscoroutine
 from typing import Iterable, Optional
 
 from src.avails import use
@@ -83,7 +84,7 @@ class State:
         def wrap_in_thread(_func):
             threading.Thread(target=_func, args=self.args, daemon=True).start()
 
-        self.is_coro = inspect.iscoroutinefunction(func)
+        self.is_coro = inspect.iscoroutinefunction(func) or inspect.isawaitable(func)
 
         if self.is_blocking:
             self.func = functools.partial(wrap_in_task if self.is_coro else wrap_in_thread, func)
@@ -107,6 +108,10 @@ class State:
             ret_val = await self.func()
         else:
             ret_val = self.func()
+
+        # some edge case
+        if iscoroutine(ret_val):
+            ret_val = await ret_val
 
         return ret_val
 
@@ -169,6 +174,10 @@ class StateManager:
                 current_state: State = await self.state_queue.get()
                 if current_state is None:
                     return
+
+                if not isinstance(current_state, State):
+                    _logger.warning(f"ignoring unexpected state object {current_state=}")
+                    continue
 
                 self.states.append(current_state)
                 r = await current_state.enter_state()

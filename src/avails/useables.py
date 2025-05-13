@@ -165,8 +165,11 @@ def echo_print(*args, **kwargs):
     return print(*args, COLORS.RESET, **kwargs)
 
 
-def async_input(helper_str=""):
-    return asyncio.to_thread(input, helper_str)
+async def async_input(helper_str=""):
+    try:
+        return await asyncio.to_thread(input, helper_str)
+    except EOFError:
+        return None
 
 
 def open_file(content):

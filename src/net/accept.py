@@ -7,8 +7,8 @@ import traceback
 from asyncio import TaskGroup
 from typing import Optional
 
-from src.avails import WireData, const, use
-from src.avails.exceptions import InvalidPacket
+from src.avails import RemotePeer, WireData, const, use
+from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
 from src.core.app import ReadOnlyAppType
 from src.core.events import ConnectionEvent
@@ -84,7 +84,12 @@ class Acceptor(AExitStackMixIn):
         if not handshake:
             return
         _logger.info(f"handshake successful {handshake}")
-        peer = await peers.get_remote_peer(handshake.peer_id)
+        try:
+            peer = await peers.get_remote_peer(handshake.peer_id)
+        except RemotePeerNotFound:
+            _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
+            return
+        peer.status = RemotePeer.ONLINE
         conn = Connection.create_from(initial_conn, peer)
         self._exit_stack.enter_context(initial_conn)
         con_event = ConnectionEvent(conn, handshake)

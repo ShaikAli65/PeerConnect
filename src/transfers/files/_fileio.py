@@ -15,7 +15,7 @@ from io import BytesIO, TextIOWrapper
 from typing import AsyncGenerator, BinaryIO
 
 from src.avails.exceptions import InvalidStateError
-from src.transfers import thread_pool_for_disk_io as _th_pool
+from src.transfers import _logger, thread_pool_for_disk_io as _th_pool
 from src.transfers.abc import AbstractRWBase, AbstractReader, AbstractWriter
 from ._fileobject import FileItem, calculate_chunk_size
 
@@ -32,7 +32,7 @@ __all__ = (
 async def async_open(*args):
     loop = asyncio.get_running_loop()
     fd: TextIOWrapper | BinaryIO = await loop.run_in_executor(_th_pool, open, *args)  # noqa
-    async with fd:
+    with fd:
         yield fd
 
 
@@ -63,7 +63,7 @@ class FileItemRWBase(AbstractRWBase, ABC):
     def size(self):
         return self._stop_index - self._start_index
 
-    async def set_bounds(self, start, end):
+    def set_bounds(self, start, end):
         """Set the boundaries, this may be invalid if the reader/writer is already started"""
         assert end >= start, f"{end=} should be greater that {start=}"
         self._start_index = start
@@ -87,10 +87,11 @@ class FileItemReader(FileItemRWBase, AbstractReader):
             chunk_size(int): length of each chunk passed into ``send_function`` for each call
         """
 
-        super().__init__(file)
         self.fd: BytesIO | None = None
         self._chunk_len = chunk_size or calculate_chunk_size(file.size)
         self._reader_gen: AsyncGenerator | None = None
+        super().__init__(file)
+        self._seek = self._start_index
 
     @asynccontextmanager
     async def start_reading(self):
@@ -106,14 +107,17 @@ class FileItemReader(FileItemRWBase, AbstractReader):
             finally:
                 await self.close()
 
-    async def set_bounds(self, start, end):
-        assert self._reader_gen.ag_running is False, "cannot set boundaries after start_reading called"
+    def set_bounds(self, start, end):
+
+        if self._reader_gen and self._reader_gen.ag_running is True:
+            raise InvalidStateError("cannot set boundaries after start_reading called")
+
         self._start_index = start
+        self._seek = start
         self._stop_index = end
 
     async def _mmap_reader(self):
         chunk_size = self._chunk_len
-        seek = self._start_index
 
         with mmap.mmap(self.fd.fileno(), 0, access=mmap.ACCESS_READ) as f_mapped:
             asyncify = functools.partial(
@@ -122,9 +126,9 @@ class FileItemReader(FileItemRWBase, AbstractReader):
                 f_mapped.__getitem__
             )
 
-            for offset in range(seek, self._stop_index, chunk_size):
+            for offset in range(self._start_index, self._stop_index, chunk_size):
                 chunk = await asyncify(slice(offset, offset + chunk_size))
-                seek += len(chunk)
+                self._seek += len(chunk)
                 yield chunk
 
     async def _reader(self):
@@ -140,12 +144,13 @@ class FileItemReader(FileItemRWBase, AbstractReader):
         chunk = self._chunk_len
         while size > 0:
             chunk = await async_read(min(chunk, size))  # noqa
-            size -= chunk
+            size -= len(chunk)
+            self._seek += len(chunk)
             yield chunk
 
     @property
     def seek_pos(self):
-        return self.fd.tell() - self._start_index
+        return self._seek
 
     @property
     def reader(self):
@@ -153,20 +158,18 @@ class FileItemReader(FileItemRWBase, AbstractReader):
         return self._reader_gen
 
     async def close(self, *args):
-        if self._reader_gen.ag_running is False:
-            raise InvalidStateError("Not Started")
-
-        await self._reader_gen.aclose()
+        return await self._reader_gen.aclose()
 
 
 class FileItemWriter(FileItemRWBase, AbstractWriter):
     __slots__ = "fd", "_fd_writer", "started"
 
     def __init__(self, file: FileItem):
-        super().__init__(file)
         self.fd: BytesIO | None = None
         self._file_writer = None
         self.started = False
+        self._seek = 0
+        super().__init__(file)
 
     @asynccontextmanager
     async def start_writing(self):
@@ -190,12 +193,12 @@ class FileItemWriter(FileItemRWBase, AbstractWriter):
         """
         async with self._setup_file():
             self.started = True
-            # directly set file_writer as write method, `write` method just relaying the call
-            setattr(self, 'write', self._file_writer)
             yield self._file_writer
 
     async def write(self, data: bytes):
-        return await self._file_writer(data)
+        w = await self._file_writer(data)
+        self._seek += w
+        return w
 
     @asynccontextmanager
     async def _setup_file(self):
@@ -208,13 +211,15 @@ class FileItemWriter(FileItemRWBase, AbstractWriter):
         # all the contents are cleared
 
         if self._start_index > 0 and not os.path.exists(self.file_item.path):
-            print(f"File {self.file_item.path} not found for resuming transfer.")  # debug
+            _logger.info(f"File {self.file_item.path} not found for resuming transfer.")  # debug
             raise FileNotFoundError(
                 f"File {self.file_item.path} not found for resuming transfer."
             )
 
         async with async_open(self.file_item.path, mode) as fd:
             self.fd = fd
+            self._seek += self._start_index
+
             fd.seek(self._start_index)
             loop = asyncio.get_running_loop()
             self._file_writer = functools.partial(loop.run_in_executor, _th_pool, fd.write)
@@ -222,7 +227,7 @@ class FileItemWriter(FileItemRWBase, AbstractWriter):
 
     @property
     def seek_pos(self):
-        return self.fd.tell()
+        return self._seek
 
     async def close(self, *args):
         return self.fd.close()

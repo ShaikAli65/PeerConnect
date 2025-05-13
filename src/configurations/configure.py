@@ -37,9 +37,8 @@ def print_app(app):
         {"=" * 56}
         """
     )
-    with const.LOCK_PRINT:
-        print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
-        return print(print_string)
+    print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
+    return print(print_string)
 
 
 def _get_local_appdata_path():
@@ -79,7 +78,7 @@ def set_paths():
     if not downloads_path.exists():
         downloads_path = Path(Path.home(), 'Desktop')
 
-    const.PATH_DOWNLOAD = Path(os.path.join(downloads_path, const.APP_NAME))
+    const.PATH_DOWNLOAD = Path(downloads_path, const.APP_NAME)
 
     try:
         os.makedirs(const.PATH_DOWNLOAD, exist_ok=True)

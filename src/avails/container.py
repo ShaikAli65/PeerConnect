@@ -4,7 +4,6 @@ Contains simple storages used across the peer connect
 2. PeerDict
 """
 
-import asyncio
 from collections import defaultdict
 from itertools import count
 from typing import Iterable, TYPE_CHECKING, ValuesView
@@ -26,19 +25,16 @@ __all__ = (
     "TransfersBookKeeper",
 
 )
+
+
 # (self, peer_id:  str, transfer_handle: HasID | HasIdProperty)
 
 
 class PeerDict(dict):
-    __slots__ = '__lock',
-
-    def __init__(self):
-        super().__init__()
-        # self.__lock = threading.Lock()
-        self.__lock = asyncio.Lock()
+    __slots__ = ()
 
     def get_peer(self, peer_id) -> RemotePeer:
-        return self.get(peer_id, None)
+        return self.get(peer_id)
 
     def add_peer(self, peer_obj: RemotePeer | HasPeerId):
         """Adds peer to dictionary
@@ -68,8 +64,7 @@ class PeerDict(dict):
         return self.values()
 
     def clear(self):
-        with self.__lock:
-            self.clear()
+        self.clear()
 
     def __str__(self):
         return ', '.join(x.__repr__() for x in self.values())

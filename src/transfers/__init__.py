@@ -21,6 +21,6 @@ class TransferState(enum.Enum):
     COMPLETED = 7
 
 
-def get_transfer_id(event: ConnectionEvent) -> str:
+def make_transfer_id(event: ConnectionEvent) -> str:
     file_req = event.handshake
-    return f"{file_req['peer_id']};{file_req['file_id']}"
+    return f"{file_req.peer_id};{file_req['transfer_id']}"

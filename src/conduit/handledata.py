@@ -80,8 +80,9 @@ async def send_file(command_data: DataWeaver):
     if not any(selected_files):
         return
 
-    peer = await peers.get_remote_peer(command_data.peer_id)
-    if peer is None:
+    try:
+        peer = await peers.get_remote_peer(command_data.peer_id)
+    except RemotePeerNotFound:
         await webpage.failed_to_reach(command_data.peer_id)
         return
 

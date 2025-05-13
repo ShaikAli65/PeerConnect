@@ -12,7 +12,7 @@ from src.conduit import webpage
 from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.core.events import ConnectionEvent
-from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState, files, get_transfer_id, otm
+from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState, files, make_transfer_id, otm
 from src.transfers.abc import AbstractTransferHandle
 from src.transfers.otm.relay import OTMFilesRelay
 from src.transfers.status import StatusIterator, StatusMixIn
@@ -71,7 +71,6 @@ async def _sender_helper(file_sender, this_peer_id, handshake_header):
                 _prepare_connection(file_sender, this_peer_id, handshake_header))
             file_sender.connection_made(connection)
             accepted = await asyncio.wait_for(connection.recv(1), const.DEFAULT_TRANSFER_TIMEOUT)
-            print(f"{accepted=}")  # debug
             if accepted == TRANSFER_NOT_OK:
                 may_be_confirmed = False
         except OSError as oe:  # unable to connect
@@ -96,7 +95,7 @@ async def _prepare_connection(transfer_handle, this_peer_id, header):
         handshake = WireData(
             header=header,
             version=transfer_handle.version,
-            file_id=transfer_handle.id,
+            transfer_id=transfer_handle.id,
             peer_id=this_peer_id,
         )
         _logger.debug(f"authorization header sent for file connection {transfer_handle.id}")
@@ -144,7 +143,7 @@ async def send_big_file(peer, file_list, app_ctx=None):
 
 def FileConnectionHandler(app_ctx):
     async def handler(event: ConnectionEvent):
-        transfer_id = get_transfer_id(event)
+        transfer_id = make_transfer_id(event)
 
         should_return = await _common_operations(transfer_id, event, app_ctx)
         if should_return is True:
@@ -177,6 +176,7 @@ async def _common_operations(transfer_id, event, app_ctx):
 
 
 async def _run_file_receiver(event: ConnectionEvent, transfer_id: str, transfer_handle_class):
+    transfer_handle = None
     try:
         async with AsyncExitStack() as exit_stack:
             transfer_handle = await _recv_and_update(
@@ -186,7 +186,8 @@ async def _run_file_receiver(event: ConnectionEvent, transfer_id: str, transfer_
                 transfer_handle_class,
             )
     except TransferIncomplete as e:
-        await webpage.transfer_incomplete(transfer_handle, detail=e)  # transfer_handle isn't available here yet
+        if transfer_handle:
+            await webpage.transfer_incomplete(transfer_handle, detail=e)  # transfer_handle isn't available here yet
 
 
 async def _recv_and_update(event, transfer_id, exit_stack, transfer_handle_class):
@@ -226,10 +227,9 @@ async def _file_receiver(event, transfer_id, status_updater, receiver_class):
         await _finalize_transfer(file_handle)
 
 
-@provide_app_ctx
 def BigFileConnectionHandler(app_ctx):
     async def handler(event: ConnectionEvent):
-        transfer_id = get_transfer_id(event)
+        transfer_id = make_transfer_id(event)
 
         should_return = await _common_operations(transfer_id, event, app_ctx)
         if should_return is True:

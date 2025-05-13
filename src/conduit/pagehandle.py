@@ -92,6 +92,7 @@ class FrontEndWebSocket:
         return await self.buffer.put(msg)
 
     def _handle_buffer_and_log(self):
+        """Logs a warning and removes top element from queue"""
         if self.buffer.qsize() >= self.max_buffer_size:
             return logger.warning(f"discarding websocket message {self.buffer.get_nowait()}, buffer full",
                                   exc_info=True)
@@ -159,7 +160,7 @@ class MessageFromFrontEndDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatch
         try:
             await asyncio.sleep(0)
         except CancelledError:
-            logger.warning("suppressing expected canceller error at aexit")
+            logger.debug("suppressing expected canceller error at aexit")
             return
 
         try:
@@ -274,7 +275,8 @@ def run_page_server(host="localhost", _exit_stack=_exit_stack):
 
 async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
     global PROFILE_WAIT
-    PROFILE_WAIT = _asyncio.get_event_loop().create_future()
+    if PROFILE_WAIT is None:
+        PROFILE_WAIT = _asyncio.get_event_loop().create_future()
 
     await app.exit_stack.enter_async_context(_exit_stack)
 

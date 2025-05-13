@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import hashlib
 import traceback
 from concurrent.futures import ProcessPoolExecutor
@@ -34,15 +33,20 @@ def hasher(file_paths):
 
 @provide_app_ctx
 async def test_file_transfer(_config, *, app_ctx=None):
-    file_paths = "D:\\Movies\\Schindlers List 1993 720p UHD BluRay x264 6CH-Pahe.mkv", "D:\\Movies\\Businessman_2012_Telugu_Blu_Ray_1080p_AVC_x264_DD5_1_448Kbps_+_ESub.mkv"
+    file_paths = (
+        r"C:\Users\7862s\Desktop\25huizengek1-vitune.txt",
+        r"C:\Users\7862s\Desktop\cse.ap.gov.in_TISPreviewPage_0531174.pdf",
+        r"C:\Users\7862s\Desktop\How Can a Python Program Block Itself.pptx",
+        r"C:\Users\7862s\Desktop\lnmh7c4kelr81.png",
+        r"C:\Users\7862s\Desktop\profile.jpg",
+    )
     await app_ctx.in_network.wait()
     peer = get_a_peer()
+    print("*" * 80, peer)
     data = DataWeaver(
         header=headers.HANDLE.SEND_FILE,
         peer_id=peer.peer_id,
-        content={
-            'paths': file_paths,
-        }
+        content={'paths': file_paths}
     )
     if _config.test_mode == "host":
         hash_tasks = hasher(file_paths)
@@ -66,5 +70,5 @@ async def test_file_transfer(_config, *, app_ctx=None):
 
 
 if __name__ == '__main__':
-    file_transfer = State("test file transfer", functools.partial(test_file_transfer, config), is_blocking=True)
+    file_transfer = State("test file transfer", test_file_transfer, config, is_blocking=True)
     start_test1((), (file_transfer,))

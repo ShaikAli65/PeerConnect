@@ -16,7 +16,7 @@ class AbstractRWBase(ABC):
     async def close(self, *args): ...
 
     @abstractmethod
-    async def set_bounds(self, start: int, end: int): ...
+    def set_bounds(self, start: int, end: int): ...
 
     @property
     def seek_pos(self):
@@ -170,7 +170,14 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
     @property
     def _log_prefix(self):
-        return f"[{self.__class__}]"
+        return f"[{self.__class__.__name__}]"
+
+    def __repr__(self):
+        return (f"<{self.__class__.__name__}("
+                f"peer={self.peer}, "
+                f"curr={self.current_file}, "
+                f"state={self.state}, "
+                f")>")
 
 
 if TYPE_CHECKING:

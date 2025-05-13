@@ -4,6 +4,7 @@ import struct
 
 from src.avails import const
 from src.net import IPAddress
+from ._interfaces_windows import INCLUDE_LOOP_BACK
 
 IFF_LOOPBACK = 0x8
 IFF_UP = 0x1  # Interface is up.
@@ -109,7 +110,7 @@ def get_interfaces(
             iface_name = iface.ifa_name.decode("utf-8") if iface.ifa_name else None
             if (
                 not (family == socket.AF_INET or family == socket.AF_INET6)
-                or bool(flags & IFF_LOOPBACK)
+                  or (INCLUDE_LOOP_BACK or bool(flags & IFF_LOOPBACK))
                 or not bool(flags & IFF_RUNNING)
             ):
                 p = iface.ifa_next

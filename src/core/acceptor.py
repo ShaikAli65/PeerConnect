@@ -73,9 +73,6 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     _parking_lot = {}
     _parked_item = namedtuple("ConnectionAndWatcherTask", ("connection", "watcher_task"))
 
-    def __call__(self, event, *args, **kwargs):
-        return self(event, *args, **kwargs, _task_name=f"accept-con[{event.handshake.header}]")
-
     def park(self, connection):
         async def watcher():
             conn_watcher = bandwidth.Watcher()
@@ -118,8 +115,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
                 await self._handle_runtime_error(_logger)
             except Exception as e:
                 # we can't afford exceptions here as they move into QueueMixIn
-                _logger.error(f"{handler}({event}) failed with \n", exc_info=e)
-
+                _logger.error(f"{handler}({event}) failed with: \n", exc_info=e)
         finally:
             await self._try_parking(handler, event.connection)
 

@@ -195,4 +195,4 @@ class Receiver(
 
     @property
     def id(self):
-        return f"{self.peer.peer_id} {self._transfer_id}"
+        return self._transfer_id

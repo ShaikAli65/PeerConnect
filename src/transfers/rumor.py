@@ -140,10 +140,12 @@ class RumorMongerProtocol:
         return True
 
     def __forward_payload(self, message, peer_id):
-        peer_obj = self.global_peer_list.get_peer(peer_id)
-        if peer_obj is not None:
+        try:
+            peer_obj = self.global_peer_list.get_peer(peer_id)
             self.transport.sendto(bytes(message), peer_obj.req_uri)
             return peer_obj
+        except KeyError:
+            pass
 
     def gossip_message(self, message):
         print("[GOSSIP] gossiping new message", message, "to")
