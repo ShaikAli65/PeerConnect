@@ -39,7 +39,7 @@ class CannotConnect(OSError):
 
 
 class ResourceBusy(Exception):
-    """Resource is Busy
+    """Resource is busy
 
     Attributes:
         available_after(asyncio.Condition):gets released when resource is freed
@@ -48,7 +48,7 @@ class ResourceBusy(Exception):
     available_after: asyncio.Condition
 
 
-class RemotePeerNotFound(Exception):
+class RemotePeerNotFound(LookupError):
     """RemotePeer object not found anywhere"""
     peer_id: str
 

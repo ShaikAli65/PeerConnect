@@ -1,4 +1,5 @@
 import asyncio
+from itertools import chain
 
 from tqdm import tqdm
 
@@ -63,18 +64,18 @@ class StatusMixIn(AbstractStatusMix):
         yield_freq (int): Number of yield points desired during the transfer.
     """
 
-    __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
+    # __slots__ = 'yield_freq', 'current_status', '_yield_iterator', 'progress_bar', 'next_yield_point'
 
     def __init__(self, yield_freq):
         self.next_yield_point = -1
         self.yield_freq = yield_freq
         self.current_status = 0
-        self._yield_iterator = iter(range(yield_freq))
+        self._yield_iterator = None
         self.progress_bar = None
+        self.final_limit = 0  # Track final limit for sentinel
 
     def update_status(self, status):
         self.progress_bar.update(status - self.current_status)
-        # update only the increment b/w before and after
         self.current_status = status
 
     def write_update(self, update):
@@ -89,13 +90,16 @@ class StatusMixIn(AbstractStatusMix):
         Returns:
             bool: True if yielding is appropriate now, False otherwise.
         """
-        if self.current_status > self.next_yield_point:
-            self.next_yield_point = next(self._yield_iterator)
+        if self.current_status >= self.next_yield_point:
+            try:
+                self.next_yield_point = next(self._yield_iterator)
+            except StopIteration:
+                self.next_yield_point = self.final_limit + 1
             return True
         return False
 
     def status_setup(self, prefix, initial_limit, final_limit):
-        print("#" * 89, initial_limit, final_limit)
+        self.final_limit = final_limit
         if self.progress_bar:
             self.progress_bar.close()
 
@@ -108,22 +112,25 @@ class StatusMixIn(AbstractStatusMix):
             dynamic_ncols=True
         )
         self.progress_bar.update(initial_limit)
+        self.current_status = initial_limit
 
-        if self.yield_freq < 2:
+        if self.yield_freq < 1:
             self.next_yield_point = final_limit + 1
             self._yield_iterator = None
         else:
-            spacing = (final_limit - initial_limit) / (self.yield_freq - 1)
-            self._yield_iterator = (min(final_limit, int(initial_limit + i * spacing)) for i in range(self.yield_freq))
+            spacing = (final_limit - initial_limit) / self.yield_freq
+            # Generate evenly spaced yield points with rounding
+            self._yield_iterator = chain(
+                (round(initial_limit + i * spacing) for i in range(1, self.yield_freq + 1)),
+                # Add sentinel value to prevent post-completion yields
+                [final_limit + 1],
+            )
             self.next_yield_point = next(self._yield_iterator)
 
     def close(self):
         if self.progress_bar:
             self.progress_bar.clear()
             self.progress_bar.close()
-
-    def __del__(self):
-        self.close()
 
 
 class StatusIterator(StatusMixIn, AbstractStatusIterator):

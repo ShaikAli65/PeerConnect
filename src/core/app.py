@@ -1,6 +1,8 @@
 import asyncio
 import functools
 import inspect
+from types import FunctionType
+from typing import Callable
 
 from src.avails import PeerDict, RemotePeer
 from src.avails.mixins import AggregatingAsyncExitStack
@@ -114,6 +116,7 @@ class App(_NoSetter, metaclass=_ClassLevelDesc):
 
 
 AppType = type[App]
+# AppType = TypeVar('AppType', App, None, covariant=True)
 
 ReadOnlyAppType = App
 
@@ -122,7 +125,7 @@ def get_app_context():
     return App.read_only()
 
 
-def provide_app_ctx(func):
+def provide_app_ctx(func: FunctionType | Callable):
     """
     Decorator that provides read only application context object with *kw* parameter ``app_ctx``
 
@@ -136,12 +139,13 @@ def provide_app_ctx(func):
 
     signature = inspect.signature(func)
     ok = "app_ctx" in signature.parameters and (
-            signature.parameters["app_ctx"].kind in (
+          signature.parameters["app_ctx"].kind in (
         inspect.Parameter.KEYWORD_ONLY,
         inspect.Parameter.POSITIONAL_OR_KEYWORD
     )
     )
     app_ctx = get_app_context()
+
     if ok:
         @functools.wraps(func)
         def _func(*args, **kwargs):
@@ -151,5 +155,12 @@ def provide_app_ctx(func):
                 return func(*args, **kwargs)
     else:
         _func = func
+
+    if inspect.iscoroutinefunction(func):
+        # functools does not preserve coroutine-ness
+        # Patch: set coroutine flag (0x80) on code object
+        COROUTINE_FLAG = 0x80
+        _func.__code__ = _func.__code__.replace(co_flags=(_func.__code__.co_flags | COROUTINE_FLAG))
+        # this preserves the function as coroutine
 
     return _func

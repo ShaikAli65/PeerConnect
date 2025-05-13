@@ -7,9 +7,10 @@ async def ask_for_interface_choice(interfaces):
     reply = await front_end_data_dispatcher(
         DataWeaver(
             header=headers.GET_INTERFACE_CHOICE,
-            content={k: getattr(v, "_asdict")() for k, v in interfaces}
+            content={k: getattr(v, "_asdict")() for k, v in interfaces},
+            msg_id=use.get_unique_id(str),
         ),
-        expect_reply=True
+        expect_reply=True,
     )
     return reply.content.get("interface_id", None)
 
@@ -79,8 +80,9 @@ async def get_transfer_ok(profile, peer_id):
         DataWeaver(
             header=headers.REQ_FOR_FILE_TRANSFER,
             peer_id=peer_id,
+            msg_id=use.get_unique_id(str),
         ),
-        expect_reply=True
+        expect_reply=True,
     )
 
     if (remember := confirmation.content["remember"]) is not None:
@@ -103,8 +105,8 @@ async def transfer_update(transfer_handle):
     status_update = DataWeaver(
         header=headers.TRANSFER_UPDATE,
         content={
-            'item_path': str(transfer_handle.current_file),
-            'received': transfer_handle.status_updater.current_status,
+            'item_path': str(transfer_handle.current_file.path),
+            'progress': transfer_handle.status_updater.current_status,
             'transfer_id': transfer_handle.id,
         },
         peer_id=transfer_handle.peer.peer_id,
@@ -121,7 +123,7 @@ async def transfer_incomplete(transfer_handle, detail=None):
         content.update(
             {
                 'item_path': str(transfer_handle.current_file.path),
-                'received': transfer_handle.status_updater.current_status,
+                'progress': transfer_handle.status_updater.current_status,
             })
 
     content.update({'error': str(detail)} if detail else {})

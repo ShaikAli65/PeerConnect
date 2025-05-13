@@ -124,11 +124,15 @@ class AExitStackMixIn:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._exit_stack = AsyncExitStack()
+        self._exiting = False
 
     async def __aenter__(self):
         return await self._exit_stack.__aenter__()
 
     async def __aexit__(self, *exp_details):
+        if self._exiting is True:
+            return
+        self._exiting = True
         try:
             return await self._exit_stack.__aexit__(*exp_details)  # noqa
         except BaseException as exp:

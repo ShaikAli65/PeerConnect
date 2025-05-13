@@ -1,5 +1,4 @@
 import asyncio
-import traceback
 from contextlib import AsyncExitStack
 
 import _path  # noqa
@@ -75,13 +74,8 @@ async def test_connections(app_ctx):
     await app_ctx.in_network.wait()
 
     print("starting testing connections")
-    try:
-        await test_connection()
-        await test_connection_pool()
-    except Exception:
-        print("#@" * 23)  # debug
-        traceback.print_exc()
-        raise
+    await test_connection()
+    await test_connection_pool()
 
 
 if __name__ == "__main__":

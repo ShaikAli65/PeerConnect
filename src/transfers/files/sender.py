@@ -6,9 +6,9 @@ from src import net
 from src.avails import const
 from src.avails.exceptions import InvalidStateError
 from src.transfers import HEADERS, TransferState, _logger
-from src.transfers.abc import AbstractSender
+from src.transfers.abc import AbstractReader, AbstractSender
 from src.transfers.mixins import *
-from ._fileio import AbstractReader, FileItemReader
+from ._fileio import FileItemReader
 from ._fileobject import FileItem
 
 
@@ -75,17 +75,18 @@ class Sender(
                 finally:
                     self.current_file.seeked += file_reader.seek_pos
 
+            self.status_updater.close()
             _logger.info(f"file sent {self.current_file}")
 
         # end of transfer, signalling that there are no more files
         await self.wrap_exp_handling(self.net_sender, HEADERS.END_OF_TRANSFER)
 
-        _logger.info(f"{self._log_prefix} sent final flag, completed sending")
+        _logger.info(f"{self._log_prefix} sent final flag, completed sending, changing state to COMPLETED")
         self.state = TransferState.COMPLETED
 
     def setup_status(self, file_reader):
         return self.status_updater.status_setup(
-            prefix=f"sending: {file_reader}",
+            prefix=f"sending: {file_reader.file_item!s}",
             initial_limit=file_reader.seek_start_pos,
             final_limit=file_reader.seek_end_pos
         )
@@ -163,6 +164,6 @@ class Sender(
     def current_file(self):
         return self.files_to_send[self._current_file_idx]
 
-    def __aenter__(self):
+    async def __aenter__(self):
         self.state = TransferState.CONNECTING
         return self

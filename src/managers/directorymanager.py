@@ -10,7 +10,7 @@ from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.core.events import ConnectionEvent
 from src.net import Connector, WireIO
-from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState
+from src.transfers import HEADERS, TRANSFER_NOT_OK, TRANSFER_OK, TransferState, make_transfer_id
 from src.transfers.files import DirReceiver, DirSender, rename_directory_with_increment
 from src.transfers.status import StatusMixIn
 
@@ -87,9 +87,8 @@ def DirConnectionHandler(app_ctx: ReadOnlyAppType):
     async def handler(event: ConnectionEvent):
         connection = event.connection
 
-        transfer_id = event.handshake.body['transfer_id']
         peer = await peers.get_remote_peer(event.handshake.peer_id)
-        transfer_id = peer.peer_id + ';' + transfer_id
+        transfer_id = make_transfer_id(event)
 
         dir_name = event.handshake.body['dir_name']
         dir_path = rename_directory_with_increment(const.PATH_DOWNLOAD, Path(dir_name))

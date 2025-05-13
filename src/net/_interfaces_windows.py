@@ -8,6 +8,7 @@ GAA_FLAG_INCLUDE_PREFIX = 0x10
 ERROR_BUFFER_OVERFLOW = 111
 ERROR_SUCCESS = 0
 LOOP_BACK_TYPE = 24
+INCLUDE_LOOP_BACK = False
 
 
 def get_interfaces(address_family: socket.AF_INET | socket.AF_INET6):
@@ -126,7 +127,7 @@ def get_interfaces(address_family: socket.AF_INET | socket.AF_INET6):
     for adapter in get_adapters():
         # Use the friendly name if available, otherwise the AdapterName.
 
-        if adapter.IfType == LOOP_BACK_TYPE or adapter.OperStatus != 1:
+        if (INCLUDE_LOOP_BACK or adapter.IfType == LOOP_BACK_TYPE) or adapter.OperStatus != 1:
             continue
 
         ip = ""

@@ -106,23 +106,31 @@ async def get_remote_peer_from_network(peer_network, peer_id):
 @provide_app_ctx
 async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
     """
-    Just a helper, tries to check for peer_id in cached App.peer_list
-    if there is a chance that cached remote peer object is expired then use ``:func: peers.get_remote_peer``
-    if not found the performs a distributed search in the network
+
+    Tries to check for peer_id in cached App.peer_list
+
+    checks for the local cache returns immediately if found online,
+
+    if peer is flagged as offline or not found in the cache at all,
+    then performs a distributed search, on failure, returns offline peer object
     """
     try:
         peer_obj = app_ctx.peer_list.get_peer(peer_id)
-        if not peer_obj.is_online:
-            app_ctx.peer_list.remove_peer(peer_id)
-            raise KeyError
+        if peer_obj.is_online:
+            return peer_obj
     except KeyError:
-        peer_obj = await get_remote_peer_from_network(app_ctx.kad_server, peer_id)
+        peer_obj = None
+
+    peer_obj_from_network = await get_remote_peer_from_network(app_ctx.kad_server, peer_id)
+    if peer_obj_from_network:
+        peer_obj = peer_obj_from_network
 
     if peer_obj is None:
         err = RemotePeerNotFound()
         err.peer_id = peer_id
         raise err
-
+    else:
+        peer_obj.status = RemotePeer.ONLINE
     return peer_obj
 
 

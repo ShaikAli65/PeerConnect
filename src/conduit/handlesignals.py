@@ -93,9 +93,9 @@ async def gossip_search(data: DataWeaver):
 
 
 async def send_list(data: DataWeaver):
-    print("got a send list request")
+    logger.debug("got a send list request")
     peer_list = await peers.get_more_peers()
-    print("sending list", peer_list)
+    logger.debug(f"sending list {peer_list=}")
     await webpage.search_response(data.msg_id, peer_list)
 
 

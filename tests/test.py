@@ -1,16 +1,4 @@
 import argparse
-import asyncio
-import multiprocessing
-import os
-import traceback
-
-import _path  # noqa
-from src.__main__ import initial_states, initiate
-from src.avails import RemotePeer
-from src.core.app import App, provide_app_ctx
-from src.managers.statemanager import State
-from tests import multicast_stub
-
 
 def _str2bool(value):
     """
@@ -52,6 +40,19 @@ parser.add_argument(
 
 config = parser.parse_args()
 
+import asyncio
+import multiprocessing
+import os
+
+import _path  # noqa
+from src.__main__ import initiate
+from src.avails import RemotePeer
+from src.core.app import provide_app_ctx
+from src.managers.statemanager import State
+from tests import multicast_stub
+from tests._initiate import initial_states
+from tests.mock import get_mock_app
+
 
 @provide_app_ctx
 def get_a_peer(app_ctx=None) -> RemotePeer | None:
@@ -63,21 +64,17 @@ def get_a_peer(app_ctx=None) -> RemotePeer | None:
     return p
 
 
-def test_initial_states(app):
-    states = list(initial_states(app))
-    removes = {"launching webpage", "loading profiles"}
-
-    for state in states.copy():
-        if state.name in removes:
-            states.remove(state)
-
-    return tuple(states)
+def _process_wrapper(env, *args):
+    os.environ.update(env)
+    return start_test(*args)
 
 
 def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     try:
-        initiate(test_initial_states(App) + other_states, App)
+        mock_app = get_mock_app()
+        print(mock_app)
+        initiate(initial_states(config, mock_app) + other_states, mock_app)
     except KeyboardInterrupt:
         return
 
@@ -100,27 +97,35 @@ def start_test1(*states):
         *states(tuple[State | None]):
     """
 
+    processes = []
+
     if config.mock_multicast:
         multicast_process = multiprocessing.Process(target=start_multicast)
         multicast_process.start()
+        processes.append(multicast_process)
 
     if config.test_mode == "local":
         start_test(*states[0])
         return
 
-    processes = []
     for i in range(len(states)):
-        p = multiprocessing.Process(target=start_test, args=states[i])
+        p = multiprocessing.Process(
+            target=_process_wrapper,
+            name=f"instance-{i + 2}",
+            args=({"INSTANCE_ID": str(i + 2)}, *states[i]),
+        )
         p.start()
         processes.append(p)
 
-    print(processes)
-
+    exes = []
     for p in processes:
         try:
             p.join()
-        except Exception:
-            traceback.print_exc()
+        except BaseException as exp:
+            exes.append(exp)
+
+    if exes:
+        raise BaseExceptionGroup("Multiple Exceptions", exes)
 
 
 if __name__ == "__main__":

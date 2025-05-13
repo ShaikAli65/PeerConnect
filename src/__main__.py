@@ -97,7 +97,7 @@ async def _async_initiate_helper(states, app):
 
 def initiate(states, app):
     try:
-        with AnotherRunner(app_ctx=app.read_only(), debug=const.debug) as runner:
+        with AnotherRunner(app_ctx=app.read_only(), debug=const.debug and False) as runner:
             eventloop.set_eager_task_factory()
             app.state_manager_handle = StateManager()
             runner.run(_async_initiate_helper(states, app.read_only()))

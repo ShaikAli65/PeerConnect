@@ -69,21 +69,22 @@
     },
     "kademlia": {
       "level": "INFO",
-      "propagate": true
+      "propagate": false
     },
     "rpcudp": {
       "level": "INFO"
     },
     "src.core.requests": {
-      "propagate": true
+      "level": "WARNING"
     },
     "kademlia.protocol": {
-      "propagate": true
+      "level": "WARNING"
     },
     "kademlia.crawling": {
-      "propagate": true
+      "level": "WARNING"
     },
     "src.core.discover": {
+      "level": "WARNING",
       "handlers": [
         "discovery_handler"
       ],
