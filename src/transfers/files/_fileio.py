@@ -70,7 +70,11 @@ class FileItemRWBase(AbstractRWBase, ABC):
         self._stop_index = end
 
     def __repr__(self):
-        return f"<{self.__class__.__name__}({self.file_item!r}, bounds={(self._start_index, self._stop_index)})>"
+        return (f"<{self.__class__.__name__}("
+                f"{self.file_item!r}, "
+                f"bounds={(self._start_index, self._stop_index)}, "
+                f"curr={self.seek_pos}"
+                f")>")
 
 
 class FileItemReader(FileItemRWBase, AbstractReader):
@@ -95,10 +99,13 @@ class FileItemReader(FileItemRWBase, AbstractReader):
 
     @asynccontextmanager
     async def start_reading(self):
-        async with async_open(self.file_item.path, 'r+b') as fd:
+        async with async_open(self.file_item.path, 'rb') as fd:
             self.fd = fd
             if USE_MMAP_READ:
-                self._reader_gen = self._mmap_reader()
+                try:
+                    self._reader_gen = self._mmap_reader()
+                except PermissionError:
+                    self._reader_gen = self._reader()
             else:
                 self._reader_gen = self._reader()
 
@@ -126,8 +133,22 @@ class FileItemReader(FileItemRWBase, AbstractReader):
                 f_mapped.__getitem__
             )
 
-            for offset in range(self._start_index, self._stop_index, chunk_size):
-                chunk = await asyncify(slice(offset, offset + chunk_size))
+            total = self._stop_index - self._start_index
+            full_chunks = total // chunk_size
+            remainder = total % chunk_size
+
+            base = self._start_index
+            for i in range(full_chunks):
+                start = base + i * chunk_size
+                stop = start + chunk_size
+                chunk = await asyncify(slice(start, stop))
+                self._seek += len(chunk)
+                yield chunk
+
+            if remainder:
+                start = base + full_chunks * chunk_size
+                stop = self._stop_index
+                chunk = await asyncify(slice(start, stop))
                 self._seek += len(chunk)
                 yield chunk
 
