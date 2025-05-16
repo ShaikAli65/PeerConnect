@@ -21,7 +21,7 @@ class Receiver(
     CancelOperationMixIn,
     AbstractReceiver,
 ):
-    version = const.VERSIONS['FO']
+    version = const.VERSIONS["FO"]
 
     def __init__(self, peer_obj, file_id, download_path, status_updater):
         self.transfer_task = None
@@ -30,13 +30,14 @@ class Receiver(
         self._transfer_id = file_id
         self.connection_wait = asyncio.get_event_loop().create_future()
         self.download_path = download_path
-        self._current_file = None
+        self._current_file: FileItem | None = None
         self.should_stop = False  # only set when Receiver.cancel is called
         self.file_items = []
         self.net_sender = None
         self.net_receiver = None
         self.status_updater = status_updater
         self._expected_exps = set()
+        self._on_completion_event = asyncio.Event()
 
     async def start_transfer(self):
         """Start receiving files
@@ -55,12 +56,17 @@ class Receiver(
         while True:
             if not await self._should_proceed():
                 break
-            async with aclosing(self._recv_file_once()) as loop:
-                async for _ in loop:
-                    yield _
+            try:
+                async with aclosing(self._recv_file_once()) as loop:
+                    async for _ in loop:
+                        yield _
+            finally:
+                await self.status_updater.close()
 
+        _logger.debug(f"{self._log_prefix} ACKing to transfer completion flag")
+        await self.wrap_exp_handling(self.net_sender, HEADERS.END_OF_TRANSFER)
         self.state = TransferState.COMPLETED
-        _logger.info(f'completed transfer: {self.file_items}')
+        _logger.info(f"completed transfer: {len(self.file_items)=}")
 
     async def _should_proceed(self):
         if self.should_stop:
@@ -77,20 +83,29 @@ class Receiver(
                 f" finalizing file recv loop, changing state to COMPLETED"
             )
             return False
-        return what == HEADERS.CONTINUE_TRANSFER
+        _logger.debug(f"receiving another file {what=}")
+        return what
 
-    async def _recv_file_once(self):
+    async def _prepare_file_item(self):
         try:
             self._current_file = await self._recv_file_item()
         except Exception as exp:
-            self.handle_exception(exp)
+            if self._current_file:
+                exp.add_note(f"FILE ITEM path: {self._current_file.path}")
 
+            self.handle_exception(exp)
+        _logger.debug(f"{self._log_prefix} file item received, {self._current_file}")
         self.file_items.append(self._current_file)
-        if self._current_file.size <= 0:
+        if self._current_file.size == 0:
             self._current_file.path.touch(exist_ok=True)
-            return
+            return False
 
         validatename(file_item=self._current_file, root_path=self.download_path)
+        return True
+
+    async def _recv_file_once(self):
+        if await self._prepare_file_item() is False:
+            return
 
         self.status_updater.status_setup(
             self._status_string_prefix,
@@ -100,11 +115,17 @@ class Receiver(
 
         f_writer = FileItemWriter(self._current_file)
         async with aclosing(self._receive_single_file(f_writer)) as file_receiver:
-            async for chunk_len in file_receiver:
-                self.status_updater.write_update(chunk_len)
-                yield chunk_len
+            try:
+                _logger.debug(
+                    f"{self._log_prefix} receiving file data, {self._current_file}, {f_writer=}"
+                )
+                async for chunk_len in file_receiver:
+                    await self.status_updater.write_update(chunk_len)
+                    yield chunk_len
+            finally:
+                self._current_file.seeked = f_writer.seek_pos
 
-        self.status_updater.close()
+        _logger.debug(f"{self._log_prefix} completed receiving file data, {f_writer=}")
 
     async def _recv_file_item(self):
         try:
@@ -116,6 +137,7 @@ class Receiver(
         except OSError as oe:
             raise TransferIncomplete from oe
         else:
+
             file_item = FileItem.load_from(raw_file_item, self.download_path)
             return file_item
 
@@ -156,11 +178,11 @@ class Receiver(
         self.state = TransferState.CONNECTING
         await self.connection_wait  # wait until we get a connection
 
-        _logger.debug(f'FILE[{self._transfer_id}] changing state to receiving')
+        _logger.debug(f"FILE[{self._transfer_id}] changing state to receiving")
         self.state = TransferState.RECEIVING
 
         # synchronizing last received file seek
-        s = struct.pack('!Q', self.current_file.seeked)
+        s = struct.pack("!Q", self.current_file.seeked)
         await self.wrap_exp_handling(self.net_sender, s)
 
         while True:
@@ -173,6 +195,7 @@ class Receiver(
                     yield items
 
     def connection_made(self, connection):
+        _logger.debug(f"{self._log_prefix} connection made, {connection}")
         self.connection_wait.set_result(connection)
         self.net_sender = connection.send
         self.net_receiver = connection.recv
@@ -196,3 +219,7 @@ class Receiver(
     @property
     def id(self):
         return self._transfer_id
+
+    @property
+    def done(self):
+        return self._on_completion_event

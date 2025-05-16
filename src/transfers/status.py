@@ -4,6 +4,7 @@ from itertools import chain
 from tqdm import tqdm
 
 from src.avails.useables import override
+from . import _logger
 from .abc import AbstractStatusIterator, AbstractStatusMix
 
 
@@ -73,32 +74,42 @@ class StatusMixIn(AbstractStatusMix):
         self._yield_iterator = None
         self.progress_bar = None
         self.final_limit = 0  # Track final limit for sentinel
+        self._frozen = False
 
-    def update_status(self, status):
+    def freeze(self):
+        self._frozen = True
+
+    def unfreeze(self):
+        self._frozen = False
+
+    async def update_status(self, status):
         self.progress_bar.update(status - self.current_status)
         self.current_status = status
 
-    def write_update(self, update):
+    async def write_update(self, update):
         self.progress_bar.update(update)
         self.current_status += update
 
     def should_yield(self):
-        """
-        Check whether the transfer should yield control at this point,
-        based on the internal progress and yield frequency.
-
-        Returns:
-            bool: True if yielding is appropriate now, False otherwise.
-        """
         if self.current_status >= self.next_yield_point:
+            if self._yield_iterator is None:
+                _logger.debug(f"{self._yield_iterator=} not set, blind yielding status point,"
+                              f" {self.current_status=}, {self.next_yield_point=}")
+                return True
+
             try:
                 self.next_yield_point = next(self._yield_iterator)
             except StopIteration:
                 self.next_yield_point = self.final_limit + 1
+            _logger.debug(f"yielding status point, {self.current_status=}, {self.next_yield_point=}")
             return True
         return False
 
     def status_setup(self, prefix, initial_limit, final_limit):
+        if self._frozen is True:
+            _logger.debug("status mixin is frozen, ignoring setup call")
+            return
+
         self.final_limit = final_limit
         if self.progress_bar:
             self.progress_bar.close()
@@ -113,7 +124,6 @@ class StatusMixIn(AbstractStatusMix):
         )
         self.progress_bar.update(initial_limit)
         self.current_status = initial_limit
-
         if self.yield_freq < 1:
             self.next_yield_point = final_limit + 1
             self._yield_iterator = None
@@ -126,8 +136,19 @@ class StatusMixIn(AbstractStatusMix):
                 [final_limit + 1],
             )
             self.next_yield_point = next(self._yield_iterator)
+        _logger.debug(
+            f"setting up status iterator "
+            f"{prefix=}, "
+            f"{initial_limit=}, "
+            f"{final_limit=}, "
+            f"{self.yield_freq=}, "
+        )
 
-    def close(self):
+    async def close(self):
+        if self._frozen is True:
+            _logger.debug("cannot close frozen status bar")
+            return
+
         if self.progress_bar:
             self.progress_bar.clear()
             self.progress_bar.close()
@@ -153,14 +174,14 @@ class StatusIterator(StatusMixIn, AbstractStatusIterator):
         self.exp = self._sentinel
 
     @override
-    def update_status(self, status):
-        super().update_status(status)
-        self._queue.put(self.current_status)
+    async def update_status(self, status):
+        await super().update_status(status)
+        await self._queue.put(self.current_status)
 
     @override
-    def write_update(self, update):
-        super().write_update(update)
-        self._queue.put(self.current_status)
+    async def write_update(self, update):
+        await super().write_update(update)
+        await self._queue.put(self.current_status)
 
     def __aiter__(self):
         return self
@@ -201,4 +222,4 @@ class StatusIterator(StatusMixIn, AbstractStatusIterator):
     @override
     async def close(self):
         await self.stop()
-        super().close()
+        return await super().close()

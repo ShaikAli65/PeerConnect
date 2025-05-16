@@ -72,7 +72,7 @@ class AbstractStatusMix(ABC):
     current_status: int
 
     @abstractmethod
-    def update_status(self, status):
+    async def update_status(self, status):
         """
         Update the progress bar using an absolute progress value.
 
@@ -89,7 +89,7 @@ class AbstractStatusMix(ABC):
         """
 
     @abstractmethod
-    def write_update(self, update):
+    async def write_update(self, update):
         """
         Increment the progress bar by a relative value.
 
@@ -105,13 +105,28 @@ class AbstractStatusMix(ABC):
         """
 
     @abstractmethod
-    def should_yield(self): ...
+    def should_yield(self):
+        """
+        Check whether the transfer should yield control at this point,
+        based on the internal progress and yield frequency.
+
+        Returns:
+            bool: True if yielding is appropriate now, False otherwise.
+        """
 
     @abstractmethod
     def status_setup(self, prefix, initial_limit, final_limit): ...
 
     @abstractmethod
-    def close(self): ...
+    async def close(self): ...
+
+    @abstractmethod
+    def freeze(self):
+        """Disallow status_setups"""
+
+    @abstractmethod
+    def unfreeze(self):
+        """Unfreeze freeze"""
 
 
 class AbstractStatusIterator(AbstractStatusMix, AsyncIterable, ABC):
@@ -138,13 +153,11 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
     @abstractmethod
     async def resume_transfer(self):
-        """When some error happens in the initial state and that error has been recovered
-        """
+        """When some error happens in the initial state and that error has been recovered"""
 
     @abstractmethod
     def connection_made(self, connection: Connection):
-        """Connection has arrived that is related to this handle
-        """
+        """Connection has arrived that is related to this handle"""
 
     @abstractmethod
     def pause(self):
@@ -173,11 +186,18 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         return f"[{self.__class__.__name__}]"
 
     def __repr__(self):
-        return (f"<{self.__class__.__name__}("
-                f"peer={self.peer}, "
-                f"curr={self.current_file}, "
-                f"state={self.state}, "
-                f")>")
+        return (
+            f"<{self.__class__.__name__}("
+            f"peer={self.peer}, "
+            f"curr={self.current_file}, "
+            f"state={self.state}, "
+            f")>"
+        )
+
+    @property
+    @abstractmethod
+    def done(self) -> asyncio.Event:
+        """Returns an Event that gets set on the completion of transfer"""
 
 
 if TYPE_CHECKING:
@@ -188,11 +208,21 @@ else:
 
 class AbstractSender(AbstractTransferHandle):
     @abstractmethod
-    def __init__(self, peer_obj, transfer_id, file_list: list[FileItem | AbstractReader],
-                 status_updater: AbstractStatusMix | AbstractStatusIterator): ...
+    def __init__(
+          self,
+          peer_obj,
+          transfer_id,
+          file_list: list[FileItem | AbstractReader],
+          status_updater: AbstractStatusMix | AbstractStatusIterator,
+    ): ...
 
 
 class AbstractReceiver(AbstractTransferHandle):
     @abstractmethod
-    def __init__(self, peer_obj: RemotePeer, transfer_id: int | str, download_path: Path,
-                 status_updater: AbstractStatusIterator | AbstractStatusMix): ...
+    def __init__(
+          self,
+          peer_obj: RemotePeer,
+          transfer_id: int | str,
+          download_path: Path,
+          status_updater: AbstractStatusIterator | AbstractStatusMix,
+    ): ...
