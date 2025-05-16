@@ -1,5 +1,6 @@
 import argparse
 
+
 def _str2bool(value):
     """
     Convert a string to a boolean.
@@ -28,14 +29,19 @@ parser.add_argument(
 parser.add_argument(
     '--peers',
     type=int,
-    default=2,
+    default=1,
     help="Number of peers (an integer)."
 )
 parser.add_argument(
     '--mock-multicast',
     type=_str2bool,
-    default='t',
+    default='f',
     help="Enable mock multicast (True or False)."
+)
+parser.add_argument(
+    '-id',
+    default="3",
+    help="provide a run-id (directly matches to ip addr)",
 )
 
 config = parser.parse_args()
@@ -52,6 +58,8 @@ from src.managers.statemanager import State
 from tests import multicast_stub
 from tests._initiate import initial_states
 from tests.mock import get_mock_app
+
+INSTANCE_ID_OFFSET = 10
 
 
 @provide_app_ctx
@@ -73,7 +81,6 @@ def start_test(*other_states):
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     try:
         mock_app = get_mock_app()
-        print(mock_app)
         initiate(initial_states(config, mock_app) + other_states, mock_app)
     except KeyboardInterrupt:
         return
@@ -98,7 +105,6 @@ def start_test1(*states):
     """
 
     processes = []
-
     if config.mock_multicast:
         multicast_process = multiprocessing.Process(target=start_multicast)
         multicast_process.start()
@@ -108,11 +114,18 @@ def start_test1(*states):
         start_test(*states[0])
         return
 
+    if config.peers == 1:
+        try:
+            _process_wrapper({'INSTANCE_ID': config.id}, *states[0])
+        finally:
+            [p.join() for p in processes]
+        return
+
     for i in range(len(states)):
         p = multiprocessing.Process(
             target=_process_wrapper,
-            name=f"instance-{i + 2}",
-            args=({"INSTANCE_ID": str(i + 2)}, *states[i]),
+            name=f"instance-{i + INSTANCE_ID_OFFSET}",
+            args=({"INSTANCE_ID": str(i + INSTANCE_ID_OFFSET)}, *states[i]),
         )
         p.start()
         processes.append(p)

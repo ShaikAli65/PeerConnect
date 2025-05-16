@@ -4,6 +4,7 @@ import getpass
 import logging
 import os
 import random
+import socket
 from contextlib import asynccontextmanager
 
 import src.core.app
@@ -113,11 +114,16 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ct
     base_socket = UDPProtocol.create_async_server_sock(
         loop, bind_address, family=const.IP_VERSION
     )
+    base_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        transport, _ = await loop.create_datagram_endpoint(
+            functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
+            sock=base_socket
+        )
+    except OSError as oe:
+        oe.add_note(f"ADDR : {bind_address}")
+        raise oe
 
-    transport, _ = await loop.create_datagram_endpoint(
-        functools.partial(RequestsEndPoint, req_dispatcher, app_ctx),
-        sock=base_socket
-    )
     return transport
 
 

@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import traceback
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -42,22 +41,16 @@ async def test_file_transfer(_config, *, app_ctx=None):
     )
     await app_ctx.in_network.wait()
     peer = get_a_peer()
-    print("*" * 80, peer)
     data = DataWeaver(
         header=headers.HANDLE.SEND_FILE,
         peer_id=peer.peer_id,
-        content={'paths': file_paths}
+        content={"paths": file_paths},
     )
     if _config.test_mode == "host":
         hash_tasks = hasher(file_paths)
 
-    try:
-        print("starting file transfer test")
-        await handledata.send_file(data)
-    except Exception:
-        print("%" * 80)
-        traceback.print_exc()
-        raise
+    print("STARTING file transfer test")
+    await handledata.send_file(data)
 
     if _config.test_mode == "host":
         hashes = await asyncio.gather(*hash_tasks)  # noqa
@@ -69,6 +62,27 @@ async def test_file_transfer(_config, *, app_ctx=None):
         print("file transfer test passed")
 
 
-if __name__ == '__main__':
-    file_transfer = State("test file transfer", test_file_transfer, config, is_blocking=True)
-    start_test1((), (file_transfer,))
+@provide_app_ctx
+async def test_bigfile_transfer(_config, *, app_ctx=None):
+    file_paths = (
+        r"D:\backup.tar.gz",
+        # r"D:\Movies\Predestination.2014.720p.BluRay.x264.700MB-[Mkvking.com].mkv",
+    )
+    await app_ctx.in_network.wait()
+    peer = get_a_peer()
+    data = DataWeaver(
+        header=headers.HANDLE.SEND_FILE,
+        peer_id=peer.peer_id,
+        content={"paths": file_paths},
+    )
+
+    print("STARTING file transfer test")
+    await handledata.send_big_file(data)
+
+
+if __name__ == "__main__":
+    # file_transfer = State("test file transfer", test_file_transfer, config, is_blocking=True)
+    file_transfer = State(
+        "test big file transfer", test_bigfile_transfer, config, is_blocking=True
+    )
+    start_test1((file_transfer,), ())

@@ -5,12 +5,12 @@ import os
 import _path  # noqa
 from src.configurations.configure import load_configs, set_paths
 from src.configurations.interfaces import get_interfaces, get_ip_with_ip
+from src.core.app import App
 from src.managers import logmanager, profilemanager
-from tests.mock.app import MockApp
 
 _logger = logging.getLogger(__name__)
 
-app = MockApp()
+app = App()
 
 
 def _get_selected(profiles):
