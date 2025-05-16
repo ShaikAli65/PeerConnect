@@ -1,6 +1,9 @@
 class HEADERS:
-    END_OF_TRANSFER = b'\x00'
-    CONTINUE_TRANSFER = b'\x01'
+    START_TRANSFER = b'\x0f'
+    END_OF_TRANSFER = b'\xf0'
+    CONTINUE_TRANSFER = b'\xf1'
+    FINALIZE_TRANSFER = b'\xff'
+    TRANSFER_CONN_OK = b'\x33'
 
     REQ_FOR_LIST = b"list of users  "
     REDIRECT = b"redirect        "
@@ -19,7 +22,6 @@ class HEADERS:
     CMD_RECV_FILE = b"receive file    "
     CMD_CLOSING_HEADER = b"close connection"
     CMD_TEXT = b"this is message "
-    CMD_RECV_DIR = b"cmd to recv dir "
     CMD_FILE_CONN = b"connection for file transfer"
     CMD_BIG_FILE_CONN = b"connection for big file transfer"
     CMD_DIR_CONN = b"connection for dir transfer"
