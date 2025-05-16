@@ -4,6 +4,7 @@ import logging
 import logging.config
 import queue
 import sys
+import traceback
 from functools import partial
 from pathlib import Path
 
@@ -14,7 +15,6 @@ log_queue = queue.SimpleQueue()
 
 
 def _loader(file_path):
-    log_config = {}
     with open(file_path) as fp:
         log_config = json.load(fp)
     return log_config
@@ -30,8 +30,17 @@ def _log_exit(queue_handlers):
 
 
 async def _py312_initiate(app: AppType):
+    try:
+        log_config = await asyncio.to_thread(_loader, const.PATH_LOG_CONFIG)
+    except (ValueError, OSError):
+        traceback.print_exc()
+        print("LOGGING CONFIG ERROR, using basic configuration", file=sys.stderr)
+        logging.basicConfig(
+            format="%(asctime)s - %(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s",
+            level=logging.DEBUG,
+        )
 
-    log_config = await asyncio.to_thread(_loader, const.PATH_LOG_CONFIG)
+        return
 
     for handler in log_config["handlers"]:
         if "filename" in log_config["handlers"][handler]:
@@ -59,13 +68,24 @@ async def _py312_initiate(app: AppType):
 
 
 async def _py311_initiate(_: AppType):
-    log_file_311 = const.PATH_LOG_CONFIG.with_stem(
-        const.PATH_LOG_CONFIG.stem + "311")
-    log_config = await asyncio.to_thread(_loader, log_file_311)
+    log_file_311 = const.PATH_LOG_CONFIG.with_stem(const.PATH_LOG_CONFIG.stem + "311")
+
+    try:
+        log_config = await asyncio.to_thread(_loader, log_file_311)
+    except (ValueError, OSError):
+        traceback.print_exc()
+        print("LOGGING CONFIG ERROR, using basic configuration", file=sys.stderr)
+        logging.basicConfig(
+            format="%(asctime)s - %(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s",
+            level=logging.DEBUG,
+        )
+        return
+
     logging.config.dictConfig(log_config)
 
     if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
         const.debug = False
+
 
 if sys.version_info >= (3, 12):
     initiate = _py312_initiate
