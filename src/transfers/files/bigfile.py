@@ -1,6 +1,5 @@
 import asyncio
 import struct
-from asyncio import TaskGroup
 from contextlib import aclosing
 from functools import wraps
 from itertools import count
@@ -8,9 +7,11 @@ from itertools import count
 from src import net
 from src.avails import const
 from src.avails.exceptions import CancelTransfer, InvalidStateError, TransferIncomplete
-from src.transfers import HEADERS, TransferState, _logger
+from src.avails.useables import override, shorten_path
+from src.transfers import HEADERS, TransferState, _logger, thread_pool_for_disk_io
 from src.transfers.abc import AbstractReceiver, AbstractSender
 from src.transfers.status import StatusIterator
+from . import FileItemReader, FileItemWriter
 from ._fileobject import FileItem
 from ._merge import merge_all_and_delete
 from .receiver import Receiver as FReceiver
@@ -27,34 +28,43 @@ async def bomb():
 
 class _ControlMixIn:
     async def pause(self):
-        for i, connection in self.connections.items():
+        connections = getattr(self, 'connections')
+        for i, connection in connections.items():
             connection.send.pause()
             connection.recv.pause()
 
-        _logger.debug(f"{self._log_prefix} pausing the transfer")
-        self.state = TransferState.PAUSED
+        _logger.debug(f"{getattr(self, '_log_prefix')} pausing the transfer")
+        setattr(self, 'state', TransferState.PAUSED)
 
     async def resume(self):
-        for i, connection in self.connections.items():
+        connections = getattr(self, 'connections')
+        for i, connection in connections.items():
             connection.send.resume()
             connection.recv.resume()
 
-        _logger.debug(f"{self._log_prefix} resuming the transfer")
-        self.state = TransferState.RECEIVING
+        _logger.debug(f"{getattr(self, '_log_prefix')} resuming the transfer")
+        setattr(self, 'state', TransferState.RECEIVING)
 
 
 class _CancelMixIn:
     async def cancel(self):
-        if self.state == TransferState.CONNECTING:
-            if self._wait_for_first_connection.done():
-                if self._wait_for_first_connection.exception():
+        if getattr(self, 'state') == TransferState.CONNECTING:
+            _wait_for_first_connection = getattr(self, '_wait_for_first_connection')
+
+            if _wait_for_first_connection.done():
+                if _wait_for_first_connection.exception():
                     return  # this is not an expected situation
+
             self.should_stop = True
             # TODO: what to do with connection ??
             self.state = TransferState.ABORTING
             return
 
-        possible_states = (TransferState.SENDING, TransferState.RECEIVING, TransferState.PAUSED)
+        possible_states = (
+            TransferState.SENDING,
+            TransferState.RECEIVING,
+            TransferState.PAUSED,
+        )
         if self.state not in possible_states:
             raise InvalidStateError(f"not expected transfer state in {self.state}")
 
@@ -68,45 +78,91 @@ class _CancelMixIn:
 
 class _BigFileTaskGroup:
     def __init__(self):
-        self.task_group = TaskGroup()
+        self._tasks: set[asyncio.Task] = set()
+        self._closing = False
 
-    def __aenter__(self):
-        return self.task_group.__aenter__()
+    async def __aenter__(self):
+        return self
 
-    def __aexit__(self, *args):
-        return self.task_group.__aexit__(*args)
+    async def __aexit__(self, exc_type, exc, tb):
+        # swallow exceptions here; close() will re-raise if needed
+        await self.close()
 
-    @wraps(TaskGroup.create_task)
-    def create_task(self, *args, **kwargs):
-        return self.task_group.create_task(*args, **kwargs)
+    @wraps(asyncio.Task)
+    def create_task(self, coro, *args, **kwargs):
+        if self._closing:
+            raise RuntimeError(
+                "Cannot create new tasks after closing, call `refresh` to clean up"
+            )
+        task = asyncio.create_task(coro, *args, **kwargs)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def _task_done(self, task: asyncio.Task):
+
+        if not task.cancelled():
+            self._tasks.discard(task)
+            return
+
+        try:
+            task.exception()
+        except asyncio.CancelledError as ce:
+            if any(
+                  x for x in ce.args if isinstance(x, TransferIncomplete | CancelTransfer)
+            ):
+                return
+            # we need that exception at clean up
 
     @property
     def is_stopping(self):
-        return getattr(self.task_group, '_exiting')
+        return self._closing
 
-    def cancel_all_tasks(self, *args):
-        for task in getattr(self.task_group, '_tasks'):
+    def cancel_all_tasks(self, ct=None):
+        self._closing = True
+        for task in list(self._tasks):
             if not task.done():
-                task.cancel(*args)
+                task.cancel(ct)
 
     async def close(self):
-        try:
-            return await self.__aexit__(*[None] * 3)
-        except* Exception as exps:
-            # extract the exception related to big file transfer
-            _raise = next(filter(
-                lambda x: isinstance(x, TransferIncomplete | CancelTransfer),
-                (arg for exp in exps.exceptions for arg in exp.args)
-            ), None)
+        """Waits for all the tasks to complete and raises exception relevant to transfer"""
+        # signal no more tasks and cancel all
 
-            if not _raise:
-                raise  # reraise if no related exceptions found
+        if not self._tasks:
+            return
 
-        if _raise:
-            raise _raise
+        # wait for all to finish, catching exceptions
+        self._closing = True
+        results = await asyncio.gather(*self._tasks, return_exceptions=True)
+        # pull out actual Exception instances
+        exceptions = [r for r in results if isinstance(r, BaseException)]
+
+        # look for your relevant errors
+        to_raise = None
+        for exc in exceptions:
+            if isinstance(exc, ConnectionError):
+                to_raise = exc
+                break
+        if to_raise is None:
+            for exc in exceptions:
+                # unpack nested args looking for your sentinel types
+                for arg in getattr(exc, "args", ()):
+                    if isinstance(arg, (TransferIncomplete, CancelTransfer)):
+                        to_raise = arg
+                        break
+                if to_raise:
+                    break
+
+        if to_raise:
+            raise to_raise
+        # if there were exceptions but none matched, re-raise the first one
+        if exceptions:
+            raise exceptions[0]
 
     def refresh(self):
-        self.task_group = TaskGroup()
+        # wipe out old tasks and reset
+        self._tasks.clear()
+        self._closing = False
 
 
 class _BigChunkSender(FSender):
@@ -117,16 +173,49 @@ class _BigChunkSender(FSender):
             [],
             status_updater,
         )
+        self._big_chunk_id = None
+        self._current_part = None
 
     async def send_big_chunk(self, big_chunk: FileItem, chunk_id):
-        self._expected_exps.clear()
         self.files_to_send.clear()
         self.files_to_send.append(big_chunk)
+        self.should_stop = False
         self.state = TransferState.SENDING
-        await self.wrap_exp_handling(self.net_sender, struct.pack('!I', chunk_id))
-        async with aclosing(self.start_transfer()) as loop:
-            async for _ in loop:
-                pass
+        self._current_file_idx = -1
+        self._expected_exps.clear()
+        self._current_part = big_chunk
+        self._big_chunk_id = chunk_id
+
+        await self.send_file_metadata(big_chunk)
+        file_reader = FileItemReader(self.current_file)
+
+        async with aclosing(self.send_one_file(file_reader)) as loop:
+            try:
+                updater = self.status_updater.write_update  # localize function
+                async for bytes_sent in loop:
+                    await updater(bytes_sent)
+            finally:
+                self.current_file.seeked = file_reader.seek_pos
+                _logger.debug(
+                    f"setting seeked attribute of {self.current_file=}, {file_reader=}"
+                )
+
+    @override
+    async def send_file_metadata(self, file_item):
+        # this function assumes current chunk id matches to part offset
+        metadata = struct.pack(
+            "!IQQ",
+            self._big_chunk_id,
+            srt := file_item.seeked - CHUNK_SIZE * self._big_chunk_id,  # start
+            stp := file_item.size - CHUNK_SIZE * self._big_chunk_id,  # stop
+        )
+        t = self._big_chunk_id, srt, stp
+        _logger.debug(f"sending big-file-part metadata={t}")
+        await self.net_sender(metadata)
+
+    @property
+    def current_file(self):
+        return self._current_part
 
 
 class Sender(
@@ -146,13 +235,14 @@ class Sender(
     This leads to efficient utilization of bandwidth, adding more connections pushes the network limit.
 
     """
+
     version = const.VERSIONS["FO"]
 
     def __init__(
           self, file_item, peer_obj, transfer_id, status_iterator: StatusIterator
     ):
-        self.file = file_item
-        self.peer_obj = peer_obj
+        self.file: FileItem = file_item
+        self.peer = peer_obj
         self.transfer_id = transfer_id
         self.status_updater: StatusIterator = status_iterator
         self.connections = {}
@@ -163,8 +253,11 @@ class Sender(
         self.file_iterator = self._bigfile_chunk_generator()
         self.should_stop = False
         self.task_group = _BigFileTaskGroup()
-        self._wait_for_first_connection: asyncio.Future[net.Connection] = asyncio.get_running_loop().create_future()
+        self._wait_for_first_connection: asyncio.Future[net.Connection] = (
+            asyncio.get_running_loop().create_future()
+        )
         self._start_transfer = asyncio.Event()  # event to signal the start of transfer
+        self._on_completion_event = asyncio.Event()  # event to signal end of transfer
 
     def _bigfile_chunk_generator(self):
         size = self.file.size
@@ -172,56 +265,67 @@ class Sender(
         for id, i in enumerate(range(start, size, CHUNK_SIZE)):
             if len(self.failed_chunks):
                 yield self.failed_chunks.pop(0)
-            yield id, i, i + CHUNK_SIZE
+            _logger.debug(
+                f"{self._log_prefix} yield big chunk({id=}, start={i}, stop={i + CHUNK_SIZE})"
+            )
+            yield id, i, min(size, i + CHUNK_SIZE)
 
     async def __aenter__(self):
         self.state = TransferState.CONNECTING
         self.status_updater.status_setup(
-            f"{self._log_prefix} sending file: {self.file}", self.file.seeked, self.file.size
+            f"{self._log_prefix} sending file: {shorten_path(self.file.path, 20)}",
+            self.file.seeked,
+            self.file.size,
         )
+        self.status_updater.freeze()
         await self.task_group.__aenter__()
         return self
 
     async def start_transfer(self):
-        conn = await self._wait_for_first_connection
-        await conn.send(struct.pack('!I', self.max_noof_parts))
-        handshake = await conn.recv(1)
-        assert handshake == HEADERS.CONTINUE_TRANSFER, "WTF"
-        _logger.debug(f"{self._log_prefix} transfer handshake successful starting transfer")
         self.state = TransferState.SENDING
         self._start_transfer.set()
         async for update in self.status_updater:
             yield update
+        self._on_completion_event.set()
 
     def connection_made(self, connection):
         if not self._wait_for_first_connection.done():
             self._wait_for_first_connection.set_result(connection)
 
-        _logger.debug(f"{self._log_prefix} adding new connection to send big chunks, {connection=}")
+        _logger.debug(
+            f"{self._log_prefix} adding new connection to send big chunks, {connection=}"
+        )
 
         idx = next(self.connection_index_gen)
         self.connections[idx] = connection
-        self.task_group.create_task(self._send_task(connection, idx))
+
+        self.task_group.create_task(
+            self._send_task(connection, idx),
+            name=f'part-sender-task {idx=}',
+        )
 
     async def _send_task(self, net_connection, index):
         await self._start_transfer.wait()
         if not self.state == TransferState.RECEIVING:
             return
 
-        sender = _BigChunkSender(self.peer_obj, self.id, self.status_updater)
+        sender = _BigChunkSender(self.peer, self.id, self.status_updater)
         sender.connection_made(net_connection)
         _logger.debug(f"{self._log_prefix} starting part sender with {index=}")
 
         for big_chunk in self.file_iterator:
-            await net_connection.send(HEADERS.CONTINUE_TRANSFER)
 
             idx, start, end = big_chunk
             temp_file = FileItem(self.file.path, seeked=start)
             temp_file.size = end
             try:
+                await net_connection.send(HEADERS.CONTINUE_TRANSFER)
                 await sender.send_big_chunk(temp_file, idx)
-                _logger.debug(f"{self._log_prefix} sent big part successfully with {idx=}")
+                _logger.debug(
+                    f"{self._log_prefix} sent big part successfully with {idx=}, task_id={index}"
+                )
                 self._sent_parts[idx] = temp_file
+                assert await net_connection.recv(1) == HEADERS.TRANSFER_CONN_OK
             finally:
                 if (
                       not temp_file.seeked == temp_file.size
@@ -229,18 +333,30 @@ class Sender(
                     # adding the failed chunk to failed list so that the another pair get associated for this chunk
                     self.failed_chunks.append(big_chunk)
                     _logger.debug(
-                        f"{self._log_prefix} failed to send big part "
-                        f"with {idx=}, exiting loop",
+                        f"{self._log_prefix} task={index} failed to send big part "
+                        f"with {idx=}, {temp_file.seeked=}, {temp_file.size=}, exiting loop",
                         exc_info=True,
                     )
                     del self.connections[index]
                     break
 
         await net_connection.send(HEADERS.END_OF_TRANSFER)
+        assert (
+              await net_connection.recv(1) == HEADERS.FINALIZE_TRANSFER
+        ), f"{self._log_prefix} Expecting ACK to be {HEADERS.FINALIZE_TRANSFER=}"
+        _logger.debug(
+            f"finalizing big-file-part transfer, task={index=} signing off..."
+        )
 
     async def __aexit__(self, exec_type, exec_val, exec_tb):
-        if exec_type == TransferIncomplete:
-            self.task_group.create_task(bomb())
+        if exec_type is asyncio.CancelledError:
+            await self.cancel()
+            return False  # no messing with cancelled error
+
+        self._on_completion_event.set()
+
+        if exec_type is CancelTransfer:
+            return True
 
         try:
             await self.task_group.close()
@@ -250,6 +366,10 @@ class Sender(
                 return True
             _logger.debug("transfer failed:", exc_info=exp)
             raise
+
+    @property
+    async def done(self):
+        return self._on_completion_event
 
     async def resume_transfer(self):
         raise NotImplementedError
@@ -270,33 +390,68 @@ class Sender(
         return self.file
 
     @property
-    def max_noof_parts(self):
-        return self.file.size // CHUNK_SIZE + (1 if self.file.size % CHUNK_SIZE else 0)
+    def max_parts_count(self):
+        return (self.file.size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
     def __repr__(self):
         return (
-            f"<{self.__class__.__name__}"f"("
+            f"<{self.__class__.__name__}"
+            f"("
             f"file={self.file!r}, "
             f"id={self.transfer_id}, "
             f"connections={len(self.connections)}, "
             f"parts={len(self._sent_parts)}, "
-            f"total_parts={self.max_noof_parts}, "
+            f"total_parts={self.max_parts_count}, "
             f"state={self.state}"
             f")>"
         )
 
 
 class _BigChunkReceiver(FReceiver):
-    async def recv_big_chunk(self):
-        self._expected_exps.clear()
-        idx = await self.wrap_exp_handling(net.recv_int, self.net_receiver)
-        _logger.debug(f"{self._log_prefix} started  receiving  big chunk={idx}")
-        async with aclosing(self.start_transfer()) as loop:
-            async for _ in loop:
-                pass
-        _logger.debug(f"{self._log_prefix} completed receiving big chunk={idx}")
+    def __init__(self, big_file, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.big_file = big_file  # current big file under transfer
 
-        return idx, self._current_file
+    def _build_file_name(self):
+        return f"{self.big_file.path.stem}.{self.id}.{self._big_chunk_id}{const.FILE_ERROR_EXT}"
+
+    @override
+    async def _recv_file_item(self):
+        raw_meta_data = await self.net_receiver(20)  # 4 + 8 + 8 = 20
+        self._big_chunk_id, start, stop = struct.unpack("!IQQ", raw_meta_data)
+        file_item = FileItem(self.download_path / self._build_file_name(), start)
+        file_item.size = stop
+        _logger.debug(
+            f"{self._log_prefix} received  big-file-part {file_item!r}, idx={self._big_chunk_id}"
+        )
+        return file_item
+
+    def _setup_state(self):
+        self._current_file = None
+        self._expected_exps.clear()
+        if self.net_sender is None:
+            raise AssertionError("connection not made yet")
+
+    async def recv_big_chunk(self):
+        self._setup_state()
+
+        await self._prepare_file_item()
+        f_writer = FileItemWriter(self._current_file)
+        async with aclosing(self._receive_single_file(f_writer)) as file_receiver:
+            try:
+                _logger.debug(
+                    f"{self._log_prefix} receiving big-file-part data, {f_writer=}"
+                )
+                u = self.status_updater.write_update
+                async for chunk_len in file_receiver:
+                    await u(chunk_len)
+            finally:
+                self._current_file.seeked = f_writer.seek_pos
+            _logger.debug(
+                f"{self._log_prefix} received big-file-part data, {self._current_file}, {f_writer=}"
+            )
+
+        return self._big_chunk_id, self._current_file
 
 
 class Receiver(
@@ -316,11 +471,14 @@ class Receiver(
     one big file with the name received in handshake
 
     """
+
     version = const.VERSIONS["FO"]
 
     async def resume_transfer(self):
-        raise NotImplementedError("Bigfile Receiver does not have a resume_transfer method, "
-                                  "simply call connection_made to resume broken transfer")
+        raise NotImplementedError(
+            "Bigfile Receiver does not have a resume_transfer method, "
+            "simply call `connection_made` to resume broken transfer"
+        )
 
     def __init__(self, peer_obj, transfer_id, download_path, status_updater):
         self._file = None
@@ -336,37 +494,43 @@ class Receiver(
         self._wait_for_first_connection = asyncio.get_running_loop().create_future()
         self.max_chunks = None
         self.download_path = download_path
-        self._success_tasks = []  # tasks that completed their transfer successfully
+        self._completed_tasks = []  # tasks that completed their transfer successfully
         self._start_transfer = asyncio.Event()  # event to signal the start of transfer
+        self._on_completion_event = (
+            asyncio.Event()
+        )  # event to signal the end of transfer
+
+    async def __aenter__(self):
+        self.status_updater.status_setup(
+            f"{self._log_prefix} receiving file: {shorten_path(self._file.path, 20)}",
+            self._file.seeked,
+            self._file.size,
+        )
+        self.status_updater.freeze()
+        await self.task_group.__aenter__()
+        return self
+
+    async def start_transfer(self):
+        self.max_chunks = (self._file.size + CHUNK_SIZE - 1) // CHUNK_SIZE
+        _logger.debug(f"received part count= {self.max_chunks}")
+
+        self.state = TransferState.RECEIVING
+        self._start_transfer.set()
+        async for status in self.status_updater:
+            yield status
+        self._on_completion_event.set()
 
     def connection_made(self, connection):
         if not self._wait_for_first_connection.done():
             self._wait_for_first_connection.set_result(connection)
 
-        _logger.debug(f"{self._log_prefix} adding new connection to receive big chunks {connection=}")
-
+        _logger.debug(f"{self._log_prefix} adding new connection to receive big chunks")
         idx = next(self.connection_idx_gen)
         self.connections[idx] = connection
-        self.task_group.create_task(self._receiver_task(connection, idx))
 
-    async def __aenter__(self):
-        self.status_updater.status_setup(
-            f"{self._log_prefix} receiving file: {self._file}", self._file.seeked, self._file.size
+        self.task_group.create_task(
+            self._receiver_task(connection, idx), name=f"_receiver_task-{idx=}"
         )
-        await self.task_group.__aenter__()
-        return self
-
-    async def start_transfer(self):
-        conn = await self._wait_for_first_connection
-        self.max_chunks = await net.recv_int(conn.recv)
-
-        # agree the transfer handshake
-        await conn.send(HEADERS.CONTINUE_TRANSFER)
-        _logger.debug(f"{self._log_prefix} transfer handshake sent")
-        self.state = TransferState.RECEIVING
-        self._start_transfer.set()
-        async for status in self.status_updater:
-            yield status
 
     async def _receiver_task(self, connection, conn_idx: int):
         await self._start_transfer.wait()
@@ -374,92 +538,132 @@ class Receiver(
             return
 
         receiver = _BigChunkReceiver(
+            self.current_file,
             self.peer,
             self.transfer_id,
             self.download_path,
             self.status_updater,
         )
+        receiver.connection_made(connection)
+
+        # await connection.send(HEADERS.TRANSFER_CONN_OK)
+        # assert (ok := await connection.recv(1)) == HEADERS.TRANSFER_CONN_OK,\
+        #     f"expected connection to be {ok=}, {HEADERS.TRANSFER_CONN_OK=}"
+
         async with receiver:
             try:
-                with self.should_stop:
+                if not self.should_stop:
                     await self.__task_loop(connection, receiver)
+            except ConnectionError:
+                _logger.debug("connection reset by peer, trying to send FINALIZE flag")
+                try:
+                    await connection.send(HEADERS.FINALIZE_TRANSFER)
+                    _logger.debug(
+                        f"sent FINALIZE TRANSFER, parts-recv task id={conn_idx}, signing off..."
+                    )
+                except ConnectionError:
+                    _logger.debug("cannot send FINALIZE flag")
+                await self.__signal_completion(conn_idx)
+                return
             except Exception as exp:
-                del self.connections[conn_idx]  # remove ourselves, this decreases active task count
-                _logger.debug(f"{self._log_prefix} receiver task failed with:", exc_info=exp)
+                del self.connections[
+                    conn_idx
+                ]  # remove ourselves, this decreases active task count
+                _logger.debug(
+                    f"{self._log_prefix} receiver task idx={conn_idx} failed with:",
+                    exc_info=exp,
+                )
                 raise
 
+        await connection.send(HEADERS.FINALIZE_TRANSFER)
+        _logger.debug(
+            f"sent FINALIZE TRANSFER, parts-recv task id={conn_idx}, signing off..."
+        )
         await self.__signal_completion(conn_idx)
 
-    async def __task_loop(self, connection: net.Connection, receiver: _BigChunkReceiver):
+    async def __task_loop(
+          self, connection: net.Connection, receiver: _BigChunkReceiver
+    ):
         new_file = None
-        try:
-            what = await connection.recv(1)
-            if what == HEADERS.END_OF_TRANSFER:
-                return
-            idx, new_file = await receiver.recv_big_chunk()
-            self.parts[idx] = new_file
+        while not self.should_stop:
+            try:
+                what = await connection.recv(1)
+                if what == HEADERS.END_OF_TRANSFER:
+                    _logger.debug(f"receiving END OF TRANSFER, exiting loop {what=}")
+                    break
+                assert (
+                      what == HEADERS.CONTINUE_TRANSFER
+                ), f"continue transfer {what=}, {HEADERS.CONTINUE_TRANSFER=}"
+                idx, new_file = await receiver.recv_big_chunk()
+                self.parts[idx] = new_file
+                await connection.send(HEADERS.TRANSFER_CONN_OK)
+            finally:
+                if new_file is None:
+                    # try getting new_file from part-receiver
+                    new_file = receiver.current_file
 
-        finally:
-            if new_file and new_file.seeked < CHUNK_SIZE:
-                # this chunk is not completely done
-                _logger.debug(
-                    f"{self._log_prefix} failed receiving big chunk completely "
-                    f"remaining={CHUNK_SIZE - new_file.seeked},"
-                    f" removing chunk from system and exiting loop"
-                )
-                new_file.path.unlink()  # delete the incomplete file
-                return
+                if new_file and new_file.seeked < new_file.size:
+                    # this chunk is not completely done
+                    _logger.debug(
+                        f"{self._log_prefix} failed receiving big chunk completely "
+                        f"remaining={CHUNK_SIZE - new_file.seeked}, {new_file!r},"
+                        f" removing chunk from system and exiting loop"
+                    )
+                    new_file.path.unlink(missing_ok=True)  # delete the incomplete file
+                    break
 
     async def __signal_completion(self, task_idx):
-        _logger.debug(f"{self._log_prefix} receiver task={task_idx} completed execution")
+        _logger.debug(
+            f"{self._log_prefix} receiver task={task_idx} completed execution"
+        )
         # connection_id is same as task_id
-        self._success_tasks.append(task_idx)
+        self._completed_tasks.append(task_idx)
 
-        # get the maximum no.of tasks spawned
-        # we add connections to self.connections incrementally and python dicts preserve insertion order
-        if len(self._success_tasks) == len(self.connections):
-            if len(self.parts) == self.max_noof_parts:
-                # this means we completed the transfer
-                _logger.debug(f"{self._log_prefix} completed receiving big file")
-                _logger.debug(f"{self!r}")
-                await self.status_updater.close()
-                # this signals the start_transfer method to release the iterator
+        if len(self.parts) == self.max_chunks:
+            # this means we completed the transfer
+            _logger.debug(f"{self._log_prefix} completed receiving big file")
+            self.state = TransferState.COMPLETED
+            _logger.debug(f"{self!r}")
+            # this signals the start_transfer method to release the iterator
+            self.status_updater.unfreeze()
+            await self.status_updater.close()
 
     async def _delete_chunks(self):
         _logger.debug(f"{self._log_prefix} deleting chunks={len(self.parts)}")
+        loop = asyncio.get_running_loop()
+        deletes = []
         for chunk_item in self.parts.values():
-            chunk_item.path.unlink(missing_ok=True)
+            t = loop.run_in_executor(
+                thread_pool_for_disk_io, chunk_item.path.unlink, True
+            )
+            deletes.append(t)
+        await asyncio.gather(*deletes, return_exceptions=True)
 
     async def __aexit__(self, e_type, e_val, e_tb):
-        if e_type == TransferIncomplete:
-            self.task_group.create_task(bomb())
+        self.status_updater.unfreeze()
+        await self.status_updater.close()
+        self._on_completion_event.set()
 
-        ret_value, delete_all = None, False
+        if e_type == CancelTransfer and self.state == TransferState.ABORTING:
+            # if we are willingly cancelling the transfer then suppress the error, no need to reraise it
+            await self._delete_chunks()
+            return True
 
         try:
             await self.task_group.close()
-        except CancelTransfer:
-            delete_all = True
-            ret_value = True
-        else:
+            _logger.info(f"Completed big file transfer {self=}")
             await merge_all_and_delete(self._file, self.parts)
-
-        if e_type == CancelTransfer and self.state == TransferState.ABORTING:
-            delete_all = True
-            # if we are willingly cancelling the transfer then suppress the error, no need to reraise it
-            ret_value = True
-        _logger.debug(f"{self._log_prefix} transfer exiting with {ret_value=}, {delete_all=}, {e_val=}", exc_info=e_tb)
-
-        if delete_all:
+        except CancelTransfer:
             await self._delete_chunks()
+            return True
+        except BaseException:
+            await merge_all_and_delete(self._file, self.parts)
+            raise
 
-        return ret_value
-
-    @property
-    def max_noof_parts(self):
-        # TODO: this or that
-        # self._file.size // CHUNK_SIZE + (1 if self._file.size % CHUNK_SIZE else 0)
-        return self.max_chunks
+    def __del__(self):
+        # delete all the parts, at this point there is no point in recovering those
+        for fi in self.parts.values():
+            fi.path.unlink(missing_ok=True)
 
     @property
     def id(self):
@@ -469,9 +673,14 @@ class Receiver(
     def current_file(self):
         return self._file
 
+    @current_file.setter
+    def current_file(self, file):
+        self._file = file
+
     def __repr__(self):
         return (
-            f"<{self.__class__.__name__}"f"("
+            f"<{self.__class__.__name__}"
+            f"("
             f"file={self._file!r}, "
             f"id={self.transfer_id}, "
             f"connections={len(self.connections)}, "
@@ -480,3 +689,7 @@ class Receiver(
             f"state={self.state}"
             f")>"
         )
+
+    @property
+    def done(self):
+        return self._on_completion_event
