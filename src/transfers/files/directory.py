@@ -2,6 +2,7 @@ import asyncio
 import struct
 from contextlib import aclosing
 from pathlib import Path
+from typing import Generator
 
 import umsgpack
 
@@ -11,6 +12,7 @@ from src.avails.exceptions import TransferIncomplete
 from src.avails.useables import override
 from src.transfers import TransferState, _logger
 from src.transfers.status import StatusMixIn
+from . import async_open
 from ._fileio import FileItemReader
 from ._fileobject import FileItem
 from .receiver import Receiver
@@ -73,40 +75,56 @@ class DirSender(Sender):
         """
         super().__init__(peer_obj, transfer_id, [], status_updater)
         self.root_path = root_path
-        self.dir_iterator = self.root_path.rglob('*')
+        self.dir_iterator: Generator[Path, None, None] = self.root_path.rglob('*')
         self._current_file = None
+        _logger.debug(f"{self._log_prefix} created new directory sender")
 
     @override
     async def start_transfer(self):
         self.transfer_task = asyncio.current_task()
+
+        _logger.debug(f'{self._log_prefix} changing state to sending')
+        self.state = TransferState.SENDING
 
         for item in self.dir_iterator:
             if self.should_stop:
                 break
 
             if item.is_dir():
+                _logger.debug(f"{self._log_prefix} sending sub-directory")
                 await self.__send_code_parts(_PATH_CODE, item)
                 self._current_file = FileItem(item, 0)
                 continue
 
             if item.is_file():
+                try:
+                    async with async_open(item, 'rb'):
+                        pass
+                except PermissionError as pe:
+                    _logger.debug(
+                        f"{self._log_prefix} got permission error{pe!r}, skipping that file={item!s}")
+                    continue
+
                 self._current_file = await self.send_file_metadata(item)
+                _logger.debug(f"{self._log_prefix} sent file metadata={item!s}")
                 if self._current_file.size <= 0:
                     assert (await self.net_receiver(1)) == _FILE_CODE
                     continue
-
                 f_reader = FileItemReader(self._current_file)
                 self.setup_status(f_reader)
-
                 async with aclosing(self.send_one_file(f_reader)) as sender:
                     updater = self.status_updater.update_status  # localize function
+                    _logger.debug(f"{self._log_prefix} sending file data={item!s}")
                     async for i in sender:
-                        updater(f_reader.seek_pos)
+                        await updater(f_reader.seek_pos)
                         yield i
 
+                _logger.debug(f"{self._log_prefix} sent file data={item!s}")
                 assert (await self.net_receiver(1)) == _FILE_CODE
 
+        _logger.debug(f"{self._log_prefix} sending end of transfer code")
         await self.net_sender(b'\x00')  # code to inform end of transfer
+        self.state = TransferState.COMPLETED
 
     @use.override
     async def send_file_metadata(self, file_path):
@@ -130,8 +148,10 @@ class DirSender(Sender):
         try:
             await self.net_sender(code)  # code to inform that there are more files to get
             await self.net_sender(struct.pack('!I', len(dumped_code)) + dumped_code)
+            _logger.debug(f"{self._log_prefix} sent code parts")
 
         except Exception as exp:
+            _logger.debug(f"{self._log_prefix} exception when sending code parts", exc_info=exp)
             self.handle_exception(exp)
 
         return parent, name
@@ -162,27 +182,40 @@ class DirReceiver(Receiver):
     """
 
     async def start_transfer(self):
+        _logger.debug(f"{self._log_prefix} changing state to CONNECTING")
+        self.state = TransferState.CONNECTING
+        await self.connection_wait
+
+        _logger.debug(f"{self._log_prefix} changing state to RECEIVING")
         self.state = TransferState.RECEIVING
+
         self.transfer_task = asyncio.current_task()
+        _logger.debug(f"{self._log_prefix} receiving directory, into {self.download_path}")
 
         while True:
             if not (code := await self._should_proceed()):
+                _logger.debug(f"{self._log_prefix} got exit code, finalizing recv loop")
                 break
 
             if code == _FILE_CODE:
+                _logger.debug(f"{self._log_prefix} got sub-file code")
                 async with aclosing(self._recv_file_once()) as loop:
-                    # print(self.current_file)  # debug
+                    _logger.debug(f"receiving sub-file={self.current_file}")
                     async for _ in loop:
                         yield _
                 await self.net_sender(code)
 
             elif code == _PATH_CODE:
+                _logger.debug(f"{self._log_prefix} got sub-directory code")
                 parent, item_name = await self._recv_parts()
                 full_path = Path(self.download_path, parent, item_name)
+                _logger.debug(
+                    f"creating directory at {full_path}, ({self.download_path=},{parent=},{item_name=})")
                 full_path.mkdir(parents=True)
-                # print("creating directory", use.shorten_path(full_path, 40))  # debug
                 self._current_file = FileItem(full_path, 0)
                 yield full_path, None
+
+        self.state = TransferState.COMPLETED
 
     @use.override
     async def _recv_file_item(self):

@@ -9,7 +9,6 @@ from kademlia.utils import digest
 import src.core.async_runner  # noqa
 from src import net
 from src.avails import RemotePeer, constants as const, use
-from src.avails.useables import COLORS
 from src.conduit import pagehandle
 from src.configurations import interfaces as _interfaces, logger as _logger
 from src.core.app import AppType
@@ -96,7 +95,7 @@ async def launch_web_page():
             await _open_page_in_win_shell(page_url)
             return
         if bridged is False:
-            print(COLORS.RED, "cannot launch UI:", comment, COLORS.RESET)
+            _logger.fatal(f"cannot launch UI: {comment}")
             return
 
     try:
