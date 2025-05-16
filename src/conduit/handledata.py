@@ -49,35 +49,30 @@ async def send_text(command_data: DataWeaver):
 
 
 async def new_dir_transfer(command_data: DataWeaver):
-    if p := command_data.content['path']:
-        dir_path = p
-    else:
-        dir_path = await directorymanager.open_dir_selector()
-
-    if not dir_path:
+    if not (dir_path := await _get_file_paths(command_data, prompter=directorymanager.open_dir_selector)):
+        return
+    try:
+        peer = await peers.get_remote_peer(command_data.peer_id)
+    except RemotePeerNotFound:
+        await webpage.failed_to_reach(command_data.peer_id)
         return
 
-    peer_id = command_data.peer_id
-    remote_peer = await peers.get_remote_peer(peer_id)
-    if not remote_peer:
-        raise Exception(f"cannot find remote peer object for given id{peer_id}")
-
-    await directorymanager.send_directory(remote_peer, dir_path)
+    logger.debug(f"starting new directory transfer {command_data.content=}")
+    await directorymanager.send_directory(peer, dir_path[0])
 
 
-async def _get_file_paths(command_data: DataWeaver):
+async def _get_file_paths(command_data: DataWeaver, *, prompter=filemanager.open_file_selector):
     if "paths" in command_data:
         selected_files = [Path(x) for x in command_data["paths"]]
     else:
-        selected_files = await filemanager.open_file_selector()
+        selected_files = await prompter()
         if not selected_files:
             return
     return list(map(Path, selected_files))
 
 
 async def send_file(command_data: DataWeaver):
-    selected_files = await _get_file_paths(command_data)
-    if not any(selected_files):
+    if not any(selected_files := await _get_file_paths(command_data)):
         return
 
     try:
@@ -90,8 +85,7 @@ async def send_file(command_data: DataWeaver):
 
 
 async def send_big_file(command_data: DataWeaver):
-    selected_files = await _get_file_paths(command_data)
-    if not any(selected_files):
+    if not any(selected_files := await _get_file_paths(command_data)):
         return
 
     peer = await peers.get_remote_peer(command_data.peer_id)
@@ -103,8 +97,7 @@ async def send_big_file(command_data: DataWeaver):
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
-    selected_files = await _get_file_paths(command_data)
-    if not any(selected_files):
+    if not any(selected_files := await _get_file_paths(command_data)):
         return
 
     peer_ids = command_data.content["peerList"]

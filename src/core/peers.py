@@ -4,6 +4,7 @@ Helper functions to deal with peers in network
 
 import asyncio
 import logging
+from contextlib import aclosing
 from typing import AsyncIterator, Optional
 
 from kademlia import crawling
@@ -97,10 +98,12 @@ async def get_remote_peer_from_network(peer_network, peer_id):
     """
     byte_id = convert_peer_id_to_byte_id(peer_id)
     _logger.debug(f"getting peer with id {peer_id} from network")
-    async for _ in use.async_timeouts(max_retries=const.PEER_SEARCH_RETRIES):
-        peer = await peer_network.get_remote_peer(byte_id)
-        if peer is not None:
-            return peer
+
+    async with aclosing(use.async_timeouts(max_retries=const.PEER_SEARCH_RETRIES)) as timeouts:
+        async for _ in timeouts:
+            peer = await peer_network.get_remote_peer(byte_id)
+            if peer is not None:
+                return peer
 
 
 @provide_app_ctx
@@ -121,9 +124,10 @@ async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
     except KeyError:
         peer_obj = None
 
-    peer_obj_from_network = await get_remote_peer_from_network(app_ctx.kad_server, peer_id)
-    if peer_obj_from_network:
-        peer_obj = peer_obj_from_network
+    if app_ctx.kad_server:
+        peer_obj_from_network = await get_remote_peer_from_network(app_ctx.kad_server, peer_id)
+        if peer_obj_from_network:
+            peer_obj = peer_obj_from_network
 
     if peer_obj is None:
         err = RemotePeerNotFound()

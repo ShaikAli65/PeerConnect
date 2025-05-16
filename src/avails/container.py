@@ -23,7 +23,6 @@ __match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
 __all__ = (
     "PeerDict",
     "TransfersBookKeeper",
-
 )
 
 
@@ -34,7 +33,7 @@ class PeerDict(dict):
     __slots__ = ()
 
     def get_peer(self, peer_id) -> RemotePeer:
-        return self.get(peer_id)
+        return self[peer_id]
 
     def add_peer(self, peer_obj: RemotePeer | HasPeerId):
         """Adds peer to dictionary
@@ -67,7 +66,7 @@ class PeerDict(dict):
         self.clear()
 
     def __str__(self):
-        return ', '.join(x.__repr__() for x in self.values())
+        return ", ".join(x.__repr__() for x in self.values())
 
     def __iter__(self):
         return self.values().__iter__()
@@ -78,19 +77,20 @@ class TransfersBookKeeper:
 
     All the containers are two-dimensional
     {
-        peer id: set{file_handles/pools}  # uses set 
+        peer id: set{file_handles/pools}  # uses set
     }
     completed : stores weak references to file handles/pools that are completed
     current : stores strong references to file handles/pools that are running
     continued : stores strong references file handles/pools that are paused or are meant to resumed
     """
+
     _id_counter = count()
-    __slots__ = '__continued', '__completed', '__current', '__scheduled'
+    __slots__ = "__continued", "__completed", "__current", "__scheduled"
     __annotations__ = {
-        '__continued': dict,
-        '__completed': dict,
-        '__current': dict,
-        '__scheduled': dict,
+        "__continued": dict,
+        "__completed": dict,
+        "__current": dict,
+        "__scheduled": dict,
     }
 
     def __init__(self):
@@ -108,8 +108,8 @@ class TransfersBookKeeper:
         self.__continued[peer_id].discard(transfer_handle)
         self.__completed[peer_id].add(transfer_handle)
 
-    def add_to_scheduled(self, key, transfer_handle):
-        self.__scheduled[key] = transfer_handle
+    def add_to_scheduled(self, transfer_handle):
+        self.__scheduled[transfer_handle.id] = transfer_handle
 
     def add_to_continued(self, peer_id, file_pool):
         self.__current[peer_id].discard(file_pool)
@@ -119,34 +119,45 @@ class TransfersBookKeeper:
         self.__continued[peer_id].remove(file_pool)
         self.__completed[peer_id].add(file_pool)
 
-    def _get_running_transfers(self, peer_id, file_id=None):
+    @staticmethod
+    def __check_container(peer_id, file_id, container):
         if file_id:
-            return next(file for file in self.__current[peer_id] if file.id == file_id)
-        return list(self.__current[peer_id])
+            return next((h for h in container[peer_id] if h.id == file_id), None)
+        return iter(container[peer_id])
 
-    def _get_completed_transfer(self, peer_id, file_id):
-        return next(file for file in self.__completed[peer_id] if file.id == file_id)
+    def get_running_transfers(self, peer_id, file_id=None):
+        return self.__check_container(peer_id, file_id, self.__current)
 
-    def _get_continued_file(self, peer_id, file_id):
-        return next(file for file in self.__continued[peer_id] if file.id == file_id)
+    def get_completed_transfer(self, peer_id, file_id):
+        return self.__check_container(peer_id, file_id, self.__completed)
+
+    def get_continued_file(self, peer_id, file_id):
+        return self.__check_container(peer_id, file_id, self.__continued)
 
     def get_scheduled(self, file_id):
         return self.__scheduled.get(file_id, None)
 
     def get_transfer(self, peer_id, file_id):
         try:
-            return self._get_running_transfers(peer_id, file_id)
+            return self.get_running_transfers(peer_id, file_id)
         except StopIteration:
             pass
         try:
-            return self._get_completed_transfer(peer_id, file_id)
+            return self.get_continued_file(peer_id, file_id)
         except StopIteration:
             pass
         try:
-            return self._get_continued_file(peer_id, file_id)
+            return self.get_completed_transfer(peer_id, file_id)
         except StopIteration:
             pass
         return None
+
+    def remove_transfer(self, peer_id, transfer_handle):
+        self.__current[peer_id].discard(transfer_handle)
+        self.__continued[peer_id].discard(transfer_handle)
+        self.__completed[peer_id].discard(transfer_handle)
+        if transfer_handle.id in self.__scheduled:
+            del self.__scheduled[transfer_handle]
 
     @property
     def continued(self):
@@ -164,32 +175,50 @@ class TransfersBookKeeper:
     def get_new_id(cls):
         return str(next(cls._id_counter))
 
-    def check_running(self, peer_id):
-        if running := self._get_running_transfers(peer_id):
-            return running[0]
+    def get_running_transfer(self, peer_id):
+        if running := self.get_running_transfers(peer_id):
+            return next(running, None)
         return None
+
+    def __repr__(self):
+        return f"{tuple(self.current)=}, {tuple(self.completed)=}, {tuple(self.continued)=}"
 
 
 if TYPE_CHECKING:
     from src.transfers.abc import AbstractTransferHandle
 
-
     class TransfersBookKeeper:
-        def add_to_current(self, peer_id: str, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
+        def add_to_current(
+              self,
+              peer_id: str,
+              transfer_handle: AbstractTransferHandle | HasID | HasIdProperty,
+        ): ...
 
-        def add_to_completed(self, peer_id: str, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
+        def add_to_completed(
+              self,
+              peer_id: str,
+              transfer_handle: AbstractTransferHandle | HasID | HasIdProperty,
+        ): ...
 
-        def add_to_scheduled(self, key, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty): ...
+        def add_to_scheduled(
+              self, key, transfer_handle: AbstractTransferHandle | HasID | HasIdProperty
+        ): ...
 
         def add_to_continued(self, peer_id: str, file_pool): ...
 
         def swap(self, peer_id: str, file_pool): ...
 
-        def _get_running_transfers(self, peer_id: str, file_id=None) -> AbstractTransferHandle: ...
+        def get_running_transfers(
+              self, peer_id: str, file_id=None
+        ) -> AbstractTransferHandle: ...
 
-        def _get_completed_transfer(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
+        def get_completed_transfer(
+              self, peer_id: str, file_id
+        ) -> AbstractTransferHandle: ...
 
-        def _get_continued_file(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
+        def get_continued_file(
+              self, peer_id: str, file_id
+        ) -> AbstractTransferHandle: ...
 
         def get_scheduled(self, file_id) -> AbstractTransferHandle: ...
 

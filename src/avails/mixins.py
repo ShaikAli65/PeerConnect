@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from asyncio import TaskGroup
+from asyncio import CancelledError, TaskGroup
 from contextlib import AsyncExitStack
 from functools import wraps
 from typing import Type, TypeVar
@@ -101,6 +101,7 @@ class QueueMixIn:
 
     async def _handle_runtime_error(self, logger):
         logger.warning(f"got unexpected runtime error, checking {self.__class__.__name__} queue")
+        logger.debug("", exc_info=True)
         if self.is_healthy():
             logger.info("requests dispatcher queue healthy, raise error again")
             raise
@@ -113,7 +114,9 @@ class QueueMixIn:
     async def __aexit__(self, *exp_details):
         try:
             return await self._task_group.__aexit__(*exp_details)
-        except BaseException as exp:
+        except CancelledError:
+            return
+        except ExceptionGroup as exp:
             exp.add_note(f"from {type(self)}")
             raise exp
 

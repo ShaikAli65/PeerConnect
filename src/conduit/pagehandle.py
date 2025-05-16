@@ -98,7 +98,8 @@ class FrontEndWebSocket:
                                   exc_info=True)
 
     async def __aenter__(self):
-        self._buffer_sender_task = _asyncio.create_task(self._send_buffer())
+        self._buffer_sender_task = _asyncio.create_task(self._send_buffer(),
+                                                        name="frontend-websocket-watcher")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
