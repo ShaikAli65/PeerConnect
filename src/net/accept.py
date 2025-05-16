@@ -3,7 +3,6 @@ import logging
 import socket
 import sys
 import threading
-import traceback
 from asyncio import TaskGroup
 from typing import Optional
 
@@ -11,7 +10,7 @@ from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
 from src.core.app import ReadOnlyAppType
-from src.core.events import ConnectionEvent
+from src.net.events import ConnectionEvent
 from . import bandwidth
 from .connect import Connection, Socket
 from .wire_io import WireIO
@@ -37,7 +36,7 @@ class Acceptor(AExitStackMixIn):
         self.back_log = 4
         self.max_timeout = 90
         self._task_group = TaskGroup()
-        self._initiate_task = asyncio.create_task(self.initiate())
+        self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
 
     async def initiate(self):
         _logger.info(f"Initiating Acceptor {self.address}")
@@ -88,14 +87,16 @@ class Acceptor(AExitStackMixIn):
             peer = await peers.get_remote_peer(handshake.peer_id)
         except RemotePeerNotFound:
             _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
+            initial_conn.close()
             return
+
         peer.status = RemotePeer.ONLINE
         conn = Connection.create_from(initial_conn, peer)
         self._exit_stack.enter_context(initial_conn)
         con_event = ConnectionEvent(conn, handshake)
         watcher = bandwidth.Watcher()
         watcher.watch(initial_conn, conn)
-        self._app_ctx.connections.dispatcher(con_event)
+        self._app_ctx.connections.dispatcher(con_event, _task_name=f'conn-task-H={handshake.header}')
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
@@ -110,10 +111,6 @@ class Acceptor(AExitStackMixIn):
             error_log = f"Socket error"
         except InvalidPacket:
             error_log = f"Initial handshake packet is invalid, closing connection"
-        except Exception:
-            print("*" * 79)
-            traceback.print_exc()
-            raise
 
         if error_log := locals().get('error_log'):
             _logger.error(error_log)

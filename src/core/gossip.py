@@ -4,7 +4,7 @@ from src.avails import BaseDispatcher, GossipMessage, const
 from src.avails.mixins import QueueMixIn
 from src.core import search
 from src.core.app import AppType, ReadOnlyAppType
-from src.core.events import GossipEvent, RequestEvent
+from src.net.events import GossipEvent, RequestEvent
 from src.transfers import GOSSIP_HEADER, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
 

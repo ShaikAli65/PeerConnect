@@ -24,9 +24,9 @@ from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import App, ReadOnlyAppType, provide_app_ctx
-from src.core.events import ConnectionEvent, MessageEvent
 from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth, connectivity
 from src.net.connector import Connector
+from src.net.events import ConnectionEvent, MessageEvent
 from src.transfers import HEADERS
 from src.transfers.messages import MsgReceiver, MsgSender
 

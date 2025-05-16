@@ -7,8 +7,8 @@ from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.core import _kademlia, gossip
 from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
-from src.core.events import RequestEvent
 from src.managers.statemanager import State
+from src.net.events import RequestEvent
 from src.net.requests import setup_endpoint
 from src.net.transports import RequestsTransport
 from src.transfers import REQUESTS_HEADERS

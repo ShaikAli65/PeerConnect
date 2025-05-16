@@ -10,8 +10,8 @@ from kademlia import crawling
 from src.avails import GossipMessage, RemotePeer, WireData, const, use
 from src.avails.exceptions import SearchExhausted
 from src.core.app import provide_app_ctx
-from src.core.events import GossipEvent
 from src.core.peerstore import node_list_ids
+from src.net.events import GossipEvent
 from src.transfers import GOSSIP_HEADER
 
 # ## How do we perform

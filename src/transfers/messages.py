@@ -4,8 +4,8 @@ from typing import Awaitable, Callable, Self
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import FailedToSend, InvalidPacket, InvalidStateError
 from src.core.app import ReadOnlyAppType
-from src.core.events import MessageEvent
 from src.net import MsgConnection, MsgConnectionNoRecv
+from src.net.events import MessageEvent
 from . import _logger
 from ._headers import HEADERS
 
@@ -214,7 +214,7 @@ class MsgReceiver:
         async with self.limiter:
             try:
                 wire_data = await msg_connection.recv()
-                _logger.debug(f"< new msg {wire_data}")  # debug
+                _logger.debug(f"< new msg {wire_data}")
             except InvalidPacket:
                 _logger.info(f"<! malformed packet", exc_info=True)
                 return

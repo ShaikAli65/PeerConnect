@@ -14,10 +14,10 @@ from src.avails import BaseDispatcher, WireData, const
 from src.avails.exceptions import InvalidPacket
 from src.avails.mixins import QueueMixIn
 from src.core.app import AppType
-from src.core.events import ConnectionEvent
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
 from src.net import Acceptor, WireIO, bandwidth
+from src.net.events import ConnectionEvent
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ async def initiate_acceptor(app_ctx: AppType):
     c_reg_handler = connection_dispatcher.register_handler
     c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(app_ctx.read_only()))
     c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(app_ctx.read_only()))
-    c_reg_handler(HEADERS.CMD_RECV_DIR, DirConnectionHandler(app_ctx.read_only()))
+    c_reg_handler(HEADERS.CMD_DIR_CONN, DirConnectionHandler(app_ctx.read_only()))
     c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
     c_reg_handler(HEADERS.PING, PingHandler(app_ctx.this_remote_peer))
 
@@ -76,6 +76,8 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
     def park(self, connection):
         async def watcher():
             conn_watcher = bandwidth.Watcher()
+            connection.recv.resume()
+            connection.send.resume()
             try:
                 async with connection:
                     service_header = await asyncio.wait_for(WireIO.recv_msg(connection), const.MAX_IDLE_TIME_FOR_CONN)

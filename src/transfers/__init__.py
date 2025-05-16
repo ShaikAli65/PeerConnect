@@ -1,7 +1,7 @@
 import enum
 from concurrent.futures.thread import ThreadPoolExecutor
 
-from src.core.events import ConnectionEvent
+from src.net.events import ConnectionEvent
 from src.transfers._headers import *
 from src.transfers.rumor import *
 

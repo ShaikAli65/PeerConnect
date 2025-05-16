@@ -1,7 +1,7 @@
 from typing import NamedTuple
 
 from src.avails.wire import GossipMessage, WireData
-from src.net.connect import Connection, MsgConnection, NetAddr
+from .connect import Connection, MsgConnection, NetAddr
 
 
 class RequestEvent(NamedTuple):

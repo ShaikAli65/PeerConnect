@@ -43,7 +43,7 @@ from src.avails.bases import BaseDispatcher
 from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
 from src.conduit import webpage
 from src.core.app import AppType, ReadOnlyAppType
-from src.core.events import RequestEvent
+from src.net.events import RequestEvent
 from src.net.transports import DiscoveryTransport
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
 

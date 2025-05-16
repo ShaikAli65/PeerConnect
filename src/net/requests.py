@@ -5,8 +5,8 @@ from logging import getLogger
 
 from src.avails import const
 from src.avails.exceptions import InvalidPacket
-from src.core.events import RequestEvent
 from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
+from src.net.events import RequestEvent
 
 _logger = getLogger(__name__)
 

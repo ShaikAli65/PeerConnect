@@ -4,9 +4,9 @@ import random
 import _path  # noqa
 from src.avails import WireData
 from src.core.app import AppType
-from src.core.events import MessageEvent
 from src.managers import message
 from src.managers.statemanager import State
+from src.net.events import MessageEvent
 from src.transfers import HEADERS
 from tests.test import get_a_peer, start_test
 

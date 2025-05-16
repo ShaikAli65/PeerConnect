@@ -8,7 +8,7 @@ from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket
 from src.avails.mixins import QueueMixIn, singleton_mixin
 from src.core.app import AppType, provide_app_ctx
-from src.core.events import RequestEvent
+from src.net.events import RequestEvent
 from src.transfers import HEADERS
 from .connect import connect_to_peer
 
