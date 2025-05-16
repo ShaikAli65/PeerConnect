@@ -84,7 +84,7 @@ class Connector(AExitStackMixIn):
             peer (RemotePeer): to connect
             raise_if_busy(bool):
                 if true then raises ResourceBusy which contains a condition that will be released,
-                 signalling that to do something if needed
+                when resources are available
             acquire_lock(bool):
                 acquires internal lock of connection, this removes need for nested with statements,
                 one for connect call and one for lock
@@ -107,6 +107,7 @@ class Connector(AExitStackMixIn):
                 one_connection = active.pop()
                 self.passive_conns[peer].remove(one_connection)
                 del active  # drop the references early
+                _logger.debug("returning connection from pool")
                 async with self._yield_connection_and_maintain(one_connection, acquire_lock):
                     yield one_connection
                 return
@@ -160,6 +161,8 @@ class Connector(AExitStackMixIn):
                     conns.remove(connection)
                     self._global_conn_count -= 1
             else:
+                connection.send.resume()
+                connection.recv.resume()
                 self.passive_conns[peer].add(connection)
                 _logger.debug(f"added to passive list, {connection}")
 
