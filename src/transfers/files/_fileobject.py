@@ -77,9 +77,13 @@ class FileItem:
         return iter((self.name, self.size, self.seeked))
 
     def __str__(self):
-        size_str = stringify_size(self.size)
         name_str = f"...{self._name[-20:]}" if len(self._name) > 20 else self._name
-        str_str = f"FileItem({name_str}, {size_str}, {use.shorten_path(self.path, 20)})"
+        str_str = (f"FileItem("
+                   f"{name_str}, "
+                   f"slice={stringify_size(self.size - self.seeked)}, "
+                   f"size={stringify_size(self.size)}, "
+                   f"{use.shorten_path(self.path, 20)}"
+                   f")")
         return str_str
 
     def __repr__(self):
@@ -100,7 +104,7 @@ class FileItem:
         """
         self.original_ext = self.path.suffix
         new_path = self.path.with_suffix(error_ext)
-        self.path.rename(new_path)
+        self.path = self.path.rename(new_path)
         self._name = self.path.name
         return self._name
 
@@ -143,7 +147,7 @@ def add_error_ext(file_item: FileItem, root_path, error_ext):
     """
     try:
         file_item.add_error_ext(error_ext)
-    except FileExistsError:
+    except (FileExistsError, FileNotFoundError):
         return validatename(file_item, root_path)
 
 
