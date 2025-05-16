@@ -91,12 +91,12 @@ async def get_transfer_ok(profile, peer_id):
     return bool(confirmation.content['confirmed'])
 
 
-async def transfer_confirmation(peer_id, transfer_id, confirmation):
+async def transfer_confirmation(transfer_handle, confirmation):
     front_end_data_dispatcher(
         DataWeaver(
             header=headers.TRANSFER_UPDATE,
-            content={"confirmation": confirmation, 'transferId': transfer_id},
-            peer_id=peer_id,
+            content={"confirmation": confirmation, 'transferId': transfer_handle.id},
+            peer_id=transfer_handle.peer.peer_id,
         )
     )
 

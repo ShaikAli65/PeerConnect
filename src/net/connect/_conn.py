@@ -2,20 +2,20 @@ import asyncio as _asyncio
 import struct
 import time
 from asyncio.trsock import TransportSocket
-from typing import Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
+from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
 
 from src.avails import const, wire
 from src.avails.exceptions import FailedToReceive, InvalidPacket
 from ._asocket import Socket
 
 __all__ = (
-    'ThroughputMixin',
-    'Sender',
-    'Receiver',
-    'Connection',
-    'MsgConnection',
-    'MsgConnectionNoRecv',
-    'ChunkedReceiver',
+    "ThroughputMixin",
+    "Sender",
+    "Receiver",
+    "Connection",
+    "MsgConnection",
+    "MsgConnectionNoRecv",
+    "ChunkedReceiver",
 )
 
 
@@ -60,6 +60,7 @@ class ThroughputMixin:
             self.rate = self._bytes_total / self.BYTES_PER_KB / dt
             self._bytes_total = 0
             self._window_start = current_time
+        return nbytes
 
     def _format_rate(self):
         """Convert KB/s to human-readable format with appropriate units"""
@@ -77,8 +78,15 @@ class ThroughputMixin:
 
 
 class Sender(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
-    __slots__ = ('sock', 'send_func', '_limiter',
-                 '_bytes_total', '_window_start', 'rate', '_peer_name')
+    __slots__ = (
+        "sock",
+        "send_func",
+        "_limiter",
+        "_bytes_total",
+        "_window_start",
+        "rate",
+        "_peer_name",
+    )
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
@@ -89,7 +97,7 @@ class Sender(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
         self._limiter.set()
         super().__init__(*args, **kwargs)
 
-    async def __call__(self, buf: bytes):
+    async def __call__(self, buf: bytes) -> Annotated[int, "bytes sent"]:
         await self._limiter.wait()
         await self.send_func(self.sock, buf)
         return self._update_throughput(len(buf), time.perf_counter())
@@ -99,8 +107,15 @@ class Sender(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
 
 
 class Receiver(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
-    __slots__ = ('sock', 'recv_func', '_limiter',
-                 '_bytes_total', '_window_start', 'rate', '_peer_name')
+    __slots__ = (
+        "sock",
+        "recv_func",
+        "_limiter",
+        "_bytes_total",
+        "_window_start",
+        "rate",
+        "_peer_name",
+    )
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
@@ -171,6 +186,14 @@ async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
         yield data
 
 
+class Lock(_asyncio.Lock):
+    def __str__(self):
+        return f"<Lock(locked={self.locked()})>"
+
+    def __repr__(self):
+        return str(self)
+
+
 class Connection(NamedTuple):
     """
     To represent A p2p connection
@@ -188,21 +211,25 @@ class Connection(NamedTuple):
         recv: receiver API, async callable that returns bytes with requested length
         peer: peer object of other end
     """
+
     socket: TransportSocket
     send: Sender
     recv: Receiver
 
     if TYPE_CHECKING:
         from src.avails import RemotePeer
+
         peer: RemotePeer
     else:
         peer: Any
 
-    lock: _asyncio.Lock
+    lock: Lock
 
     @staticmethod
     def create_from(socket: Socket, peer):
-        return Connection(TransportSocket(socket), Sender(socket), Receiver(socket), peer, _asyncio.Lock())
+        return Connection(
+            TransportSocket(socket), Sender(socket), Receiver(socket), peer, Lock()
+        )
 
     def __enter__(self):
         raise RuntimeWarning("use async with!")
@@ -217,7 +244,8 @@ class Connection(NamedTuple):
 
 class MsgConnection:
     """Send or Receive WireData object from connection"""
-    __slots__ = '_connection',
+
+    __slots__ = ("_connection",)
     _connection: Connection
 
     def __init__(self, connection):

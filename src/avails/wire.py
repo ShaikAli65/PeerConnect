@@ -64,7 +64,7 @@ class WireData:
             header, _id, version, body, peer_id = list_of_attributes
         except (ValueError, umsgpack.UnpackException, TypeError) as exp:
             ip = InvalidPacket()
-            ip.add_note(f"items={list_of_attributes}")
+            ip.add_note(f"items count={list_of_attributes}")
             raise ip from exp
 
         return cls(header, _id, peer_id, version=version, **body)

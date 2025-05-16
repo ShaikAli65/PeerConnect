@@ -1,6 +1,7 @@
 """Networking and Management"""
 
 from .accept import *
+from .bandwidth import Watcher
 from .connect import *
 from .connector import *
 from .utils import *
