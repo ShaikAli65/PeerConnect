@@ -19,8 +19,8 @@ from src.avails.useables import override
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import AppType, ReadOnlyAppType
-from src.core.events import RequestEvent
 from src.core.peerstore import ForgetfulStorage, Storage
+from src.net.events import RequestEvent
 from src.net.transports import KademliaTransport
 from src.transfers import REQUESTS_HEADERS
 
@@ -356,14 +356,16 @@ class PeerServer(network.Server):
 
         if data['neighbors']:
             try:
-                await self.bootstrap(self.app_ctx.addr_tuple(t[0], t[1]) for t in data['neighbors'])
+                await self.bootstrap([
+                    self.app_ctx.addr_tuple(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
+                ])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
 
     async def __aenter__(self):
         self.stopping = False
         if self.state_dump_file:
-            await self.load_state()
+            asyncio.create_task(self.load_state(), name='loading-kad-state')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
