@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 from asyncio import CancelledError, TaskGroup
 from contextlib import AsyncExitStack
@@ -162,6 +163,7 @@ class AggregatingAsyncExitStack(AsyncExitStack):
     __slots__ = ()
 
     async def __aexit__(self, *exc_details):
+        logging.getLogger(__name__).error(f"error {exc_details=}", exc_info=True)
         exc = exc_details[1]
         received_exc = exc is not None
         aggregated = []

@@ -83,7 +83,7 @@ class RPCCaller(RPCProtocol):
 class RPCReceiver(RPCProtocol):
     __slots__ = ()
 
-    def rpc_ping(self, sender, sender_peer):
+    def rpc_ping(self, _, sender_peer):
         self._check_in(sender_peer)
         return self.source_node.serialized
 
@@ -94,7 +94,7 @@ class RPCReceiver(RPCProtocol):
         self.storage[key] = value
         return True
 
-    def rpc_find_node(self, sender, sender_peer, key):
+    def rpc_find_node(self, _, sender_peer, key):
         source = self._check_in(sender_peer)
         _logger.info("finding neighbors of %i in local table",
                      source.long_id)
@@ -118,12 +118,12 @@ class RPCReceiver(RPCProtocol):
             return self.rpc_find_node(sender, sender_peer, list_key)
         return {'value': value}
 
-    def rpc_store_peers_in_list(self, sender, caller_peer, list_key, peer_list):
+    def rpc_store_peers_in_list(self, _, caller_peer, list_key, peer_list):
         # caller_peer = RemotePeer.load_from(caller_peer)
         self._check_in(caller_peer)
         return self.storage.store_peers_in_list(list_key, peer_list)
 
-    def rpc_search_peers(self, sender, caller_peer, search_string):
+    def rpc_search_peers(self, _, caller_peer, search_string):
         self._check_in(caller_peer)
         relevant_peers = use.search_relevant_peers(self.peer_list, search_string)
         return list(map(bytes, relevant_peers))
@@ -233,8 +233,9 @@ class PeerServer(network.Server):
         return nearest_list_id
 
     async def add_this_peer_to_lists(self):
-        if self.add_this_peer_task:
-            _logger.warning(f"{self.add_this_peer_task=}, already found task object not entering function body")
+        if isinstance(self.add_this_peer_task, asyncio.Task) and not self.add_this_peer_task.done():
+            _logger.warning(
+                f"{self.add_this_peer_task=}, already found task running not entering function body")
             # this function only gets called once in the entire application lifetime
             return
 

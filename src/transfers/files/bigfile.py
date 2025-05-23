@@ -11,19 +11,13 @@ from src.avails.useables import override, shorten_path
 from src.transfers import HEADERS, TransferState, _logger, thread_pool_for_disk_io
 from src.transfers.abc import AbstractReceiver, AbstractSender
 from src.transfers.status import StatusIterator
-from . import FileItemReader, FileItemWriter
+from . import FileItemReader, FileItemWriter, validatename
 from ._fileobject import FileItem
 from ._merge import merge_all_and_delete
 from .receiver import Receiver as FReceiver
 from .sender import Sender as FSender
 
 CHUNK_SIZE = 30 * 1024 * 1024  # 30MB
-
-
-async def bomb():
-    raise (
-        "cancel all tasks in taskgroup"
-    )  # change this to an exception with specificity
 
 
 class _ControlMixIn:
@@ -652,11 +646,13 @@ class Receiver(
         try:
             await self.task_group.close()
             _logger.info(f"Completed big file transfer {self=}")
+            validatename(file_item=self._file, root_path=self.download_path)
             await merge_all_and_delete(self._file, self.parts)
         except CancelTransfer:
             await self._delete_chunks()
             return True
         except BaseException:
+            validatename(file_item=self._file, root_path=self.download_path)
             await merge_all_and_delete(self._file, self.parts)
             raise
 

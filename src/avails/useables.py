@@ -8,6 +8,7 @@ import subprocess
 import sys
 import traceback
 import uuid
+from functools import wraps
 from pathlib import Path
 from sys import _getframe  # noqa
 
@@ -178,7 +179,8 @@ def open_file(content):
         $file = '{content}'
         Invoke-Item $file
         """
-        result = subprocess.run(["powershell.exe", "-Command", powershell_script], stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(["powershell.exe", "-Command", powershell_script], stdout=subprocess.PIPE,
+                                text=True)
         return result.stdout.strip()
     elif platform.system() == "Darwin":
         subprocess.run(["open", content])
@@ -302,7 +304,8 @@ def wrap_with_tryexcept(func, *args, **kwargs):
             return await func(*args, **kwargs)
         except Exception as e:
 
-            print(f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e)} : {e}", file=sys.stderr)
+            print(f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e)} : {e}",
+                  file=sys.stderr)
             traceback.print_exc()
             tb = traceback.extract_tb(e.__traceback__)
             filtered_tb = [frame for frame in tb if "wrapped_with_tryexcept" not in frame.name]
@@ -357,6 +360,20 @@ def search_relevant_peers(peer_list, search_string):
             continue  # Skip removed peer
         if peer.is_relevant(search_string):
             yield peer
+
+
+def keep_task_reference(func):
+    """Decorator
+    Event does not hold a reference to running tasks, to prevent task disappearing
+    in the middle of its execution, this keeps a strong reference to current running task
+    """
+
+    @wraps(func)
+    def task_wrapper(*args, **kwargs):
+        _ = asyncio.current_task()
+        return func(*args, **kwargs)
+
+    return task_wrapper
 
 
 class NotInUse:

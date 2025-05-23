@@ -141,6 +141,7 @@ class StateManager:
         self.close = False
         self.all_tasks: list[asyncio.Task] = []
         self.stopped = False
+        self.current_state: State | None = None
 
     async def signal_stopping(self):
         if self.stopped:
@@ -171,16 +172,21 @@ class StateManager:
         """
         try:
             while self.close is False:
-                current_state: State = await self.state_queue.get()
-                if current_state is None:
+                self.current_state = await self.state_queue.get()
+                if self.current_state is None:
                     return
 
-                if not isinstance(current_state, State):
-                    _logger.warning(f"ignoring unexpected state object {current_state=}")
+                if not isinstance(self.current_state, State):
+                    _logger.warning(f"ignoring unexpected state object {self.current_state=}")
                     continue
 
-                self.states.append(current_state)
-                r = await current_state.enter_state()
+                self.states.append(self.current_state)
+                r = await self.current_state.enter_state()
+                self.current_state = None
                 assert r is None, "state returned non None value"
+        except BaseException as be:
+            be.add_note(f"{self.current_state=}")
+            _logger.debug("exp while processing states:", exc_info=be)
+            raise
         finally:
             await self.signal_stopping()

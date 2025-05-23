@@ -80,7 +80,8 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             connection.send.resume()
             try:
                 async with connection:
-                    service_header = await asyncio.wait_for(WireIO.recv_msg(connection), const.MAX_IDLE_TIME_FOR_CONN)
+                    service_header = await asyncio.wait_for(WireIO.recv_msg(connection),
+                                                            const.MAX_IDLE_TIME_FOR_CONN)
             except (TimeoutError, OSError, InvalidPacket):
                 await conn_watcher.request_closing(connection)
                 return
@@ -122,11 +123,16 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             await self._try_parking(handler, event.connection)
 
     async def _try_parking(self, handler, connection):
-        our_task = asyncio.current_task()
-        cancelling = our_task.cancelling
-        conn_watcher = bandwidth.Watcher()
 
-        if cancelling():
+        def check_cancelling():
+            our_task = asyncio.current_task()
+            if our_task:
+                return our_task.cancelling()
+            else:
+                return False
+
+        conn_watcher = bandwidth.Watcher()
+        if check_cancelling():
             await conn_watcher.request_closing(connection)
             return
 
@@ -141,7 +147,7 @@ class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
             # or to close connection itself
             return
         except CancelledError:
-            if cancelling():
+            if check_cancelling():
                 await conn_watcher.request_closing(connection)
                 return
 
