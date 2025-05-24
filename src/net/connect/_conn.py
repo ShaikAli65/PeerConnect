@@ -1,11 +1,12 @@
 import asyncio as _asyncio
 import struct
-import time
 from asyncio.trsock import TransportSocket
+from time import perf_counter
 from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
 
-from src.avails import const, wire
+from src.avails import const
 from src.avails.exceptions import FailedToReceive, InvalidPacket
+from src.avails.wire import WireData
 from ._asocket import Socket
 
 __all__ = (
@@ -23,106 +24,180 @@ class _PauseMixIn:
     __slots__ = ()
 
     def pause(self):
-        self._limiter.clear()  # noqa
+        getattr(self, '_limiter').clear()
 
 
 class _ResumeMixIn:
     __slots__ = ()
 
     def resume(self):
-        self._limiter.set()  # noqa
+        getattr(self, '_limiter').set()
 
 
 class ThroughputMixin:
     """
     Mixin to provide common asynchronous I/O and throughput measurement.
+
+    You can set `max_rate_limit` to a valid rate, that limits transfer rate (in KB/s)
+    set it back to None to default
     """
 
     BYTES_PER_KB = const.BYTES_PER_KB
     RATE_WINDOW = const.RATE_WINDOW
+    CALIBRATION_FACTOR = 1.06  # Compensate for overhead
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._bytes_total = 0
-        self._window_start = time.perf_counter()
+        self._window_start = perf_counter()
         self.rate = 0.0
+        self.max_rate_limit = None
+        self._tokens = 0.0  # In bytes
+        self._last_token_update = perf_counter()
 
-    def _update_throughput(self, nbytes, current_time):
+    async def _apply_limiting(self, nbytes):
+        if self.max_rate_limit is None:
+            return
+
+        current_time = perf_counter()
+        elapsed = current_time - self._last_token_update
+        self._last_token_update = current_time
+        rate_limit = self.effective_rate_limit
+
+        # Add new tokens
+        new_tokens = rate_limit * self.BYTES_PER_KB * elapsed
+        self._tokens = min(self._tokens + new_tokens, rate_limit * self.BYTES_PER_KB * 1)  # Max 1s burst
+
+        # Check if we have enough tokens
+        while self._tokens < nbytes:
+            deficit = nbytes - self._tokens
+            wait_time = deficit / (rate_limit * self.BYTES_PER_KB)
+            await _asyncio.sleep(wait_time)
+
+            # Update tokens after waiting
+            current_time = perf_counter()
+            elapsed = current_time - self._last_token_update
+            self._last_token_update = current_time
+            self._tokens += rate_limit * self.BYTES_PER_KB * elapsed
+
+        self._tokens -= nbytes
+
+    @property
+    def effective_rate_limit(self):
+        if self.max_rate_limit is None:
+            return float('inf')
+        return self.max_rate_limit * self.CALIBRATION_FACTOR
+
+    def _update_throughput(self, nbytes):
         """
         Update the throughput counters.
-
         :param nbytes: number of bytes transferred during the operation.
-        :param current_time: the current time (using time.perf_counter()).
         """
+
+        current_time = perf_counter()
         self._bytes_total += nbytes
         dt = current_time - self._window_start
         if dt >= self.RATE_WINDOW:
             self.rate = self._bytes_total / self.BYTES_PER_KB / dt
             self._bytes_total = 0
             self._window_start = current_time
+
         return nbytes
 
-    def _format_rate(self):
+    @staticmethod
+    def _format_rate(rate_kbps):
         """Convert KB/s to human-readable format with appropriate units"""
-        rate_kbps = self.rate
-        if rate_kbps < 1:  # Less than 1 KB/s - show in B/s
+        if rate_kbps < 1:
             return f"{rate_kbps * 1024:.1f} B/s"
-        elif rate_kbps < 1024:  # Less than 1 MB/s - keep in KB/s
+        elif rate_kbps < 1024:
             return f"{rate_kbps:.1f} KB/s"
-        else:  # 1 MB/s or more
+        else:
             return f"{rate_kbps / 1024:.1f} MB/s"
+
+    @property
+    def readable_rate(self):
+        return self._format_rate(self.rate)
+
+    @property
+    def readable_mx_rate(self):
+        return self._format_rate(self.max_rate_limit) if self.max_rate_limit else "inf"
 
     @property
     def last_updated_time(self):
         return self._window_start
 
 
-class Sender(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
-    __slots__ = (
-        "sock",
-        "send_func",
-        "_limiter",
-        "_bytes_total",
-        "_window_start",
-        "rate",
-        "_peer_name",
-    )
+class _ReprMixin:
+    __slots__ = ()
+
+    def __repr__(self):
+        return f"<{__package__}.{type(self).__name__}(" \
+               f">{getattr(self, '_peer_name')}, " \
+               f"rx={getattr(self, 'readable_rate')}, " \
+               f"paused={not getattr(self, '_limiter').is_set()}, " \
+               f"mxr={getattr(self, 'readable_mx_rate')}" \
+               ")>"
+
+
+class Sender(
+    ThroughputMixin,
+    _PauseMixIn,
+    _ResumeMixIn,
+    _ReprMixin,
+):
+    __slots__ = "sock", "_send_func", "_limiter", "_peer_name", "max_rate_limit"
+    MAX_CHUNK_RATIO = 0.1  # Max 10% of bucket size
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
         self._peer_name = sock.getpeername()
         loop = _asyncio.get_event_loop()
-        self.send_func = loop.sock_sendall
+        self._send_func = loop.sock_sendall
         self._limiter = _asyncio.Event()
         self._limiter.set()
         super().__init__(*args, **kwargs)
 
-    async def __call__(self, buf: bytes) -> Annotated[int, "bytes sent"]:
+    async def _process_chunk(self, chunk):
         await self._limiter.wait()
-        await self.send_func(self.sock, buf)
-        return self._update_throughput(len(buf), time.perf_counter())
+        nbytes = len(chunk)
+        await self._apply_limiting(nbytes)
+        await self._send_func(self.sock, bytes(chunk))
+        return self._update_throughput(nbytes)
 
-    def __repr__(self):
-        return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
+    async def __call__(self, buf: bytes) -> Annotated[int, "bytes sent"]:
+        total_sent = 0
+        buf = bytearray(buf)
+        while total_sent < len(buf):
+            # Dynamic chunk sizing
+            if self.max_rate_limit:
+                chunk_size = min(
+                    len(buf) - total_sent,
+                    int(self.max_rate_limit * self.BYTES_PER_KB * self.MAX_CHUNK_RATIO)
+                )
+            else:
+                chunk_size = len(buf) - total_sent
+
+            chunk = buf[total_sent: total_sent + chunk_size]
+            await self._process_chunk(chunk)
+            total_sent += len(chunk)
+
+        return total_sent
 
 
-class Receiver(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
-    __slots__ = (
-        "sock",
-        "recv_func",
-        "_limiter",
-        "_bytes_total",
-        "_window_start",
-        "rate",
-        "_peer_name",
-    )
+class Receiver(
+    ThroughputMixin,
+    _PauseMixIn,
+    _ResumeMixIn,
+    _ReprMixin,
+):
+    __slots__ = "sock", "_recv_func", "_limiter", "_peer_name", "max_rate_limit"
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
         loop = _asyncio.get_event_loop()
         self._peer_name = sock.getpeername()
 
-        self.recv_func = loop.sock_recv
+        self._recv_func = loop.sock_recv
         self._limiter = _asyncio.Event()
         self._limiter.set()
         super().__init__(*args, **kwargs)
@@ -132,19 +207,19 @@ class Receiver(ThroughputMixin, _PauseMixIn, _ResumeMixIn):
         received_data = bytearray()
 
         while len(received_data) < nbytes:
-            chunk = await self.recv_func(self.sock, nbytes - len(received_data))
+            chunk = await self._recv_func(self.sock, nbytes - len(received_data))
             if chunk == b"":  # Handle premature disconnection
                 ce = ConnectionError("Connection closed during data reception")
-                ce.received_data = bytes(received_data)
+                setattr(ce, 'received_data', bytes(received_data))
                 raise ce
 
-            self._update_throughput(len(chunk), time.perf_counter())
             received_data += chunk
 
-        return bytes(received_data)
+            received_bytes = len(chunk)
+            await self._apply_limiting(received_bytes)
+            self._update_throughput(received_bytes)
 
-    def __repr__(self):
-        return f"<connect.{type(self).__name__}(>{self._peer_name}, rate={self._format_rate()}, paused={not self._limiter.is_set()})>"
+        return bytes(received_data)
 
 
 ReceiverType = Receiver | Callable[[int], Awaitable[bytes]]
@@ -173,7 +248,7 @@ async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
         FailedToReceive: If the connection is interrupted and total expected data
                          could not be received.
                         (`FailedToReceive.received` field can be used to check for
-                         how much data is received sucessfully).
+                         how much data is received successfully).
 
     """
 
@@ -251,13 +326,14 @@ class MsgConnection:
     def __init__(self, connection):
         self._connection = connection
 
-    async def send(self, data):
-        byted_data = bytes(data)  # marshall
-        data_size = struct.pack("!I", len(byted_data))
-        return await self._connection.send(data_size + byted_data)
-
     if TYPE_CHECKING:
-        async def send(self, data: wire.WireData): ...
+        async def send(self, data: WireData):
+            ...
+    else:
+        async def send(self, data):
+            byted_data = bytes(data)  # marshall
+            data_size = struct.pack("!I", len(byted_data))
+            return await self._connection.send(data_size + byted_data)
 
     async def recv(self):
         try:
@@ -265,7 +341,7 @@ class MsgConnection:
         except struct.error as se:
             raise InvalidPacket from se
         raw_data = await self._connection.recv(data_size)
-        return wire.WireData.load_from(raw_data)
+        return WireData.load_from(raw_data)
 
     @property
     def socket(self):
