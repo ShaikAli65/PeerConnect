@@ -34,7 +34,7 @@ class InvalidStateError(Exception):
     """The operation is not allowed in this state."""
 
 
-class CannotConnect(OSError):
+class CannotConnect(ConnectionError):
     """Cannot connect to provided address or peer"""
 
 

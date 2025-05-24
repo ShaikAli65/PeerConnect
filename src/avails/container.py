@@ -10,13 +10,7 @@ from typing import Iterable, TYPE_CHECKING, ValuesView
 from weakref import WeakSet
 
 from src.avails.bases import HasID, HasIdProperty, HasPeerId
-
-if TYPE_CHECKING:
-    from src.avails import RemotePeer
-
-    RemotePeer = RemotePeer
-else:
-    RemotePeer = None
+from src.avails.remotepeer import RemotePeer
 
 __match_type_hint = r":\s*([A-Za-z_]\w*(?:\s*\|\s*[A-Za-z_]\w*)*)(?=[,)])"
 
@@ -223,6 +217,8 @@ if TYPE_CHECKING:
         def get_scheduled(self, file_id) -> AbstractTransferHandle: ...
 
         def get_transfer(self, peer_id: str, file_id) -> AbstractTransferHandle: ...
+
+        def get_running_transfer(self, peer_id) -> AbstractTransferHandle | None: ...
 
         @property
         def continued(self) -> int: ...  # noqa
