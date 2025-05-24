@@ -80,9 +80,17 @@ async def test_bigfile_transfer(_config, *, app_ctx=None):
     await handledata.send_big_file(data)
 
 
+def _clear_download_dir():
+    from pathlib import Path
+    p = Path(const.PATH_DOWNLOAD, const.APP_NAME)
+    if input(f"removing {p} are you sure ([Y/y] / [N/n])?") in ('y', 'Y'):
+        for i in p.glob('*'):
+            i.unlink()
+
+
 if __name__ == "__main__":
-    # file_transfer = State("test file transfer", test_file_transfer, config, is_blocking=True)
-    file_transfer = State(
+    file_transfer1 = State("test file transfer", test_file_transfer, config, is_blocking=True)
+    file_transfer2 = State(
         "test big file transfer", test_bigfile_transfer, config, is_blocking=True
     )
-    start_test1((file_transfer,), ())
+    start_test1((file_transfer1, file_transfer2), ())
