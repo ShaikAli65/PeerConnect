@@ -26,7 +26,6 @@ if sys.platform == 'win32':
             super().__init__(proactor)
 
         def sock_sendto(self, sock, data, address):
-            assert isinstance(address[0], str), f"invalid address: {address}"
             return super().sock_sendto(sock, data, address)
 
 

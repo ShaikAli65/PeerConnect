@@ -44,7 +44,7 @@ class MsgSender:
         Does not stop ```{retry+send-msg}``` loop until context manager is exited
 
     """
-    _message_senders = {}
+    _message_senders: dict[str, Self] = {}
 
     __slots__ = (
         "peer",
@@ -87,11 +87,11 @@ class MsgSender:
         self._started = True
         message, fut = None, None
         try:
+            assert self._connection is not None, "connection is None, cannot start sender loop"
             while True:
                 message, fut = await self._msg_queue.get()
                 if message is None:
                     return
-
                 await self._connection.send(bytes(message))
                 _logger.debug(f"> sent, message={repr(message)[:30]}")
 
@@ -164,7 +164,7 @@ class MsgSender:
         return r
 
     @classmethod
-    def get_sender(cls, peer_id) -> Self:
+    def get_sender(cls, peer_id) -> Self | None:
         return cls._message_senders.get(peer_id, None)
 
     async def stop(self, cancel_sender=True):

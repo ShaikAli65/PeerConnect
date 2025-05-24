@@ -67,7 +67,7 @@ async def _get_file_paths(command_data: DataWeaver, *, prompter=filemanager.open
     else:
         selected_files = await prompter()
         if not selected_files:
-            return
+            return ()
     return list(map(Path, selected_files))
 
 
@@ -94,6 +94,7 @@ async def send_big_file(command_data: DataWeaver):
         return
 
     await filemanager.send_big_file(peer, selected_files)
+    logger.info(f"sent file to {peer}")
 
 
 async def send_files_to_multiple_peers(command_data: DataWeaver):
