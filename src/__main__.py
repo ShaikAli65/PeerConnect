@@ -74,12 +74,12 @@ cancellation_started = 0.0
 async def _async_initiate_helper(states, app):
     await app.state_manager_handle.put_states(states)
 
-    cancelled = None
+    error = None
     async with app.exit_stack:
         try:
             await app.state_manager_handle.process_states()
         except CancelledError as ce:
-            cancelled = ce
+            error = ce
             # no point of passing cancelled error related to main task into exit_stack
             # (which will be mostly related to keyboard interrupts)
 
@@ -89,10 +89,10 @@ async def _async_initiate_helper(states, app):
             if const.debug:
                 print(COLORS.RED, "CRITICAL EXCEPTION NOT EXPECTING", COLORS.RESET)
                 traceback.print_exc()
-            cancelled = be
+            error = be
 
-    if cancelled is not None:
-        raise cancelled
+    if error is not None:
+        raise error
 
 
 def initiate(states, app):

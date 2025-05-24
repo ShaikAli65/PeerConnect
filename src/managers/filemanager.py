@@ -16,7 +16,7 @@ from src.avails import (
     const,
     get_dialog_handler,
 )
-from src.avails.exceptions import TransferIncomplete, TransferRejected
+from src.avails.exceptions import CannotConnect, TransferIncomplete, TransferRejected
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
@@ -80,6 +80,19 @@ async def send_files_to_peer(peer, selected_files, *, app_ctx=None):
 
 @asynccontextmanager
 async def sender_helper(sender, this_peer_id, handshake_header, **extras):
+    """Prepare connection for the transfer
+
+    Connects to other `peer` specified in the `sender`, checks for the transfer confirmation 
+    from the `peer` and returns connection object.
+
+    
+    Yields:
+        Connection: connection object
+    
+    Raises:
+        TransferIncomplete: if the connection breaks 
+        TransferRejected:
+    """
     try:
         async with _prepare_connection(
               sender,
@@ -89,9 +102,9 @@ async def sender_helper(sender, this_peer_id, handshake_header, **extras):
         ) as connection:
             await get_confirmation(sender, connection)
             yield connection
-    except OSError as oe:  # unable to connect
+    except CannotConnect:  # unable to connect
         await webpage.transfer_confirmation(sender, False)
-        raise TransferIncomplete from oe
+        raise
 
 
 @asynccontextmanager
@@ -186,7 +199,7 @@ async def send_big_file(peer, file_list, app_ctx=None):
             + file_item_bytes
         )
 
-        async def f():
+        async def another_connection():
             await asyncio.sleep(1.3)
             connection2 = await exit_stack.enter_async_context(
                 _prepare_connection(
@@ -197,15 +210,9 @@ async def send_big_file(peer, file_list, app_ctx=None):
             big_file_sender.connection_made(connection2)
             return connection2
 
-        asyncio.create_task(f())
+        asyncio.create_task(another_connection())
 
-        await iterate_and_update_status(
-            status_iterator,
-            big_file_sender,
-            # c,
-            connection1,
-            # connection1, connection2,
-        )
+        await iterate_and_update_status(status_iterator, big_file_sender, connection1)
 
 
 # RECEIVERS
@@ -217,7 +224,8 @@ def FileConnectionHandler(app_ctx):
 
         transfer_handle, should_return = await basic_recv(transfer_id, event, app_ctx)
         if should_return is True:
-            await transfer_handle.done.wait()
+            if transfer_handle:
+                await transfer_handle.done.wait()
             return
 
         _logger.debug(f"scheduling transfer request {event.handshake!r}")
@@ -277,7 +285,7 @@ async def run_receiver(
       handle_factory: TransferHandleFactoryKind,
       transfer_book=transfers_book,
 ):
-    transfer_handle = None
+    receiver_handle = None
     try:
         receiver_handle = await _file_receiver(event, transfer_id, handle_factory)
         status_updater = receiver_handle.status_updater
@@ -286,12 +294,12 @@ async def run_receiver(
         )
         await status_updater.close()
     except TransferIncomplete as e:
-        if transfer_handle:
-            await webpage.transfer_incomplete(transfer_handle, detail=e)
-        # transfer_handle isn't available here yet
+        if receiver_handle:
+            await webpage.transfer_incomplete(receiver_handle, detail=e)
+        # receiver_handle isn't available here yet
     finally:
-        if transfer_handle is not None:
-            await finalize_transfer(transfer_handle, transfers_book=transfer_book)
+        if receiver_handle:
+            await finalize_transfer(receiver_handle, transfers_book=transfer_book)
 
 
 async def _file_receiver(

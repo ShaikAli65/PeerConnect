@@ -120,8 +120,10 @@ class StatusMixIn(AbstractStatusMix):
             unit='B',
             unit_scale=True,
             unit_divisor=1024,
-            dynamic_ncols=True
+            dynamic_ncols=True,
+            bar_format='{desc}: {percentage:3.0f}%| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
         )
+
         self.progress_bar.update(initial_limit)
         self.current_status = initial_limit
         if self.yield_freq < 1:

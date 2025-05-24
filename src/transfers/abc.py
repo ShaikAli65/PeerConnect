@@ -142,7 +142,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
     transfer_task: asyncio.Task | None
 
     @abstractmethod
-    def start_transfer(self) -> AsyncGenerator[Any] | AsyncIterable[Any]:
+    def start_transfer(self) -> AsyncGenerator[Any]:
         """Start the transfer
 
         Sends a final flag when done, commiting the transfer completion.

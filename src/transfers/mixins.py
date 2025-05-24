@@ -80,7 +80,8 @@ class ExceptionRouterMixIn:
         log_prefix = getattr(self, "_log_prefix")
         expected_exps = getattr(self, "_expected_exps")
 
-        _logger.error(f"{log_prefix} got error, pausing transfer", exc_info=True)
+        _logger.info(f"{log_prefix} got error, pausing transfer")
+        _logger.debug("", exc_info=True)
         self.state = TransferState.PAUSED
 
         if isinstance(err, ConnectionError):
@@ -114,7 +115,8 @@ class ExceptionRouterMixIn:
             raise
 
         expected_exps.add(err)
-        _logger.error(f"{log_prefix} got error, pausing transfer", exc_info=True)
+        _logger.error(f"{log_prefix} got error, pausing transfer")
+        _logger.debug("", exc_info=True)
         self.state = TransferState.PAUSED
         raise err
 

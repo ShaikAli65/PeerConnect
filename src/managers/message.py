@@ -77,7 +77,7 @@ class MsgDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
         except TimeoutError:
             _logger.debug(f"timeout at message processing task, cancelling {handler} task")
         except RuntimeError:
-            await self._handle_run_time_error(_logger)  # noqa
+            await self._handle_runtime_error(_logger)  # noqa
         except Exception as exp:
             _logger.error(f"{handler=}, failed with error", exc_info=exp)
 
@@ -307,7 +307,7 @@ async def _try_connecting(peer, this_peer_id) -> tuple[bool, ConnectionEvent | N
 
 
 @provide_app_ctx
-async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType = None) -> MsgConnectionNoRecv:
+async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType) -> MsgConnectionNoRecv:
     if msg_connection := await _get_from_pool(peer):
         _logger.debug(f"not connection again, reusing pooled connection, peer={peer}")
         return msg_connection
@@ -323,7 +323,7 @@ async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType = None) -> 
 
 
 @provide_app_ctx
-async def connect_ahead(peer_id, *, app_ctx: ReadOnlyAppType):
+async def connect_ahead(peer_id, *, app_ctx: ReadOnlyAppType | None = None):
     if sender := MsgSender.get_sender(peer_id):
         if sender.is_connected:
             _logger.debug(f"not connecting again, found message sender: {sender=!r}")

@@ -103,7 +103,7 @@ class Sender(
 
     def setup_status(self, file_reader):
         return self.status_updater.status_setup(
-            prefix=f"sending: {file_reader.file_item!s}",
+            prefix=f"sending: {file_reader.file_item.path}",
             initial_limit=file_reader.seek_start_pos,
             final_limit=file_reader.seek_end_pos,
         )

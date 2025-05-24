@@ -1,7 +1,6 @@
 import asyncio
 import struct
 from contextlib import aclosing
-from functools import wraps
 from itertools import count
 
 from src import net
@@ -11,7 +10,7 @@ from src.avails.useables import override, shorten_path
 from src.transfers import HEADERS, TransferState, _logger, thread_pool_for_disk_io
 from src.transfers.abc import AbstractReceiver, AbstractSender
 from src.transfers.status import StatusIterator
-from . import FileItemReader, FileItemWriter, validatename
+from . import FileItemReader, FileItemWriter
 from ._fileobject import FileItem
 from ._merge import merge_all_and_delete
 from .receiver import Receiver as FReceiver
@@ -42,16 +41,17 @@ class _ControlMixIn:
 
 class _CancelMixIn:
     async def cancel(self):
-        if getattr(self, 'state') == TransferState.CONNECTING:
+        current_state = getattr(self, 'state')
+        if current_state == TransferState.CONNECTING:
             _wait_for_first_connection = getattr(self, '_wait_for_first_connection')
 
             if _wait_for_first_connection.done():
                 if _wait_for_first_connection.exception():
                     return  # this is not an expected situation
 
-            self.should_stop = True
+            setattr(self, 'should_stop', True)
             # TODO: what to do with connection ??
-            self.state = TransferState.ABORTING
+            setattr(self, 'state', TransferState.ABORTING)
             return
 
         possible_states = (
@@ -59,15 +59,16 @@ class _CancelMixIn:
             TransferState.RECEIVING,
             TransferState.PAUSED,
         )
-        if self.state not in possible_states:
-            raise InvalidStateError(f"not expected transfer state in {self.state}")
+        if current_state not in possible_states:
+            raise InvalidStateError(f"not expected transfer state in {current_state}")
 
-        self.should_stop = True
-        self.state = TransferState.ABORTING
+        setattr(self, 'should_stop', True)
+        setattr(self, 'state', TransferState.ABORTING)
         ct = CancelTransfer("User canceled the transfer")
-        self.task_group.cancel_all_tasks(ct)
+        getattr(self, 'task_group').cancel_all_tasks(ct)
 
-        await self.status_updater.stop(ct)  # this raises CancelTransfer in the start_transfer method
+        await getattr(self, 'status_updater').stop(
+            ct)  # this raises CancelTransfer in the start_transfer method
 
 
 class _BigFileTaskGroup:
@@ -82,7 +83,6 @@ class _BigFileTaskGroup:
         # swallow exceptions here; close() will re-raise if needed
         await self.close()
 
-    @wraps(asyncio.Task)
     def create_task(self, coro, *args, **kwargs):
         if self._closing:
             raise RuntimeError(
@@ -94,19 +94,10 @@ class _BigFileTaskGroup:
         return task
 
     def _task_done(self, task: asyncio.Task):
-
-        if not task.cancelled():
+        if not task.cancelled() or task.exception() is None:
+            # remove from container if its a clean exit
             self._tasks.discard(task)
-            return
-
-        try:
-            task.exception()
-        except asyncio.CancelledError as ce:
-            if any(
-                  x for x in ce.args if isinstance(x, TransferIncomplete | CancelTransfer)
-            ):
-                return
-            # we need that exception at clean up
+        return
 
     @property
     def is_stopping(self):
@@ -181,6 +172,8 @@ class _BigChunkSender(FSender):
         self._big_chunk_id = chunk_id
 
         await self.send_file_metadata(big_chunk)
+        assert self.current_file is not None
+
         file_reader = FileItemReader(self.current_file)
 
         async with aclosing(self.send_one_file(file_reader)) as loop:
@@ -256,13 +249,13 @@ class Sender(
     def _bigfile_chunk_generator(self):
         size = self.file.size
         start = 0
-        for id, i in enumerate(range(start, size, CHUNK_SIZE)):
+        for idx, i in enumerate(range(start, size, CHUNK_SIZE)):
             if len(self.failed_chunks):
                 yield self.failed_chunks.pop(0)
             _logger.debug(
-                f"{self._log_prefix} yield big chunk({id=}, start={i}, stop={i + CHUNK_SIZE})"
+                f"{self._log_prefix} yield big chunk({idx=}, start={i}, stop={i + CHUNK_SIZE})"
             )
-            yield id, i, min(size, i + CHUNK_SIZE)
+            yield idx, i, min(size, i + CHUNK_SIZE)
 
     async def __aenter__(self):
         self.state = TransferState.CONNECTING
@@ -294,9 +287,17 @@ class Sender(
         self.connections[idx] = connection
 
         self.task_group.create_task(
-            self._send_task(connection, idx),
+            self._spawn_send_task(connection, idx),
             name=f'part-sender-task {idx=}',
         )
+
+    async def _spawn_send_task(self, conn, idx):
+        try:
+            return await self._send_task(conn, idx)
+        finally:
+            if len(self._sent_parts) >= self.max_parts_count and len(self.failed_chunks) == 0:
+                self.status_updater.unfreeze()
+                await self.status_updater.close()
 
     async def _send_task(self, net_connection, index):
         await self._start_transfer.wait()
@@ -343,14 +344,7 @@ class Sender(
         )
 
     async def __aexit__(self, exec_type, exec_val, exec_tb):
-        if exec_type is asyncio.CancelledError:
-            await self.cancel()
-            return False  # no messing with cancelled error
-
         self._on_completion_event.set()
-
-        if exec_type is CancelTransfer:
-            return True
 
         try:
             await self.task_group.close()
@@ -389,8 +383,7 @@ class Sender(
 
     def __repr__(self):
         return (
-            f"<{self.__class__.__name__}"
-            f"("
+            f"<{self.__class__.__name__}("
             f"file={self.file!r}, "
             f"id={self.transfer_id}, "
             f"connections={len(self.connections)}, "
@@ -430,6 +423,8 @@ class _BigChunkReceiver(FReceiver):
         self._setup_state()
 
         await self._prepare_file_item()
+        assert self._current_file is not None
+
         f_writer = FileItemWriter(self._current_file)
         async with aclosing(self._receive_single_file(f_writer)) as file_receiver:
             try:
@@ -474,7 +469,7 @@ class Receiver(
             "simply call `connection_made` to resume broken transfer"
         )
 
-    def __init__(self, peer_obj, transfer_id, download_path, status_updater):
+    def __init__(self, peer_obj, transfer_id, download_path, status_updater: StatusIterator):
         self._file = None
         self.peer = peer_obj
         self.transfer_id = transfer_id
@@ -495,6 +490,7 @@ class Receiver(
         )  # event to signal the end of transfer
 
     async def __aenter__(self):
+        assert self._file is not None, "set current file to start the transfer"
         self.status_updater.status_setup(
             f"{self._log_prefix} receiving file: {shorten_path(self._file.path, 20)}",
             self._file.seeked,
@@ -505,6 +501,8 @@ class Receiver(
         return self
 
     async def start_transfer(self):
+        assert self._file is not None, "set current file to start the transfer"
+
         self.max_chunks = (self._file.size + CHUNK_SIZE - 1) // CHUNK_SIZE
         _logger.debug(f"received part count= {self.max_chunks}")
 
@@ -539,10 +537,6 @@ class Receiver(
             self.status_updater,
         )
         receiver.connection_made(connection)
-
-        # await connection.send(HEADERS.TRANSFER_CONN_OK)
-        # assert (ok := await connection.recv(1)) == HEADERS.TRANSFER_CONN_OK,\
-        #     f"expected connection to be {ok=}, {HEADERS.TRANSFER_CONN_OK=}"
 
         async with receiver:
             try:
@@ -633,7 +627,17 @@ class Receiver(
             deletes.append(t)
         await asyncio.gather(*deletes, return_exceptions=True)
 
+    async def _merge(self):
+        if self._file is None:
+            _logger.debug(f"{self._log_prefix} root file is None, skipping merge")
+            return
+        try:
+            await merge_all_and_delete(self._file, self.parts)
+        except FileNotFoundError as fnf:
+            raise TransferIncomplete("File download corrupted") from fnf
+
     async def __aexit__(self, e_type, e_val, e_tb):
+
         self.status_updater.unfreeze()
         await self.status_updater.close()
         self._on_completion_event.set()
@@ -646,14 +650,12 @@ class Receiver(
         try:
             await self.task_group.close()
             _logger.info(f"Completed big file transfer {self=}")
-            validatename(file_item=self._file, root_path=self.download_path)
-            await merge_all_and_delete(self._file, self.parts)
+            await self._merge()
         except CancelTransfer:
             await self._delete_chunks()
             return True
         except BaseException:
-            validatename(file_item=self._file, root_path=self.download_path)
-            await merge_all_and_delete(self._file, self.parts)
+            await self._merge()
             raise
 
     def __del__(self):
