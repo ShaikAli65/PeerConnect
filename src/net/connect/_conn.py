@@ -1,5 +1,5 @@
-import asyncio as _asyncio
 import struct
+from asyncio import Event, Lock as aLock, get_running_loop, sleep
 from asyncio.trsock import TransportSocket
 from time import perf_counter
 from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
@@ -72,7 +72,7 @@ class ThroughputMixin:
         while self._tokens < nbytes:
             deficit = nbytes - self._tokens
             wait_time = deficit / (rate_limit * self.BYTES_PER_KB)
-            await _asyncio.sleep(wait_time)
+            await sleep(wait_time)
 
             # Update tokens after waiting
             current_time = perf_counter()
@@ -151,9 +151,8 @@ class Sender(
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
         self._peer_name = sock.getpeername()
-        loop = _asyncio.get_event_loop()
-        self._send_func = loop.sock_sendall
-        self._limiter = _asyncio.Event()
+        self._send_func = get_running_loop().sock_sendall
+        self._limiter = Event()
         self._limiter.set()
         super().__init__(*args, **kwargs)
 
@@ -164,22 +163,24 @@ class Sender(
         await self._send_func(self.sock, bytes(chunk))
         return self._update_throughput(nbytes)
 
-    async def __call__(self, buf: bytes) -> Annotated[int, "bytes sent"]:
+    async def __call__(self, buf: bytes | memoryview) -> Annotated[int, "bytes sent"]:
         total_sent = 0
-        buf = bytearray(buf)
-        while total_sent < len(buf):
-            # Dynamic chunk sizing
-            if self.max_rate_limit:
-                chunk_size = min(
-                    len(buf) - total_sent,
-                    int(self.max_rate_limit * self.BYTES_PER_KB * self.MAX_CHUNK_RATIO)
-                )
-            else:
-                chunk_size = len(buf) - total_sent
+        length = len(buf)
 
-            chunk = buf[total_sent: total_sent + chunk_size]
-            await self._process_chunk(chunk)
-            total_sent += len(chunk)
+        with memoryview(buf) as mv:  # <-- wrap the original bytes in a memoryview
+            while total_sent < length:
+                # Dynamic chunk sizing
+                if self.max_rate_limit:
+                    chunk_size = min(
+                        length - total_sent,
+                        int(self.max_rate_limit * self.BYTES_PER_KB * self.MAX_CHUNK_RATIO)
+                    )
+                else:
+                    chunk_size = length - total_sent
+
+                chunk = mv[total_sent: total_sent + chunk_size]
+                await self._process_chunk(chunk)
+                total_sent += chunk_size
 
         return total_sent
 
@@ -194,11 +195,10 @@ class Receiver(
 
     def __init__(self, sock, *args, **kwargs):
         self.sock = sock
-        loop = _asyncio.get_event_loop()
         self._peer_name = sock.getpeername()
 
-        self._recv_func = loop.sock_recv
-        self._limiter = _asyncio.Event()
+        self._recv_func = get_running_loop().sock_recv
+        self._limiter = Event()
         self._limiter.set()
         super().__init__(*args, **kwargs)
 
@@ -261,7 +261,7 @@ async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
         yield data
 
 
-class Lock(_asyncio.Lock):
+class Lock(aLock):
     def __str__(self):
         return f"<Lock(locked={self.locked()})>"
 

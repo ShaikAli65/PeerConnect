@@ -167,7 +167,7 @@ class FileItemReader(FileItemRWBase, AbstractReader):
             chunk = await async_read(min(chunk, size))  # noqa
             size -= len(chunk)
             self._seek += len(chunk)
-            yield chunk
+            yield memoryview(chunk)
 
     @property
     def seek_pos(self):
