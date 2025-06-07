@@ -12,7 +12,7 @@ from inspect import isawaitable
 
 from src.avails import BaseDispatcher, WireData, const
 from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import TaskGroupMixIn
 from src.core.app import AppType
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
@@ -42,7 +42,7 @@ async def initiate_acceptor(app_ctx: AppType):
     await app_ctx.exit_stack.enter_async_context(acceptor)
 
 
-class ConnectionDispatcher(QueueMixIn, BaseDispatcher):
+class ConnectionDispatcher(TaskGroupMixIn, BaseDispatcher):
     """Dispatches incoming connections...
 
     ...Based on the handshake header, used to identify services registered for incoming connections

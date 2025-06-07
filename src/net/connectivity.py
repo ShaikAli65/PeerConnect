@@ -6,7 +6,7 @@ import time
 
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import QueueMixIn, singleton_mixin
+from src.avails.mixins import TaskGroupMixIn, singleton_mixin
 from src.core.app import AppType, provide_app_ctx
 from src.net.events import RequestEvent
 from src.transfers import HEADERS
@@ -59,7 +59,7 @@ class CheckRequest:
 
 
 @singleton_mixin
-class Connectivity(QueueMixIn):
+class Connectivity(TaskGroupMixIn):
     __slots__ = 'last_checked',
 
     def __init__(self, *args, **kwargs):

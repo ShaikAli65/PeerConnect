@@ -20,7 +20,7 @@ from inspect import isawaitable
 
 from src.avails import BaseDispatcher, RemotePeer, WireData, const, use
 from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFound
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, singleton_mixin
+from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import App, ReadOnlyAppType, provide_app_ctx
@@ -51,7 +51,7 @@ async def initiate(app_ctx: App):
 
 
 @singleton_mixin
-class MsgDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class MsgDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
     __slots__ = ()
 
     async def submit(self, event: MessageEvent):

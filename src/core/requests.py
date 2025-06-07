@@ -3,7 +3,7 @@ import logging
 
 from src.avails import const
 from src.avails.bases import BaseDispatcher
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
+from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn
 from src.core import _kademlia, gossip
 from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
@@ -74,7 +74,7 @@ async def initiate(app: AppType):
     await app.state_manager_handle.put_state(add_to_lists)
 
 
-class RequestsDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):

@@ -1,7 +1,7 @@
 import logging
 
 from src.avails import BaseDispatcher, GossipMessage, const
-from src.avails.mixins import QueueMixIn
+from src.avails.mixins import TaskGroupMixIn
 from src.core import search
 from src.core.app import AppType, ReadOnlyAppType
 from src.net.events import GossipEvent, RequestEvent
@@ -38,7 +38,7 @@ def GlobalGossipMessageHandler(app_ctx: ReadOnlyAppType):
     return handle
 
 
-class GossipDispatcher(QueueMixIn, BaseDispatcher):
+class GossipDispatcher(TaskGroupMixIn, BaseDispatcher):
     """Dispatches gossip messages from multiplexed requests endpoint"""
 
     async def submit(self, event: RequestEvent):

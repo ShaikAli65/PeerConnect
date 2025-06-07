@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING
 import src.net.utils as net_util
 from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn
+from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn
 from src.conduit import webpage
 from src.core.app import AppType, ReadOnlyAppType
 from src.net.events import RequestEvent
@@ -106,7 +106,7 @@ def DiscoveryRequestHandler(app_ctx: ReadOnlyAppType):
     return handle
 
 
-class DiscoveryDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class DiscoveryDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
     __slots__ = ()
     if TYPE_CHECKING:
         transport: DiscoveryTransport

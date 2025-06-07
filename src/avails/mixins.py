@@ -52,14 +52,15 @@ class ReplyRegistryMixIn:
         return str(message.id) in self._reply_registry
 
 
-class QueueMixIn:
-    """
-        Requires submit method to exist which should return an awaitable
+class TaskGroupMixIn:
+    """Calls made to `__call__` are spawned as tasks using an internal TaskGroup
 
-        Overrides `__call__` method and,
-        spawns self.submit as a ``asyncio.Task`` and owns that task lifetime
+    Requires submit method to exist which should return an awaitable
 
-        Provides context manager that wraps underlying TaskGroup
+    Overrides `__call__` method and,
+    spawns self.submit as a ``asyncio.Task`` and owns that task lifetime
+
+    Provides context manager that wraps underlying TaskGroup
 
     """
 
@@ -116,7 +117,7 @@ class QueueMixIn:
         try:
             return await self._task_group.__aexit__(*exp_details)
         except CancelledError:
-            return
+            return None
         except ExceptionGroup as exp:
             exp.add_note(f"from {type(self)}")
             raise exp
@@ -135,7 +136,7 @@ class AExitStackMixIn:
 
     async def __aexit__(self, *exp_details):
         if self._exiting is True:
-            return
+            return None
         self._exiting = True
         try:
             return await self._exit_stack.__aexit__(*exp_details)  # noqa
