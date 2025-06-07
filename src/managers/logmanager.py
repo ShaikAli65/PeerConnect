@@ -4,7 +4,6 @@ import logging
 import logging.config
 import queue
 import sys
-import traceback
 from functools import partial
 from pathlib import Path
 
@@ -29,17 +28,25 @@ def _log_exit(queue_handlers):
             hand.close()
 
 
-async def _py312_initiate(app: AppType):
-    try:
-        log_config = await asyncio.to_thread(_loader, const.PATH_LOG_CONFIG)
-    except (ValueError, OSError):
-        traceback.print_exc()
-        print("LOGGING CONFIG ERROR, using basic configuration", file=sys.stderr)
-        logging.basicConfig(
-            format="%(asctime)s - %(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s",
-            level=logging.DEBUG,
-        )
+def _do_basic_config():
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s",
+        level=logging.DEBUG,
+        filename=const.PATH_LOG / 'logs.log',
+    )
 
+
+async def _try_loading_config(path) -> dict | None:
+    try:
+        return await asyncio.to_thread(_loader, path)
+    except (ValueError, OSError):
+        _do_basic_config()
+        logging.error("LOGGING CONFIG ERROR, using basic configuration", exc_info=True)
+        return None
+
+
+async def _py312_initiate(app: AppType):
+    if log_config := await _try_loading_config(const.PATH_LOG_CONFIG):
         return
 
     for handler in log_config["handlers"]:
@@ -69,16 +76,7 @@ async def _py312_initiate(app: AppType):
 
 async def _py311_initiate(_: AppType):
     log_file_311 = const.PATH_LOG_CONFIG.with_stem(const.PATH_LOG_CONFIG.stem + "311")
-
-    try:
-        log_config = await asyncio.to_thread(_loader, log_file_311)
-    except (ValueError, OSError):
-        traceback.print_exc()
-        print("LOGGING CONFIG ERROR, using basic configuration", file=sys.stderr)
-        logging.basicConfig(
-            format="%(asctime)s - %(levelname)-8s %(name)-30s %(funcName)-25s - %(message)s",
-            level=logging.DEBUG,
-        )
+    if log_config := await _try_loading_config(log_file_311):
         return
 
     logging.config.dictConfig(log_config)
