@@ -3,7 +3,7 @@ class HEADERS:
     END_OF_TRANSFER = b'\xf0'
     CONTINUE_TRANSFER = b'\xf1'
     FINALIZE_TRANSFER = b'\xff'
-    TRANSFER_CONN_OK = b'\x33'
+    TRANSFER_CONN_OK: bytes = b'\x33'
 
     REQ_FOR_LIST = b"list of users  "
     REDIRECT = b"redirect        "

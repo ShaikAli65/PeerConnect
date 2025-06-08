@@ -20,7 +20,7 @@ CHUNK_SIZE = 30 * 1024 * 1024  # 30MB
 
 
 class _ControlMixIn:
-    async def pause(self):
+    def pause(self):
         connections = getattr(self, 'connections')
         for i, connection in connections.items():
             connection.send.pause()
@@ -29,7 +29,7 @@ class _ControlMixIn:
         _logger.debug(f"{getattr(self, '_log_prefix')} pausing the transfer")
         setattr(self, 'state', TransferState.PAUSED)
 
-    async def resume(self):
+    def resume(self):
         connections = getattr(self, 'connections')
         for i, connection in connections.items():
             connection.send.resume()
@@ -95,7 +95,7 @@ class _BigFileTaskGroup:
 
     def _task_done(self, task: asyncio.Task):
         if not task.cancelled() or task.exception() is None:
-            # remove from container if its a clean exit
+            # remove from container if it's a clean exit
             self._tasks.discard(task)
         return
 
@@ -140,6 +140,8 @@ class _BigFileTaskGroup:
 
         if to_raise:
             raise to_raise
+
+        # TODO: error log all the other suppressed exceptions
         # if there were exceptions but none matched, re-raise the first one
         if exceptions:
             raise exceptions[0]
@@ -356,7 +358,7 @@ class Sender(
             raise
 
     @property
-    async def done(self):
+    def done(self):
         return self._on_completion_event
 
     async def resume_transfer(self):
@@ -650,7 +652,7 @@ class Receiver(
         try:
             await self.task_group.close()
             _logger.info(f"Completed big file transfer {self=}")
-            await self._merge()
+            return await self._merge()
         except CancelTransfer:
             await self._delete_chunks()
             return True

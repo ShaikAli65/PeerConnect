@@ -106,7 +106,7 @@ class Receiver(
     async def _recv_file_once(self):
         if await self._prepare_file_item() is False:
             return
-
+        assert self._current_file is not None
         self.status_updater.status_setup(
             self._status_string_prefix,
             initial_limit=self._current_file.seeked,
@@ -180,9 +180,9 @@ class Receiver(
 
         _logger.debug(f"FILE[{self._transfer_id}] changing state to receiving")
         self.state = TransferState.RECEIVING
-
+        assert self._current_file is not None
         # synchronizing last received file seek
-        s = struct.pack("!Q", self.current_file.seeked)
+        s = struct.pack("!Q", self._current_file.seeked)
         await self.wrap_exp_handling(self.net_sender, s)
 
         while True:
@@ -210,7 +210,7 @@ class Receiver(
 
     @property
     def _status_string_prefix(self):
-        return f"[FILE] {self.current_file}"
+        return f"[FILE] {self._current_file}"
 
     @property
     def current_file(self):

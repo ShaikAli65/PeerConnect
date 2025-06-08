@@ -39,7 +39,7 @@ class Sender(
     version = const.VERSIONS["FO"]
     timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
-    def __init__(self, peer_obj, transfer_id, file_list, status_updater):
+    def __init__(self, peer_obj, transfer_id, file_list: list[FileItem], status_updater):
         self.transfer_task = None
         self.state = TransferState.PREPARING
         self.files_to_send = file_list
@@ -58,6 +58,7 @@ class Sender(
         _logger.debug(f"{self._log_prefix} changing state to sending")
         self.state = TransferState.SENDING
         self.transfer_task = asyncio.current_task()
+        assert self.net_sender and self.net_receiver is not None
 
         while (
               self._current_file_idx < len(self.files_to_send) - 1
@@ -190,7 +191,7 @@ class Sender(
         return self._transfer_id
 
     @property
-    def current_file(self):
+    def current_file(self) -> FileItem:
         return self.files_to_send[self._current_file_idx]
 
     async def __aenter__(self):

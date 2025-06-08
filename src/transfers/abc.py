@@ -9,6 +9,11 @@ from src.avails import RemotePeer
 from src.net import Connection
 from . import TransferState
 
+if TYPE_CHECKING:
+    from src.transfers.files._fileobject import FileItem
+else:
+    FileItem = None
+
 
 class AbstractRWBase(ABC):
 
@@ -105,7 +110,7 @@ class AbstractStatusMix(ABC):
         """
 
     @abstractmethod
-    def should_yield(self):
+    def should_yield(self) -> bool:
         """
         Check whether the transfer should yield control at this point,
         based on the internal progress and yield frequency.
@@ -152,7 +157,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         """
 
     @abstractmethod
-    async def resume_transfer(self):
+    def resume_transfer(self) -> AsyncGenerator[Any]:
         """When some error happens in the initial state and that error has been recovered"""
 
     @abstractmethod
@@ -178,7 +183,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
     @property
     @abstractmethod
-    def current_file(self):
+    def current_file(self) -> FileItem | None:
         """File under transfer"""
 
     @property
@@ -198,12 +203,6 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
     @abstractmethod
     def done(self) -> asyncio.Event:
         """Returns an Event that gets set on the completion of transfer"""
-
-
-if TYPE_CHECKING:
-    from src.transfers.files._fileobject import FileItem
-else:
-    FileItem = None
 
 
 class AbstractSender(AbstractTransferHandle):
