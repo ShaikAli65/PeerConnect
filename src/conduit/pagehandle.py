@@ -17,10 +17,8 @@ import websockets
 from websockets import ConnectionClosedError, WebSocketServerProtocol
 
 from src.avails import DataWeaver, const, use
-from src.avails.bases import BaseDispatcher
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
-from src.avails.mixins import QueueMixIn, ReplyRegistryMixIn, \
-    singleton_mixin
+from src.avails.mixins import BasicDispatcher, Dispatcher, singleton_mixin
 from src.conduit import headers, logger
 from src.core.app import AppType
 
@@ -119,7 +117,7 @@ class FrontEndWebSocket:
 
 
 @singleton_mixin
-class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
+class FrontEndDispatcher(*BasicDispatcher):
     """
     Dispatcher that SENDS packets to frontend >>
     """
@@ -138,19 +136,19 @@ class FrontEndDispatcher(QueueMixIn, BaseDispatcher):
         try:
             return await self.registry[msg_packet.type].submit(msg_packet.dump())
         except TransferIncomplete as ti:
-            logger.info(f"! cannot send msg to frontend {msg_packet}", exc_info=ti)
+            return logger.info(f"! cannot send msg to frontend {msg_packet}", exc_info=ti)
 
 
 @singleton_mixin
-class MessageFromFrontEndDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class MessageFromFrontEndDispatcher(*Dispatcher):
     __slots__ = ()
 
     async def submit(self, data_weaver):
-        handler = self.registry[data_weaver.type]
-        try:
-            await handler(data_weaver)
-        except Exception as exp:
-            logger.debug(f"{handler=} failed with", exc_info=exp)
+        return await self.call_handler(
+            data_weaver.type,
+            logger,
+            data_weaver
+        )
 
     async def __aexit__(self, *args):
         async def bomb():
@@ -162,12 +160,14 @@ class MessageFromFrontEndDispatcher(QueueMixIn, ReplyRegistryMixIn, BaseDispatch
             await asyncio.sleep(0)
         except CancelledError:
             logger.debug("suppressing expected canceller error at aexit")
-            return
+            return None
 
         try:
             return await super().__aexit__(*args)
         except* InterruptedError:
             logger.debug("suppressing expected interrupted error at aexit")
+
+        return None
 
 
 async def validate_connection(web_socket, *, _exit_stack=_exit_stack):

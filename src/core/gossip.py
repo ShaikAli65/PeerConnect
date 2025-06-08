@@ -1,7 +1,7 @@
 import logging
 
-from src.avails import BaseDispatcher, GossipMessage, const
-from src.avails.mixins import TaskGroupMixIn
+from src.avails import GossipMessage, const
+from src.avails.mixins import BasicDispatcher
 from src.core import search
 from src.core.app import AppType, ReadOnlyAppType
 from src.net.events import GossipEvent, RequestEvent
@@ -38,22 +38,13 @@ def GlobalGossipMessageHandler(app_ctx: ReadOnlyAppType):
     return handle
 
 
-class GossipDispatcher(TaskGroupMixIn, BaseDispatcher):
+class GossipDispatcher(*BasicDispatcher):
     """Dispatches gossip messages from multiplexed requests endpoint"""
 
     async def submit(self, event: RequestEvent):
         gossip_message = GossipMessage(event.request)
-        handler = self.registry.get(gossip_message.header, None)
-        if handler is None:
-            return
         g_event = GossipEvent(gossip_message, event.from_addr)
-        try:
-            await handler(g_event)
-        except RuntimeError:
-            await self._handle_runtime_error(_logger)
-        except Exception as e:
-            # we can't afford exceptions here as they move into QueueMixIn
-            _logger.error(f"{handler}({g_event}) failed with \n", exc_info=e)
+        return await self.call_handler(gossip_message.header, _logger, g_event)
 
 
 async def initiate_gossip(data_transport, req_dispatcher, app_ctx: AppType):

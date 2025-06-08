@@ -4,9 +4,10 @@ import sys
 from asyncio import CancelledError, TaskGroup
 from contextlib import AsyncExitStack
 from functools import wraps
+from inspect import isawaitable
 from typing import Type, TypeVar
 
-from src.avails import HasID, use
+from src.avails import BaseDispatcher, HasID, use
 
 
 class ReplyRegistryMixIn:
@@ -24,13 +25,14 @@ class ReplyRegistryMixIn:
 
     def reply_arrived(self, message: HasID):
         if not self.is_registered(message):
-            return
+            return None
 
         fut = self._reply_registry.pop(message.id)
         if not fut.done():
             return fut.set_result(message)
         loop = asyncio.get_running_loop()
         loop.call_soon(self.__prune_done_futures, self._reply_registry)
+        return None
 
     @staticmethod
     def __prune_done_futures(container):
@@ -96,7 +98,8 @@ class TaskGroupMixIn:
         try:
             await self._task_group.__aexit__(None, None, None)
         except ExceptionGroup:
-            logger.warning(f"{self.__class__.__name__}, skipping these errors, creating new task group", exc_info=True)
+            logger.warning(f"{self.__class__.__name__}, skipping these errors, creating new task group",
+                           exc_info=True)
 
         self._task_group = TaskGroup()
         await self.__aenter__()
@@ -123,8 +126,35 @@ class TaskGroupMixIn:
             raise exp
 
 
+class CallHandlerMixIn:
+    async def call_handler(self, header, logger, *args, **kwargs):
+        try:
+            handler = self.registry[header]
+        except KeyError:
+            logger.error(f"{self._log_prefix} {self.__class__} no handler found for event {header=}")
+            return None
+
+        try:
+            r = handler(*args, **kwargs)
+            if isawaitable(r):
+                return await asyncio.ensure_future(r)
+            return r
+        except RuntimeError:
+            if hasattr(self, '_handle_runtime_error'):
+                return await self._handle_runtime_error(logger)
+            return None
+        except Exception as e:
+            # we can't afford exceptions here as they move into TaskGroupMixIn (formerly QueueMixIn)
+            return logger.error(f"{self._log_prefix} {handler}({args=},{kwargs=}) failed with: \n",
+                                exc_info=e)
+
+    @property
+    def _log_prefix(self):
+        return f"{self.__class__}"
+
+
 class AExitStackMixIn:
-    """Provides an asynchronous exit stack with name `_exit_stack` """
+    """Provides an asynchronous exit stack with attribute ``_exit_stack`` """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -225,6 +255,36 @@ class AggregatingAsyncExitStack(AsyncExitStack):
                 raise
 
         return received_exc and suppressed_exc
+
+Dispatcher = TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, BaseDispatcher
+
+BasicDispatcher = TaskGroupMixIn, CallHandlerMixIn, BaseDispatcher
+
+# Usage::
+# class SomeDispatcher(*BasicDispatcher):
+#    pass
+
+# We are using `Dispatcher`, `BasicDispatcher` as tuples  
+# instead of something like this::
+#
+# class Dispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, BaseDispatcher):
+#     __slots__ = ()
+#
+# class BasicDispatcher(TaskGroupMixIn, CallHandlerMixIn, BaseDispatcher):
+#     __slots__ = ()
+
+# Cause we can get rid of a mro level just by using `*` (unpack) while defining class
+#
+# previous::
+#
+# class SomeDispatcher(BasicDispatcher):
+#    pass
+#
+# now::
+#
+# class SomeDispatcher(*BasicDispatcher):
+#    pass
+# this is important cause dispatchers are core to the application and have lots of calls to them
 
 
 _T = TypeVar('_T')

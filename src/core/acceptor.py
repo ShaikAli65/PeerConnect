@@ -8,11 +8,10 @@ import asyncio
 import logging
 from asyncio import CancelledError
 from collections import namedtuple
-from inspect import isawaitable
 
-from src.avails import BaseDispatcher, WireData, const
+from src.avails import WireData, const
 from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import TaskGroupMixIn
+from src.avails.mixins import BasicDispatcher
 from src.core.app import AppType
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
@@ -42,7 +41,7 @@ async def initiate_acceptor(app_ctx: AppType):
     await app_ctx.exit_stack.enter_async_context(acceptor)
 
 
-class ConnectionDispatcher(TaskGroupMixIn, BaseDispatcher):
+class ConnectionDispatcher(*BasicDispatcher):
     """Dispatches incoming connections...
 
     ...Based on the handshake header, used to identify services registered for incoming connections
@@ -101,28 +100,13 @@ class ConnectionDispatcher(TaskGroupMixIn, BaseDispatcher):
         self._parking_lot[connection] = item
 
     async def submit(self, event: ConnectionEvent):
+        _logger.info(f"dispatching connection with header {event.handshake.header}")
         try:
-            handler = self.registry[event.handshake.header]
-        except KeyError:
-            _logger.error(f"no handler found for event {event}")
-            return
-
-        _logger.info(f"dispatching connection with header {event.handshake.header} to {handler}")
-
-        try:
-            try:
-                r = handler(event)
-                if isawaitable(r):
-                    await asyncio.ensure_future(r)
-            except RuntimeError:
-                await self._handle_runtime_error(_logger)
-            except Exception as e:
-                # we can't afford exceptions here as they move into QueueMixIn
-                _logger.error(f"{handler}({event}) failed with: \n", exc_info=e)
+            return await self.call_handler(event.handshake.header, _logger, event)
         finally:
-            await self._try_parking(handler, event.connection)
+            await self._try_parking(event.connection)
 
-    async def _try_parking(self, handler, connection):
+    async def _try_parking(self, connection):
 
         def check_cancelling():
             our_task = asyncio.current_task()
@@ -140,7 +124,7 @@ class ConnectionDispatcher(TaskGroupMixIn, BaseDispatcher):
             await asyncio.wait_for(connection.lock.acquire(), 1)
             connection.lock.release()
         except TimeoutError:
-            _logger.error(f"failed to acquire connection lock from {handler}, closing connection")
+            _logger.error(f"failed to acquire connection lock, closing connection")
             await conn_watcher.request_closing(connection)
             # DECISION, whether we should forcefully release using
             # connection.lock.release() and park,

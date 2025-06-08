@@ -3,7 +3,7 @@ from configparser import ConfigParser
 from contextlib import AsyncExitStack
 from typing import Callable, Concatenate, ParamSpec, TypeVar, Union
 
-from src.avails.connect import IPAddress
+from src.net import IPAddress
 
 from src.avails import PeerDict, RemotePeer
 from src.core._kademlia import PeerServer

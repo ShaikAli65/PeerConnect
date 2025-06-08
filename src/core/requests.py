@@ -1,15 +1,16 @@
 import inspect
 import logging
+import re
+import sys
 
 from src.avails import const
-from src.avails.bases import BaseDispatcher
-from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn
+from src.avails.mixins import Dispatcher
 from src.core import _kademlia, gossip
 from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
 from src.managers.statemanager import State
+from src.net import requests
 from src.net.events import RequestEvent
-from src.net.requests import setup_endpoint
 from src.net.transports import RequestsTransport
 from src.transfers import REQUESTS_HEADERS
 
@@ -17,33 +18,13 @@ _logger = logging.getLogger(__name__)
 
 
 async def initiate(app: AppType):
-    if const.IS_WINDOWS:
-        # a discovery request packet is observed in wire shark but that packet is
-        # not getting delivered to application socket in linux when we bind to specific interface address
-
-        # TL;DR: causing some unknown behaviour in linux system
-        const.BIND_IP = app.this_ip.ip
-
-    bind_address = app.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
-
-    multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6, const.PORT_NETWORK)
 
     req_dispatcher = RequestsDispatcher()
     await app.exit_stack.enter_async_context(req_dispatcher)
-    try:
-        transport = await setup_endpoint(
-            bind_address,
-            multicast_address,
-            req_dispatcher,
-            app.read_only(),
-        )
-        _logger.debug("created requests transport")
-    except OSError as oe:
-        print(const.BIND_FAILED_MSG)
-        _logger.critical("failed to bind acceptor", exc_info=True)
-        raise RuntimeError from oe
+    multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6,
+                         const.PORT_NETWORK)
 
-    req_dispatcher.transport = RequestsTransport(transport)
+    transport, req_transport = await _make_req_endpoint(req_dispatcher, multicast_address, app)
 
     kad_server = await _kademlia.prepare_kad_server(transport, app_ctx=app.read_only())
     _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
@@ -52,7 +33,7 @@ async def initiate(app: AppType):
     _logger.info("joined gossip network")
 
     app.requests.dispatcher = req_dispatcher
-    app.requests.transport = req_dispatcher.transport
+    app.requests.transport = req_transport
     app.kad_server = kad_server
 
     discovery_state = State(
@@ -74,8 +55,27 @@ async def initiate(app: AppType):
     await app.state_manager_handle.put_state(add_to_lists)
 
 
-class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
-    __slots__ = ()
+async def _make_req_endpoint(req_dispatcher, multicast_address, app):
+
+    try:
+        transport = await requests.setup_endpoint(
+            requests.get_bind_address(app),
+            multicast_address,
+            req_dispatcher,
+            app.read_only(),
+        )
+        _logger.debug("created requests transport")
+    except OSError as oe:
+        print(const.BIND_FAILED_MSG, file=sys.stderr)
+        _logger.critical("failed to bind acceptor", exc_info=True)
+        raise RuntimeError from oe
+
+    rt = req_dispatcher.transport = RequestsTransport(transport)
+    return transport, rt
+
+
+class RequestsDispatcher(*Dispatcher):
+    __slots__ = 'transport'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

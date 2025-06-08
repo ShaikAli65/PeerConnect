@@ -3,17 +3,17 @@ import typing
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING, TypeVar
+from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING
 
 from src.avails import RemotePeer
 from src.avails.wire import GossipMessage
 from src.net import Connection
-from . import TransferState
+from src.transfers._state import TransferState
 
 if TYPE_CHECKING:
     from src.transfers.files._fileobject import FileItem
 else:
-    FileItem = None
+    FileItem = Any
 
 
 class AbstractRWBase(ABC):

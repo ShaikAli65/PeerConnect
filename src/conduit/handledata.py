@@ -12,7 +12,7 @@ from src.managers import directorymanager, filemanager, message
 class FrontEndDataDispatcher(BaseDispatcher):
     __slots__ = ()
 
-    async def submit(self, data_weaver):
+    async def submit(self, data_weaver): # type: ignore
         try:
             await self.registry[data_weaver.header](data_weaver)
         except Exception as exp:

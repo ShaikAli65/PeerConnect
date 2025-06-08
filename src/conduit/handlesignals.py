@@ -2,6 +2,7 @@ import asyncio
 from typing import AsyncIterator
 
 from src.avails import BaseDispatcher, DataWeaver, const
+from src.avails.mixins import CallHandlerMixIn
 from src.conduit import logger, webpage
 from src.conduit.handleprofiles import (
     align_profiles,
@@ -14,19 +15,18 @@ from src.managers import message
 from src.managers.statemanager import State
 
 
-class FrontEndSignalDispatcher(BaseDispatcher):
+class FrontEndSignalDispatcher(BaseDispatcher, CallHandlerMixIn):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    async def submit(self, data_weaver):
-        try:
-            handler = self.registry[data_weaver.header]
-            logger.debug(f"invoking page signal handler {handler}")
-            await handler(data_weaver)
-        except Exception as exp:
-            logger.error(f"signal dispatcher data:{data_weaver}, handler failed with:", exc_info=exp)
+    async def submit(self, data_weaver): # type: ignore
+        return await self.call_handler(
+            data_weaver.header,
+            logger,
+            data_weaver,
+        )
 
     def register_all(self):
         self.registry.update({

@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING
 import src.net.utils as net_util
 from src.avails import WireData, const, use
 from src.avails.bases import BaseDispatcher
-from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn
+from src.avails.mixins import Dispatcher, ReplyRegistryMixIn, TaskGroupMixIn
 from src.conduit import webpage
 from src.core.app import AppType, ReadOnlyAppType
 from src.net.events import RequestEvent
@@ -106,7 +106,7 @@ def DiscoveryRequestHandler(app_ctx: ReadOnlyAppType):
     return handle
 
 
-class DiscoveryDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class DiscoveryDispatcher(*Dispatcher):
     __slots__ = ()
     if TYPE_CHECKING:
         transport: DiscoveryTransport
@@ -114,17 +114,7 @@ class DiscoveryDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
     async def submit(self, event: RequestEvent):
         wire_data = event.request
         self.reply_arrived(wire_data)
-        handle = self.registry.get(wire_data.header, None)
-        if handle is None:
-            return
-
-        _logger.debug(f"dispatching request {handle}")
-        try:
-            await handle(event)
-        except RuntimeError:
-            await self._handle_runtime_error(_logger)
-        except Exception as exp:
-            _logger.error(f"{handle} failed with :", exc_info=exp)
+        return await self.call_handler(wire_data.header, _logger, event)
 
 
 async def send_discovery_requests(multicast_addr, app_ctx):

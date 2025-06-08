@@ -16,11 +16,10 @@ Working:
 import asyncio
 import logging
 from contextlib import AsyncExitStack
-from inspect import isawaitable
 
-from src.avails import BaseDispatcher, RemotePeer, WireData, const, use
+from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFound
-from src.avails.mixins import ReplyRegistryMixIn, TaskGroupMixIn, singleton_mixin
+from src.avails.mixins import Dispatcher, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
 from src.core.app import App, ReadOnlyAppType, provide_app_ctx
@@ -51,35 +50,18 @@ async def initiate(app_ctx: App):
 
 
 @singleton_mixin
-class MsgDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, BaseDispatcher):
+class MsgDispatcher(*Dispatcher):
     __slots__ = ()
 
     async def submit(self, event: MessageEvent):
 
         # self.reply_arrived(event.msg)  # no need of this
         # handled directly at recv loop as an optimization
-
-        message_header = event.msg.header
+        h = self.call_handler(event.msg.header, _logger, event)
         try:
-            handler = self.registry[message_header]
-        except KeyError:
-            _logger.warning(f"No handler found for {message_header}")
-            return
-
-        _logger.debug(f"dispatching msg with header {message_header} to {handler}")
-
-        r = handler(event)
-        if not isawaitable(r):
-            return
-
-        try:
-            await asyncio.wait_for(r, const.TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
+            return await asyncio.wait_for(h, const.TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
         except TimeoutError:
-            _logger.debug(f"timeout at message processing task, cancelling {handler} task")
-        except RuntimeError:
-            await self._handle_runtime_error(_logger)  # noqa
-        except Exception as exp:
-            _logger.error(f"{handler=}, failed with error", exc_info=exp)
+            return _logger.debug(f"timeout at message processing task, cancelling {event} task")
 
 
 # ================
@@ -105,7 +87,8 @@ class _MsgConnectionPool:
             MsgConnectionNoRecv: msg connection into a send-only one
         """
 
-        msg_conn_no_recv = self._internal_msg_conn_pool[connection.peer.peer_id] = MsgConnectionNoRecv(connection)
+        msg_conn_no_recv = self._internal_msg_conn_pool[connection.peer.peer_id] = MsgConnectionNoRecv(
+            connection)
         return msg_conn_no_recv
 
     def get(self, peer_id):
@@ -213,7 +196,7 @@ def MessageConnHandler(app_ctx):
         app_ctx(ReadOnlyAppType): application context
     """
     receiver = MessageRecvLoopBackHandler(app_ctx=app_ctx)
- 
+
     async def handle_duplication_conn(connection):
         conn = await _get_from_pool(connection.peer)
         if conn is not None:
@@ -242,7 +225,7 @@ def MessageConnHandler(app_ctx):
         _msg_conn_pool.add(event.connection)
         async with event.connection:
             await receiver(event)
-    
+
     return handler
 
 
@@ -317,6 +300,7 @@ async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType) -> MsgConn
     if ok is False:
         raise CannotConnect("try again")
 
+    assert conn_event is not None
     msg_conn = _msg_conn_pool.add(conn_event.connection)
     app_ctx.connections.dispatcher(conn_event)
     return msg_conn

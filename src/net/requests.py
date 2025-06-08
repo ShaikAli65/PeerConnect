@@ -48,6 +48,17 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.dispatcher(event)
 
 
+def get_bind_address(app):
+    if const.IS_WINDOWS:
+        # a discovery request packet is observed in wire shark but that packet is
+        # not getting delivered to application socket in linux when we bind to specific interface address
+
+        # TL;DR: causing some unknown behaviour in linux system
+        const.BIND_IP = app.this_ip.ip
+
+    return app.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
+
+
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher, app_ctx):
     assert isinstance(bind_address, tuple) and isinstance(multicast_address,
                                                           tuple), "expecting bind_address and multicast_address"
