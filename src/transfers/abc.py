@@ -3,9 +3,10 @@ import typing
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING
+from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING, TypeVar
 
 from src.avails import RemotePeer
+from src.avails.wire import GossipMessage
 from src.net import Connection
 from . import TransferState
 
@@ -47,7 +48,7 @@ class AbstractReader(AbstractRWBase):
     @abstractmethod
     async def start_reading(self):
         """Start the Reader
-            This is usually a context manager
+            This is usually a context manager that returns an async iterator, or itself a async generator
 
         Usage::
 
@@ -225,3 +226,21 @@ class AbstractReceiver(AbstractTransferHandle):
           download_path: Path,
           status_updater: AbstractStatusIterator | AbstractStatusMix,
     ): ...
+
+
+class AbstractRumorMessageList(ABC):
+    @abstractmethod
+    def sample_peers(self, message_id, sample_count):
+        pass
+
+    @abstractmethod
+    def push(self, message: GossipMessage):
+        pass
+
+
+class AbstractRumorPolicy(ABC):
+    @abstractmethod
+    def __init__(self, protocol_class): ...
+
+    @abstractmethod
+    def should_rumor(self, message: GossipMessage): ...

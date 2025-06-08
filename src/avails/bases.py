@@ -9,7 +9,6 @@ else:
     class QueueShutDown(Exception):
         ...
 
-from src.avails.wire import GossipMessage
 
 
 class _HasID(Protocol):
@@ -92,31 +91,11 @@ class BaseDispatcher(AbstractDispatcher):
         return self.registry.pop(event_trigger)
 
 
-class AbstractRumorMessageList(ABC):
-    @abstractmethod
-    def sample_peers(self, message_id, sample_count):
-        pass
-
-    @abstractmethod
-    def push(self, message: GossipMessage):
-        pass
-
-
-class AbstractRumorPolicy(ABC):
-    @abstractmethod
-    def __init__(self, protocol_class): ...
-
-    @abstractmethod
-    def should_rumor(self, message: GossipMessage): ...
-
-
 __all__ = (
-    'AbstractRumorMessageList',
     'AbstractHandler',
     'AbstractDispatcher',
     'BaseHandler',
     'BaseDispatcher',
-    'AbstractRumorPolicy',
     'HasIdProperty',
     'HasID',
     'HasPeerId'

@@ -2,8 +2,9 @@ import asyncio
 import random
 import time
 
-from src.avails import AbstractRumorMessageList, AbstractRumorPolicy, GossipMessage, RumorMessageItem, const
+from src.avails import GossipMessage, RumorMessageItem, const
 from src.net.transports import GossipTransport
+from src.transfers.abc import AbstractRumorMessageList, AbstractRumorPolicy
 
 
 class SimpleRumorMessageList(AbstractRumorMessageList):
