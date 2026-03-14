@@ -1,4 +1,4 @@
-"""Networking and Management"""
+"""Low level Networking and Protocol Modules"""
 
 from .accept import *
 from .bandwidth import Watcher

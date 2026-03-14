@@ -2,6 +2,7 @@ import asyncio
 import configparser
 import ipaddress
 import json
+import logging
 import os
 import random
 import socket
@@ -12,9 +13,9 @@ from kademlia.utils import digest
 
 from src import net
 from src.avails import const
-from src.configurations import logger as _logger
-from src.core.app import AppType
 from src.net import TCPProtocol, UDPProtocol
+
+_logger = logging.getLogger(__package__)
 
 
 def print_app(app):
@@ -90,7 +91,7 @@ def set_paths():
     print_paths()
 
 
-async def load_configs(app: AppType):
+async def load_configs(exit_stack):
     config_map = configparser.ConfigParser(allow_no_value=True)
 
     def _helper():
@@ -124,9 +125,8 @@ async def load_configs(app: AppType):
 
     await asyncio.to_thread(_helper)
     set_constants(config_map)
-    app.current_config = config_map
-    app.exit_stack.callback(finalize_config)
-
+    exit_stack.callback(finalize_config)
+    return config_map
 
 def _write_default_configurations(path):
     default_config_file = textwrap.dedent(

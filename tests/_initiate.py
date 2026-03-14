@@ -1,4 +1,4 @@
-from src.__main__ import initial_states as main_states
+from src.__main__ import init_app as main_states
 from src.managers.statemanager import State
 from tests.mock import mock
 

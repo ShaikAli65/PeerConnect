@@ -10,7 +10,7 @@ from src.managers import logmanager, profilemanager
 
 _logger = logging.getLogger(__name__)
 
-app = App()
+app = App
 
 
 def _get_selected(profiles):
@@ -22,8 +22,7 @@ def _get_selected(profiles):
 
 
 async def test_check_loading():
-    await load_configs(app)
-    assert app.current_config is not None, "expected current config to be set"
+    app.current_config = await load_configs(app.exit_stack)
     _logger.info("[TEST PASSED] found current_config healthy")
     profiles_len = len(app.current_config["USER_PROFILES"])
     await profilemanager.load_profiles_to_program(app.current_config)

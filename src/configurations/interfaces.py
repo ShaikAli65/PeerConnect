@@ -7,9 +7,11 @@ Common Usage:
 
 """
 
+import logging
 from src.avails import const
 from src.net import IPAddress, get_interfaces as _get_interfaces
-from . import logger
+
+logger = logging.getLogger(__package__)
 
 _if_info: list | None = None
 

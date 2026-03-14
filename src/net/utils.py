@@ -94,6 +94,57 @@ async def _run_cmd(*args):
     return stdout.decode().strip()
 
 
+def _is_wsl_environment() -> bool:
+    if os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"):
+        return True
+
+    for proc_file in ("/proc/sys/kernel/osrelease", "/proc/version"):
+        try:
+            with open(proc_file, "r") as f:
+                if "microsoft" in f.read().lower():
+                    return True
+        except OSError:
+            continue
+
+    return "wsl" in platform.release().lower()
+
+
+def _find_default_route(route_output: str) -> tuple[str | None, str | None]:
+    for line in route_output.splitlines():
+        if not line.startswith("default"):
+            continue
+
+        tokens = line.split()
+        gateway = None
+        interface = None
+
+        if "via" in tokens:
+            via_idx = tokens.index("via")
+            if via_idx + 1 < len(tokens):
+                gateway = tokens[via_idx + 1]
+
+        if "dev" in tokens:
+            dev_idx = tokens.index("dev")
+            if dev_idx + 1 < len(tokens):
+                interface = tokens[dev_idx + 1]
+
+        return interface, gateway
+
+    return None, None
+
+
+def _extract_ipv4_from_addr(ip_output: str) -> tuple[str | None, int | None]:
+    for line in ip_output.splitlines():
+        if "inet " not in line:
+            continue
+
+        cidr = line.strip().split()[1]
+        host, prefix = cidr.split("/", 1)
+        return host, int(prefix)
+
+    return None, None
+
+
 async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
     """Check if system's networking mode is Bridged or not in WSL environment.
 
@@ -107,31 +158,36 @@ async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
     if _cache:
         return _cache[0]
 
-    if 'wsl' not in platform.release().lower():
+    if not _is_wsl_environment():
         _cache.append((None, "Not running in a WSL environment"))
         return _cache[0]
 
     try:
-        # === STEP 1: Get IP address for eth0 ===
-        ip_output = await _run_cmd("ip", "-4", "addr", "show", "eth0")
-        ip_line = next((line.strip() for line in ip_output.splitlines() if "inet " in line), None)
-        if not ip_line:
-            _cache.append((False, "Could not find eth0 IP"))
+        # Use the interface attached to the default route instead of assuming eth0.
+        route_output = await _run_cmd("ip", "route")
+        iface, gw_ip = _find_default_route(route_output)
+        if not iface:
+            _cache.append((False, "Could not determine default route interface"))
             return _cache[0]
 
-        wsl_ip = ip_line.split()[1].split('/')[0]
+        ip_output = await _run_cmd("ip", "-4", "addr", "show", "dev", iface)
+        wsl_ip, prefix_len = _extract_ipv4_from_addr(ip_output)
+        if not wsl_ip or prefix_len is None:
+            _cache.append((False, f"Could not find IPv4 address for {iface}"))
+            return _cache[0]
+
         wsl_ip_obj = ipaddress.ip_address(wsl_ip)
 
-        # === STEP 2: Get default gateway ===
-        route_output = await _run_cmd("ip", "route")
-        gw_line = next((line for line in route_output.splitlines() if line.startswith("default")), "")
-        gw_ip = gw_line.split()[2] if gw_line else None
-
-        ip_likely_bridged = any([
-            wsl_ip_obj in ipaddress.ip_network("192.168.0.0/16"),
-            wsl_ip_obj in ipaddress.ip_network("10.0.0.0/8"),
-            wsl_ip_obj in ipaddress.ip_network("172.16.0.0/12")
-        ]) and not str(wsl_ip_obj).startswith("172.26")
+        # Prefer subnet-based inference over broad RFC1918 checks. Bridged/mirrored
+        # setups usually place the guest and default gateway on the same LAN subnet.
+        ip_likely_bridged = False
+        if gw_ip:
+            try:
+                gateway_obj = ipaddress.ip_address(gw_ip)
+                link_net = ipaddress.ip_network(f"{wsl_ip}/{prefix_len}", strict=False)
+                ip_likely_bridged = gateway_obj in link_net and gateway_obj != wsl_ip_obj
+            except ValueError:
+                ip_likely_bridged = False
 
         # === STEP 3: Parse .wslconfig ===
         win_home_raw = await _run_cmd("cmd.exe", "/c", "echo", "%USERPROFILE%")
@@ -149,7 +205,10 @@ async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
         config_says_bridged = config_mode in {"bridged", "mirrored"}
         likely_bridged = ip_likely_bridged or config_says_bridged
 
-        notes = f"WSL IP: {wsl_ip}, Gateway: {gw_ip}, .wslconfig mode: {config_mode or 'not set'}"
+        notes = (
+            f"WSL iface: {iface}, IP: {wsl_ip}/{prefix_len}, "
+            f"Gateway: {gw_ip}, .wslconfig mode: {config_mode or 'not set'}"
+        )
         _cache.append((likely_bridged, notes))
         return likely_bridged, notes
 

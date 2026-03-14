@@ -22,7 +22,7 @@ from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFou
 from src.avails.mixins import Dispatcher, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
-from src.core.app import App, ReadOnlyAppType, provide_app_ctx
+from src.core.app import AppType, ReadOnlyAppType, provide_app_ctx
 from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth, connectivity
 from src.net.connector import Connector
 from src.net.events import ConnectionEvent, MessageEvent
@@ -33,7 +33,7 @@ _logger = logging.getLogger(__name__)
 _exit_stack = AsyncExitStack()
 
 
-async def initiate(app_ctx: App):
+async def initiate(app_ctx: AppType):
     data_dispatcher = MsgDispatcher()
     app_ctx.messages.dispatcher = data_dispatcher
     data_dispatcher.register_handler(HEADERS.CMD_TEXT, MessageHandler())
@@ -296,8 +296,8 @@ async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType) -> MsgConn
         return msg_connection
 
     ok, conn_event = await _try_connecting(peer, app_ctx.this_peer_id)
-    _logger.debug("failed to connect")
-    if ok is False:
+    if not ok:
+        _logger.debug("failed to connect")
         raise CannotConnect("try again")
 
     assert conn_event is not None

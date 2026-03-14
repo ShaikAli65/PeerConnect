@@ -13,7 +13,6 @@ from src.core.gossip import GlobalRumorMonger, GossipDispatcher
 from src.core.requests import RequestsDispatcher
 from src.managers import ProfileManager
 from src.managers.message import MsgDispatcher
-from src.managers.statemanager import StateManager
 from src.net.transports import DiscoveryTransport, RequestsTransport
 from src.transfers import GossipTransport
 
@@ -75,7 +74,6 @@ class App(_NoSetter):
     peer_list: PeerDict
     current_config: ConfigParser
     current_profile: ProfileManager
-    state_manager_handle: StateManager
     interfaces: list[IPAddress]
     this_peer_id: str | int
     __instance = None

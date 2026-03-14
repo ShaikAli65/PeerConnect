@@ -184,7 +184,7 @@ class PeerServer(network.Server):
 
     def __init__(self, app_ctx, state_dump_file=None, ksize=20, alpha=3, peer_id=None, storage=None):
         super().__init__(ksize, alpha, peer_id, storage)
-        self.add_this_peer_task = None
+        self._add_this_peer_task = None
         self._transport = None
         self.stopping = False
         self.app_ctx = app_ctx
@@ -233,13 +233,13 @@ class PeerServer(network.Server):
         return nearest_list_id
 
     async def add_this_peer_to_lists(self):
-        if isinstance(self.add_this_peer_task, asyncio.Task) and not self.add_this_peer_task.done():
+        if isinstance(self._add_this_peer_task, asyncio.Task) and not self._add_this_peer_task.done():
             _logger.warning(
-                f"{self.add_this_peer_task=}, already found task running not entering function body")
+                f"{self._add_this_peer_task=}, already found task running not entering function body")
             # this function only gets called once in the entire application lifetime
             return
 
-        self.add_this_peer_task = asyncio.current_task()
+        self._add_this_peer_task = asyncio.current_task()
 
         closest_list_id = self._get_closest_list_id(peers.node_list_ids)
         await asyncio.sleep(const.DISCOVER_TIMEOUT)
@@ -373,8 +373,8 @@ class PeerServer(network.Server):
         self.stopping = True
         await asyncio.sleep(0)
 
-        if self.add_this_peer_task:
-            await use.safe_cancel_task(self.add_this_peer_task)
+        if self._add_this_peer_task:
+            await use.safe_cancel_task(self._add_this_peer_task)
 
         if self.state_dump_file:
             await asyncio.to_thread(self.save_state, self.state_dump_file)

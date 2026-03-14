@@ -146,9 +146,13 @@ async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIR
     """
     same as :func: `get_timeouts` but delays itself in yielding
 
-    Example:
-        >>> async for _ in async_timeouts(initial=1, factor=2, max_retries=4, max_value=5):
-        >>>     # any working code that needs to be executed with delays
+    Example::
+
+        async for _ in async_timeouts(initial=1, factor=2, max_retries=4, max_value=5):
+            # any working code that needs to be executed with delays
+
+    Yields:
+        None
     """
 
     for timeout in get_timeouts(initial, factor, max_retries, max_value):
@@ -374,6 +378,7 @@ def keep_task_reference(func):
         return func(*args, **kwargs)
 
     return task_wrapper
+
 
 
 class NotInUse:

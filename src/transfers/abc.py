@@ -148,7 +148,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
     transfer_task: asyncio.Task | None
 
     @abstractmethod
-    def start_transfer(self) -> AsyncGenerator[Any]:
+    def start_transfer(self) -> AsyncGenerator:
         """Start the transfer
 
         Sends a final flag when done, commiting the transfer completion.
@@ -158,7 +158,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         """
 
     @abstractmethod
-    def resume_transfer(self) -> AsyncGenerator[Any]:
+    def resume_transfer(self) -> AsyncGenerator:
         """When some error happens in the initial state and that error has been recovered"""
 
     @abstractmethod

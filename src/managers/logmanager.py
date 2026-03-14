@@ -8,7 +8,6 @@ from functools import partial
 from pathlib import Path
 
 from src.avails import const
-from src.core.app import AppType
 
 log_queue = queue.SimpleQueue()
 
@@ -45,8 +44,8 @@ async def _try_loading_config(path) -> dict | None:
         return None
 
 
-async def _py312_initiate(app: AppType):
-    if log_config := await _try_loading_config(const.PATH_LOG_CONFIG):
+async def _py312_initiate(exit_stack):
+    if not (log_config := await _try_loading_config(const.PATH_LOG_CONFIG)):
         return
 
     for handler in log_config["handlers"]:
@@ -71,10 +70,10 @@ async def _py312_initiate(app: AppType):
         queue_listener = getattr(q_handler, 'listener')
         queue_listener.start()
 
-    app.exit_stack.callback(partial(_log_exit, queue_handlers))
+    exit_stack.callback(partial(_log_exit, queue_handlers))
 
 
-async def _py311_initiate(_: AppType):
+async def _py311_initiate(_):
     log_file_311 = const.PATH_LOG_CONFIG.with_stem(const.PATH_LOG_CONFIG.stem + "311")
     if log_config := await _try_loading_config(log_file_311):
         return

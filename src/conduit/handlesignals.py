@@ -12,7 +12,6 @@ from src.conduit.headers import HANDLE
 from src.core import peers
 from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.managers import message
-from src.managers.statemanager import State
 
 
 class FrontEndSignalDispatcher(BaseDispatcher, CallHandlerMixIn):
@@ -38,14 +37,6 @@ class FrontEndSignalDispatcher(BaseDispatcher, CallHandlerMixIn):
             HANDLE.SEND_PEER_LIST: send_list,
             HANDLE.GOSSIP_SEARCH: gossip_search
         })
-
-
-def _restart(): ...
-
-
-def receive_restart_signal(app_ctx, data: DataWeaver):
-    s = State("restarting", func=_restart)
-    app_ctx.state_manager_handle.state_queue.put(s)
 
 
 async def close_app():
