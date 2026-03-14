@@ -35,6 +35,12 @@ from src.transfers.files import FileItem, add_error_ext, validatename
 from src.transfers.otm.relay import OTMFilesRelay
 from src.transfers.status import StatusIterator, StatusMixIn
 
+# bookkeeping for transfers that are running, completed, continued, scheduled
+# this is intentionally module level singleton, instead of class level singleton
+# anyhow this is dependency injected to the functions that needs it as default argument
+# (just me trying to do something original w.r.t python) as modules are already objects in python
+# why wrapping this in a class named FileManager, passing bookkeeping object in to constructors etc.
+# (old school java)
 transfers_book = TransfersBookKeeper()
 
 _logger = logging.getLogger(__name__)

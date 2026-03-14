@@ -1,6 +1,6 @@
+import asyncio
 import inspect
 import logging
-import re
 import sys
 
 from src.avails import const
@@ -8,7 +8,6 @@ from src.avails.mixins import Dispatcher
 from src.core import _kademlia, gossip
 from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
-from src.managers.statemanager import State
 from src.net import requests
 from src.net.events import RequestEvent
 from src.net.transports import RequestsTransport
@@ -36,23 +35,10 @@ async def initiate(app: AppType):
     app.requests.transport = req_transport
     app.kad_server = kad_server
 
-    discovery_state = State(
-        "discovery",
-        discovery_initiate,
-        multicast_address,
-        app,
-        transport,
-        is_blocking=True,
-    )
+    await discovery_initiate(multicast_address, app, transport)
 
-    add_to_lists = State(
-        "adding this peer to lists",
-        kad_server.add_this_peer_to_lists,
-        is_blocking=True,
-    )
-
-    await app.state_manager_handle.put_state(discovery_state)
-    await app.state_manager_handle.put_state(add_to_lists)
+    # TODO: who is the owner of this task??
+    await asyncio.create_task(kad_server.add_this_peer_to_lists())
 
 
 async def _make_req_endpoint(req_dispatcher, multicast_address, app):

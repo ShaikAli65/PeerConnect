@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import os
 import sys
@@ -18,66 +19,69 @@ from src.core import acceptor, eventloop, requests
 from src.net import connectivity
 from src.core.async_runner import AnotherRunner
 from src.managers import logmanager, message, profilemanager
-from src.managers.statemanager import State, StateManager
+
+_logger = logging.getLogger()
 
 
-def initial_states(app: AppType) -> tuple[State]:
-    set_paths = State("set paths", configure.set_paths)
-    log_config = State("initiating logging", logmanager.initiate, app)
-    load_config = State("loading configurations", configure.load_configs, app)
-    load_profiles = State(
-        "loading profiles",
-        profilemanager.load_profiles_to_program,
-        lazy_args=(lambda: app.current_config,)
-    )
-    launch_webpage = State("launching webpage", bootup.launch_web_page)
-    interfaces = State("load interfaces", bootup.load_interfaces, app)
-    page_handle = State("initiating page handle", pagehandle.initiate_page_handle, app)
+# TODO: Fix this: Error handling is inconsistent and leaky
+# Some modules raise custom exceptions
+# Some print
+# Some swallow errors
+# Some return None and hope
 
-    boot_up = State("boot_up initiating", bootup.set_ip_config, app)
+async def init_app(app: AppType):
+    exit_stack = app.exit_stack
+    _logger.info("setting paths")
+    configure.set_paths()
+    _logger.info("initiating logging")
+    await logmanager.initiate(exit_stack)
 
-    configure_rm = State(
-        "configuring this remote peer object",
-        bootup.configure_this_remote_peer,
-        app,
-    )
+    config_map = await configure.load_configs(exit_stack)
+    app.current_config = config_map
+    _logger.info(f"loaded configurations, {config_map=}")
 
-    print_config = State("printing configurations", configure.print_app, app.read_only())
+    _logger.info("loading profiles")
+    await profilemanager.load_profiles_to_program(config_map)
 
-    comms = State(
-        "initiating comms",
-        acceptor.initiate_acceptor,
-        lazy_args=(lambda: app,)
-    )
+    _logger.info("launching webpage")
+    await bootup.launch_web_page()
 
-    msg_con = State(
-        "starting message connections",
-        message.initiate,
-        app,
-    )
+    _logger.info("load interfaces")
+    app.interfaces = await bootup.load_interfaces()
 
-    ini_request = State(
-        "initiating requests",
-        requests.initiate,
-        app,
-    )
+    _logger.info("initiating page handle")
+    await pagehandle.initiate_page_handle(exit_stack)
+    _logger.info("boot_up initiating")
+    await bootup.set_ip_config(app)
 
-    connectivity_check = State("connectivity checker", connectivity.initiate, app)
-    states = locals().copy()
-    states.pop('app')
-    return tuple(states.values())
+    _logger.info("configuring this peer object")
+    bootup.configure_this_remote_peer(app)
+
+    _logger.info("printing configurations")
+    configure.print_app(app.read_only())
+
+    _logger.info("initiating comms")
+    await acceptor.initiate_acceptor(app)
+
+    _logger.info("starting message connections")
+    await message.initiate(app)
+
+    _logger.info("initiating requests")
+    await requests.initiate(app)
+
+    _logger.info("initiating connectivity checker")
+    await connectivity.initiate(app)
 
 
 cancellation_started = 0.0
 
 
-async def _async_initiate_helper(states, app):
-    await app.state_manager_handle.put_states(states)
+async def _async_initiate_helper(init_app, exit_stack):
 
     error = None
-    async with app.exit_stack:
+    async with exit_stack:
         try:
-            await app.state_manager_handle.process_states()
+            await init_app()
         except CancelledError as ce:
             error = ce
             # no point of passing cancelled error related to main task into exit_stack
@@ -95,12 +99,11 @@ async def _async_initiate_helper(states, app):
         raise error
 
 
-def initiate(states, app):
+def initiate(init_app, exit_stack, finalizing):
     try:
-        with AnotherRunner(app_ctx=app.read_only(), debug=const.debug and False) as runner:
+        with AnotherRunner(finalizing=finalizing, debug=const.debug and False) as runner:
             eventloop.set_eager_task_factory()
-            app.state_manager_handle = StateManager()
-            runner.run(_async_initiate_helper(states, app.read_only()))
+            runner.run(_async_initiate_helper(init_app, exit_stack))
     except BaseException as be:
         if const.debug:
             print_str = f"{'-' * 80}\n" \
@@ -116,4 +119,4 @@ def initiate(states, app):
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     multiprocessing.freeze_support()
-    initiate(initial_states(App), app=App)
+    initiate(lambda: init_app(App), App.exit_stack, App.finalizing)

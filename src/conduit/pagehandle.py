@@ -274,12 +274,12 @@ def run_page_server(host="localhost", _exit_stack=_exit_stack):
     _exit_stack.push_async_callback(use.safe_cancel_task, run_server)
 
 
-async def initiate_page_handle(app: AppType, *, _exit_stack=_exit_stack):
+async def initiate_page_handle(app_exit_stack, *, _exit_stack=_exit_stack):
     global PROFILE_WAIT
     if PROFILE_WAIT is None:
         PROFILE_WAIT = _asyncio.get_event_loop().create_future()
 
-    await app.exit_stack.enter_async_context(_exit_stack)
+    await app_exit_stack.enter_async_context(_exit_stack)
 
     # responsible for sending messages to frontend, composed with multiple FrontEndWebSockets
     front_end = FrontEndDispatcher()

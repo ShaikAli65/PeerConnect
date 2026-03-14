@@ -1,5 +1,5 @@
 import asyncio
-import os
+import logging
 import subprocess
 import webbrowser
 from pathlib import Path
@@ -10,8 +10,10 @@ import src.core.async_runner  # noqa
 from src import net
 from src.avails import RemotePeer, constants as const, use
 from src.conduit import pagehandle
-from src.configurations import interfaces as _interfaces, logger as _logger
+from src.configurations import interfaces as _interfaces
 from src.core.app import AppType
+
+_logger = logging.getLogger(__package__)
 
 
 async def set_ip_config(app_ctx: AppType):
@@ -33,9 +35,10 @@ def _clear_logs():
         Path(path).write_text("")
 
 
-async def load_interfaces(app: AppType):
-    app.interfaces = _interfaces.get_interfaces()
-    _logger.debug(f"loaded interfaces: {app.interfaces=}")
+async def load_interfaces():
+    interfaces = _interfaces.get_interfaces()
+    _logger.debug(f"loaded interfaces: {interfaces=}")
+    return interfaces
 
 
 def configure_this_remote_peer(app: AppType):
@@ -86,12 +89,23 @@ def retrace_browser_path():
         return command_output
 
 
+def _build_local_page_url() -> str:
+    page_serve_port = int(const.PORT_PAGE_SERVE)
+    page_port = int(const.PORT_PAGE)
+    return f"http://localhost:{page_serve_port}/?port={page_port}"
+
+
 async def launch_web_page():
-    page_url = f"http://localhost:{const.PORT_PAGE_SERVE}/?port={const.PORT_PAGE}"
+    try:
+        page_url = _build_local_page_url()
+    except (TypeError, ValueError) as exc:
+        _logger.fatal(f"cannot launch UI: invalid local page configuration: {exc}")
+        return
 
     if const.IS_LINUX:
         bridged, comment = await net.is_wsl_bridged()
-        if bridged is True:
+        if bridged:
+            _logger.info(f"detected wsl, launching page through powershell: {comment}")
             await _open_page_in_win_shell(page_url)
             return
         if bridged is False:
@@ -102,16 +116,19 @@ async def launch_web_page():
         webbrowser.open(page_url)
     except webbrowser.Error:
         if const.IS_WINDOWS:
-            os.system(f"start {page_url}")
+            await _open_page_in_win_shell(page_url)
 
         elif const.IS_LINUX or const.IS_DARWIN:
-            subprocess.Popen(['xdg-open', page_url])
+            p = await asyncio.create_subprocess_exec('xdg-open', page_url)
+            await p.wait()
 
 
 async def _open_page_in_win_shell(page_url):
     p = await asyncio.create_subprocess_exec(
-        'powershell.exe',
-        '-Command',
-        f'start {page_url}'
+        'cmd.exe',
+        '/c',
+        'start',
+        '',
+        page_url
     )
     await p.wait()

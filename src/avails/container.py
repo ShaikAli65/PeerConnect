@@ -1,5 +1,5 @@
 """
-Contains simple storages used across the peer connect
+Contains simple storages
 1. TransfersBookKeeper
 2. PeerDict
 """

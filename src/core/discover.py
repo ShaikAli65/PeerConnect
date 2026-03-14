@@ -55,6 +55,7 @@ async def discovery_initiate(
         app_ctx: AppType,
         transport,
 ):
+    """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
     discover_dispatcher = DiscoveryDispatcher()
     discovery_transport = DiscoveryTransport(transport)
     await app_ctx.exit_stack.enter_async_context(discover_dispatcher)
@@ -69,9 +70,16 @@ async def discovery_initiate(
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
-    await send_discovery_requests(
-        multicast_address,
-        app_ctx,
+    # TODO: who is the owner of this task??
+    asyncio.create_task(
+        send_discovery_requests(
+            multicast_address,
+            app_ctx.kad_server,
+            app_ctx.in_network,
+            app_ctx.finalizing,
+            discovery_transport,
+            app_ctx.this_remote_peer
+        )
     )
 
 
@@ -117,17 +125,19 @@ class DiscoveryDispatcher(*Dispatcher):
         return await self.call_handler(wire_data.header, _logger, event)
 
 
-async def send_discovery_requests(multicast_addr, app_ctx):
-    kad_server = app_ctx.kad_server
-    in_network = app_ctx.in_network
-    finalizing = app_ctx.finalizing
-    transport = app_ctx.discovery.transport
+async def send_discovery_requests(multicast_addr,
+                                  kad_server,
+                                  in_network,
+                                  finalizing,
+                                  transport,
+                                  this_remote_peer):
+    """Sends multicast discovery requests with timeouts and passive fallback; queries user for peer name if unbootstrapped"""
 
     ping_data = bytes(
         WireData(
             DISCOVERY.NETWORK_FIND,
-            app_ctx.this_peer_id,
-            reply_addr=app_ctx.this_remote_peer.req_uri[:2]
+            this_remote_peer.peer_id,
+            reply_addr=this_remote_peer.req_uri[:2]
         )
     )
 
@@ -163,6 +173,7 @@ async def send_discovery_requests(multicast_addr, app_ctx):
     # try requesting user a host name of peer that is already in network
     if not kad_server.is_bootstrapped:
         _logger.debug(f"requesting user for peer name after waiting for {const.DISCOVER_TIMEOUT}s")
+        # TODO: Improve on this
         await _try_asking_user(transport, ping_data)
 
     if not task.done():

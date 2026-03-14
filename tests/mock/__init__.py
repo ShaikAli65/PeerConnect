@@ -19,7 +19,6 @@ from src.net import IPAddress, UDPProtocol, requests
 def get_mock_app():
     from src.managers.statemanager import StateManager
     from src.core.app import App
-    App.state_manager_handle = StateManager()
     return App
 
 

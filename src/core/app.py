@@ -87,7 +87,6 @@ class App(_NoSetter, metaclass=_ClassLevelDesc):
     peer_list = PeerDict()
     current_config = None
     current_profile = None
-    state_manager_handle = None
     interfaces = None
     __instance = None
 

@@ -33,7 +33,7 @@ class MsgSender:
 
     Context manager needs to be entered to start sending, uses connector to connect peer,
 
-    Retries connecting peer if connection returned by connector callable fails with OSError
+    Retries connecting peer if connection returned by connector callable fails with OSError,
     timeouts between each retry is reasonable.
 
         If the connect loop is sleeping on a timeout, one can force its waking up and start
