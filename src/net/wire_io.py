@@ -1,6 +1,6 @@
 import struct
 from asyncio import BaseTransport
-from typing import Any, Coroutine, Optional
+from typing import Any, Awaitable, Coroutine, Optional
 
 import umsgpack
 
@@ -20,7 +20,7 @@ class WireIO:
         return await sock.asendall(data_size + data)
 
     @staticmethod
-    def send_msg(connection, msg):
+    def send_msg(connection, msg) -> Awaitable[None]:
         """
 
         Args:

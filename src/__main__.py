@@ -61,16 +61,32 @@ async def init_app(app: AppType):
     configure.print_app(app.read_only())
 
     _logger.info("initiating comms")
-    await acceptor.initiate_acceptor(app)
+    app.connections.dispatcher = await acceptor.initiate_acceptor(
+        app.exit_stack,
+        app.finalizing,
+        app.addr_tuple,
+        app.current_profile,
+        app.this_remote_peer,
+    )
 
     _logger.info("starting message connections")
-    await message.initiate(app)
+    app.messages.dispatcher = await message.initiate(
+        app.finalizing,
+        app.this_peer_id,
+        app.connections.dispatcher,
+        app.exit_stack,
+    )
 
     _logger.info("initiating requests")
     await requests.initiate(app)
 
     _logger.info("initiating connectivity checker")
-    await connectivity.initiate(app)
+    await connectivity.initiate(
+        app.exit_stack,
+        app.requests.dispatcher,
+        app.requests.transport,
+        app.this_peer_id,
+    )
 
 
 cancellation_started = 0.0

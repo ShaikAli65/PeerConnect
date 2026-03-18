@@ -52,20 +52,29 @@ _logger = logging.getLogger(__name__)
 
 async def discovery_initiate(
         multicast_address,
-        app_ctx: AppType,
+        exit_stack,
+        requests_dispatcher,
+        addr_tuple_gen,
+        this_ip,
+        this_remote_peer,
+        kad_server,
+        in_network,
+        finalizing_event,
         transport,
 ):
     """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
     discover_dispatcher = DiscoveryDispatcher()
     discovery_transport = DiscoveryTransport(transport)
-    await app_ctx.exit_stack.enter_async_context(discover_dispatcher)
-    app_ctx.requests.dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
+    await exit_stack.enter_async_context(discover_dispatcher)
+    requests_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
 
-    app_ctx.discovery.dispatcher = discover_dispatcher
-    app_ctx.discovery.transport = discovery_transport
-
-    discovery_reply_handler = DiscoveryReplyHandler(app_ctx.read_only())
-    discovery_req_handler = DiscoveryRequestHandler(app_ctx.read_only())
+    discovery_reply_handler = DiscoveryReplyHandler(this_ip, kad_server)
+    discovery_req_handler = DiscoveryRequestHandler(
+        discovery_transport,
+        addr_tuple_gen,
+        this_remote_peer,
+        this_ip,
+    )
 
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
@@ -74,41 +83,42 @@ async def discovery_initiate(
     asyncio.create_task(
         send_discovery_requests(
             multicast_address,
-            app_ctx.kad_server,
-            app_ctx.in_network,
-            app_ctx.finalizing,
+            kad_server,
+            in_network,
+            finalizing_event,
             discovery_transport,
-            app_ctx.this_remote_peer
+            this_remote_peer
         )
     )
+    return discovery_transport, discover_dispatcher
 
 
-def DiscoveryReplyHandler(app_ctx: ReadOnlyAppType):
+def DiscoveryReplyHandler(this_ip, kad_server):
     async def handle(event: RequestEvent):
-        if event.from_addr[0] == app_ctx.this_ip.ip:
+        if event.from_addr[0] == this_ip.ip:
             return
         connect_address = tuple(event.request["connect_uri"])
         _logger.debug(f"from: {event.from_addr}, {connect_address=}")
-        if any(await app_ctx.kad_server.bootstrap([connect_address])):
+        if any(await kad_server.bootstrap([connect_address])):
             _logger.debug("bootstrapping completed")
 
     return handle
 
 
-def DiscoveryRequestHandler(app_ctx: ReadOnlyAppType):
+def DiscoveryRequestHandler(discovery_transport, addr_tuple_gen, this_remote_peer, this_ip):
     async def handle(event: RequestEvent):
         req_packet = event.request
-        if req_packet["reply_addr"][0] == app_ctx.this_ip.ip[0]:
+        if req_packet["reply_addr"][0] == this_ip.ip[0]:
             _logger.debug(f"ignoring echo, {req_packet['reply_addr']}")
             return
         _logger.info(f"discovery replying to req: {req_packet.body}")
         data_payload = WireData(
             header=DISCOVERY.NETWORK_FIND_REPLY,
-            msg_id=app_ctx.this_peer_id,
-            connect_uri=app_ctx.this_remote_peer.req_uri[:2],
+            msg_id=this_remote_peer.peer_id,
+            connect_uri=this_remote_peer.req_uri[:2],
         )
-        app_ctx.discovery.transport.sendto(
-            bytes(data_payload), app_ctx.addr_tuple(*req_packet["reply_addr"][:2])
+        discovery_transport.sendto(
+            bytes(data_payload), addr_tuple_gen(*req_packet["reply_addr"][:2])
         )
 
     return handle

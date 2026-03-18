@@ -22,23 +22,26 @@ from src.transfers import HEADERS
 _logger = logging.getLogger(__name__)
 
 
-async def initiate_acceptor(app_ctx: AppType):
+async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, current_profile, this_remote_peer):
     connection_dispatcher = ConnectionDispatcher()
     c_reg_handler = connection_dispatcher.register_handler
-    c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(app_ctx.read_only()))
-    c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(app_ctx.read_only()))
-    c_reg_handler(HEADERS.CMD_DIR_CONN, DirConnectionHandler(app_ctx.read_only()))
+    c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(current_profile))
+    c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(current_profile))
+    c_reg_handler(HEADERS.CMD_DIR_CONN, DirConnectionHandler(current_profile))
     c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
-    c_reg_handler(HEADERS.PING, PingHandler(app_ctx.this_remote_peer))
+    c_reg_handler(HEADERS.PING, PingHandler(this_remote_peer))
 
-    app_ctx.connections.dispatcher = connection_dispatcher
-
-    acceptor = Acceptor(app_ctx.read_only())
+    acceptor = Acceptor(
+        finalizing_event,
+        addr_tuple_gen(ip=None, port=const.PORT_THIS),
+        connection_dispatcher,
+    )
 
     # warning, careful with order
-    await app_ctx.exit_stack.enter_async_context(bandwidth.Watcher())
-    await app_ctx.exit_stack.enter_async_context(connection_dispatcher)
-    await app_ctx.exit_stack.enter_async_context(acceptor)
+    await exit_stack.enter_async_context(bandwidth.Watcher())
+    await exit_stack.enter_async_context(connection_dispatcher)
+    await exit_stack.enter_async_context(acceptor)
+    return connection_dispatcher
 
 
 class ConnectionDispatcher(*BasicDispatcher):

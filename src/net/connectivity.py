@@ -132,15 +132,15 @@ def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
     return req, connector(req)
 
 
-def EchoHandler(app_ctx):
+def EchoHandler(this_peer_id, req_transport):
     def handler(req_event: RequestEvent):
         req = req_event.request
-        data = WireData(req.header, req.msg_id, app_ctx.this_peer_id)
-        return app_ctx.requests.transport.sendto(bytes(data), req_event.from_addr)
+        data = WireData(req.header, req.msg_id, this_peer_id)
+        return req_transport.sendto(bytes(data), req_event.from_addr)
 
     return handler
 
 
-async def initiate(app_ctx: AppType):
-    await app_ctx.exit_stack.enter_async_context(Connectivity())
-    app_ctx.requests.dispatcher.register_simple_handler(HEADERS.REMOVAL_PING, EchoHandler(app_ctx.read_only()))
+async def initiate(exit_stack, req_dispatcher, req_transport, this_peer_id):
+    await exit_stack.enter_async_context(Connectivity())
+    req_dispatcher.register_simple_handler(HEADERS.REMOVAL_PING, EchoHandler(this_peer_id, req_transport))

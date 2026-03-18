@@ -224,11 +224,11 @@ async def send_big_file(peer, file_list, app_ctx=None):
 # RECEIVERS
 
 
-def FileConnectionHandler(app_ctx):
+def FileConnectionHandler(current_profile):
     async def handler(event: ConnectionEvent):
         transfer_id = make_transfer_id(event)
 
-        transfer_handle, should_return = await basic_recv(transfer_id, event, app_ctx)
+        transfer_handle, should_return = await basic_recv(transfer_id, event, current_profile)
         if should_return is True:
             if transfer_handle:
                 await transfer_handle.done.wait()
@@ -248,7 +248,7 @@ def FileConnectionHandler(app_ctx):
 
 
 async def basic_recv(
-      transfer_id, event, app_ctx, transfers_book=transfers_book  # noqa
+      transfer_id, event, current_profile, transfers_book=transfers_book  # noqa
 ) -> tuple[AbstractTransferHandle | None, bool]:
     """
     Performs a basic check of existing transfer handle with `transfer_id`
@@ -270,7 +270,7 @@ async def basic_recv(
         return transfer_handle, True
 
     if (
-          await webpage.get_transfer_ok(app_ctx.current_profile, event.handshake.peer_id)
+          await webpage.get_transfer_ok(current_profile, event.handshake.peer_id)
           is False
     ):
         await event.connection.send(TRANSFER_NOT_OK)
@@ -323,7 +323,7 @@ async def _file_receiver(
     return file_handle
 
 
-def BigFileConnectionHandler(app_ctx):
+def BigFileConnectionHandler(current_profile):
     main_file = None
 
     async def handler(event: ConnectionEvent):
@@ -331,7 +331,7 @@ def BigFileConnectionHandler(app_ctx):
         _logger.debug(f"new big file transfer request arrived, {event=}")
         transfer_id = make_transfer_id(event)
 
-        transfer_handle, should_return = await basic_recv(transfer_id, event, app_ctx)
+        transfer_handle, should_return = await basic_recv(transfer_id, event, current_profile)
         if should_return is True:
             await transfer_handle.done.wait()
             return

@@ -28,10 +28,12 @@ class Acceptor(AExitStackMixIn):
         'stopping': asyncio.Event,
     }
 
-    def __init__(self, app_ctx: ReadOnlyAppType, listen_addr=None, *args, **kwargs):
+    # def __init__(self, app_ctx: ReadOnlyAppType, listen_addr=None, *args, **kwargs):
+    def __init__(self, finalizing, listen_addr, conn_dispatcher, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.address = listen_addr or app_ctx.addr_tuple(ip=None, port=const.PORT_THIS)  # ip defaults to active ip
-        self._app_ctx = app_ctx
+        self.address = listen_addr  # ip defaults to active ip
+        self._finalizing = finalizing
+        self.conn_dispatcher = conn_dispatcher
         self.main_socket: Optional[Socket] = None
         self.back_log = 4
         self.max_timeout = 90
@@ -43,7 +45,7 @@ class Acceptor(AExitStackMixIn):
         _logger.info("Listening for connections")
         self._start_socket()
         await self._exit_stack.enter_async_context(self._task_group)
-        stopping = self._app_ctx.finalizing.is_set
+        stopping = self._finalizing.is_set
         while not stopping():
             try:
                 initial_conn, addr = await self.main_socket.aaccept()
@@ -96,7 +98,7 @@ class Acceptor(AExitStackMixIn):
         con_event = ConnectionEvent(conn, handshake)
         watcher = bandwidth.Watcher()
         watcher.watch(initial_conn, conn)
-        self._app_ctx.connections.dispatcher(con_event, _task_name=f'conn-task-H={handshake.header}')
+        self.conn_dispatcher(con_event, _task_name=f'conn-task-H={handshake.header}')
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):

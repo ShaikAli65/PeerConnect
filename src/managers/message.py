@@ -22,7 +22,7 @@ from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFou
 from src.avails.mixins import Dispatcher, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
-from src.core.app import AppType, ReadOnlyAppType, provide_app_ctx
+from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth, connectivity
 from src.net.connector import Connector
 from src.net.events import ConnectionEvent, MessageEvent
@@ -33,20 +33,20 @@ _logger = logging.getLogger(__name__)
 _exit_stack = AsyncExitStack()
 
 
-async def initiate(app_ctx: AppType):
+async def initiate(finalizing_event, this_peer_id, conn_dispatcher, exit_stack):
     data_dispatcher = MsgDispatcher()
-    app_ctx.messages.dispatcher = data_dispatcher
     data_dispatcher.register_handler(HEADERS.CMD_TEXT, MessageHandler())
-    msg_conn_handler = MessageConnHandler(app_ctx.read_only())
-    app_ctx.connections.dispatcher.register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
-    app_ctx.connections.dispatcher.register_handler(HEADERS.PING, PingHandler(app_ctx.read_only()))
-    app_ctx.connections.dispatcher.register_handler(
+    msg_conn_handler = MessageConnHandler(finalizing_event, data_dispatcher, this_peer_id)
+    conn_dispatcher.register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
+    conn_dispatcher.register_handler(HEADERS.PING, PingHandler(this_peer_id))
+    conn_dispatcher.register_handler(
         HEADERS.CMD_MSG_CONN_RECV_LOOP_BACK,
-        MessageRecvLoopBackHandler(app_ctx.read_only())
+        MessageRecvLoopBackHandler(finalizing_event, data_dispatcher)
     )
-    await app_ctx.exit_stack.enter_async_context(data_dispatcher)
-    await app_ctx.exit_stack.enter_async_context(_exit_stack)
+    await exit_stack.enter_async_context(data_dispatcher)
+    await exit_stack.enter_async_context(_exit_stack)
     await _exit_stack.enter_async_context(_msg_conn_pool)
+    return data_dispatcher
 
 
 @singleton_mixin
@@ -187,15 +187,14 @@ def MessageHandler():
     return handler
 
 
-def MessageConnHandler(app_ctx):
+def MessageConnHandler(finalizing_event, msg_dispatcher, this_peer_id):
     """
     Iterates over a tcp stream
     if some data event occurs then calls data_dispatcher and submits that event
 
     Args:
-        app_ctx(ReadOnlyAppType): application context
     """
-    receiver = MessageRecvLoopBackHandler(app_ctx=app_ctx)
+    receiver = MessageRecvLoopBackHandler(finalizing_event, msg_dispatcher)
 
     async def handle_duplication_conn(connection):
         conn = await _get_from_pool(connection.peer)
@@ -203,14 +202,14 @@ def MessageConnHandler(app_ctx):
             # no duplicate connections allowed
             closing_connection = WireData(
                 header=HEADERS.DUP_MSG_CONN,
-                peer_id=app_ctx.this_peer_id
+                peer_id=this_peer_id
             )
             await WireIO.send_msg(conn.connection, closing_connection)
             return False
 
         ok = WireData(
             header=HEADERS.MSG_CONN_OK,
-            peer_id=app_ctx.this_peer_id
+            peer_id=this_peer_id
         )
 
         await WireIO.send_msg(connection, ok)
@@ -229,9 +228,9 @@ def MessageConnHandler(app_ctx):
     return handler
 
 
-def MessageRecvLoopBackHandler(app_ctx):
+def MessageRecvLoopBackHandler(finalizing_event, msg_dispatcher):
     async def handler(event: ConnectionEvent):
-        receiver = MsgReceiver(app_ctx, MsgConnection(event.connection))
+        receiver = MsgReceiver(finalizing_event, msg_dispatcher, MsgConnection(event.connection))
         try:
             await receiver.start_receiving()
         except OSError:
@@ -240,14 +239,14 @@ def MessageRecvLoopBackHandler(app_ctx):
     return handler
 
 
-def PingHandler(app_ctx):
+def PingHandler(this_peer_id):
     """Handle a ping received"""
 
     async def handler(msg_event: MessageEvent):
         ping = msg_event.msg
         un_ping = WireData(
             header=HEADERS.UNPING,
-            peer_id=app_ctx.this_peer_id,
+            peer_id=this_peer_id,
             msg_id=ping.msg_id,
         )
         return await msg_event.connection.send(un_ping)

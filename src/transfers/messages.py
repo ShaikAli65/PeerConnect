@@ -1,9 +1,9 @@
 import asyncio
+from asyncio import Event
 from typing import Awaitable, Callable, Self
 
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import FailedToSend, InvalidPacket, InvalidStateError
-from src.core.app import ReadOnlyAppType
 from src.net import MsgConnection, MsgConnectionNoRecv
 from src.net.events import MessageEvent
 from . import _logger
@@ -205,8 +205,9 @@ class MsgSender:
 
 
 class MsgReceiver:
-    def __init__(self, app_ctx: ReadOnlyAppType, msg_conn: MsgConnection):
-        self.app_ctx = app_ctx
+    def __init__(self, stopping_event: Event, msg_dispatcher, msg_conn: MsgConnection):
+        self.stopping_event = stopping_event
+        self.msg_dispatcher = msg_dispatcher
         self.limiter = asyncio.Semaphore(const.MAX_CONCURRENT_MSG_PROCESSING)
         self.msg_conn = msg_conn
 
@@ -232,11 +233,11 @@ class MsgReceiver:
             _logger.debug(f"> sent ack for {wire_data.msg_id=}")
 
     async def start_receiving(self):
-        finalized = self.app_ctx.finalizing.is_set
+        finalized = self.stopping_event.is_set
         patience_threshold = 10
         counter = 0
         msg_conn = self.msg_conn
-        msg_dispatcher = self.app_ctx.messages.dispatcher
+        msg_dispatcher = self.msg_dispatcher
         process_once = self._process_once
 
         while not finalized():

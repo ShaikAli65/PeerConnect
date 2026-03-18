@@ -140,14 +140,13 @@ async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
 
 # Callbacks called by kademila's routing mechanisms
 
-def remove_peer(app_ctx, peer):
+def remove_peer(peer):
     """
     Does not directly remove peer
     Spawns a Task that tries to check connectivity status of peer
     If peer is reachable then it is not removed
     else peer is marked as offline
     Args:
-        app_ctx(AppType): application context
         peer(RemotePeer): peer obj to remove
     """
     _logger.warning(f"a request for removal of {peer}")

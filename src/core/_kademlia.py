@@ -18,7 +18,6 @@ from src.avails.bases import BaseDispatcher
 from src.avails.useables import override
 from src.conduit import webpage
 from src.core import peers
-from src.core.app import AppType, ReadOnlyAppType
 from src.core.peerstore import ForgetfulStorage, Storage
 from src.net.events import RequestEvent
 from src.net.transports import KademliaTransport
@@ -130,11 +129,11 @@ class RPCReceiver(RPCProtocol):
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, app_ctx, source_node, storage, ksize):
+    def __init__(self, peer_list, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
-        self.router = AnotherRoutingTable(app_ctx, self, ksize, source_node)
+        self.router = AnotherRoutingTable(peer_list, self, ksize, source_node)
         self.storage = storage
-        self.peer_list = app_ctx.peer_list
+        self.peer_list = peer_list
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
@@ -163,31 +162,43 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
 
 
 class AnotherRoutingTable(routing.RoutingTable):
-    def __init__(self, app_ctx, *args, **kwargs):
+    def __init__(self, peer_list, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._app_ctx: AppType = app_ctx
+        self.peer_list = peer_list
 
     @override
     def add_contact(self, peer: RemotePeer):
         super().add_contact(peer)
-        self._app_ctx.peer_list.add_peer(peer)
+        self.peer_list.add_peer(peer)
         use.sync(webpage.update_peer(peer))
 
     @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        peers.remove_peer(self._app_ctx, peer)
+        peers.remove_peer(peer)
 
 
 class PeerServer(network.Server):
     protocol_class = KadProtocol
 
-    def __init__(self, app_ctx, state_dump_file=None, ksize=20, alpha=3, peer_id=None, storage=None):
+    def __init__(
+            self,
+            peer_list,
+            in_network_event,
+            addr_tuple_gen,
+            state_dump_file=None,
+            ksize=20,
+            alpha=3,
+            peer_id=None,
+            storage=None,
+    ):
         super().__init__(ksize, alpha, peer_id, storage)
         self._add_this_peer_task = None
         self._transport = None
         self.stopping = False
-        self.app_ctx = app_ctx
+        self.peer_list = peer_list
+        self.in_network = in_network_event
+        self.addr_tuple_gen = addr_tuple_gen
         self.state_dump_file = state_dump_file
 
     @override
@@ -197,7 +208,7 @@ class PeerServer(network.Server):
 
     @override
     def _create_protocol(self):
-        return self.protocol_class(self.app_ctx, self.node, self.storage, self.ksize)
+        return self.protocol_class(self.peer_list, self.node, self.storage, self.ksize)
 
     def start(self):
         self.protocol = self._create_protocol()
@@ -256,7 +267,7 @@ class PeerServer(network.Server):
 
         while not self.stopping:
             await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
-            await self.app_ctx.in_network.wait()
+            await self.in_network.wait()
             if not await self.__store_nodes_in_list(closest_list_id, [self.node]):
                 _logger.error("failed adding this peer object to lists")
 
@@ -358,7 +369,7 @@ class PeerServer(network.Server):
         if data['neighbors']:
             try:
                 await self.bootstrap([
-                    self.app_ctx.addr_tuple(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
+                    self.addr_tuple_gen(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
                 ])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
@@ -379,27 +390,31 @@ class PeerServer(network.Server):
         if self.state_dump_file:
             await asyncio.to_thread(self.save_state, self.state_dump_file)
 
-    @property
-    def peer_list(self):
-        """Shortcut access to application's active peer list"""
-        return self.app_ctx.peer_list
-
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     handler = KademliaHandler(server)
     dispatcher.register_handler(REQUESTS_HEADERS.KADEMLIA, handler)
 
 
-async def prepare_kad_server(req_transport, app_ctx: ReadOnlyAppType):
+async def prepare_kad_server(
+        req_transport,
+        peer_list,
+        in_network_event,
+        addr_tuple_gen,
+        this_remote_peer,
+        exit_stack,
+):
     kad_server = PeerServer(
-        app_ctx=app_ctx,
+        peer_list,
+        in_network_event,
+        addr_tuple_gen,
         state_dump_file=Path(const.PATH_CONFIG, const.KAD_SERVER_STATE_FILE_NAME),
         storage=Storage()
     )
-    kad_server.node = app_ctx.this_remote_peer
+    kad_server.node = this_remote_peer
     kad_server.start()
     kad_server.transport = KademliaTransport(req_transport)
-    await app_ctx.exit_stack.enter_async_context(kad_server)
+    await exit_stack.enter_async_context(kad_server)
     return kad_server
 
 

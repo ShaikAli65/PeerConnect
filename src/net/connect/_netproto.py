@@ -177,7 +177,11 @@ class UDPProtocol(NetworkProtocol):
         server_sock = Socket(family, _socket.SOCK_DGRAM, -1, fileno)
         server_sock.setblocking(False)
         server_sock.set_loop(loop)
-        server_sock.bind(bind_address)
+        try:
+            server_sock.bind(bind_address)
+        except Exception as exp:
+            exp.add_note(f"ip:{bind_address}")
+            raise
         # server_sock.listen(backlog)
         return server_sock
 

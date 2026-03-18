@@ -113,7 +113,7 @@ class Connector(AExitStackMixIn):
                 return
 
         if self.number_of_connections(peer) >= const.MAX_CONNECTIONS_BETWEEN_PEERS:
-            if raise_if_busy is True:
+            if raise_if_busy:
                 self._raise_resource_busy(peer)
 
             async with (condition := self.conn_waiters[peer]):

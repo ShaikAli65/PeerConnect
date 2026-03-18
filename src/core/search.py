@@ -224,7 +224,7 @@ class GossipSearch:
             _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id", exc_info=ke)
 
 
-def GossipSearchReqHandler(searcher, transport, app_ctx,
+def GossipSearchReqHandler(searcher, transport, gossiper,
                            gossip_handler):
     """
     Working:
@@ -242,7 +242,7 @@ def GossipSearchReqHandler(searcher, transport, app_ctx,
     """
 
     async def handle(event: GossipEvent):
-        if not app_ctx.gossip.gossiper.is_seen(event.message):
+        if not gossiper.is_seen(event.message):
             # let this search request get forwarded to other peers
             # if this is our first time seeing this message
             await gossip_handler(event)
@@ -265,15 +265,15 @@ def get_gossip_searcher():
     return GossipSearch
 
 
-def register_handlers(app_ctx, g_dispatcher, gossip_message_handler, gossip_transport):
+def register_handlers(gossiper, g_dispatcher, gossip_message_handler, gossip_transport):
     """Register search handlers into dispatcher"""
     gossip_searcher = get_gossip_searcher()
     req_handler = GossipSearchReqHandler(
         GossipSearch(),
         gossip_transport,
-        app_ctx,
+        gossiper,
         gossip_message_handler
     )
-    reply_handler = GossipSearchReplyHandler(app_ctx.gossip.gossiper, gossip_searcher)
+    reply_handler = GossipSearchReplyHandler(gossiper, gossip_searcher)
     g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REQ, req_handler)
     g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REPLY, reply_handler)

@@ -3,7 +3,7 @@ import logging
 from src.avails import GossipMessage, const
 from src.avails.mixins import BasicDispatcher
 from src.core import search
-from src.core.app import AppType, ReadOnlyAppType
+from src.core.app import AppType
 from src.net.events import GossipEvent, RequestEvent
 from src.transfers import GOSSIP_HEADER, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
@@ -28,9 +28,7 @@ class GlobalRumorMonger(RumorMongerProtocol):
         super().__init__(transport, global_peer_list, message_list)
 
 
-def GlobalGossipMessageHandler(app_ctx: ReadOnlyAppType):
-    gossip_handler = app_ctx.gossip.gossiper
-
+def GlobalGossipMessageHandler(gossip_handler):
     async def handle(event: GossipEvent):
         print("[GOSSIP] new message arrived", event.message, "from", event.from_addr)
         return gossip_handler.message_arrived(*event)
@@ -47,18 +45,16 @@ class GossipDispatcher(*BasicDispatcher):
         return await self.call_handler(gossip_message.header, _logger, g_event)
 
 
-async def initiate_gossip(data_transport, req_dispatcher, app_ctx: AppType):
+async def initiate_gossip(data_transport, req_dispatcher, peer_list, exit_stack):
     gossip_transport = GossipTransport(data_transport)
     g_dispatcher = GossipDispatcher()
 
-    app_ctx.gossip.transport = gossip_transport
-    app_ctx.gossip.gossiper = GlobalRumorMonger(gossip_transport, app_ctx.peer_list)
-    app_ctx.gossip.dispatcher = g_dispatcher
+    gossiper = GlobalRumorMonger(gossip_transport, peer_list)
 
-    gossip_message_handler = GlobalGossipMessageHandler(app_ctx.read_only())
+    gossip_message_handler = GlobalGossipMessageHandler(gossiper)
 
     search.register_handlers(
-        app_ctx.read_only(),
+        gossiper,
         g_dispatcher,
         gossip_message_handler,
         gossip_transport
@@ -66,6 +62,5 @@ async def initiate_gossip(data_transport, req_dispatcher, app_ctx: AppType):
 
     g_dispatcher.register_handler(GOSSIP_HEADER.MESSAGE, gossip_message_handler)
     req_dispatcher.register_handler(REQUESTS_HEADERS.GOSSIP, g_dispatcher)
-    await app_ctx.exit_stack.enter_async_context(g_dispatcher)
-    app_ctx.gossip.dispatcher = g_dispatcher
-    return g_dispatcher
+    await exit_stack.enter_async_context(g_dispatcher)
+    return gossip_transport, g_dispatcher, gossiper

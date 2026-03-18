@@ -66,7 +66,7 @@ def pause_transfer(peer_id, transfer_id):
     transfers_book.add_to_continued(peer_id, transfer_handle)
 
 
-def DirConnectionHandler(app_ctx: ReadOnlyAppType):
+def DirConnectionHandler(current_profile):
     async def handler(event: ConnectionEvent):
 
         async def make_dir_receiver(peer, _transfer_id):
@@ -89,7 +89,7 @@ def DirConnectionHandler(app_ctx: ReadOnlyAppType):
             # `should_return` is False
 
         transfer_handle, should_return = await basic_recv(
-            transfer_id, event, app_ctx, transfers_book
+            transfer_id, event, current_profile, transfers_book
         )
         if should_return is True:
             await transfer_handle.done.wait()

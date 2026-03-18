@@ -20,7 +20,6 @@ from src.avails import DataWeaver, const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import BasicDispatcher, Dispatcher, singleton_mixin
 from src.conduit import headers, logger
-from src.core.app import AppType
 
 PROFILE_WAIT: _asyncio.Future | None = None
 
