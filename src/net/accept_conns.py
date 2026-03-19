@@ -9,12 +9,11 @@ from typing import Optional
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import AExitStackMixIn, singleton_mixin
-from src.core.app import ReadOnlyAppType
 from src.net.events import ConnectionEvent
 from . import bandwidth
 from .connect import Connection, Socket
 from .wire_io import WireIO
-from ..avails.useables import COLORS
+from src.avails.useables import COLORS
 
 _logger = logging.getLogger(__name__)
 
@@ -28,12 +27,18 @@ class Acceptor(AExitStackMixIn):
         'stopping': asyncio.Event,
     }
 
-    # def __init__(self, app_ctx: ReadOnlyAppType, listen_addr=None, *args, **kwargs):
-    def __init__(self, finalizing, listen_addr, conn_dispatcher, *args, **kwargs):
+    def __init__(
+            self,
+            finalizing: asyncio.Event,
+            listen_addr:tuple,
+            conn_service,
+            *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
+        from core.acceptor import ConnectionService
         self.address = listen_addr  # ip defaults to active ip
         self._finalizing = finalizing
-        self.conn_dispatcher = conn_dispatcher
+        self.conn_service: ConnectionService = conn_service
         self.main_socket: Optional[Socket] = None
         self.back_log = 4
         self.max_timeout = 90
@@ -86,7 +91,7 @@ class Acceptor(AExitStackMixIn):
             return
         _logger.info(f"handshake successful {handshake}")
         try:
-            peer = await peers.get_remote_peer(handshake.peer_id)
+            peer = await peers.get_remote_peer(handshake.peer_id)  # TODO: fix this
         except RemotePeerNotFound:
             _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
             initial_conn.close()
@@ -98,7 +103,7 @@ class Acceptor(AExitStackMixIn):
         con_event = ConnectionEvent(conn, handshake)
         watcher = bandwidth.Watcher()
         watcher.watch(initial_conn, conn)
-        self.conn_dispatcher(con_event, _task_name=f'conn-task-H={handshake.header}')
+        await self.conn_service.new_connection(con_event)
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):

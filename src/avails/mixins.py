@@ -5,7 +5,7 @@ from asyncio import CancelledError, TaskGroup
 from contextlib import AsyncExitStack
 from functools import wraps
 from inspect import isawaitable
-from typing import Type, TypeVar
+from typing import TYPE_CHECKING, Type, TypeVar
 
 from src.avails import BaseDispatcher, HasID, use
 
@@ -127,6 +127,9 @@ class TaskGroupMixIn:
 
 
 class CallHandlerMixIn:
+    if TYPE_CHECKING:
+        registry: dict
+
     async def call_handler(self, header, logger, *args, **kwargs):
         try:
             handler = self.registry[header]
@@ -286,7 +289,7 @@ BasicDispatcher = TaskGroupMixIn, CallHandlerMixIn, BaseDispatcher
 # class SomeDispatcher(*BasicDispatcher):
 #    pass
 # this is important cause dispatchers are core to the application and have lots of calls to them
-
+# i didn't ran some benchmarks, just doing it in a different way ;)
 
 _T = TypeVar('_T')
 

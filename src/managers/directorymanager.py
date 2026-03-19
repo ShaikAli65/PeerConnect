@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 
 from src.avails import TransfersBookKeeper, const, get_dialog_handler
-from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.managers.filemanager import (
     basic_recv,
     finalize_transfer,
@@ -28,8 +27,7 @@ async def open_dir_selector():
     return await result
 
 
-@provide_app_ctx
-async def send_directory(remote_peer, dir_path: Path, *, app_ctx=None):
+async def send_directory(remote_peer, dir_path: Path, this_peer_id):
     status_mixin = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
     sender = DirSender(
         remote_peer,
@@ -42,7 +40,7 @@ async def send_directory(remote_peer, dir_path: Path, *, app_ctx=None):
     try:
         async with sender_helper(
               sender,
-              app_ctx.this_peer_id,
+              this_peer_id,
               HEADERS.CMD_DIR_CONN,
               dir_name=dir_path.name,
         ) as connection:

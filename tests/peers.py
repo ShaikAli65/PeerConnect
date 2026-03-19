@@ -3,8 +3,6 @@ import logging
 import _path  # noqa
 from src.avails.useables import async_input
 from src.core import peers
-from src.core.app import provide_app_ctx
-from src.managers.statemanager import State
 from tests.test import start_test
 
 _logger = logging.getLogger(__name__)

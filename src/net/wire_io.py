@@ -21,7 +21,7 @@ class WireIO:
 
     @staticmethod
     def send_msg(connection, msg) -> Awaitable[None]:
-        """
+        """Just a handy a wrapper around `MsgConnection.send`.
 
         Args:
             connection(Connection): connection object

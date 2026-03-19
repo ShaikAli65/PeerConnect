@@ -4,41 +4,15 @@ import logging
 import struct
 import time
 
+from core.requests import RequestsService
 from src.avails import RemotePeer, WireData, const, use
-from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import TaskGroupMixIn, singleton_mixin
-from src.core.app import AppType, provide_app_ctx
+from src.avails.mixins import TaskGroupMixIn
 from src.net.events import RequestEvent
 from src.transfers import HEADERS
 from .connect import connect_to_peer
+from .requests import send_request
 
 _logger = logging.getLogger(__name__)
-
-
-@provide_app_ctx
-async def send_request(msg, peer, *, expect_reply=False, app_ctx=None):
-    """Send a msg to requests endpoint of the peer
-
-    Notes:
-        if expect_reply is True and no msg_id available in msg raises InvalidPacket
-    Args:
-        msg(WireData): message to send
-        peer(RemotePeer): msg is sent to
-        expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
-        app_ctx(ReadOnlyAppType): application context to retrieve requests transport
-
-    Raises:
-        InvalidPacket: if msg does not contain msg_id and expecting a reply
-    """
-
-    if msg.msg_id is None and expect_reply is True:
-        raise InvalidPacket("msg_id not found and expecting a reply")
-
-    app_ctx.requests.transport.sendto(bytes(msg), peer.req_uri)
-
-    if expect_reply:
-        req_disp = app_ctx.requests.dispatcher
-        return await req_disp.register_reply(msg.msg_id)
 
 
 class ConnectivityCheckState(enum.IntEnum):
@@ -58,26 +32,19 @@ class CheckRequest:
         self.status = ConnectivityCheckState.INITIATED
 
 
-@singleton_mixin
 class Connectivity(TaskGroupMixIn):
     __slots__ = 'last_checked',
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, req_service, *args, **kwargs):
         self.last_checked = {}
+        self.req_service = req_service
         super().__init__(*args, **kwargs)
 
     async def submit(self, request: CheckRequest):
         self.last_checked[request.peer] = request, (fut := asyncio.ensure_future(self._new_check(request)))
         return await fut
 
-    def check_for_recent(self, request):
-        if request.peer in self.last_checked:
-            prev_request, fut = self.last_checked[request.peer]
-            if request.time_stamp - prev_request.time_stamp <= const.PING_TIME_CHECK_WINDOW:
-                return fut
-
-    @staticmethod
-    async def _new_check(request):
+    async def _new_check(self, request):
 
         ping_data = WireData(
             header=HEADERS.REMOVAL_PING,
@@ -87,7 +54,7 @@ class Connectivity(TaskGroupMixIn):
         _logger.debug(f"connectivity check initiating for {request}")
 
         try:
-            t = send_request(ping_data, request.peer, expect_reply=True)
+            t = send_request(self.req_service, ping_data, request.peer, expect_reply=True)
             await asyncio.wait_for(t, const.PING_TIMEOUT)
             return True
         except TimeoutError:
@@ -109,27 +76,48 @@ class Connectivity(TaskGroupMixIn):
         else:
             return True
 
+    def new_check(self, peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
+        """
+        Creates a new check request for a given peer and either returns an existing future
+        or initiates a new check process.
+
+        This method is responsible for handling check requests by first determining if there
+        is an existing recent check for the peer. If a recent check exists, it immediately
+        returns the request and its associated future. Otherwise, it creates a new check task.
+
+        Args:
+            peer: The peer entity for which the check request is being created.
+
+        Returns:
+            A tuple where the first element is an instance of CheckRequest for the given
+            peer. The second element is an asyncio.Future object representing the result
+            of the check process.
+        """
+
+        req = CheckRequest(peer, False)
+        if fut := self.check_for_recent(req):
+            # return fast without spawning a task within queue mix in
+            return req, fut
+
+        return req, self(req)
+
+    def check_for_recent(self, request):
+        if request.peer in self.last_checked:
+            prev_request, fut = self.last_checked[request.peer]
+            if request.time_stamp - prev_request.time_stamp <= const.PING_TIME_CHECK_WINDOW:
+                return fut
+        return None
+
     async def __aenter__(self):
         await super().__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-
         for _, fut in self.last_checked.values():
             if not fut.done():
                 fut.cancel()
 
         return await super().__aexit__(exc_type, exc_val, exc_tb)
-
-
-def new_check(peer) -> tuple[CheckRequest, asyncio.Future[bool]]:
-    connector = Connectivity()
-    req = CheckRequest(peer, False)
-    if fut := connector.check_for_recent(req):
-        # return fast without spawning a task within queue mix in
-        return req, fut
-
-    return req, connector(req)
 
 
 def EchoHandler(this_peer_id, req_transport):
@@ -141,6 +129,11 @@ def EchoHandler(this_peer_id, req_transport):
     return handler
 
 
-async def initiate(exit_stack, req_dispatcher, req_transport, this_peer_id):
-    await exit_stack.enter_async_context(Connectivity())
-    req_dispatcher.register_simple_handler(HEADERS.REMOVAL_PING, EchoHandler(this_peer_id, req_transport))
+async def initiate(exit_stack, req_service: RequestsService, this_peer_id):
+    req_service.dispatcher.register_simple_handler(
+        HEADERS.REMOVAL_PING,
+        EchoHandler(this_peer_id, req_service.transport)
+    )
+    connectivity_checker = Connectivity(req_service)
+    await exit_stack.enter_async_context(connectivity_checker)
+    return connectivity_checker

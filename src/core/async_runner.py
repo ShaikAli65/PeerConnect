@@ -1,7 +1,6 @@
 import asyncio
 
 from src.avails import use
-from src.core.app import App
 
 
 class AnotherRunner(asyncio.Runner):  # noqa # dirty dirty dirty

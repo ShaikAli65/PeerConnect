@@ -52,6 +52,7 @@ class IPAddress(NamedTuple):
             flow_info = 0
             scope_id = max(0, int(self.scope_id))
             return ipaddr, port, flow_info, scope_id
+        return None
 
 
 NetAddr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
@@ -133,8 +134,7 @@ async def connect_to_peer(
     :returns: connected socket if successful
     :raises: OSError
     """
-    addr = getattr(_peer_obj, to_which)
-    address = const.THIS_IP.addr_tuple(port=addr[1], ip=addr[0])
+    address = getattr(_peer_obj, to_which)
     retry_count = 0
 
     if timeout is None:

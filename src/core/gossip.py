@@ -1,9 +1,9 @@
 import logging
+from typing import NamedTuple
 
 from src.avails import GossipMessage, const
 from src.avails.mixins import BasicDispatcher
 from src.core import search
-from src.core.app import AppType
 from src.net.events import GossipEvent, RequestEvent
 from src.transfers import GOSSIP_HEADER, GossipTransport, REQUESTS_HEADERS, \
     RumorMongerProtocol, SimpleRumorMessageList
@@ -45,22 +45,27 @@ class GossipDispatcher(*BasicDispatcher):
         return await self.call_handler(gossip_message.header, _logger, g_event)
 
 
-async def initiate_gossip(data_transport, req_dispatcher, peer_list, exit_stack):
+class GossipService(NamedTuple):
+    gossip_transport: GossipTransport
+    g_dispatcher: GossipDispatcher
+    gossiper: GlobalRumorMonger
+
+
+async def initiate_gossip(data_transport, remote_peer, req_dispatcher, peer_list, exit_stack):
     gossip_transport = GossipTransport(data_transport)
     g_dispatcher = GossipDispatcher()
-
     gossiper = GlobalRumorMonger(gossip_transport, peer_list)
 
     gossip_message_handler = GlobalGossipMessageHandler(gossiper)
-
-    search.register_handlers(
-        gossiper,
-        g_dispatcher,
-        gossip_message_handler,
-        gossip_transport
-    )
-
     g_dispatcher.register_handler(GOSSIP_HEADER.MESSAGE, gossip_message_handler)
+
+    gossip_service = GossipService(gossip_transport, g_dispatcher, gossiper)
+
+    search.init_gossip_searcher(remote_peer, gossip_service.gossiper)
+    search.register_handlers(
+        gossip_service,
+        gossip_message_handler,
+    )
     req_dispatcher.register_handler(REQUESTS_HEADERS.GOSSIP, g_dispatcher)
     await exit_stack.enter_async_context(g_dispatcher)
-    return gossip_transport, g_dispatcher, gossiper
+    return gossip_service

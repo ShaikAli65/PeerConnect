@@ -308,6 +308,7 @@ async def initiate_page_handle(app_exit_stack, *, _exit_stack=_exit_stack):
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(start_websocket_server())
+    return PROFILE_WAIT
 
 
 @overload

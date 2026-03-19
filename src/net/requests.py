@@ -3,6 +3,7 @@ import functools
 import socket
 from logging import getLogger
 
+from net import IPAddress
 from src.avails import const
 from src.avails.exceptions import InvalidPacket
 from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
@@ -48,15 +49,14 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.dispatcher(event)
 
 
-def get_bind_address(this_ip, addr_tuple_gen):
+def get_bind_address(this_ip:IPAddress):
     if const.IS_WINDOWS:
         # a discovery request packet is observed in wire shark but that packet is
         # not getting delivered to application socket in linux when we bind to specific interface address
 
         # TL;DR: causing some unknown behaviour in linux system
         const.BIND_IP = this_ip.ip
-
-    return addr_tuple_gen(port=const.PORT_REQ, ip=const.BIND_IP)
+    return this_ip.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
 
 
 async def setup_endpoint(bind_address, multicast_address, req_dispatcher, finalizing_event, addr_tuple_gen):
@@ -101,3 +101,29 @@ def _subscribe_to_multicast(sock, multicast_addr):
         )
         _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
     return sock
+
+
+async def send_request(req_service, msg, peer, *, expect_reply=False):
+    """Send a msg to requests endpoint of the peer
+
+    Notes:
+        if expect_reply is True and no msg_id available in msg raises InvalidPacket
+    Args:
+        req_service(RequestService): requests service to use for sending and receiving ack.
+        msg(WireData): message to send
+        peer(RemotePeer): msg is sent to
+        expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
+
+    Raises:
+        InvalidPacket: if msg does not contain msg_id and expecting a reply
+    """
+    # TODO: add retries
+
+    if msg.msg_id is None and expect_reply is True:
+        raise InvalidPacket("msg_id not found and expecting a reply")
+
+    req_service.transport.sendto(bytes(msg), peer.req_uri)
+
+    if expect_reply:
+        return await req_service.dispatcher.register_reply(msg.msg_id)
+    return None

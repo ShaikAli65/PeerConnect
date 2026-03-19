@@ -9,26 +9,18 @@ from kademlia.utils import digest
 import src.core.async_runner  # noqa
 from src import net
 from src.avails import RemotePeer, constants as const, use
-from src.conduit import pagehandle
 from src.configurations import interfaces as _interfaces
-from src.core.app import AppType
 
 _logger = logging.getLogger(__package__)
 
 
-async def set_ip_config(app_ctx: AppType):
+async def set_ip_config(current_profile):
     _clear_logs() if const.CLEAR_LOGS else None
 
-    _logger.debug("waiting for profile selection")
+    const.THIS_IP = current_profile.interface
 
-    app_ctx.current_profile = await pagehandle.PROFILE_WAIT
-
-    app_ctx.this_ip = app_ctx.current_profile.interface
-
-    const.THIS_IP = app_ctx.current_profile.interface
-
-    _logger.info(f"{app_ctx.this_ip=}")
-
+    _logger.info(f"setting {current_profile.interface=}")
+    return current_profile.interface
 
 def _clear_logs():
     for path in Path(const.PATH_LOG).glob("*.log*"):
@@ -41,13 +33,7 @@ async def load_interfaces():
     return interfaces
 
 
-def configure_this_remote_peer(app: AppType):
-    rp = _make_this_remote_peer(app.current_profile)
-    app.this_remote_peer = rp
-    const.USERNAME = rp.username
-
-
-def _make_this_remote_peer(profile):
+def make_this_remote_peer(profile):
     rp = RemotePeer(
         byte_id=digest(profile.id),
         username=profile.username,

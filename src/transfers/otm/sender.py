@@ -84,7 +84,7 @@ class FilesSender:
             f_mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
             for offset in range(seek, file_item.size, chunk_size):
                 chunk = f_mapped[offset: offset + chunk_size]
-            await self.relay.send_file_chunk(chunk)
+                await self.relay.send_file_chunk(chunk)
 
     def _create_inform_packet(self):
         return WireData(

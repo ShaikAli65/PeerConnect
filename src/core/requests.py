@@ -2,11 +2,11 @@ import asyncio
 import inspect
 import logging
 import sys
+from typing import NamedTuple
 
 from src.avails import const
 from src.avails.mixins import Dispatcher
 from src.core import _kademlia, gossip
-from src.core.app import AppType, provide_app_ctx
 from src.core.discover import discovery_initiate
 from src.net import requests
 from src.net.events import RequestEvent
@@ -16,77 +16,14 @@ from src.transfers import REQUESTS_HEADERS
 _logger = logging.getLogger(__name__)
 
 
-async def initiate(app: AppType):
-
-    req_dispatcher = RequestsDispatcher()
-    await app.exit_stack.enter_async_context(req_dispatcher)
-    multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6,
-                         const.PORT_NETWORK)
-
-    dgram_transport, req_transport = await _make_req_endpoint(
-        req_dispatcher,
-        multicast_address,
-        app.addr_tuple,
-        app.this_ip,
-        app.finalizing,
-    )
-
-    kad_server = await _kademlia.prepare_kad_server(
-        dgram_transport,
-        app.peer_list,
-        app.in_network,
-        app.addr_tuple,
-        app.this_remote_peer,
-        app.exit_stack,
-    )
-
-    _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
-
-    gossip_transport, g_dispatcher, gossiper = await gossip.initiate_gossip(
-        dgram_transport,
-        req_dispatcher,
-        app.peer_list,
-        app.exit_stack,
-    )
-    app.gossip.transport = gossip_transport
-    app.gossip.gossiper = gossiper
-    app.gossip.dispatcher = g_dispatcher
-
-    _logger.info("joined gossip network")
-
-    app.requests.dispatcher = req_dispatcher
-    app.requests.transport = req_transport
-    app.kad_server = kad_server
-
-    discovery_transport, discover_dispatcher = await discovery_initiate(
-        multicast_address,
-        app.exit_stack,
-        req_dispatcher,
-        app.addr_tuple,
-        app.this_ip,
-        app.this_remote_peer,
-        kad_server,
-        app.in_network,
-        app.finalizing,
-        dgram_transport
-    )
-
-    app.discovery.dispatcher = discover_dispatcher
-    app.discovery.transport = discovery_transport
-
-    # TODO: who is the owner of this task??
-    await asyncio.create_task(kad_server.add_this_peer_to_lists())
-
-
-async def _make_req_endpoint(req_dispatcher, multicast_address, addr_tuple_gen, this_ip, finalizing_event):
-
+async def _make_req_endpoint(req_dispatcher, multicast_address, this_ip, finalizing_event):
     try:
         transport = await requests.setup_endpoint(
-            requests.get_bind_address(this_ip, addr_tuple_gen),
+            requests.get_bind_address(this_ip),
             multicast_address,
             req_dispatcher,
             finalizing_event,
-            addr_tuple_gen,
+            this_ip.addr_tuple,
         )
         _logger.debug("created requests transport")
     except OSError as oe:
@@ -94,17 +31,15 @@ async def _make_req_endpoint(req_dispatcher, multicast_address, addr_tuple_gen, 
         _logger.critical("failed to bind acceptor", exc_info=True)
         raise RuntimeError from oe
 
-    rt = req_dispatcher.transport = RequestsTransport(transport)
-    return transport, rt
+    return transport, RequestsTransport(transport)
 
 
 class RequestsDispatcher(*Dispatcher):
-    __slots__ = 'transport'
+    __slots__ = ()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.registry[REQUESTS_HEADERS.REQUEST] = {}
-        # for simple handlers
 
     async def submit(self, req_event: RequestEvent):
 
@@ -145,7 +80,66 @@ class RequestsDispatcher(*Dispatcher):
         self.registry[REQUESTS_HEADERS.REQUEST][header] = handler
 
 
-@provide_app_ctx
-async def end_requests(app_ctx):
-    app_ctx.kademlia_network_server.stop()
-    app_ctx.requests_transport.close()
+class RequestsService(NamedTuple):
+    dispatcher: RequestsDispatcher
+    transport: RequestsTransport
+
+
+async def initiate(
+        this_ip,
+        this_remote_peer,
+        peer_list,
+        in_network,
+        finalizing,
+        exit_stack,
+):
+    req_dispatcher = RequestsDispatcher()
+    await exit_stack.enter_async_context(req_dispatcher)
+    multicast_address = (const.MULTICAST_IP_v4 if const.USING_IP_V4 else const.MULTICAST_IP_v6,
+                         const.PORT_NETWORK)
+
+    dgram_transport, req_transport = await _make_req_endpoint(
+        req_dispatcher,
+        multicast_address,
+        this_ip,
+        finalizing,
+    )
+    requests_service = RequestsService(req_dispatcher, req_transport)
+
+    kad_server = await _kademlia.prepare_kad_server(
+        dgram_transport,
+        peer_list,
+        in_network,
+        this_ip,
+        this_remote_peer,
+        exit_stack,
+    )
+
+    _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
+
+    gossip_service = await gossip.initiate_gossip(
+        dgram_transport,
+        this_remote_peer,
+        req_dispatcher,
+        peer_list,
+        exit_stack,
+    )
+
+    _logger.info("joined gossip network")
+
+    discovery_service = await discovery_initiate(
+        multicast_address,
+        exit_stack,
+        req_dispatcher,
+        this_ip,
+        this_remote_peer,
+        kad_server,
+        in_network,
+        finalizing,
+        dgram_transport
+    )
+
+    # this task is internally managed by KademliaServer
+    await asyncio.create_task(kad_server.add_this_peer_to_lists())
+
+    return requests_service, gossip_service, discovery_service, kad_server

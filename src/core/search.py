@@ -7,9 +7,9 @@ from typing import AsyncIterator
 
 from kademlia import crawling
 
+from core.gossip import GossipService
 from src.avails import GossipMessage, RemotePeer, WireData, const, use
 from src.avails.exceptions import SearchExhausted
-from src.core.app import provide_app_ctx
 from src.core.peerstore import node_list_ids
 from src.net.events import GossipEvent
 from src.transfers import GOSSIP_HEADER
@@ -151,14 +151,14 @@ class GossipSearch:
             return not current_time - self._start_time > const.TIMEOUT_TO_GATHER_SEARCH_RESULTS
 
         async def __anext__(self):
-            if self._is_active is False:
+            if not self._is_active:
                 raise StopAsyncIteration
 
             current_time = asyncio.get_event_loop().time()
             try:
                 search_response = await asyncio.wait_for(self.reply_queue.get(),
                                                          timeout=const.TIMEOUT_TO_GATHER_SEARCH_RESULTS - (
-                                                                     current_time - self._start_time))
+                                                                 current_time - self._start_time))
                 return search_response
             except asyncio.TimeoutError:
                 raise StopAsyncIteration
@@ -166,30 +166,32 @@ class GossipSearch:
     _message_state_dict: dict[str, search_iterator] = {}
     _search_cache = {}
 
-    @classmethod
-    def search_for(cls, find_str, gossiper):
+    def __init__(self, this_peer: RemotePeer, gossiper):
+        self.this_peer = this_peer
+        self.gossiper = gossiper
+
+    def search_for(self, find_str):
         _logger.info(f"[GOSSIP][SEARCH] new search for: {find_str}")
-        m = cls._prepare_search_message(find_str)
-        gossiper.gossip_message(m)
-        cls._message_state_dict[m.id] = f = cls.search_iterator(m.id)
+        m = self._prepare_search_message(find_str)
+        self.gossiper.gossip_message(m)
+        self._message_state_dict[m.id] = f = self.search_iterator(m.id)
         return f
 
-    @classmethod
-    @provide_app_ctx
-    def request_arrived(cls, req_data: GossipMessage, _, app_ctx=None):
+    # @provide_app_ctx
+    def request_arrived(self, req_data: GossipMessage, _):
         search_string = req_data.message
-        if app_ctx.this_remote_peer.is_relevant(search_string):
-            return cls._prepare_reply(req_data.id, app_ctx.this_remote_peer)
+        if self.this_peer.is_relevant(search_string):
+            return self._prepare_reply(req_data.id)
+        return None
 
-    @staticmethod
-    def _prepare_reply(reply_id, this_rp):
+    def _prepare_reply(self, reply_id):
         gm = GossipMessage(
             WireData(
                 header=GOSSIP_HEADER.SEARCH_REPLY,
-                message=this_rp.serialized,
+                message=self.this_peer.serialized,
                 created=time.time(),
                 msg_id=reply_id,
-                peer_id=this_rp.peer_id,
+                peer_id=self.this_peer.peer_id,
                 ttl=1,
             )
         )
@@ -209,17 +211,16 @@ class GossipSearch:
         )
         return gm
 
-    @classmethod
-    def reply_arrived(cls, reply_data: GossipMessage, addr):
+    def reply_arrived(self, reply_data: GossipMessage, _):
         try:
-            result_iter = cls._message_state_dict[reply_data.id]
+            result_iter = self._message_state_dict[reply_data.id]
             if m := reply_data.message:
                 m = RemotePeer.load_from(m)
             try:
                 result_iter.add_peer(m)
             except SearchExhausted:
                 _logger.debug(f"search iterator id={reply_data.id} exhausted, removing")
-                cls._message_state_dict.pop(reply_data.id)
+                self._message_state_dict.pop(reply_data.id)
         except KeyError as ke:
             _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id", exc_info=ke)
 
@@ -234,9 +235,9 @@ def GossipSearchReqHandler(searcher, transport, gossiper,
         * Gossips the received search request received using gossiper
 
     Args:
+        gossiper:  used to gossip the search request
         searcher(GossipSearch): delegates search request event to this object
         transport(GossipTransport): transport to use to send messages
-        app_ctx(ReadOnlyAppType): application global context
         gossip_handler(GlobalGossipMessageHandler): handler that handles gossip message that has arrived
 
     """
@@ -248,6 +249,7 @@ def GossipSearchReqHandler(searcher, transport, gossiper,
             await gossip_handler(event)
         if reply := searcher.request_arrived(*event):
             return transport.sendto(reply, event.from_addr)
+        return None
 
     return handle
 
@@ -261,19 +263,27 @@ def GossipSearchReplyHandler(gossiper, gossip_searcher):
     return handle
 
 
-def get_gossip_searcher():
-    return GossipSearch
+_gossip_searcher = None
 
 
-def register_handlers(gossiper, g_dispatcher, gossip_message_handler, gossip_transport):
+def get_gossip_searcher() -> GossipSearch:
+    return _gossip_searcher
+
+
+def init_gossip_searcher(remote_peer, gossiper):
+    global _gossip_searcher
+    _gossip_searcher = GossipSearch(remote_peer, gossiper)
+
+
+def register_handlers(gossip_service, gossip_message_handler):
     """Register search handlers into dispatcher"""
     gossip_searcher = get_gossip_searcher()
     req_handler = GossipSearchReqHandler(
-        GossipSearch(),
-        gossip_transport,
-        gossiper,
+        gossip_searcher,
+        gossip_service.gossip_transport,
+        gossip_service.gossiper,
         gossip_message_handler
     )
-    reply_handler = GossipSearchReplyHandler(gossiper, gossip_searcher)
-    g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REQ, req_handler)
-    g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REPLY, reply_handler)
+    reply_handler = GossipSearchReplyHandler(gossip_service.gossiper, gossip_searcher)
+    gossip_service.g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REQ, req_handler)
+    gossip_service.g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REPLY, reply_handler)

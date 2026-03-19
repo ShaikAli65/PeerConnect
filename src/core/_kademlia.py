@@ -185,7 +185,7 @@ class PeerServer(network.Server):
             self,
             peer_list,
             in_network_event,
-            addr_tuple_gen,
+            this_ip,
             state_dump_file=None,
             ksize=20,
             alpha=3,
@@ -198,7 +198,7 @@ class PeerServer(network.Server):
         self.stopping = False
         self.peer_list = peer_list
         self.in_network = in_network_event
-        self.addr_tuple_gen = addr_tuple_gen
+        self.this_ip = this_ip
         self.state_dump_file = state_dump_file
 
     @override
@@ -369,7 +369,7 @@ class PeerServer(network.Server):
         if data['neighbors']:
             try:
                 await self.bootstrap([
-                    self.addr_tuple_gen(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
+                    self.this_ip.addr_tuple(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
                 ])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
@@ -397,24 +397,25 @@ def register_into_dispatcher(server, dispatcher: BaseDispatcher):
 
 
 async def prepare_kad_server(
-        req_transport,
+        data_transport,
         peer_list,
         in_network_event,
-        addr_tuple_gen,
+        this_ip,
         this_remote_peer,
         exit_stack,
 ):
     kad_server = PeerServer(
         peer_list,
         in_network_event,
-        addr_tuple_gen,
+        this_ip,
         state_dump_file=Path(const.PATH_CONFIG, const.KAD_SERVER_STATE_FILE_NAME),
         storage=Storage()
     )
     kad_server.node = this_remote_peer
     kad_server.start()
-    kad_server.transport = KademliaTransport(req_transport)
+    kad_server.transport = KademliaTransport(data_transport)
     await exit_stack.enter_async_context(kad_server)
+
     return kad_server
 
 

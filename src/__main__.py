@@ -4,14 +4,15 @@ import os
 import sys
 import time
 import traceback
-from asyncio import CancelledError
+from asyncio import CancelledError, Event
 
+from avails import PeerDict
+from avails.mixins import AggregatingAsyncExitStack
 from src.avails.useables import COLORS
 
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from src.core.app import App, AppType
 from src.avails import const
 from src.conduit import pagehandle
 from src.configurations import bootup, configure
@@ -29,15 +30,13 @@ _logger = logging.getLogger()
 # Some swallow errors
 # Some return None and hope
 
-async def init_app(app: AppType):
-    exit_stack = app.exit_stack
+async def init_app(exit_stack, finalizing, in_network, peer_list):
     _logger.info("setting paths")
     configure.set_paths()
     _logger.info("initiating logging")
     await logmanager.initiate(exit_stack)
 
     config_map = await configure.load_configs(exit_stack)
-    app.current_config = config_map
     _logger.info(f"loaded configurations, {config_map=}")
 
     _logger.info("loading profiles")
@@ -47,45 +46,55 @@ async def init_app(app: AppType):
     await bootup.launch_web_page()
 
     _logger.info("load interfaces")
-    app.interfaces = await bootup.load_interfaces()
+    await bootup.load_interfaces()
 
     _logger.info("initiating page handle")
-    await pagehandle.initiate_page_handle(exit_stack)
+    profile_selection = await pagehandle.initiate_page_handle(exit_stack)
+
+    _logger.debug("waiting for profile selection")
+    current_profile = await profile_selection
+
     _logger.info("boot_up initiating")
-    await bootup.set_ip_config(app)
+    this_ip = await bootup.set_ip_config(current_profile)
 
     _logger.info("configuring this peer object")
-    bootup.configure_this_remote_peer(app)
+    this_remote_peer = bootup.make_this_remote_peer(current_profile)
 
     _logger.info("printing configurations")
-    configure.print_app(app.read_only())
+    configure.print_app(this_remote_peer, this_ip)
 
     _logger.info("initiating comms")
-    app.connections.dispatcher = await acceptor.initiate_acceptor(
-        app.exit_stack,
-        app.finalizing,
-        app.addr_tuple,
-        app.current_profile,
-        app.this_remote_peer,
+    conn_service = await acceptor.initiate_acceptor(
+        exit_stack,
+        finalizing,
+        this_ip.addr_tuple,
+        current_profile,
+        this_remote_peer,
     )
 
     _logger.info("starting message connections")
-    app.messages.dispatcher = await message.initiate(
-        app.finalizing,
-        app.this_peer_id,
-        app.connections.dispatcher,
-        app.exit_stack,
+    msg_conn_service = await message.initiate(
+        finalizing,
+        this_remote_peer.peer_id,
+        conn_service,
+        exit_stack,
     )
 
     _logger.info("initiating requests")
-    await requests.initiate(app)
+    req_service, gossip_service, discovery_service, kad_server = await requests.initiate(
+        this_ip,
+        this_remote_peer,
+        peer_list,
+        in_network,
+        finalizing,
+        exit_stack,
+    )
 
     _logger.info("initiating connectivity checker")
-    await connectivity.initiate(
-        app.exit_stack,
-        app.requests.dispatcher,
-        app.requests.transport,
-        app.this_peer_id,
+    connectivity_checker = await connectivity.initiate(
+        exit_stack,
+        req_service,
+        this_remote_peer.peer_id,
     )
 
 
@@ -93,7 +102,6 @@ cancellation_started = 0.0
 
 
 async def _async_initiate_helper(init_app, exit_stack):
-
     error = None
     async with exit_stack:
         try:
@@ -135,4 +143,14 @@ def initiate(init_app, exit_stack, finalizing):
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     multiprocessing.freeze_support()
-    initiate(lambda: init_app(App), App.exit_stack, App.finalizing)
+    finalizing = Event()
+    exit_stack = AggregatingAsyncExitStack()
+    in_network = Event()
+    # exit_stack = AsyncExitStack()
+    initiate(
+        lambda: init_app(
+            exit_stack, finalizing, in_network, PeerDict()
+        ),
+        exit_stack,
+        finalizing
+    )

@@ -24,9 +24,16 @@ async def write_config(config_parser, file_path):
 
 class ProfileManager:
     """
-    This class used to contain a profile instance of profiles
+    Used to contain a profile instance of profiles
     it is recommended to discard this class's object if an error is raised somewhere in using
-    as it can lead to unexpected behaviour
+    as it can lead to unexpected behaviour.
+
+    Attributes:
+        username: username of the user
+        id: id of the user
+        interface: IPAddress[ip, scope_id, if_name, friendly_name]
+        file_name: str  # profile path on disk
+        transfers_agreed: dict[peer_id, agreed_or_not: bool]
     """
 
     main_config: ConfigParser = None

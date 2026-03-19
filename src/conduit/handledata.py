@@ -12,7 +12,7 @@ from src.managers import directorymanager, filemanager, message
 class FrontEndDataDispatcher(BaseDispatcher):
     __slots__ = ()
 
-    async def submit(self, data_weaver): # type: ignore
+    async def submit(self, data_weaver):  # type: ignore
         try:
             await self.registry[data_weaver.header](data_weaver)
         except Exception as exp:
@@ -21,7 +21,7 @@ class FrontEndDataDispatcher(BaseDispatcher):
     def register_all(self):
         self.registry.update(
             {
-                HANDLE.SEND_DIR: new_dir_transfer,
+                HANDLE.SEND_DIR: new_dir_transfer,  # TODO: fix this
                 HANDLE.SEND_FILE: send_file,
                 HANDLE.SEND_TEXT: send_text,
                 HANDLE.SEND_BIGFILE: send_big_file,
@@ -32,7 +32,7 @@ class FrontEndDataDispatcher(BaseDispatcher):
 
 
 async def connect_user(data: DataWeaver):
-    if await message.connect_ahead(data.peer_id):
+    if await message.connect_ahead(data.peer_id): # TODO: fix this
         await webpage.peer_connected(data.peer_id)
     else:
         await webpage.failed_to_reach(data.peer_id)
@@ -48,7 +48,8 @@ async def send_text(command_data: DataWeaver):
         await webpage.failed_to_send_message(fts.item.msg_id, peer_id)
 
 
-async def new_dir_transfer(command_data: DataWeaver):
+# @provide_app_ctx
+async def new_dir_transfer(this_peer, command_data: DataWeaver):
     if not (dir_path := await _get_file_paths(command_data, prompter=directorymanager.open_dir_selector)):
         return
     try:
@@ -57,8 +58,8 @@ async def new_dir_transfer(command_data: DataWeaver):
         await webpage.failed_to_reach(command_data.peer_id)
         return
 
-    logger.debug(f"starting new directory transfer {command_data.content=}")
-    await directorymanager.send_directory(peer, dir_path[0])
+    logger.info(f"starting new directory transfer {command_data.content=}")
+    await directorymanager.send_directory(peer, dir_path[0], this_peer.peer_id)
 
 
 async def _get_file_paths(command_data: DataWeaver, *, prompter=filemanager.open_file_selector):
@@ -71,7 +72,7 @@ async def _get_file_paths(command_data: DataWeaver, *, prompter=filemanager.open
     return list(map(Path, selected_files))
 
 
-async def send_file(command_data: DataWeaver):
+async def send_file(this_peer, command_data: DataWeaver):
     if not any(selected_files := await _get_file_paths(command_data)):
         return
 
@@ -81,10 +82,13 @@ async def send_file(command_data: DataWeaver):
         await webpage.failed_to_reach(command_data.peer_id)
         return
 
-    await filemanager.send_files_to_peer(peer, selected_files)
+    await filemanager.send_files_to_peer(peer, selected_files, this_peer.peer_id)
+    logger.info(
+        f"sent file to {peer} with {len(selected_files)} files"
+    )
 
 
-async def send_big_file(command_data: DataWeaver):
+async def send_big_file(this_peer, command_data: DataWeaver):
     if not any(selected_files := await _get_file_paths(command_data)):
         return
 
@@ -93,11 +97,11 @@ async def send_big_file(command_data: DataWeaver):
         await webpage.failed_to_reach(command_data.peer_id)
         return
 
-    await filemanager.send_big_file(peer, selected_files)
+    await filemanager.send_big_file(peer, selected_files, this_peer.peer_id)
     logger.info(f"sent file to {peer}")
 
 
-async def send_files_to_multiple_peers(command_data: DataWeaver):
+async def send_files_to_multiple_peers(this_peer, command_data: DataWeaver):
     if not any(selected_files := await _get_file_paths(command_data)):
         return
 
@@ -119,7 +123,11 @@ async def send_files_to_multiple_peers(command_data: DataWeaver):
         return
 
     selected_files = [Path(x) for x in selected_files]
-    file_sender = filemanager.start_new_otm_file_transfer(selected_files, success_peers)
+    file_sender = filemanager.start_new_otm_file_transfer(
+        selected_files,
+        success_peers,
+        this_peer.peer_id
+    )
 
     async for update in file_sender.start():
         print(update)

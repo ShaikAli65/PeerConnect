@@ -8,11 +8,11 @@ import asyncio
 import logging
 from asyncio import CancelledError
 from collections import namedtuple
+from typing import NamedTuple
 
+from avails.mixins import BasicDispatcher
 from src.avails import WireData, const
 from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import BasicDispatcher
-from src.core.app import AppType
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
 from src.net import Acceptor, WireIO, bandwidth
@@ -24,6 +24,7 @@ _logger = logging.getLogger(__name__)
 
 async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, current_profile, this_remote_peer):
     connection_dispatcher = ConnectionDispatcher()
+    conn_service = ConnectionService(connection_dispatcher)
     c_reg_handler = connection_dispatcher.register_handler
     c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(current_profile))
     c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(current_profile))
@@ -34,14 +35,14 @@ async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, curren
     acceptor = Acceptor(
         finalizing_event,
         addr_tuple_gen(ip=None, port=const.PORT_THIS),
-        connection_dispatcher,
+        conn_service,
     )
 
     # warning, careful with order
     await exit_stack.enter_async_context(bandwidth.Watcher())
     await exit_stack.enter_async_context(connection_dispatcher)
     await exit_stack.enter_async_context(acceptor)
-    return connection_dispatcher
+    return conn_service
 
 
 class ConnectionDispatcher(*BasicDispatcher):
@@ -140,6 +141,13 @@ class ConnectionDispatcher(*BasicDispatcher):
 
         # park connection once the underlying lock is released
         self.park(connection)
+
+
+class ConnectionService(NamedTuple):
+    dispatcher: ConnectionDispatcher
+
+    async def new_connection(self, connection: ConnectionEvent):
+        return await self.dispatcher(connection, _task_name=f'conn-task-H={connection.handshake.header}') # noqa
 
 
 def PingHandler(this_peer):

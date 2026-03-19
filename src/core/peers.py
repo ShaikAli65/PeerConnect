@@ -5,7 +5,7 @@ Helper functions to deal with peers in network
 import asyncio
 import logging
 from contextlib import aclosing
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Awaitable, Optional
 
 from kademlia import crawling
 
@@ -13,7 +13,6 @@ from src.avails import RemotePeer, const, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.conduit import webpage
-from src.core.app import provide_app_ctx
 from src.core.peerstore import node_list_ids
 from src.core.search import SearchCrawler, get_gossip_searcher
 from src.net import connectivity
@@ -55,22 +54,18 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         return []
 
 
-@provide_app_ctx
-def get_more_peers(*, app_ctx=None):
-    peer_server = app_ctx.kad_server
+def get_more_peers(peer_server) -> Awaitable[list[RemotePeer]]:
     _logger.debug("getting more peers")
     return PeerListGetter.get_more_peers(peer_server)
 
 
-@provide_app_ctx
-async def gossip_search(search_string, *, app_ctx=None) -> AsyncIterator[RemotePeer]:
+async def gossip_search(search_string) -> AsyncIterator[RemotePeer]:
     searcher = get_gossip_searcher()
-    async for peer in searcher.search_for(search_string, app_ctx.gossip.gossiper):
+    async for peer in searcher.search_for(search_string):
         yield peer
 
 
-@provide_app_ctx
-def search_for_peers_with_name(search_string, *, app_ctx):
+def search_for_peers_with_name(search_string, kad_server):
     """
     searches for nodes relevant to given ``:param search_string:``
 
@@ -78,7 +73,7 @@ def search_for_peers_with_name(search_string, *, app_ctx):
          a generator of peers that matches with the search_string
     """
 
-    return SearchCrawler.search_for_nodes(app_ctx.kad_server, search_string)
+    return SearchCrawler.search_for_nodes(kad_server, search_string)
 
 
 async def get_remote_peer_from_network(peer_network, peer_id):
@@ -104,10 +99,11 @@ async def get_remote_peer_from_network(peer_network, peer_id):
             peer = await peer_network.get_remote_peer(byte_id)
             if peer is not None:
                 return peer
+        return None
 
 
-@provide_app_ctx
-async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
+# @provide_app_ctx
+async def get_remote_peer(kad_server, peer_list, peer_id) -> Optional[RemotePeer]: # TODO: fix this
     """
 
     Tries to check for peer_id in cached App.peer_list
@@ -118,14 +114,14 @@ async def get_remote_peer(peer_id, *, app_ctx=None) -> Optional[RemotePeer]:
     then performs a distributed search, on failure, returns offline peer object
     """
     try:
-        peer_obj = app_ctx.peer_list.get_peer(peer_id)
+        peer_obj = peer_list.get_peer(peer_id)
         if peer_obj.is_online:
             return peer_obj
     except KeyError:
         peer_obj = None
 
-    if app_ctx.kad_server:
-        peer_obj_from_network = await get_remote_peer_from_network(app_ctx.kad_server, peer_id)
+    if kad_server:
+        peer_obj_from_network = await get_remote_peer_from_network(kad_server, peer_id)
         if peer_obj_from_network:
             peer_obj = peer_obj_from_network
 
@@ -150,6 +146,7 @@ def remove_peer(peer):
         peer(RemotePeer): peer obj to remove
     """
     _logger.warning(f"a request for removal of {peer}")
+    # TODO: fix this
     req, fut = connectivity.new_check(peer)
 
     if fut.done():
@@ -160,6 +157,7 @@ def remove_peer(peer):
 
 
 async def _check_and_remove_if_needed(peer: RemotePeer):
+    # TODO: fix this
     req, fut = connectivity.new_check(peer)
     _may_be_remove(peer, await fut)
 

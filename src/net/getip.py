@@ -5,16 +5,16 @@
 import asyncio
 import ipaddress
 import json
+import logging
 import re
 import socket
 import urllib.request
 
 import src.net.utils
 from src.avails import const, use
-from src.configurations import logger as _logger
 from src.net import IPAddress
 
-
+_logger = logging.getLogger(__package__)
 async def get_v4():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as config_socket:
         try:

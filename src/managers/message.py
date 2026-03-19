@@ -16,14 +16,16 @@ Working:
 import asyncio
 import logging
 from contextlib import AsyncExitStack
+from functools import partial
+from typing import NamedTuple
 
+from core.acceptor import ConnectionService
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import CannotConnect, InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import Dispatcher, singleton_mixin
 from src.conduit import webpage
 from src.core import peers
-from src.core.app import ReadOnlyAppType, provide_app_ctx
-from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth, connectivity
+from src.net import Connection, MsgConnection, MsgConnectionNoRecv, WireIO, bandwidth
 from src.net.connector import Connector
 from src.net.events import ConnectionEvent, MessageEvent
 from src.transfers import HEADERS
@@ -33,20 +35,20 @@ _logger = logging.getLogger(__name__)
 _exit_stack = AsyncExitStack()
 
 
-async def initiate(finalizing_event, this_peer_id, conn_dispatcher, exit_stack):
+async def initiate(finalizing_event, this_peer_id, conn_service:ConnectionService, exit_stack):
     data_dispatcher = MsgDispatcher()
     data_dispatcher.register_handler(HEADERS.CMD_TEXT, MessageHandler())
     msg_conn_handler = MessageConnHandler(finalizing_event, data_dispatcher, this_peer_id)
-    conn_dispatcher.register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
-    conn_dispatcher.register_handler(HEADERS.PING, PingHandler(this_peer_id))
-    conn_dispatcher.register_handler(
+    conn_service.dispatcher.register_handler(HEADERS.CMD_MSG_CONN, msg_conn_handler)
+    conn_service.dispatcher.register_handler(HEADERS.PING, PingHandler(this_peer_id))
+    conn_service.dispatcher.register_handler(
         HEADERS.CMD_MSG_CONN_RECV_LOOP_BACK,
         MessageRecvLoopBackHandler(finalizing_event, data_dispatcher)
     )
     await exit_stack.enter_async_context(data_dispatcher)
     await exit_stack.enter_async_context(_exit_stack)
     await _exit_stack.enter_async_context(_msg_conn_pool)
-    return data_dispatcher
+    return MsgConnService(data_dispatcher)
 
 
 @singleton_mixin
@@ -62,6 +64,10 @@ class MsgDispatcher(*Dispatcher):
             return await asyncio.wait_for(h, const.TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK)
         except TimeoutError:
             return _logger.debug(f"timeout at message processing task, cancelling {event} task")
+
+
+class MsgConnService(NamedTuple):
+    dispatcher: MsgDispatcher
 
 
 # ================
@@ -288,32 +294,38 @@ async def _try_connecting(peer, this_peer_id) -> tuple[bool, ConnectionEvent | N
     return True, con_event
 
 
-@provide_app_ctx
-async def get_msg_conn(peer: RemotePeer, *, app_ctx: ReadOnlyAppType) -> MsgConnectionNoRecv:
+# @provide_app_ctx
+async def get_msg_conn(this_peer_id, conn_service, peer: RemotePeer) -> MsgConnectionNoRecv:
     if msg_connection := await _get_from_pool(peer):
         _logger.debug(f"not connection again, reusing pooled connection, peer={peer}")
         return msg_connection
 
-    ok, conn_event = await _try_connecting(peer, app_ctx.this_peer_id)
+    ok, conn_event = await _try_connecting(peer, this_peer_id)
     if not ok:
         _logger.debug("failed to connect")
         raise CannotConnect("try again")
 
-    assert conn_event is not None
     msg_conn = _msg_conn_pool.add(conn_event.connection)
-    app_ctx.connections.dispatcher(conn_event)
+    conn_service.new_connection(conn_event)
     return msg_conn
 
 
-@provide_app_ctx
-async def connect_ahead(peer_id, *, app_ctx: ReadOnlyAppType | None = None):
+# @provide_app_ctx
+async def connect_ahead(
+        peer_id,
+        this_peer_id,
+        conn_service,
+        msg_conn_service,
+        connectivity_checker,
+):
     if sender := MsgSender.get_sender(peer_id):
         if sender.is_connected:
             _logger.debug(f"not connecting again, found message sender: {sender=!r}")
             return True
         if not sender.peer.is_online:
             _logger.debug(f"peer not online, initiating a connectivity check, peer={sender.peer!r}")
-            _, what = connectivity.new_check(sender.peer)
+            # TODO: fix this
+            _, what = connectivity_checker.new_check(sender.peer)
             if (await what) is False:
                 _logger.debug(f"cannot reach, peer={sender.peer=!r}")
                 raise CannotConnect("peer unreachable")
@@ -326,9 +338,10 @@ async def connect_ahead(peer_id, *, app_ctx: ReadOnlyAppType | None = None):
     _logger.debug(f"connecting for messages, peer={peer_obj}")
     sender = MsgSender(
         peer_obj,
-        app_ctx.messages.dispatcher.register_reply,
-        get_msg_conn,
+        msg_conn_service.dispatcher.register_reply,
+        partial(get_msg_conn, this_peer_id, conn_service),
     )
+
     async with AsyncExitStack() as a_ex:
         try:
             await sender.connect()

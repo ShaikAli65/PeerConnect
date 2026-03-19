@@ -7,7 +7,6 @@ from typing import Optional, TYPE_CHECKING
 
 APP_NAME = "PeerConnect"
 CLEAR_LOGS = 1
-USERNAME = "admin"
 SERVER_IP = "127.0.0.1"
 
 THIS_IP = None

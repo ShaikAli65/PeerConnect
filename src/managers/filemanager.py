@@ -19,7 +19,6 @@ from src.avails import (
 from src.avails.exceptions import CannotConnect, TransferIncomplete, TransferRejected
 from src.conduit import webpage
 from src.core import peers
-from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.net.events import ConnectionEvent
 from src.transfers import (
     HEADERS,
@@ -46,14 +45,13 @@ transfers_book = TransfersBookKeeper()
 _logger = logging.getLogger(__name__)
 
 
-@provide_app_ctx
-async def send_files_to_peer(peer, selected_files, *, app_ctx=None):
+async def send_files_to_peer(peer, selected_files, this_peer_id):
     """Sends provided files to peer
 
     Args:
         peer(RemotePeer): peer object that receives files
         selected_files(list[str | Path]): list of file paths
-        app_ctx(ReadOnlyAppType): application context to get this remote peer
+        this_peer_id(str): this peer id
     Yields:
         files.Sender object
     """
@@ -74,7 +72,7 @@ async def send_files_to_peer(peer, selected_files, *, app_ctx=None):
 
     try:
         async with sender_helper(
-              file_sender, app_ctx.this_peer_id, HEADERS.CMD_FILE_CONN
+              file_sender, this_peer_id, HEADERS.CMD_FILE_CONN
         ) as connection:
             await iterate_and_update_status(status_updater, file_sender, connection)
     except TransferRejected as tr:
@@ -181,8 +179,7 @@ async def finalize_transfer(transfer_handle, transfers_book=transfers_book):
         transfers_book.add_to_continued(transfer_handle.peer.peer_id, transfer_handle)
 
 
-@provide_app_ctx
-async def send_big_file(peer, file_list, app_ctx=None):
+async def send_big_file(peer, file_list, this_peer_id):
     file_item = files.FileItem(file_list[0], 0)
     transfer_id = transfers_book.get_new_id()
     status_iterator = StatusIterator(const.TRANSFER_STATUS_UPDATE_FREQ)
@@ -196,7 +193,7 @@ async def send_big_file(peer, file_list, app_ctx=None):
         connection1 = await exit_stack.enter_async_context(
             sender_helper(
                 big_file_sender,
-                app_ctx.this_peer_id,
+                this_peer_id,
                 HEADERS.CMD_BIG_FILE_CONN,
             )
         )
@@ -209,7 +206,7 @@ async def send_big_file(peer, file_list, app_ctx=None):
             await asyncio.sleep(1.3)
             connection2 = await exit_stack.enter_async_context(
                 _prepare_connection(
-                    big_file_sender, app_ctx.this_peer_id, HEADERS.CMD_BIG_FILE_CONN
+                    big_file_sender, this_peer_id, HEADERS.CMD_BIG_FILE_CONN
                 )
             )
             _logger.debug("ADDING CONNECTION, 🔥🔥")
@@ -391,22 +388,20 @@ def OTMConnectionHandler():
     return handler
 
 
-@provide_app_ctx
 def start_new_otm_file_transfer(
-      files_list: list[Path], peers: list[RemotePeer], *, app_ctx=None
+      files_list: list[Path], peers_to_send: list[RemotePeer], this_remote_peer
 ):
     file_sender = otm.FilesSender(
         file_list=files_list,
-        this_peer=app_ctx.this_remote_peer,
-        peers=peers,
+        this_peer=this_remote_peer,
+        peers=peers_to_send,
         timeout=3,
     )
     transfers_book.add_to_scheduled(file_sender)
     return file_sender
 
 
-@provide_app_ctx
-def new_otm_request_arrived(req_data: WireData, _, *, app_ctx):
+def new_otm_request_arrived(req_data: WireData, this_peer):
     session = OTMSession(
         originate_id=req_data.id,
         session_id=req_data["session_id"],
@@ -417,10 +412,9 @@ def new_otm_request_arrived(req_data: WireData, _, *, app_ctx):
         file_count=req_data["file_count"],
         chunk_size=req_data["chunk_size"],
     )
-    this_peer = app_ctx.this_remote_peer
     passive_endpoint_address = (this_peer.ip, net.get_free_port())
     receiver = otm.FilesReceiver(
-        session, app_ctx.this_remote_peer, passive_endpoint_address, this_peer.uri
+        session, this_peer, passive_endpoint_address, this_peer.uri
     )
     transfers_book.add_to_scheduled(receiver)
     _logger.info(f"adding otm session to registry id={session.session_id}")

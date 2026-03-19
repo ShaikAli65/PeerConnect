@@ -35,14 +35,12 @@ Discovery State Machine
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import NamedTuple, TYPE_CHECKING
 
 import src.net.utils as net_util
 from src.avails import WireData, const, use
-from src.avails.bases import BaseDispatcher
-from src.avails.mixins import Dispatcher, ReplyRegistryMixIn, TaskGroupMixIn
+from src.avails.mixins import Dispatcher
 from src.conduit import webpage
-from src.core.app import AppType, ReadOnlyAppType
 from src.net.events import RequestEvent
 from src.net.transports import DiscoveryTransport
 from src.transfers import DISCOVERY, REQUESTS_HEADERS
@@ -54,7 +52,6 @@ async def discovery_initiate(
         multicast_address,
         exit_stack,
         requests_dispatcher,
-        addr_tuple_gen,
         this_ip,
         this_remote_peer,
         kad_server,
@@ -71,7 +68,6 @@ async def discovery_initiate(
     discovery_reply_handler = DiscoveryReplyHandler(this_ip, kad_server)
     discovery_req_handler = DiscoveryRequestHandler(
         discovery_transport,
-        addr_tuple_gen,
         this_remote_peer,
         this_ip,
     )
@@ -90,7 +86,7 @@ async def discovery_initiate(
             this_remote_peer
         )
     )
-    return discovery_transport, discover_dispatcher
+    return DiscoveryService(discovery_transport, discover_dispatcher)
 
 
 def DiscoveryReplyHandler(this_ip, kad_server):
@@ -105,7 +101,7 @@ def DiscoveryReplyHandler(this_ip, kad_server):
     return handle
 
 
-def DiscoveryRequestHandler(discovery_transport, addr_tuple_gen, this_remote_peer, this_ip):
+def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_ip):
     async def handle(event: RequestEvent):
         req_packet = event.request
         if req_packet["reply_addr"][0] == this_ip.ip[0]:
@@ -118,7 +114,7 @@ def DiscoveryRequestHandler(discovery_transport, addr_tuple_gen, this_remote_pee
             connect_uri=this_remote_peer.req_uri[:2],
         )
         discovery_transport.sendto(
-            bytes(data_payload), addr_tuple_gen(*req_packet["reply_addr"][:2])
+            bytes(data_payload), this_ip.addr_tuple(*req_packet["reply_addr"][:2])
         )
 
     return handle
@@ -133,6 +129,11 @@ class DiscoveryDispatcher(*Dispatcher):
         wire_data = event.request
         self.reply_arrived(wire_data)
         return await self.call_handler(wire_data.header, _logger, event)
+
+
+class DiscoveryService(NamedTuple):
+    transport: DiscoveryTransport
+    dispatcher: DiscoveryDispatcher
 
 
 async def send_discovery_requests(multicast_addr,

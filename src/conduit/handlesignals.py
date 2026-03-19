@@ -10,7 +10,6 @@ from src.conduit.handleprofiles import (
 )
 from src.conduit.headers import HANDLE
 from src.core import peers
-from src.core.app import ReadOnlyAppType, provide_app_ctx
 from src.managers import message
 
 
@@ -20,7 +19,7 @@ class FrontEndSignalDispatcher(BaseDispatcher, CallHandlerMixIn):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    async def submit(self, data_weaver): # type: ignore
+    async def submit(self, data_weaver):  # type: ignore
         return await self.call_handler(
             data_weaver.header,
             logger,
@@ -30,11 +29,11 @@ class FrontEndSignalDispatcher(BaseDispatcher, CallHandlerMixIn):
     def register_all(self):
         self.registry.update({
             HANDLE.CONNECT_USER: connect_peer,
-            HANDLE.SYNC_USERS: sync_users,
+            HANDLE.SYNC_USERS: sync_users,  # TODO: fix this
             HANDLE.SEND_PROFILES: align_profiles,
             HANDLE.SET_PROFILE: set_selected_profile,
             HANDLE.SEARCH_FOR_NAME: search_for_user,
-            HANDLE.SEND_PEER_LIST: send_list,
+            HANDLE.SEND_PEER_LIST: send_list,  # TODO: fix this
             HANDLE.GOSSIP_SEARCH: gossip_search
         })
 
@@ -43,14 +42,16 @@ async def close_app():
     ...
 
 
-async def search_for_user(data: DataWeaver):
+async def search_for_user(kad_server, data: DataWeaver):
     search_string = data.content
     if search_string == "":
         logger.debug("skipping search request, content contains empty key")
         return
 
+    # TODO: fix this
+    logger.info(f"got a search request: {search_string}")
     peer_list = await _response_gather_helper(
-        peers.search_for_peers_with_name(search_string),
+        peers.search_for_peers_with_name(search_string, kad_server=kad_server),
         const.TIMEOUT_TO_GATHER_SEARCH_RESULTS
     )
     await webpage.search_response(data.msg_id, peer_list, type="lists")
@@ -83,23 +84,23 @@ async def gossip_search(data: DataWeaver):
     await webpage.search_response(data.msg_id, peer_list, type="gossip")
 
 
-async def send_list(data: DataWeaver):
+async def send_list(kad_server, data: DataWeaver):
     logger.debug("got a send list request")
-    peer_list = await peers.get_more_peers()
+    peer_list = await peers.get_more_peers(kad_server)
     logger.debug(f"sending list {peer_list=}")
     await webpage.search_response(data.msg_id, peer_list)
 
 
 async def connect_peer(handle_data: DataWeaver):
+    # TODO: fix this
     what = await message.connect_ahead(peer_id=handle_data.peer_id)
     await (webpage.peer_connected if what else webpage.failed_to_reach)(handle_data.peer_id)
 
 
-@provide_app_ctx
-async def sync_users(_: DataWeaver, *, app_ctx: ReadOnlyAppType = None):
+async def sync_users(peer_list, _: DataWeaver):
     refreshed = []
 
-    for peer in app_ctx.peer_list.values():
+    for peer in peer_list.values():
         if peer.is_online:
             refreshed.append(peer)
 

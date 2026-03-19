@@ -18,14 +18,14 @@ from src.net import TCPProtocol, UDPProtocol
 _logger = logging.getLogger(__package__)
 
 
-def print_app(app):
-    ip_version = ipaddress.ip_address(app.this_ip.ip).version
+def print_app(this_remote_peer, this_ip):
+    ip_version = ipaddress.ip_address(this_ip.ip).version
     print_string = textwrap.dedent(
         f"""        
         
         :configuration choices{"=" * 32}
-        {"USERNAME": <15} : {app.this_remote_peer.username: <10}
-        {"THIS_IP": <15} : {f"{app.this_ip}": <10}
+        {"USERNAME": <15} : {this_remote_peer.username: <10}
+        {"THIS_IP": <15} : {f"{this_ip}": <10}
         {"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}
         {"IP_VERSION": <15} : {ip_version: <10}
         {"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}
@@ -127,6 +127,7 @@ async def load_configs(exit_stack):
     set_constants(config_map)
     exit_stack.callback(finalize_config)
     return config_map
+
 
 def _write_default_configurations(path):
     default_config_file = textwrap.dedent(
