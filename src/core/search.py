@@ -7,7 +7,6 @@ from typing import AsyncIterator
 
 from kademlia import crawling
 
-from core.gossip import GossipService
 from src.avails import GossipMessage, RemotePeer, WireData, const, use
 from src.avails.exceptions import SearchExhausted
 from src.core.peerstore import node_list_ids
@@ -263,21 +262,18 @@ def GossipSearchReplyHandler(gossiper, gossip_searcher):
     return handle
 
 
-_gossip_searcher = None
+def init_gossip_searcher(
+        this_remote_peer,
+        gossip_service,
+        gossip_message_handler,
+):
+    gossip_searcher = GossipSearch(this_remote_peer, gossip_service.gossiper)
+    register_handlers(gossip_service, gossip_searcher, gossip_message_handler)
+    return gossip_searcher
 
 
-def get_gossip_searcher() -> GossipSearch:
-    return _gossip_searcher
-
-
-def init_gossip_searcher(remote_peer, gossiper):
-    global _gossip_searcher
-    _gossip_searcher = GossipSearch(remote_peer, gossiper)
-
-
-def register_handlers(gossip_service, gossip_message_handler):
+def register_handlers(gossip_service, gossip_searcher, gossip_message_handler):
     """Register search handlers into dispatcher"""
-    gossip_searcher = get_gossip_searcher()
     req_handler = GossipSearchReqHandler(
         gossip_searcher,
         gossip_service.gossip_transport,

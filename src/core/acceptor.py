@@ -10,8 +10,7 @@ from asyncio import CancelledError
 from collections import namedtuple
 from typing import NamedTuple
 
-from avails.mixins import BasicDispatcher
-from src.avails import WireData, const
+from src.avails import WireData, const, mixins
 from src.avails.exceptions import InvalidPacket
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
@@ -22,7 +21,14 @@ from src.transfers import HEADERS
 _logger = logging.getLogger(__name__)
 
 
-async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, current_profile, this_remote_peer):
+async def initiate_acceptor(
+        exit_stack,
+        finalizing_event,
+        app_config,
+        interface,
+        current_profile,
+        this_remote_peer,
+):
     connection_dispatcher = ConnectionDispatcher()
     conn_service = ConnectionService(connection_dispatcher)
     c_reg_handler = connection_dispatcher.register_handler
@@ -34,8 +40,9 @@ async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, curren
 
     acceptor = Acceptor(
         finalizing_event,
-        addr_tuple_gen(ip=None, port=const.PORT_THIS),
+        interface.addr_tuple(ip=None, port=app_config.this_port),
         conn_service,
+        app_config.protocol
     )
 
     # warning, careful with order
@@ -45,7 +52,7 @@ async def initiate_acceptor(exit_stack, finalizing_event, addr_tuple_gen, curren
     return conn_service
 
 
-class ConnectionDispatcher(*BasicDispatcher):
+class ConnectionDispatcher(*mixins.BasicDispatcher):
     """Dispatches incoming connections...
 
     ...Based on the handshake header, used to identify services registered for incoming connections
