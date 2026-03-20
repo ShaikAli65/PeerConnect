@@ -48,11 +48,6 @@ class REQUESTS_HEADERS:
     REQ_FOR_LIST = b"list of users"
     I_AM_ACTIVE = b"com notify user"
 
-    KADEMLIA = b"\x00"
-    DISCOVERY = b"\x01"
-    GOSSIP = b"\x02"
-    REQUEST = b"\xff"
-
 
 class DISCOVERY:
     __slots__ = ()

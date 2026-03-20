@@ -2,8 +2,16 @@ import struct
 from asyncio import BaseTransport
 
 from src.avails import WireData, use
-from src.transfers import REQUESTS_HEADERS
 from .connect import NetAddr
+
+__all__ = 'RequestsTransport', 'KademliaTransport', 'DiscoveryTransport', 'GossipTransport', 'REQUESTS_HEADERS'
+
+
+class REQUESTS_HEADERS:
+    KADEMLIA = b"\x00"
+    DISCOVERY = b"\x01"
+    GOSSIP = b"\x02"
+    REQUEST = b"\xff"
 
 
 class RequestsTransport(BaseTransport):  # just for type hinting

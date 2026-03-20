@@ -19,9 +19,7 @@ from src.avails.useables import override
 from src.conduit import webpage
 from src.core import peers
 from src.core.peerstore import ForgetfulStorage, Storage
-from src.net.events import RequestEvent
-from src.net.transports import KademliaTransport
-from src.transfers import REQUESTS_HEADERS
+from src import net
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -129,9 +127,9 @@ class RPCReceiver(RPCProtocol):
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, peer_list, source_node, storage, ksize):
+    def __init__(self, peer_list, connectivity, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
-        self.router = AnotherRoutingTable(peer_list, self, ksize, source_node)
+        self.router = AnotherRoutingTable(peer_list, connectivity, self, ksize, source_node)
         self.storage = storage
         self.peer_list = peer_list
 
@@ -162,9 +160,10 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
 
 
 class AnotherRoutingTable(routing.RoutingTable):
-    def __init__(self, peer_list, *args, **kwargs):
+    def __init__(self, peer_list, connectivity, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.peer_list = peer_list
+        self.connectivity = connectivity
 
     @override
     def add_contact(self, peer: RemotePeer):
@@ -175,7 +174,7 @@ class AnotherRoutingTable(routing.RoutingTable):
     @override
     def remove_contact(self, peer: RemotePeer):
         super().remove_contact(peer)
-        peers.remove_peer(peer)
+        peers.remove_peer(self.connectivity, peer)
 
 
 class PeerServer(network.Server):
@@ -185,7 +184,8 @@ class PeerServer(network.Server):
             self,
             peer_list,
             in_network_event,
-            this_ip,
+            interface,
+            connectivity,
             state_dump_file=None,
             ksize=20,
             alpha=3,
@@ -198,8 +198,9 @@ class PeerServer(network.Server):
         self.stopping = False
         self.peer_list = peer_list
         self.in_network = in_network_event
-        self.this_ip = this_ip
+        self.interface = interface
         self.state_dump_file = state_dump_file
+        self._connectivity_checker = connectivity
 
     @override
     async def bootstrap_node(self, addr):
@@ -208,7 +209,13 @@ class PeerServer(network.Server):
 
     @override
     def _create_protocol(self):
-        return self.protocol_class(self.peer_list, self.node, self.storage, self.ksize)
+        return self.protocol_class(
+            self.peer_list,
+            self._connectivity_checker,
+            self.node,
+            self.storage,
+            self.ksize,
+        )
 
     def start(self):
         self.protocol = self._create_protocol()
@@ -369,7 +376,7 @@ class PeerServer(network.Server):
         if data['neighbors']:
             try:
                 await self.bootstrap([
-                    self.this_ip.addr_tuple(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
+                    self.interface.addr_tuple(t[0], t[1]) for t in data['neighbors'] if t[0] != self.node.ip
                 ])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
@@ -393,34 +400,36 @@ class PeerServer(network.Server):
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     handler = KademliaHandler(server)
-    dispatcher.register_handler(REQUESTS_HEADERS.KADEMLIA, handler)
+    dispatcher.register_handler(net.REQUESTS_HEADERS.KADEMLIA, handler)
 
 
 async def prepare_kad_server(
         data_transport,
         peer_list,
         in_network_event,
-        this_ip,
+        interface,
         this_remote_peer,
         exit_stack,
+        connectivity,
 ):
     kad_server = PeerServer(
         peer_list,
         in_network_event,
-        this_ip,
+        interface,
+        connectivity,
         state_dump_file=Path(const.PATH_CONFIG, const.KAD_SERVER_STATE_FILE_NAME),
         storage=Storage()
     )
     kad_server.node = this_remote_peer
     kad_server.start()
-    kad_server.transport = KademliaTransport(data_transport)
+    kad_server.transport = net.KademliaTransport(data_transport)
     await exit_stack.enter_async_context(kad_server)
 
     return kad_server
 
 
 def KademliaHandler(kad_server):
-    def handle(event: RequestEvent):
+    def handle(event: net.RequestEvent):
         return kad_server.protocol.datagram_received(event.request['data'], event.from_addr)
 
     return handle

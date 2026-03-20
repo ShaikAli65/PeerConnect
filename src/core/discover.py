@@ -41,9 +41,8 @@ import src.net.utils as net_util
 from src.avails import WireData, const, use
 from src.avails.mixins import Dispatcher
 from src.conduit import webpage
-from src.net.events import RequestEvent
-from src.net.transports import DiscoveryTransport
-from src.transfers import DISCOVERY, REQUESTS_HEADERS
+from src import net
+from src.transfers import DISCOVERY
 
 _logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ async def discovery_initiate(
         multicast_address,
         exit_stack,
         requests_dispatcher,
-        this_ip,
+        interface,
         this_remote_peer,
         kad_server,
         in_network,
@@ -61,15 +60,15 @@ async def discovery_initiate(
 ):
     """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
     discover_dispatcher = DiscoveryDispatcher()
-    discovery_transport = DiscoveryTransport(transport)
+    discovery_transport = net.DiscoveryTransport(transport)
     await exit_stack.enter_async_context(discover_dispatcher)
-    requests_dispatcher.register_handler(REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
+    requests_dispatcher.register_handler(net.REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
 
-    discovery_reply_handler = DiscoveryReplyHandler(this_ip, kad_server)
+    discovery_reply_handler = DiscoveryReplyHandler(interface, kad_server)
     discovery_req_handler = DiscoveryRequestHandler(
         discovery_transport,
         this_remote_peer,
-        this_ip,
+        interface,
     )
 
     discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
@@ -89,9 +88,9 @@ async def discovery_initiate(
     return DiscoveryService(discovery_transport, discover_dispatcher)
 
 
-def DiscoveryReplyHandler(this_ip, kad_server):
-    async def handle(event: RequestEvent):
-        if event.from_addr[0] == this_ip.ip:
+def DiscoveryReplyHandler(interface, kad_server):
+    async def handle(event: net.RequestEvent):
+        if event.from_addr[0] == interface.ip:
             return
         connect_address = tuple(event.request["connect_uri"])
         _logger.debug(f"from: {event.from_addr}, {connect_address=}")
@@ -101,10 +100,10 @@ def DiscoveryReplyHandler(this_ip, kad_server):
     return handle
 
 
-def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_ip):
-    async def handle(event: RequestEvent):
+def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_interface):
+    async def handle(event: net.RequestEvent):
         req_packet = event.request
-        if req_packet["reply_addr"][0] == this_ip.ip[0]:
+        if req_packet["reply_addr"][0] == this_interface.ip[0]:
             _logger.debug(f"ignoring echo, {req_packet['reply_addr']}")
             return
         _logger.info(f"discovery replying to req: {req_packet.body}")
@@ -114,7 +113,7 @@ def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_ip):
             connect_uri=this_remote_peer.req_uri[:2],
         )
         discovery_transport.sendto(
-            bytes(data_payload), this_ip.addr_tuple(*req_packet["reply_addr"][:2])
+            bytes(data_payload), this_interface.addr_tuple(*req_packet["reply_addr"][:2])
         )
 
     return handle
@@ -123,16 +122,16 @@ def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_ip):
 class DiscoveryDispatcher(*Dispatcher):
     __slots__ = ()
     if TYPE_CHECKING:
-        transport: DiscoveryTransport
+        transport: net.DiscoveryTransport
 
-    async def submit(self, event: RequestEvent):
+    async def submit(self, event: net.RequestEvent):
         wire_data = event.request
         self.reply_arrived(wire_data)
         return await self.call_handler(wire_data.header, _logger, event)
 
 
 class DiscoveryService(NamedTuple):
-    transport: DiscoveryTransport
+    transport: net.DiscoveryTransport
     dispatcher: DiscoveryDispatcher
 
 
