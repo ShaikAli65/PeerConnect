@@ -3,7 +3,7 @@ import functools
 import socket
 from logging import getLogger
 
-from net import IPAddress
+from src.net.connect import Interface
 from src.avails import const
 from src.avails.exceptions import InvalidPacket
 from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
@@ -13,9 +13,8 @@ _logger = getLogger(__name__)
 
 
 class RequestsEndPoint(asyncio.DatagramProtocol):
-    __slots__ = 'transport', 'dispatcher', "_finalizing_event", "_addr_tuple_gen"
 
-    def __init__(self, dispatcher, finalizing_event, addr_tuple_gen):
+    def __init__(self, dispatcher, finalizing_event, interface: Interface):
         """A Requests Endpoint
 
             Handles all the requests/messages come to the application's requests endpoint
@@ -28,7 +27,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.transport = None
         self.dispatcher = dispatcher
         self._finalizing_event = finalizing_event
-        self._addr_tuple_gen = addr_tuple_gen
+        self.interface = interface
 
     def connection_made(self, transport):
         self.transport = transport
@@ -45,21 +44,21 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
             _logger.info(f"error:", exc_info=ip)
             return
 
-        event = RequestEvent(root_code=code, request=req_data, from_addr=self._addr_tuple_gen(*addr[:2]))
+        event = RequestEvent(root_code=code, request=req_data, from_addr=self.interface.addr_tuple(port=addr[1], ip=addr[0]))
         self.dispatcher(event)
 
 
-def get_bind_address(this_ip:IPAddress):
+def get_bind_address(port_req, interface: Interface):
     if const.IS_WINDOWS:
         # a discovery request packet is observed in wire shark but that packet is
         # not getting delivered to application socket in linux when we bind to specific interface address
 
         # TL;DR: causing some unknown behaviour in linux system
-        const.BIND_IP = this_ip.ip
-    return this_ip.addr_tuple(port=const.PORT_REQ, ip=const.BIND_IP)
+        const.BIND_IP = interface.ip
+    return interface.addr_tuple(port=port_req, ip=const.BIND_IP)
 
 
-async def setup_endpoint(bind_address, multicast_address, req_dispatcher, finalizing_event, addr_tuple_gen):
+async def setup_endpoint(bind_address, multicast_address, req_dispatcher, finalizing_event, interface: Interface):
     assert isinstance(bind_address, tuple) and isinstance(multicast_address,
                                                           tuple), "expecting bind_address and multicast_address"
     loop = asyncio.get_running_loop()
@@ -71,7 +70,7 @@ async def setup_endpoint(bind_address, multicast_address, req_dispatcher, finali
     _subscribe_to_multicast(base_socket, multicast_address)
     base_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     transport, _ = await loop.create_datagram_endpoint(
-        functools.partial(RequestsEndPoint, req_dispatcher, finalizing_event, addr_tuple_gen),
+        functools.partial(RequestsEndPoint, req_dispatcher, finalizing_event, interface),
         sock=base_socket
     )
     return transport

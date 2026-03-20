@@ -6,6 +6,8 @@ from .connect import *
 from .connector import *
 from .utils import *
 from .wire_io import *
+from .transports import *
+from .events import *
 
 if const.IS_WINDOWS:
     from ._interfaces_windows import get_interfaces

@@ -11,30 +11,30 @@ from pathlib import Path
 
 from kademlia.utils import digest
 
+from .appconfig import AppConfig
+
 from src import net
 from src.avails import const
-from src.net import TCPProtocol, UDPProtocol
 
 _logger = logging.getLogger(__package__)
 
 
-def print_app(this_remote_peer, this_ip):
+def print_app(this_remote_peer, this_ip, app_config: AppConfig):
     ip_version = ipaddress.ip_address(this_ip.ip).version
     print_string = textwrap.dedent(
-        f"""        
-        
+        f"""
         :configuration choices{"=" * 32}
         {"USERNAME": <15} : {this_remote_peer.username: <10}
         {"THIS_IP": <15} : {f"{this_ip}": <10}
-        {"PROTOCOL": <15} : {f"{const.PROTOCOL}": <10}
+        {"PROTOCOL": <15} : {f"{app_config.protocol!r}": <10}
         {"IP_VERSION": <15} : {ip_version: <10}
         {"SERVER_IP": <15} : {f"{const.SERVER_IP}": <10}
         {"MULTICAST_IP": <15} : {f"{const.MULTICAST_IP_v4 if ip_version == 4 else const.MULTICAST_IP_v6}": <10}
-        {"PORT_THIS": <15} : {const.PORT_THIS: <10}
+        {"PORT_THIS": <15} : {app_config.this_port: <10}
         {"SERVER_PORT": <15} : {const.PORT_SERVER: <10}
-        {"NETWORK_PORT": <15} : {const.PORT_NETWORK: <10}
-        {"PAGE_PORT": <15} : {const.PORT_PAGE: <10}
-        {"PORT_REQ": <15} : {const.PORT_REQ: <10}
+        {"NETWORK_PORT": <15} : {app_config.req_port: <10}
+        {"PAGE_PORT": <15} : {app_config.page_port: <10}
+        {"PORT_REQ": <15} : {app_config.req_port: <10}
         {"=" * 56}
         """
     )
@@ -101,7 +101,6 @@ async def load_configs(exit_stack):
             # access required keys
             _ = config_map['USER_PROFILES']
             _ = config_map['NERD_OPTIONS']
-            _ = config_map['VERSIONS']
             _ = config_map['SELECTED_PROFILE']
         except KeyError:
             _write_default_configurations(const.PATH_CONFIG_FILE)
@@ -124,9 +123,9 @@ async def load_configs(exit_stack):
             # write the final state of configuration when exiting application
 
     await asyncio.to_thread(_helper)
-    set_constants(config_map)
+    app_config = set_constants(config_map)
     exit_stack.callback(finalize_config)
-    return config_map
+    return config_map, app_config
 
 
 def _write_default_configurations(path):
@@ -134,18 +133,11 @@ def _write_default_configurations(path):
         f"""
         [NERD_OPTIONS]
         ip_version = {4 if const.IP_VERSION == socket.AF_INET else 6}
-        protocol = tcp
+        protocol = {const.PROTOCOL!r}
         this_port = {const.PORT_THIS}
         req_port = {const.PORT_REQ}
         page_port = {const.PORT_PAGE}
         page_serve_port = {const.PORT_PAGE_SERVE}
-        
-        [VERSIONS]
-        global = 1.1
-        rp = 1.1
-        fo = 1.1
-        do = 1.1
-        wire = 1.1
         
         [USER_PROFILES]
         {const.DEFAULT_PROFILE_NAME}
@@ -176,25 +168,31 @@ def _write_default_profile(profile_path, config_map):
     config_map.set('USER_PROFILES', profile_path.name)
 
 
-def set_constants(config_map: configparser.ConfigParser) -> bool:
+def set_constants(config_map: configparser.ConfigParser):
     """Sets global constants from values in the configuration file and directories.
 
     Reads configuration values from default_config.ini and sets global variables accordingly.
     Also sets directory paths for logs and the webpage.
 
     Returns:
-        bool: True if configuration values were flip successfully, False otherwise.
+        AppConfig: loaded configuration
     """
 
-    const.PORT_THIS = config_map.getint('NERD_OPTIONS', 'this_port')
-    const.PORT_REQ = config_map.getint('NERD_OPTIONS', 'req_port')
-    const.PORT_PAGE = config_map.getint('NERD_OPTIONS', 'page_port')
-    const.PORT_PAGE_SERVE = config_map.getint('NERD_OPTIONS', 'page_serve_port')
-
-    const.PROTOCOL = TCPProtocol if config_map['NERD_OPTIONS']['protocol'] == 'tcp' else UDPProtocol
-    const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
-
-    const.VERSIONS = {k.upper(): float(v) for k, v in config_map['VERSIONS'].items()}
+    app_config = AppConfig([], None)
+    if config_map.has_option('NERD_OPTIONS', 'this_port'):
+        app_config.this_port = config_map.getint('NERD_OPTIONS', 'this_port')
+    if config_map.has_option('NERD_OPTIONS', 'req_port'):
+        app_config.req_port = config_map.getint('NERD_OPTIONS', 'req_port')
+    if config_map.has_option('NERD_OPTIONS', 'page_port'):
+        app_config.page_port = config_map.getint('NERD_OPTIONS', 'page_port')
+    if config_map.has_option('NERD_OPTIONS', 'page_serve_port'):
+        app_config.page_serve_port = config_map.getint('NERD_OPTIONS', 'page_serve_port')
+    if config_map.has_option('NERD_OPTIONS', 'protocol'):
+        print(config_map.get('NERD_OPTIONS', 'protocol'))
+        app_config.protocol = net.TCPProtocol if config_map.get('NERD_OPTIONS', 'protocol') == repr(
+            net.TCPProtocol) else net.UDPProtocol
+    if config_map.has_option('NERD_OPTIONS', 'ip_version'):
+        const.IP_VERSION = socket.AF_INET6 if config_map['NERD_OPTIONS']['ip_version'] == '6' else socket.AF_INET
 
     if const.IP_VERSION == socket.AF_INET6:
         if socket.has_ipv6:
@@ -208,7 +206,7 @@ def set_constants(config_map: configparser.ConfigParser) -> bool:
         const.USING_IP_V4 = False
         const.BIND_IP = const._BIND_IP_V6
 
-    return True
+    return app_config
 
 
 def print_paths():

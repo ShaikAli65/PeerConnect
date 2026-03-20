@@ -13,7 +13,9 @@ from ._netproto import *
 
 
 class IPAddress(NamedTuple):
-    """
+    """ Essentially represents a network interface.
+    IPAddr and Network interfaces are used interchangeably.
+
     Attributes:
         ip: ip address either v4 or v6
         scope_id: interface id if address is v6
@@ -56,27 +58,27 @@ class IPAddress(NamedTuple):
 
 
 NetAddr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
+Interface = IPAddress
 
 
 def create_connection_sync(
-        address, timeout=None
+        protocol: NetworkProtocol, address, timeout=None
 ) -> Socket:
-    addr_family = _socket.AF_INET if ipaddress.ip_address(address[0]).version == 4 else _socket.AF_INET6
-    sock = Socket(addr_family, _socket.SOCK_STREAM)
-    sock.settimeout(timeout)
-
     if const.USING_IP_V6 and len(address) != 4:
         raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
+    addr_family = _socket.AF_INET if ipaddress.ip_address(address[0]).version == 4 else _socket.AF_INET6
+    sock = protocol.create_sync_sock(addr_family)
+    sock.settimeout(timeout)
 
     sock.connect(address)
     return sock
 
 
-async def create_connection_async(address, timeout=None) -> Socket:
+async def create_connection_async(protocol, address, timeout=None) -> Socket:
     loop = _asyncio.get_running_loop()
     if const.USING_IP_V6 and len(address) != 4:
         raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
-    sock = await const.PROTOCOL.create_connection_async(loop, address, timeout)
+    sock = await protocol.create_connection_async(loop, address, timeout)
     return sock
 
 
@@ -85,7 +87,7 @@ REQ_URI = "req_uri"
 
 
 def connect_to_peer(
-        _peer_obj=None, to_which: str = CONN_URI, timeout=None, retries: int = 1
+        protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ) -> Socket:
     """Creates a basic socket connection to the peer_obj passed in.
 
@@ -98,8 +100,7 @@ def connect_to_peer(
             uses :param timeout: as initial value
     """
 
-    addr = getattr(_peer_obj, to_which)
-    address = const.THIS_IP.addr_tuple(port=addr[1], ip=addr[0])
+    address = getattr(_peer_obj, to_which)
 
     if timeout is None:
         return create_connection_sync(address)
@@ -120,29 +121,35 @@ def connect_to_peer(
 
 @use.awaitable(connect_to_peer)
 async def connect_to_peer(
-        _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
+        protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
-    *args will be passed into socket.setsockopt
-    :param timeout: initial timeout to start from, in exponential retries
-    :param to_which: specifies to what uri should the connection made
-    :param _peer_obj: RemotePeer object
-    :param retries: if given tries reconnecting with exponential backoff using :func:`use.get_timeouts`
-    :param timeout: uses as initial value
-    :returns: connected socket if successful
-    :raises: OSError
+
+    Args:
+        protocol[NetworkProtocol]: protocol object that creates the socket
+        timeout: initial timeout to start from, in exponential retries
+        to_which: specifies to what uri should the connection made
+        _peer_obj: RemotePeer object
+        retries: if given tries reconnecting with exponential backoff using :func:`use.get_timeouts`
+        timeout: uses as initial value
+    Raises:
+        OSError: if connection fails
+
+    Returns:
+        Socket: connected socket
+
     """
     address = getattr(_peer_obj, to_which)
     retry_count = 0
 
     if timeout is None:
-        return await create_connection_async(address)
+        return await create_connection_async(protocol, address)
 
     for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
-            return await create_connection_async(address, timeout)
+            return await create_connection_async(protocol, address, timeout)
         except OSError:
             retry_count += 1
             if retry_count >= retries:

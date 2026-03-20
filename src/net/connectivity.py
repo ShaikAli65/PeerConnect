@@ -4,7 +4,7 @@ import logging
 import struct
 import time
 
-from core.requests import RequestsService
+from src.core.requests import RequestsService
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.mixins import TaskGroupMixIn
 from src.net.events import RequestEvent

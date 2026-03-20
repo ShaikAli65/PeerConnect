@@ -32,15 +32,19 @@ class Acceptor(AExitStackMixIn):
             finalizing: asyncio.Event,
             listen_addr:tuple,
             conn_service,
+            peer_service,
+            protocol,
             *args, **kwargs
     ):
         super().__init__(*args, **kwargs)
-        from core.acceptor import ConnectionService
+        from src.core.acceptor import ConnectionService
         self.address = listen_addr  # ip defaults to active ip
         self._finalizing = finalizing
         self.conn_service: ConnectionService = conn_service
+        self.peer_service = peer_service
         self.main_socket: Optional[Socket] = None
         self.back_log = 4
+        self.network_protocol = protocol
         self.max_timeout = 90
         self._task_group = TaskGroup()
         self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
@@ -68,7 +72,7 @@ class Acceptor(AExitStackMixIn):
 
     def _start_socket(self):
         try:
-            sock = const.PROTOCOL.create_async_server_sock(
+            sock = self.network_protocol.create_async_server_sock(
                 asyncio.get_running_loop(),
                 self.address,
                 family=const.IP_VERSION,
@@ -91,7 +95,7 @@ class Acceptor(AExitStackMixIn):
             return
         _logger.info(f"handshake successful {handshake}")
         try:
-            peer = await peers.get_remote_peer(handshake.peer_id)  # TODO: fix this
+            peer = await self.peer_service.get_remote_peer(handshake.peer_id)  # TODO: fix this
         except RemotePeerNotFound:
             _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
             initial_conn.close()

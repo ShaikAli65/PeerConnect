@@ -3,6 +3,8 @@ from typing import NamedTuple
 from src.avails.wire import GossipMessage, WireData
 from .connect import Connection, MsgConnection, NetAddr
 
+__all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'MessageEvent')
+
 
 class RequestEvent(NamedTuple):
     root_code: bytes
