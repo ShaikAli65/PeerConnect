@@ -1,27 +1,21 @@
-import logging
 import multiprocessing
 import os
 import sys
 import time
 import traceback
-from asyncio import CancelledError, Event
+from asyncio import CancelledError
 
-from avails import PeerDict
-from avails.mixins import AggregatingAsyncExitStack
-from src.avails.useables import COLORS
 
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+from src.configurations.appconfig import init_app_runtime
+from src.bootup import init_app
+from src.avails.useables import COLORS
 from src.avails import const
-from src.conduit import pagehandle
-from src.configurations import bootup, configure
-from src.core import acceptor, eventloop, requests
-from src.net import connectivity
+from src.core import eventloop
+from src.net import TCPProtocol
 from src.core.async_runner import AnotherRunner
-from src.managers import logmanager, message, profilemanager
-
-_logger = logging.getLogger()
 
 
 # TODO: Fix this: Error handling is inconsistent and leaky
@@ -29,73 +23,6 @@ _logger = logging.getLogger()
 # Some print
 # Some swallow errors
 # Some return None and hope
-
-async def init_app(exit_stack, finalizing, in_network, peer_list):
-    _logger.info("setting paths")
-    configure.set_paths()
-    _logger.info("initiating logging")
-    await logmanager.initiate(exit_stack)
-
-    config_map = await configure.load_configs(exit_stack)
-    _logger.info(f"loaded configurations, {config_map=}")
-
-    _logger.info("loading profiles")
-    await profilemanager.load_profiles_to_program(config_map)
-
-    _logger.info("launching webpage")
-    await bootup.launch_web_page()
-
-    _logger.info("load interfaces")
-    await bootup.load_interfaces()
-
-    _logger.info("initiating page handle")
-    profile_selection = await pagehandle.initiate_page_handle(exit_stack)
-
-    _logger.debug("waiting for profile selection")
-    current_profile = await profile_selection
-
-    _logger.info("boot_up initiating")
-    this_ip = await bootup.set_ip_config(current_profile)
-
-    _logger.info("configuring this peer object")
-    this_remote_peer = bootup.make_this_remote_peer(current_profile)
-
-    _logger.info("printing configurations")
-    configure.print_app(this_remote_peer, this_ip)
-
-    _logger.info("initiating comms")
-    conn_service = await acceptor.initiate_acceptor(
-        exit_stack,
-        finalizing,
-        this_ip.addr_tuple,
-        current_profile,
-        this_remote_peer,
-    )
-
-    _logger.info("starting message connections")
-    msg_conn_service = await message.initiate(
-        finalizing,
-        this_remote_peer.peer_id,
-        conn_service,
-        exit_stack,
-    )
-
-    _logger.info("initiating requests")
-    req_service, gossip_service, discovery_service, kad_server = await requests.initiate(
-        this_ip,
-        this_remote_peer,
-        peer_list,
-        in_network,
-        finalizing,
-        exit_stack,
-    )
-
-    _logger.info("initiating connectivity checker")
-    connectivity_checker = await connectivity.initiate(
-        exit_stack,
-        req_service,
-        this_remote_peer.peer_id,
-    )
 
 
 cancellation_started = 0.0
@@ -123,11 +50,11 @@ async def _async_initiate_helper(init_app, exit_stack):
         raise error
 
 
-def initiate(init_app, exit_stack, finalizing):
+def initiate(init_app, app_runtime):
     try:
-        with AnotherRunner(finalizing=finalizing, debug=const.debug and False) as runner:
+        with AnotherRunner(finalizing=app_runtime.finalizing, debug=const.debug and False) as runner:
             eventloop.set_eager_task_factory()
-            runner.run(_async_initiate_helper(init_app, exit_stack))
+            runner.run(_async_initiate_helper(init_app, app_runtime.exit_stack))
     except BaseException as be:
         if const.debug:
             print_str = f"{'-' * 80}\n" \
@@ -141,16 +68,10 @@ def initiate(init_app, exit_stack, finalizing):
 
 
 if __name__ == "__main__":
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     multiprocessing.freeze_support()
-    finalizing = Event()
-    exit_stack = AggregatingAsyncExitStack()
-    in_network = Event()
-    # exit_stack = AsyncExitStack()
+    app_runtime = init_app_runtime()
+    const.PROTOCOL = TCPProtocol
     initiate(
-        lambda: init_app(
-            exit_stack, finalizing, in_network, PeerDict()
-        ),
-        exit_stack,
-        finalizing
+        lambda: init_app(app_runtime),
+        app_runtime,
     )

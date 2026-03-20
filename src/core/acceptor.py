@@ -28,6 +28,7 @@ async def initiate_acceptor(
         interface,
         current_profile,
         this_remote_peer,
+        peer_service,
 ):
     connection_dispatcher = ConnectionDispatcher()
     conn_service = ConnectionService(connection_dispatcher)
@@ -42,6 +43,7 @@ async def initiate_acceptor(
         finalizing_event,
         interface.addr_tuple(ip=None, port=app_config.this_port),
         conn_service,
+        peer_service,
         app_config.protocol
     )
 
