@@ -65,6 +65,9 @@ class PeerDict(dict):
     def __iter__(self):
         return self.values().__iter__()
 
+    def __repr__(self):
+        return f"PeerDict({self})"
+
 
 class TransfersBookKeeper:
     """Stores file/dir handles/pools references

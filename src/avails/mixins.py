@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Type, TypeVar
 
 from src.avails import BaseDispatcher, HasID, use
 
+_logger = logging.getLogger(__name__)
+
 
 class ReplyRegistryMixIn:
     """Provides reply functionality
@@ -197,7 +199,8 @@ class AggregatingAsyncExitStack(AsyncExitStack):
     __slots__ = ()
 
     async def __aexit__(self, *exc_details):
-        logging.getLogger(__name__).error(f"error {exc_details=}", exc_info=True)
+        if any(exc_details):
+            _logger.error(f"error {exc_details=}", exc_info=True)
         exc = exc_details[1]
         received_exc = exc is not None
         aggregated = []

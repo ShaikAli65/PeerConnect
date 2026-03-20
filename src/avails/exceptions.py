@@ -22,11 +22,11 @@ class TransferIncomplete(Exception):
     """Data Transfer was paused or broken in between"""
 
 
-class TransferRejected(Exception):
+class TransferRejected(TransferIncomplete):
     """Data Transfer request was rejected"""
 
 
-class CancelTransfer(Exception):
+class CancelTransfer(TransferIncomplete):
     """Request to Cancel the transfer"""
 
 
