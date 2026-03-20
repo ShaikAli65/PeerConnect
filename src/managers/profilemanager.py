@@ -263,11 +263,10 @@ def all_profiles():
 
 async def load_profiles_to_program(main_config):
     assert os.path.exists(const.PATH_PROFILES), "profiles path not found"
-
     ProfileManager.main_config = main_config
     for profile_id in main_config["USER_PROFILES"]:
         try:
-            # only places where profile objects are created:
+            # Note: only places where profile objects are created:
             # 1. ProfileManager.add_profile
             # 2. here
 
@@ -277,9 +276,8 @@ async def load_profiles_to_program(main_config):
         except LookupError:
             await ProfileManager.delete_profile(profile_id)
 
-    t = '\n'.join(str(x) for x in ProfileManager.PROFILE_LIST)
-
-    _logger.debug(f"loaded profiles: {t} \n")
+    _logger.debug(f"loaded profiles: {'\n'.join(str(x) for x in ProfileManager.PROFILE_LIST)} \n")
+    return ProfileManager.PROFILE_LIST
 
 
 async def refresh_profile_list():

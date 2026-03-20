@@ -12,7 +12,6 @@ from ._fileio import FileItemReader
 from ._fileobject import FileItem
 
 
-# nah, this is not a function definition
 class Sender(
     ExceptionRouterMixIn,  # keep at the top of the mro, cause calls to these methods are more
     # probably called only once or twice

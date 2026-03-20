@@ -95,7 +95,7 @@ class Acceptor(AExitStackMixIn):
             return
         _logger.info(f"handshake successful {handshake}")
         try:
-            peer = await self.peer_service.get_remote_peer(handshake.peer_id)  # TODO: fix this
+            peer = await self.peer_service.get_remote_peer(handshake.peer_id)
         except RemotePeerNotFound:
             _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
             initial_conn.close()
