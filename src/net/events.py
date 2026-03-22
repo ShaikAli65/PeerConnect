@@ -5,23 +5,25 @@ from .connect import Connection, MsgConnection, NetAddr
 
 __all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'MessageEvent')
 
+NetworkEvent = NamedTuple
 
-class RequestEvent(NamedTuple):
+
+class RequestEvent(NetworkEvent):
     root_code: bytes
     request: WireData
     from_addr: NetAddr
 
 
-class GossipEvent(NamedTuple):
+class GossipEvent(NetworkEvent):
     message: GossipMessage
     from_addr: NetAddr
 
 
-class ConnectionEvent(NamedTuple):
+class ConnectionEvent(NetworkEvent):
     connection: Connection
     handshake: WireData
 
 
-class MessageEvent(NamedTuple):
+class MessageEvent(NetworkEvent):
     msg: WireData
     connection: MsgConnection

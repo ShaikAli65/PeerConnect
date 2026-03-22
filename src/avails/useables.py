@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import enum
 import functools
 import inspect
 import os
 import platform
+import re
 import subprocess
 import sys
 import traceback
@@ -379,7 +382,8 @@ def keep_task_reference(func):
 
     return task_wrapper
 
-
+def to_snake_case(name):
+    return
 
 class NotInUse:
     __annotations__ = {
@@ -409,3 +413,7 @@ class NotInUse:
         - **kwargs: Keyword arguments for the function.
         """
         raise ValueError(f"Your are not supposed to call this function :{self.function.__name__}")
+
+
+def camel_to_snake(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()

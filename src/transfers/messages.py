@@ -148,7 +148,7 @@ class MsgSender:
             InvalidPacket: is message does not have an id
         """
 
-        if self._started is False:
+        if not self._started:
             raise InvalidStateError("sender not started yet!")
 
         if msg.msg_id is None:

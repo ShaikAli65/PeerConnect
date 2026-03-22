@@ -2,13 +2,12 @@ import asyncio
 import logging
 import socket
 import sys
-import threading
 from asyncio import TaskGroup
 from typing import Optional
 
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
-from src.avails.mixins import AExitStackMixIn, singleton_mixin
+from src.avails.mixins import AExitStackMixIn
 from src.net.events import ConnectionEvent
 from . import bandwidth
 from .connect import Connection, Socket
@@ -18,14 +17,7 @@ from src.avails.useables import COLORS
 _logger = logging.getLogger(__name__)
 
 
-@singleton_mixin
 class Acceptor(AExitStackMixIn):
-    __annotations__ = {
-        'address': tuple,
-        '__control_flag': threading.Event,
-        'main_socket': Socket,
-        'stopping': asyncio.Event,
-    }
 
     def __init__(
             self,
@@ -88,7 +80,6 @@ class Acceptor(AExitStackMixIn):
         self._exit_stack.enter_context(sock)
 
     async def __accept_connection(self, initial_conn):
-        from src.core import peers
 
         handshake = await self._perform_handshake(initial_conn)
         if not handshake:

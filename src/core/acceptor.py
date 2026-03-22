@@ -109,7 +109,6 @@ class ConnectionDispatcher(*mixins.BasicDispatcher):
                 name=f"watching socket for activity [> peer={connection.peer.ip}]"
             )
         )
-
         self._parking_lot[connection] = item
 
     async def submit(self, event: ConnectionEvent):
