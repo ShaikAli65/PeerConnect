@@ -43,8 +43,11 @@ through [log_config.json](/config/log_config.json) and features:
 ### 1. Queue-Based Logging
 
 ```python
+import queue
+
 log_queue = queue.SimpleQueue()
-queue_listener.start()
+q_listener = getattr(log_queue, 'listener')
+q_listener.start()
 ```
 
 - **Non-blocking Architecture**: Decouples log emission from write operations
@@ -60,7 +63,11 @@ queue_listener.start()
 ### 3. Runtime Configuration
 
 ```python
-log_config["handlers"][handler]["filename"] = str(Path(const.PATH_LOG, ...))
+from pathlib import Path
+from src.avails import const
+log_config = {}
+for handler in log_config["handlers"]:
+    log_config["handlers"][handler]["filename"] = str(Path(const.PATH_LOG, ...))
 ```
 
 - Dynamic path resolution for log files
@@ -73,12 +80,3 @@ log_config["handlers"][handler]["filename"] = str(Path(const.PATH_LOG, ...))
 2. Queue listener initialization
 3. Handler chain registration
 4. Shutdown hook registration
-
-```python
-Dock.exit_stack.callback(_log_exit)
-```
-
-> **Note:** The logging system integrates with PeerConnect's lifecycle management through `Dock.exit_stack` for graceful
-> shutdowns [more](/src_docs/core/public.md).
-
-[back](/src_docs)
