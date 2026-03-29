@@ -117,7 +117,7 @@ async def setup_server_connection(app_ctx):
 
 async def send_quit_status_to_server(app_ctx):
     try:
-        app_ctx.this_remote_peer.status = RemotePeer.OFFLINE
+        app_ctx.this_remote_peer.status = RemotePeer.STATUS.OFFLINE
         sock = await connect.create_connection_async(
             app_ctx.addr_tuple(const.SERVER_IP, const.PORT_SERVER),
             timeout=const.SERVER_TIMEOUT

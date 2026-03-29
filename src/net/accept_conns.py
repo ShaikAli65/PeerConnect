@@ -8,11 +8,11 @@ from typing import Optional
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
 from src.avails.mixins import AExitStackMixIn
+from src.avails.useables import COLORS
 from src.net.events import ConnectionEvent
 from . import bandwidth
 from .connect import Connection, Socket
 from .wire_io import WireIO
-from src.avails.useables import COLORS
 
 _logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class Acceptor(AExitStackMixIn):
     def __init__(
             self,
             finalizing: asyncio.Event,
-            listen_addr:tuple,
+            listen_addr: tuple,
             conn_service,
             peer_service,
             protocol,
@@ -92,7 +92,7 @@ class Acceptor(AExitStackMixIn):
             initial_conn.close()
             return
 
-        peer.status = RemotePeer.ONLINE
+        peer.status = RemotePeer.STATUS.ONLINE
         conn = Connection.create_from(initial_conn, peer)
         self._exit_stack.enter_context(initial_conn)
         con_event = ConnectionEvent(conn, handshake)
@@ -117,10 +117,11 @@ class Acceptor(AExitStackMixIn):
         if error_log := locals().get('error_log'):
             _logger.error(error_log)
             initial_conn.close()
+        return None
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await use.safe_cancel_task(self._initiate_task)
         return await super().__aexit__(exc_tb, exc_type, exc_tb)
 
     def __repr__(self):
-        return f'Nomad{self.address}'
+        return f'<Acceptor({self.address})>'

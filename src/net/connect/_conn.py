@@ -2,7 +2,7 @@ import struct
 from asyncio import Event, Lock as aLock, get_running_loop, sleep
 from asyncio.trsock import TransportSocket
 from time import perf_counter
-from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING
+from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING, TypeVar
 
 from src.avails import const
 from src.avails.exceptions import FailedToReceive, InvalidPacket
@@ -222,7 +222,7 @@ class Receiver(
         return bytes(received_data)
 
 
-ReceiverType = Receiver | Callable[[int], Awaitable[bytes]]
+ReceiverType = TypeVar("ReceiverType", Receiver, Callable[[int], Awaitable[bytes]])
 
 
 async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
@@ -330,10 +330,10 @@ class MsgConnection:
         async def send(self, data: WireData):
             ...
     else:
-        async def send(self, data):
+        def send(self, data):
             byted_data = bytes(data)  # marshall
             data_size = struct.pack("!I", len(byted_data))
-            return await self._connection.send(data_size + byted_data)
+            return self._connection.send(data_size + byted_data)
 
     async def recv(self):
         try:

@@ -1,3 +1,4 @@
+import enum
 from typing import Self
 
 import umsgpack
@@ -23,8 +24,9 @@ class RemotePeer:
         * If any attributes are added then they should be added to __iter__ method
     """
 
-    ONLINE = 1
-    OFFLINE = 0
+    class STATUS(enum.IntEnum):
+        ONLINE = 1
+        OFFLINE = 0
 
     version = const.VERSIONS['RP']
     __annotations__ = {
@@ -44,7 +46,7 @@ class RemotePeer:
                  ip=None,
                  conn_port=const.PORT_THIS,
                  req_port=const.PORT_REQ,
-                 status=OFFLINE):
+                 status=STATUS.OFFLINE):
         self.username = username
         self.ip = str(ip)
         self._conn_port = conn_port
@@ -105,7 +107,7 @@ class RemotePeer:
 
     @property
     def is_online(self):
-        return self.status == self.ONLINE
+        return self.status == self.STATUS.ONLINE
 
     def __iter__(self):
         """

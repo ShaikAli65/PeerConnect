@@ -103,13 +103,13 @@ def connect_to_peer(
     address = getattr(_peer_obj, to_which)
 
     if timeout is None:
-        return create_connection_sync(address)
+        return create_connection_sync(const.PROTOCOL, address)
 
     retry_count = 0
     for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
             return create_connection_sync(
-                address, timeout=timeout
+                const.PROTOCOL, address, timeout=timeout
             )
         except OSError:
             retry_count += 1
@@ -128,7 +128,7 @@ async def connect_to_peer(
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer
 
     Args:
-        protocol[NetworkProtocol]: protocol object that creates the socket
+        protocol (NetworkProtocol): protocol object that creates the socket
         timeout: initial timeout to start from, in exponential retries
         to_which: specifies to what uri should the connection made
         _peer_obj: RemotePeer object
