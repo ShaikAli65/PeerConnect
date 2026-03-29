@@ -103,6 +103,7 @@ class _EventMeta(type):
             header = namespace.get("HEADER") or camel_to_snake(name)
             cls.HEADER = header
             mcls.registry[header] = cls
+        return cls
 
 
 @dataclass(frozen=True, slots=True)
