@@ -1,14 +1,16 @@
 import enum
 import sys
 from abc import ABC, abstractmethod
-from typing import Callable, NamedTuple, Protocol
+from dataclasses import dataclass
+from typing import Callable, ClassVar, NamedTuple, Protocol
+
+from src.avails.useables import camel_to_snake
 
 if sys.version_info >= (3, 13):
     pass
 else:
     class QueueShutDown(Exception):
         ...
-
 
 
 class _HasID(Protocol):
@@ -66,7 +68,7 @@ class BaseDispatcher(AbstractDispatcher):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.registry = {}
+        self.registry = kwargs.pop('registry', {})
 
     def __call__(self, *args, **kwargs):
         return self.submit(*args, **kwargs)
@@ -91,6 +93,35 @@ class BaseDispatcher(AbstractDispatcher):
         return self.registry.pop(event_trigger)
 
 
+class _EventMeta(type):
+    registry: dict[str, type["EventBase"]] = {}
+
+    def __new__(mcls, name, bases, namespace):
+        cls = super().__new__(mcls, name, bases, namespace)
+
+        if namespace.get("__register__", True):
+            header = namespace.get("HEADER") or camel_to_snake(name)
+            cls.HEADER = header
+            mcls.registry[header] = cls
+
+
+@dataclass(frozen=True, slots=True)
+class AppEventBase(metaclass=_EventMeta):
+    HEADER: ClassVar[str | None] = None
+
+    @property
+    def header(self) -> str:
+        return type(self).event_name()
+
+    @classmethod
+    def event_name(cls) -> str:
+        return cls.HEADER or camel_to_snake(cls.__name__)
+
+    @classmethod
+    def registered_headers(cls) -> tuple[str, ...]:
+        return tuple(_EventMeta.registry)
+
+
 __all__ = (
     'AbstractHandler',
     'AbstractDispatcher',
@@ -98,5 +129,6 @@ __all__ = (
     'BaseDispatcher',
     'HasIdProperty',
     'HasID',
-    'HasPeerId'
+    'HasPeerId',
+    'AppEventBase',
 )

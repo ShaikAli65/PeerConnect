@@ -3,8 +3,9 @@ import contextlib
 from dataclasses import dataclass
 from typing import Any
 
-from src.avails.mixins import AggregatingAsyncExitStack
 from src.avails import PeerDict, const
+from src.avails.mixins import AggregatingAsyncExitStack
+from src.core.app_events import AppEventsBus
 from src.managers import ProfileManager
 from src.net import Interface, NetworkProtocol, TCPProtocol
 
@@ -80,7 +81,8 @@ class AppRunTime:
     peer_list: PeerDict
     interfaces: list[Interface]
     exit_stack: contextlib.AsyncExitStack[Any]
+    app_events: AppEventsBus
 
 
 def init_app_runtime():
-    return AppRunTime([], asyncio.Event(), asyncio.Event(), PeerDict(), [], AggregatingAsyncExitStack())
+    return AppRunTime([], asyncio.Event(), asyncio.Event(), PeerDict(), [], AggregatingAsyncExitStack(), AppEventsBus())
