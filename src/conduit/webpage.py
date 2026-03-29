@@ -1,17 +1,42 @@
+import asyncio
+import asyncio as _asyncio
+
 from src.avails import use
+from src.avails.exceptions import InvalidPacket
 from src.conduit import headers, ui_codec
-from src.conduit.pagehandle import send_data_to_frontend
 from src.conduit.ui_codec import DataWeaver
 from src.conduit.ui_events_bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
     UIPromptReply
 
 
-async def failed_to_send_message(message_id, peer_id):
-    send_data_to_frontend(DataWeaver(  # noqa
-        header=headers.FAILED_TO_SEND,
-        peer_id=peer_id,
-        msg_id=message_id
-    ))
+def send_data_to_frontend(data, expect_reply=False) -> _asyncio.Future[DataWeaver] | asyncio.Task:
+    """Send a packet to frontend based on type code
+
+    Args:
+        data(src.conduit.ui_codec.DataWeaver): packet to send
+        expect_reply: if expecting a reply, this function returns an asyncio.Future
+
+    Returns:
+        Future[DataWeaver] | Task
+
+    Raises:
+        InvalidPacket: if msg does not contain msg_id and expecting a reply
+
+    """
+    from src.conduit.pagehandle import FrontEndConnector, MessageFromFrontEndDispatcher
+
+    disp = FrontEndConnector()
+    msg_disp = MessageFromFrontEndDispatcher()
+
+    r = disp(data)
+
+    if expect_reply:
+        if data.msg_id is None:
+            raise InvalidPacket("msg_id not found and expecting a reply")
+
+        return msg_disp.register_reply(data.msg_id)
+
+    return r
 
 
 async def ask_user_peer_name_for_discovery(reason):
@@ -38,15 +63,6 @@ async def failed_to_reach(peer_id):
     send_data_to_frontend(  # noqa
         DataWeaver(header=headers.FAILED_TO_REACH, peer_id=peer_id)
     )
-
-
-async def update_peer(peer):
-    data = DataWeaver(
-        header=headers.NEW_PEER if peer.is_online else headers.REMOVE_PEER,
-        content=_json_peer(peer),
-        peer_id=peer.peer_id,
-    )
-    send_data_to_frontend(data)  # noqa
 
 
 async def get_transfer_ok(profile, peer_id):

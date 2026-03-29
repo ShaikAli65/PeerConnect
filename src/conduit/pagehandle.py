@@ -6,20 +6,26 @@ Interfacing with UI using websockets
 
 import asyncio
 import asyncio as _asyncio
+import logging
 import sys
-from asyncio import CancelledError
+from asyncio import TaskGroup
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import overload
 
 import websockets
 from websockets import ConnectionClosedError, WebSocketServerProtocol
 
-from src.avails import DataWeaver, const, use
+from src.avails import const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import BasicDispatcher, Dispatcher, singleton_mixin
-from src.conduit import headers, logger
+from src.conduit import headers
+from src.conduit.app_event_subs import sub_to_remote_peer_updates
+from src.conduit.ui_codec import DataWeaver
+from src.configurations.appconfig import AppConfig, AppRunTime
+from src.core.app_events import AppEventsBus
+
+logger = logging.getLogger(__name__)
 
 PROFILE_WAIT: _asyncio.Future | None = None
 
@@ -53,13 +59,13 @@ class FrontEndWebSocket:
     async def submit(self, data: DataWeaver):
 
         if not self._is_transport_connected:
-            logger.debug(f"[PAGE HANDLE] ! transport not connected buffering data: {data=}")
+            logger.debug(f"! transport not connected buffering data: {data=}")
 
             await self._add_to_buffer(data)
             return
 
         try:
-            logger.debug(f"[PAGE HANDLE] > data to page: {data=!r}")
+            logger.debug(f"> data to page: {data=!r}")
             await self.transport.send(str(data))
         except websockets.WebSocketException as wse:
             self._is_transport_connected = False
@@ -67,14 +73,14 @@ class FrontEndWebSocket:
             raise TransferIncomplete from wse
 
     async def _send_buffer(self):
-        while self.stopping is False:
+        while not self.stopping:
             async with self.ping_sender:
                 await self.ping_sender.wait()
 
-            while self.stopping is False:
+            while not self.stopping:
                 msg = await self.buffer.get()
                 try:
-                    logger.debug(f"[PAGE HANDLE] > data to page: {msg=!r}")
+                    logger.debug(f"> data to page: {msg=!r}")
                     await self.transport.send(str(msg))
                 except websockets.WebSocketException:
                     await self._add_to_buffer(msg)
@@ -93,6 +99,7 @@ class FrontEndWebSocket:
         if self.buffer.qsize() >= self.max_buffer_size:
             return logger.warning(f"discarding websocket message {self.buffer.get_nowait()}, buffer full",
                                   exc_info=True)
+        return None
 
     async def __aenter__(self):
         self._buffer_sender_task = _asyncio.create_task(self._send_buffer(),
@@ -100,7 +107,7 @@ class FrontEndWebSocket:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._finalized is True:
+        if self._finalized:
             return
 
         if not self.buffer.empty():
@@ -116,9 +123,8 @@ class FrontEndWebSocket:
 
 
 @singleton_mixin
-class FrontEndDispatcher(*BasicDispatcher):
-    """
-    Dispatcher that SENDS packets to frontend >>
+class FrontEndConnector(*BasicDispatcher):
+    """Connections to frontend
     """
 
     async def add_websocket(self, type_code, ws):
@@ -144,7 +150,7 @@ class MessageFromFrontEndDispatcher(*Dispatcher):
 
     async def submit(self, data_weaver):
         return await self.call_handler(
-            data_weaver.type,
+            data_weaver.header,
             logger,
             data_weaver
         )
@@ -154,12 +160,6 @@ class MessageFromFrontEndDispatcher(*Dispatcher):
             raise InterruptedError
 
         self._task_group.create_task(bomb())
-
-        try:
-            await asyncio.sleep(0)
-        except CancelledError:
-            logger.debug("suppressing expected canceller error at aexit")
-            return None
 
         try:
             return await super().__aexit__(*args)
@@ -173,14 +173,14 @@ async def validate_connection(web_socket, *, _exit_stack=_exit_stack):
     try:
         wire_data = await _asyncio.wait_for(web_socket.recv(), const.SERVER_TIMEOUT)
     except TimeoutError as te:
-        logger.error(f"[PAGE HANDLE] timeout reached, cancelling {web_socket=}")
+        logger.error(f"timeout reached, cancelling {web_socket=}")
         await web_socket.close()
         raise ConnectionError from te
     except ConnectionClosedError as cce:
         raise ConnectionError from cce
 
     verification = DataWeaver(serial_data=wire_data)
-    front_end_disp = FrontEndDispatcher()
+    front_end_disp = FrontEndConnector()
     if disp := front_end_disp.get_websocket(verification.type):
         await disp.update_transport(web_socket)
     else:
@@ -188,10 +188,10 @@ async def validate_connection(web_socket, *, _exit_stack=_exit_stack):
         await _exit_stack.enter_async_context(web_socket_disp)
         await front_end_disp.add_websocket(verification.type, web_socket_disp)
 
-    logger.info("[PAGE HANDLE] waiting for data from websocket")
+    logger.info("waiting for data from websocket")
 
 
-async def _handle_client(web_socket: WebSocketServerProtocol):
+async def _handle_ui(web_socket: WebSocketServerProtocol):
     try:
         await validate_connection(web_socket)
     except ConnectionError:
@@ -203,7 +203,7 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
         data = await recv()
 
         parsed_data = DataWeaver(serial_data=data)
-        logger.debug(f"[PAGE HANDLE] < data from page: {parsed_data=!r}")
+        logger.debug(f"< data from page: {parsed_data=!r}")
 
         try:
             parsed_data.field_check()
@@ -219,9 +219,9 @@ async def _handle_client(web_socket: WebSocketServerProtocol):
         front_end_data_disp(parsed_data)
 
 
-async def _handle_client_exp_logging_wrapper(*args, **kwargs):
+async def _handle_ui_exp_logging_wrapper(*args, **kwargs):
     try:
-        await _handle_client(*args, **kwargs)
+        await _handle_ui(*args, **kwargs)
     except websockets.WebSocketException as we:
         logger.error(f"error occurred in handler exp:{we}")
 
@@ -229,20 +229,20 @@ async def _handle_client_exp_logging_wrapper(*args, **kwargs):
 @asynccontextmanager
 async def start_websocket_server():
     try:
-        start_server = await websockets.serve(_handle_client_exp_logging_wrapper, const.WEBSOCKET_BIND_IP,
+        start_server = await websockets.serve(_handle_ui_exp_logging_wrapper, const.WEBSOCKET_BIND_IP,
                                               const.PORT_PAGE)
     except OSError as oe:
         print(const.BIND_FAILED_MSG)
         logger.critical(f"failed to bind websocket: {oe}")
         sys.exit(-1)
 
-    logger.info(f"[PAGE HANDLE] websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")
+    logger.info(f"websocket server started at ws://{const.WEBSOCKET_BIND_IP}:{const.PORT_PAGE}")
     try:
         async with start_server:
             yield
     finally:
         await start_server.wait_closed()
-        logger.info("[PAGE HANDLE] websocket server closed")
+        logger.info("websocket server closed")
 
 
 def _http_server(bind, port, directory):
@@ -263,85 +263,57 @@ def _http_server(bind, port, directory):
             logger.info("\nKeyboard interrupt received, exiting.")
 
 
-def run_page_server(host="localhost", _exit_stack=_exit_stack):
+def run_page_server(host="localhost", port_page_serve=const.PORT_PAGE_SERVE, _exit_stack=_exit_stack):
     async def _helper():
         with ProcessPoolExecutor(1) as pool:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(pool, _http_server, host, const.PORT_PAGE_SERVE, const.PATH_PAGE)
+            await loop.run_in_executor(pool, _http_server, host, port_page_serve, const.PATH_PAGE)
 
     run_server = asyncio.create_task(_helper(), name="http-demon-for-frontend")
     _exit_stack.push_async_callback(use.safe_cancel_task, run_server)
 
 
-async def initiate_page_handle(app_exit_stack, *, _exit_stack=_exit_stack):
+def subscribe_to_app_events(app_events: AppEventsBus, task_group: asyncio.TaskGroup):
+    sub_to_remote_peer_updates(app_events, task_group)
+
+
+async def initiate_page_handle(
+        app_config: AppConfig,
+        app_runtime: AppRunTime,
+        *,
+        _exit_stack=_exit_stack,
+):
+    await app_runtime.exit_stack.enter_async_context(_exit_stack)
+
     global PROFILE_WAIT
     if PROFILE_WAIT is None:
         PROFILE_WAIT = _asyncio.get_event_loop().create_future()
 
-    await app_exit_stack.enter_async_context(_exit_stack)
-
     # responsible for sending messages to frontend, composed with multiple FrontEndWebSockets
-    front_end = FrontEndDispatcher()
+    front_end = FrontEndConnector()
 
     # these transports will get, set later when websocket connection from frontend arrives
     await front_end.add_websocket(headers.DATA, fEwSd := FrontEndWebSocket())
     await _exit_stack.enter_async_context(fEwSd)
+
     await front_end.add_websocket(headers.SIGNALS, fEwSd := FrontEndWebSocket())
     await _exit_stack.enter_async_context(fEwSd)
 
-    from src.conduit.handlesignals import FrontEndSignalDispatcher
-    from src.conduit.handledata import FrontEndDataDispatcher
-
-    signal_disp = FrontEndSignalDispatcher()
-    data_disp = FrontEndDataDispatcher()
-    signal_disp.register_all()
-    data_disp.register_all()
+    from src.conduit import handlesignals, handledata
 
     msg_disp = MessageFromFrontEndDispatcher()
     # messages from front end fed into this dispatcher, and it dispatches
     # them to respectively modules' dispatchers
-    msg_disp.register_handler(headers.DATA, data_disp.submit)
-    msg_disp.register_handler(headers.SIGNALS, signal_disp.submit)
+    handlesignals.register_handlers(msg_disp)
+    handledata.register_handlers(msg_disp)
 
-    run_page_server()
+    run_page_server(port_page_serve=app_config.page_serve_port)
+
+    tg = TaskGroup()
+    await _exit_stack.enter_async_context(tg)
+    subscribe_to_app_events(app_runtime.app_events, tg)
 
     await _exit_stack.enter_async_context(msg_disp)
     await _exit_stack.enter_async_context(front_end)
     await _exit_stack.enter_async_context(start_websocket_server())
     return PROFILE_WAIT
-
-
-@overload
-def front_end_data_dispatcher(data, expect_reply=False): ...
-
-
-@overload
-def front_end_data_dispatcher(data, expect_reply=True) -> _asyncio.Future[DataWeaver]: ...
-
-
-def front_end_data_dispatcher(data, expect_reply=False):
-    """Send a packet to frontend based on type code
-
-    Args:
-        data(DataWeaver): packet to send
-        expect_reply: if expecting a reply, this function returns an asyncio.Future
-
-    Returns:
-        Future[DataWeaver] | Task
-
-    Raises:
-        InvalidPacket: if msg does not contain msg_id and expecting a reply
-
-    """
-    disp = FrontEndDispatcher()
-    msg_disp = MessageFromFrontEndDispatcher()
-
-    r = disp(data)
-
-    if expect_reply:
-        if data.msg_id is None:
-            raise InvalidPacket("msg_id not found and expecting a reply")
-
-        return msg_disp.register_reply(data.msg_id)
-
-    return r
