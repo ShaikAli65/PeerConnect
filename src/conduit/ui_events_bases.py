@@ -53,14 +53,6 @@ class UIEvent(metaclass=UIEventMeta):
         return UIEventMeta.registry[header]
 
     @classmethod
-    def resolve_inbound(cls, header: str) -> type["UIInboundEvent"]:
-        return UIEventMeta.inbound_registry[header]
-
-    @classmethod
-    def resolve_outbound(cls, header: str) -> type["UIOutboundEvent"]:
-        return UIEventMeta.outbound_registry[header]
-
-    @classmethod
     def registered_headers(cls) -> tuple[str, ...]:
         return tuple(UIEventMeta.registry)
 

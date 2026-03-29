@@ -189,18 +189,15 @@ class TransferStatusChanged(UINotification):
 @dataclass(frozen=True, slots=True)
 class InterfaceChoiceRequested(UIPrompt):
     interfaces: JsonMap
-    request_id: str | int
     type: str = EventType.DATA
 
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryPeerNameRequested(UIPrompt):
     reason: str
-    request_id: str | int
 
 
 @dataclass(frozen=True, slots=True)
 class IncomingTransferDecisionRequested(UIPrompt):
     peer_id: str
-    request_id: str | int
     type: str = EventType.DATA
