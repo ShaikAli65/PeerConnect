@@ -76,7 +76,8 @@ class RequestsDispatcher(*Dispatcher):
         # 3. any type of handlers (async)
 
         try:
-            await f if inspect.isawaitable(f := handler(req_event)) else None
+            if inspect.isawaitable(f := handler(req_event)):
+                await f
         except RuntimeError:
             await self._handle_runtime_error(_logger)
         except Exception as e:
@@ -142,11 +143,9 @@ async def initiate(
 
     kad_server = await _kademlia.prepare_kad_server(
         dgram_transport,
-        app_runtime.peer_list,
-        app_runtime.in_network,
+        app_runtime,
         this_interface,
         this_remote_peer,
-        app_runtime.exit_stack,
         connectivity_checker,
     )
 
