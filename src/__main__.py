@@ -15,7 +15,7 @@ from src.avails.useables import COLORS
 from src.avails import const
 from src.core import eventloop
 from src.net import TCPProtocol
-from src.core.async_runner import AnotherRunner
+from src.core.async_runner import AppRunner
 
 
 # TODO: Fix this: Error handling is inconsistent and leaky
@@ -52,7 +52,7 @@ async def _async_initiate_helper(init_app, exit_stack):
 
 def initiate(init_app, app_runtime):
     try:
-        with AnotherRunner(finalizing=app_runtime.finalizing, debug=const.debug and False) as runner:
+        with AppRunner(finalizing=app_runtime.finalizing, debug=const.debug and False) as runner:
             eventloop.set_eager_task_factory()
             runner.run(_async_initiate_helper(init_app, app_runtime.exit_stack))
     except BaseException as be:
