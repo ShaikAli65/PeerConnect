@@ -22,7 +22,7 @@ class MsgSender:
     Most simple function call chain to send a message can be::
 
         1. send call
-        2. queues msg and get a registered ack future
+        2. queues msg and get a registered-ack-future
         3. internal sender loop picks it up
         4. sends message
         5. other side acknowledges the received message and registered future gets set

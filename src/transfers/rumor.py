@@ -1,10 +1,13 @@
 import asyncio
 import random
 import time
+import logging
 
 from src.avails import GossipMessage, RumorMessageItem, const
 from src.net.transports import GossipTransport
 from src.transfers.abc import AbstractRumorMessageList, AbstractRumorPolicy
+
+_logger = logging.getLogger(__name__)
 
 
 class SimpleRumorMessageList(AbstractRumorMessageList):
@@ -88,11 +91,11 @@ class DefaultRumorPolicy(AbstractRumorPolicy):
 
     def should_rumor(self, message: GossipMessage):
         if message.id in self.protocol_class.message_list.dropped:
-            print("not gossiping due to message id found in dropped", message.id)
+            _logger.debug("not gossiping due to message id found in dropped %s", message.id)
             return False
         elapsed_time = time.time() - message.created
         if elapsed_time > self.global_gossip_ttl:
-            print("not gossiping, global timeout reached", elapsed_time)
+            _logger.debug("not gossiping, global timeout reached %s", elapsed_time)
             return False
         # Decrease gossip chance based on time
         gossip_chance = max(
@@ -101,7 +104,7 @@ class DefaultRumorPolicy(AbstractRumorPolicy):
         )
         # Minimum 60% chance
         if not (w := random.random() < gossip_chance):
-            print("not gossiping probability check failed")
+            _logger.debug("not gossiping, probability check failed")
         return w
 
 
@@ -124,7 +127,7 @@ class RumorMongerProtocol:
     def message_arrived(self, data: GossipMessage, from_addr):
 
         if not data.fields_check():
-            print(f"fields missing, ignoring message: {data.actual_data}")
+            _logger.debug(f"fields missing, ignoring message: {data.actual_data}")
             return False
 
         if not self.policy.should_rumor(data):
@@ -132,11 +135,11 @@ class RumorMongerProtocol:
 
         if data.id in self.message_list:
             # no need to re-enter message into list, this refreshes timer of that message
-            print("[GOSSIP] forwarding seen message")
+            _logger.debug("[GOSSIP] forwarding seen message")
             self._gossip_forward(message=data)
         else:
             self.gossip_message(data)
-        print("[GOSSIP] message received and processed: %s" % data)
+        _logger.info("[GOSSIP] message received and processed: %s" % data)
 
         return True
 
@@ -149,7 +152,7 @@ class RumorMongerProtocol:
             pass
 
     def gossip_message(self, message):
-        print("[GOSSIP] gossiping new message", message, "to")
+        _logger.info(f"[GOSSIP] gossiping new message {message}")
         self.message_list.push(message)
         self._gossip_forward(message)
 
@@ -157,14 +160,14 @@ class RumorMongerProtocol:
         sampled_peers = self.message_list.sample_peers(message.id, self.alpha)
 
         if sampled_peers:
-            print("gossiping message to")  # debug
+            _logger.debug("gossiping message to")  # debug
 
         for peer_id in sampled_peers:
             p = self.__forward_payload(message, peer_id)
-            print(p.req_uri)
+            _logger.debug(p.req_uri)
 
     def is_seen(self, message: GossipMessage):
         return message.id in self.message_list
 
     def __repr__(self):
-        return str(f"<RumorMongerProtocol initiated={self._is_initiated}>")
+        return f"<{self.__class__.__name__}(initiated={self._is_initiated})>"
