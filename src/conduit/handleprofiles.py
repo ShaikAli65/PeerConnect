@@ -1,8 +1,8 @@
 import asyncio
 
-from src.avails import DataWeaver
 from src.conduit import logger, webpage
 from src.conduit.pagehandle import PROFILE_WAIT
+from src.conduit.ui_events import RequestProfilesSync, SetSelectedProfile
 from src.configurations import interfaces
 from src.configurations.interfaces import get_interfaces
 from src.managers import (
@@ -15,10 +15,11 @@ from src.managers import (
 _alignment_done = asyncio.Event()
 
 
-async def align_profiles(_: DataWeaver):
+async def align_profiles(_: RequestProfilesSync):
     interfaces.reset()
     _alignment_done.clear()
     logger.info("[PROFILES] sending profiles")
+    await webpage.send_prompt_and_get_response()
     updated_profiles = await webpage.send_profiles_and_get_updated_profiles(
         all_profiles(), get_interfaces()
     )
@@ -78,19 +79,19 @@ async def configure_further_profile_data(profiles_data):
             await profile_object.edit_profile(header, content)
 
 
-async def set_selected_profile(page_data: DataWeaver):
+async def set_selected_profile(selected_profile: SetSelectedProfile):
     await _alignment_done.wait()
 
     assert PROFILE_WAIT is not None, "PROFILE WAIT IS NONE"
 
     if PROFILE_WAIT.done():
-        logger.warning(f"current profile is already set, ignoring choice {page_data}")
+        logger.warning(f"current profile is already set, ignoring choice {selected_profile.profile}")
         return
     
     await refresh_profile_list()
     for profile in ProfileManager.PROFILE_LIST:
         profile: ProfileManager
-        if profile == page_data.content:
+        if profile == selected_profile.profile:
             assert profile.interface is not None, "interface not configured properly can't select this profile"
             assert bool(profile.file_name) is True, "file name not configured properly can't select this profile"
             assert bool(profile.id) is True, "id not configured properly can't select this profile"
