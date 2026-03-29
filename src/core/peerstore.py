@@ -29,7 +29,7 @@ node_list_ids = [
 ForgetfulStorage = storage.ForgetfulStorage
 
 
-class Storage(ForgetfulStorage):
+class PeerStorage(ForgetfulStorage):
     # TODO: introduce diff based reads
     node_lists_ids = set(node_list_ids)
     peer_data_storage = defaultdict(set)
@@ -37,6 +37,7 @@ class Storage(ForgetfulStorage):
     def get_list_of_peers(self, list_key):
         if list_key in self.peer_data_storage:
             return list(self.peer_data_storage.get(list_key))
+        return None
 
     def all_peers_in_lists(self):
         return self.peer_data_storage.items()

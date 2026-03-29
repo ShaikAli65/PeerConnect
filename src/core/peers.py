@@ -12,7 +12,7 @@ from kademlia import crawling
 from src.avails import PeerDict, RemotePeer, const, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
-from src.conduit import webpage
+from src.core import app_events
 from src.core._kademlia import PeerServer
 from src.core.peerstore import node_list_ids
 from src.core.search import GossipSearch, SearchCrawler
@@ -68,26 +68,28 @@ class PeerService(NamedTuple):
             yield peer
 
     def search_for_peers_with_name(self, search_string):
-        """
-        searches for nodes relevant to given ``:param search_string:``
+        """Searches for nodes relevant to given `search_string`
 
+        Args:
+            search_string(str): peer name to search for
         Returns:
-             a generator of peers that matches with the search_string
+             A generator of peers that matches with the search_string
         """
 
         return SearchCrawler.search_for_nodes(self.kad_server, search_string)
 
     async def get_remote_peer_from_network(self, peer_id):
-        """Gets the ``RemotePeer`` object corresponding to ``:func RemotePeer.peer_id:`` from the network
+        """Gets the `RemotePeer` object corresponding to `RemotePeer.peer_id` from the network
 
-        Wrapper around ``:method kademlia_network_server.get_remote_peer:``
+        Wrapper around `kademlia_network_server.get_remote_peer`
         with conversions related to ids, retries on failure
 
         This call is expensive as it performs a distributed search across the network
-        try using ``App.peer_list`` instead
+        try using `peer_list` instead
 
         Args:
             peer_id(str): id to search for
+
         Returns:
             RemotePeer | None
         """
@@ -126,7 +128,7 @@ class PeerService(NamedTuple):
             err.peer_id = peer_id
             raise err
         else:
-            peer_obj.status = RemotePeer.ONLINE
+            peer_obj.status = RemotePeer.STATUS.ONLINE
         return peer_obj
 
 
@@ -134,36 +136,35 @@ async def get_remote_peer(kad_server, peer_list, peer_id) -> Optional[RemotePeer
     ...
 
 
-# Callbacks called by kademila's routing mechanisms
-
-def remove_peer(connectivity, peer):
+def remove_peer(connectivity, peer, app_event_bus):
     """
     Does not directly remove peer
     Spawns a Task that tries to check connectivity status of peer
-    If peer is reachable then it is not removed
-    else peer is marked as offline
+    If peer is reachable then it is not removed else peer is marked as offline
+
     Args:
+        app_event_bus: Reports PeerStatusUpdate event to this bus
         connectivity: connectivity checker instance
         peer(RemotePeer): peer obj to remove
     """
 
     async def _check_and_remove_if_needed():
-        _may_be_remove(peer, await fut)
+        _may_be_remove(peer, await fut, app_event_bus)
 
     _logger.warning(f"a request for removal of {peer}")
     req, fut = connectivity.new_check(peer)
 
     if fut.done():
         # fast complete without spawning a Task if result is available
-        return _may_be_remove(peer, fut.result())
+        return _may_be_remove(peer, fut.result(), app_event_bus)
 
     return asyncio.create_task(_check_and_remove_if_needed())
 
 
-def _may_be_remove(peer, what):
+def _may_be_remove(peer, what, app_event_bus):
     if not what:
         _logger.info(f"connectivity check failed, changing status of {peer} to offline")
-        peer.status = RemotePeer.OFFLINE
-        use.sync(webpage.update_peer(peer))
+        peer.status = RemotePeer.STATUS.OFFLINE
+        app_event_bus.publish(app_events.PeerStatusUpdate(peer))
     else:
         _logger.info(f"connectivity check succeeded for {peer}")
