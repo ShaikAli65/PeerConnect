@@ -6,7 +6,8 @@ Conduit: a natural or artificial channel through which something (such as a flui
 
 "Conduit" seems to encapsulate the idea of a channel facilitating communication.
 It's a single word, easy to remember, and technically appropriate.
-It also doesn't tie the name to a specific technology, allowing for potential changes in the underlying protocol without renaming the package.
+It also doesn't tie the name to a specific technology, allowing for potential changes in the underlying
+protocol without renaming the package.
 
 `Courtesy: deepseek`
 

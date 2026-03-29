@@ -109,7 +109,7 @@ class _MsgConnectionPool:
 
     async def exit_connector_context(self, connection: Connection):
         if connection not in self._connector_calls:
-            return
+            return None
 
         connector_lock = self._connector_calls.pop(connection)
         return await connector_lock.__aexit__(*[None] * 3)
@@ -149,7 +149,7 @@ async def _get_from_pool(peer):
         return connection
 
     closed = await _refresh_pool(peer, connection)
-    if closed is True:
+    if closed:
         return None
 
     return connection
@@ -167,7 +167,7 @@ async def _refresh_pool(peer, msg_connection):
     """
     watcher = bandwidth.Watcher()
     closed = await watcher.close_if_not_active(peer, msg_connection.connection)
-    if closed is True:
+    if closed:
         _msg_conn_pool.remove(peer.peer_id)
         await _msg_conn_pool.exit_connector_context(msg_connection.connection)
         return closed
