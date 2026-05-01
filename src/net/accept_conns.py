@@ -30,7 +30,7 @@ class Acceptor(AExitStackMixIn):
     ):
         super().__init__(*args, **kwargs)
         from src.core.acceptor import ConnectionService
-        self.address = listen_addr  # ip defaults to active ip
+        self.address = listen_addr
         self._finalizing = finalizing
         self.conn_service: ConnectionService = conn_service
         self.peer_service = peer_service
@@ -40,6 +40,7 @@ class Acceptor(AExitStackMixIn):
         self.max_timeout = 90
         self._task_group = TaskGroup()
         self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
+        self.blocked_ips = set()
 
     async def initiate(self):
         _logger.info(f"Initiating Acceptor {self.address}")
@@ -54,6 +55,11 @@ class Acceptor(AExitStackMixIn):
                 if stopping():
                     return
                 raise
+
+            if addr[0] in self.blocked_ips:
+                initial_conn.close()
+                _logger.info(f"connection from blocked ip, closing immediately: ip: {str(addr)}")
+                continue
 
             self._task_group.create_task(
                 self.__accept_connection(initial_conn),
@@ -118,6 +124,12 @@ class Acceptor(AExitStackMixIn):
             _logger.error(error_log)
             initial_conn.close()
         return None
+
+    def block_ip(self, ip):
+        self.blocked_ips.add(ip)
+
+    def unblock_ip(self, ip):
+        self.blocked_ips.discard(ip)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await use.safe_cancel_task(self._initiate_task)
