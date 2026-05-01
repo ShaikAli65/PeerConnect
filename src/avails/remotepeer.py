@@ -1,4 +1,5 @@
 import enum
+import ipaddress
 from typing import Self
 
 import umsgpack
@@ -38,7 +39,7 @@ class RemotePeer:
         'id': bytes,
     }
 
-    __slots__ = 'id', 'username', 'ip', '_conn_port', '_req_port', 'status', 'long_id', '_byte_cache'
+    __slots__ = 'id', 'username', 'ip', '_conn_port', '_req_port', 'status', 'long_id', '_byte_cache', '_interface'
 
     def __init__(self,
                  byte_id=b'\x00',
@@ -55,6 +56,7 @@ class RemotePeer:
         self.id = byte_id
         self.long_id = int(byte_id.hex(), 16)
         self._byte_cache = None, None
+        self._interface = None
 
     def same_home_as(self, node):
         return self.ip == node.ip and self.req_uri == node.req_uri and self.uri == node.uri
@@ -81,13 +83,28 @@ class RemotePeer:
         for attr in other.__slots__:
             setattr(self, attr, getattr(other, attr))
 
+    def bind_interface(self, interface):
+        self._interface = interface
+
     @property
     def uri(self):
-        return const.THIS_IP.addr_tuple(port=self._conn_port, ip=self.ip)
+        if self._interface:
+            return self._interface.addr_tuple(port=self._conn_port, ip=self.ip)
+        else:
+            return (
+                self.ip, self._conn_port if ipaddress.ip_address(self.ip).version == 4 else
+                self.ip, self._conn_port, 0, 0
+            )
 
     @property
     def req_uri(self):
-        return const.THIS_IP.addr_tuple(port=self._req_port, ip=self.ip)
+        if self._interface:
+            return self._interface.addr_tuple(port=self._req_port, ip=self.ip)
+        else:
+            return (
+                self.ip, self._req_port if ipaddress.ip_address(self.ip).version == 4 else
+                self.ip, self._req_port, 0, 0
+            )
 
     @property
     def peer_id(self):
@@ -114,9 +131,9 @@ class RemotePeer:
         Enables use of RemotePeer as a tuple - i.e., tuple(node) works.
 
         Note:
-            Does Not Include: 'long_id', '_byte_cache'
+            Does Not Include: 'long_id', '_byte_cache', '_interface'
         """
-        return iter(tuple(getattr(self, x) for x in self.__slots__)[:-2])
+        return iter(tuple(getattr(self, x) for x in self.__slots__)[:-3])
         # return iter([
         #     self.id,
         #     self.username,

@@ -17,6 +17,7 @@ from src import net
 from src.avails import PeerDict, RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.useables import override
+from src.configurations.appconfig import AppRunTime
 from src.core import app_events, peers
 from src.core.app_events import AppEventsBus
 from src.core.peerstore import ForgetfulStorage, PeerStorage
@@ -128,13 +129,15 @@ class RPCReceiver(RPCProtocol):
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, peer_state_change_callback, source_node, storage, ksize):
+    def __init__(self, peer_state_change_callback, interface, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(peer_state_change_callback, self, ksize, source_node)
         self.storage = storage
+        self.interface = interface
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
+        s.bind_interface(self.interface)
         self.welcome_if_new(s)
         return s
 
@@ -211,6 +214,7 @@ class PeerServer(network.Server):
     def _create_protocol(self):
         return self.protocol_class(
             self._peer_state_changed,
+            self.interface,
             self.node,
             self.storage,
             self.ksize,
@@ -353,6 +357,8 @@ class PeerServer(network.Server):
         # so a check is better
         if hasattr(self, 'protocol'):
             self.protocol.transport = transport
+        else:
+            _logger.warning("protocol not set yet on PeerServer, skipping transport assignment")
 
     @property
     def is_bootstrapped(self):
@@ -413,14 +419,14 @@ def register_into_dispatcher(server, dispatcher: BaseDispatcher):
 
 async def prepare_kad_server(
         data_transport,
-        app_runtime,
+        app_runtime: AppRunTime,
         interface,
         this_remote_peer,
         connectivity,
 ):
     kad_server = PeerServer(
         app_runtime.peer_list,
-        app_runtime.in_network_event,
+        app_runtime.in_network,
         app_runtime.app_events,
         interface,
         connectivity,

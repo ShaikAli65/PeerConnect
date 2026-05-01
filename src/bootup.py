@@ -44,8 +44,9 @@ def make_this_remote_peer(profile):
         ip=profile.interface.ip,
         conn_port=const.PORT_THIS,
         req_port=const.PORT_REQ,
-        status=1,
+        status=1
     )
+    rp.bind_interface(profile.interface)
     return rp
 
 

@@ -12,7 +12,7 @@ IFF_RUNNING = 0x40
 
 
 def get_interfaces(
-    address_family: socket.AF_INET | socket.AF_INET6,
+    address_family: socket.AddressFamily,
 ) -> list[IPAddress]:
     try:
         libc = ctypes.CDLL("libc.so.6")
@@ -137,8 +137,8 @@ def get_interfaces(
             res = IPAddress(
                 ip=ip_addr,
                 scope_id=scope_id,
-                if_name=iface_name,
-                friendly_name=iface_name,
+                if_name=str(iface_name),
+                friendly_name=str(iface_name),
             )
             interfaces.append(res)
 
