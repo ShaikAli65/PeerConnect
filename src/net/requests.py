@@ -3,10 +3,10 @@ import functools
 import socket
 from logging import getLogger
 
-from src.net.connect import Interface
 from src.avails import const
 from src.avails.exceptions import InvalidPacket
 from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
+from src.net.connect import Interface
 from src.net.events import RequestEvent
 
 _logger = getLogger(__name__)
@@ -107,6 +107,7 @@ async def send_request(req_service, msg, peer, *, expect_reply=False):
 
     Notes:
         if expect_reply is True and no msg_id available in msg raises InvalidPacket
+
     Args:
         req_service(RequestService): requests service to use for sending and receiving ack.
         msg(WireData): message to send
@@ -124,5 +125,5 @@ async def send_request(req_service, msg, peer, *, expect_reply=False):
     req_service.transport.sendto(bytes(msg), peer.req_uri)
 
     if expect_reply:
-        return await req_service.dispatcher.register_reply(msg.msg_id)
+        return await req_service.router.register_reply(msg.msg_id)
     return None

@@ -38,10 +38,11 @@ import logging
 from typing import NamedTuple, TYPE_CHECKING
 
 import src.net.utils as net_util
-from src.avails import WireData, const, use
+from src.avails import Router, WireData, const, use
 from src.avails.mixins import Dispatcher
 from src.conduit import webpage
 from src import net
+from src.conduit.ui_events import DiscoveryPeerNameRequested
 from src.transfers import DISCOVERY
 
 _logger = logging.getLogger(__name__)
@@ -49,7 +50,6 @@ _logger = logging.getLogger(__name__)
 
 async def discovery_initiate(
         multicast_address,
-        exit_stack,
         requests_dispatcher,
         interface,
         this_remote_peer,
@@ -59,10 +59,9 @@ async def discovery_initiate(
         transport,
 ):
     """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
-    discover_dispatcher = DiscoveryDispatcher()
+    discovery_router = Router()
     discovery_transport = net.DiscoveryTransport(transport)
-    await exit_stack.enter_async_context(discover_dispatcher)
-    requests_dispatcher.register_handler(net.REQUESTS_HEADERS.DISCOVERY, discover_dispatcher)
+    requests_dispatcher.register_handler(net.REQUESTS_HEADERS.DISCOVERY, discovery_router)
 
     discovery_reply_handler = DiscoveryReplyHandler(interface, kad_server)
     discovery_req_handler = DiscoveryRequestHandler(
@@ -71,8 +70,8 @@ async def discovery_initiate(
         interface,
     )
 
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
-    discover_dispatcher.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
+    discovery_router.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
+    discovery_router.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
     # TODO: who is the owner of this task??
     asyncio.create_task(
@@ -85,7 +84,7 @@ async def discovery_initiate(
             this_remote_peer
         )
     )
-    return DiscoveryService(discovery_transport, discover_dispatcher)
+    return DiscoveryService(discovery_transport, discovery_router)
 
 
 def DiscoveryReplyHandler(interface, kad_server):
@@ -119,20 +118,9 @@ def DiscoveryRequestHandler(discovery_transport, this_remote_peer, this_interfac
     return handle
 
 
-class DiscoveryDispatcher(*Dispatcher):
-    __slots__ = ()
-    if TYPE_CHECKING:
-        transport: net.DiscoveryTransport
-
-    async def submit(self, event: net.RequestEvent):
-        wire_data = event.request
-        self.reply_arrived(wire_data)
-        return await self.call_handler(wire_data.header, _logger, event)
-
-
 class DiscoveryService(NamedTuple):
     transport: net.DiscoveryTransport
-    dispatcher: DiscoveryDispatcher
+    router: Router
 
 
 async def send_discovery_requests(multicast_addr,
@@ -193,6 +181,7 @@ async def send_discovery_requests(multicast_addr,
 async def _try_asking_user(transport, discovery_packet):
     reason = None
     while True:
+        # webpage.send_prompt_and_get_response(DiscoveryPeerNameRequested())
         if peer_name := await webpage.ask_user_peer_name_for_discovery(reason):
             try:
                 async for family, sock_type, proto, _, addr in net_util.get_addr_info(

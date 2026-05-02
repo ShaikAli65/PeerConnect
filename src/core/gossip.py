@@ -3,7 +3,8 @@ from typing import NamedTuple
 
 from src import net
 from src.avails import GossipMessage, const
-from src.avails.mixins import BasicDispatcher
+from src.avails.bases import Router
+from src.avails.useables import override
 from src.core import search
 from src.transfers import GOSSIP_HEADER, GossipTransport, RumorMongerProtocol, SimpleRumorMessageList
 
@@ -29,42 +30,41 @@ class GlobalRumorMonger(RumorMongerProtocol):
 
 def GlobalGossipMessageHandler(gossip_handler):
     async def handle(event: net.GossipEvent):
-        print("[GOSSIP] new message arrived", event.message, "from", event.from_addr)
+        _logger.info("new message arrived %s %s %s", event.message, "from", event.from_addr)
         return gossip_handler.message_arrived(*event)
 
     return handle
 
 
-class GossipDispatcher(*BasicDispatcher):
-    """Dispatches gossip messages from multiplexed requests endpoint"""
+class GossipRouter(Router):
+    __slots__ = ()
 
-    async def submit(self, event: net.RequestEvent):
+    @override
+    async def __call__(self, event: net.RequestEvent):  # noqa
         gossip_message = GossipMessage(event.request)
         g_event = net.GossipEvent(gossip_message, event.from_addr)
-        return await self.call_handler(gossip_message.header, _logger, g_event)
+        return await self.registry[gossip_message.header](g_event)
 
 
 class GossipService(NamedTuple):
     gossip_transport: GossipTransport
-    g_dispatcher: GossipDispatcher
+    gossip_router: GossipRouter
     gossiper: GlobalRumorMonger
 
 
-async def initiate_gossip(data_transport, remote_peer, req_dispatcher, peer_list, exit_stack):
+async def initiate_gossip(data_transport, remote_peer, req_dispatcher, peer_list):
     gossip_transport = GossipTransport(data_transport)
-    g_dispatcher = GossipDispatcher()
+    gossip_router = GossipRouter()
     gossiper = GlobalRumorMonger(gossip_transport, peer_list)
 
     gossip_message_handler = GlobalGossipMessageHandler(gossiper)
-    g_dispatcher.register_handler(GOSSIP_HEADER.MESSAGE, gossip_message_handler)
+    gossip_router.register_handler(GOSSIP_HEADER.MESSAGE, gossip_message_handler)
 
-    gossip_service = GossipService(gossip_transport, g_dispatcher, gossiper)
-
+    gossip_service = GossipService(gossip_transport, gossip_router, gossiper)
     gossip_searcher = search.init_gossip_searcher(
         remote_peer,
         gossip_service,
         gossip_message_handler,
     )
-    req_dispatcher.register_handler(net.REQUESTS_HEADERS.GOSSIP, g_dispatcher)
-    await exit_stack.enter_async_context(g_dispatcher)
+    req_dispatcher.register_handler(net.REQUESTS_HEADERS.GOSSIP, gossip_router)
     return gossip_service, gossip_searcher

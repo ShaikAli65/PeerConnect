@@ -115,15 +115,15 @@ class SearchCrawler:
         return responsible_nodes
 
     @classmethod
-    async def search_for_nodes(cls, peer_server, search_string):
+    async def search_for_nodes(cls, peer_service, search_string):
         _logger.info(f"new search request for : {search_string}")
-        for peer in use.search_relevant_peers(peer_server.peer_list, search_string):
+        for peer in peer_service.search_relevant_peers(search_string):
             yield peer
 
         for list_id in node_list_ids:
-            peers = await cls.get_relevant_peers_for_list_id(peer_server, list_id)
+            peers = await cls.get_relevant_peers_for_list_id(peer_service.kad_server, list_id)
             for peer in peers:
-                _peers = await peer_server.protocol.call_search_peers(peer, search_string)
+                _peers = await peer_service.kad_server.protocol.call_search_peers(peer, search_string)
                 yield _peers
 
 
@@ -170,13 +170,12 @@ class GossipSearch:
         self.gossiper = gossiper
 
     def search_for(self, find_str):
-        _logger.info(f"[GOSSIP][SEARCH] new search for: {find_str}")
+        _logger.info(f"new search for: {find_str}")
         m = self._prepare_search_message(find_str)
         self.gossiper.gossip_message(m)
         self._message_state_dict[m.id] = f = self.search_iterator(m.id)
         return f
 
-    # @provide_app_ctx
     def request_arrived(self, req_data: GossipMessage, _):
         search_string = req_data.message
         if self.this_peer.is_relevant(search_string):
@@ -221,7 +220,7 @@ class GossipSearch:
                 _logger.debug(f"search iterator id={reply_data.id} exhausted, removing")
                 self._message_state_dict.pop(reply_data.id)
         except KeyError as ke:
-            _logger.debug("[GOSSIP][SEARCH] invalid gossip search response id", exc_info=ke)
+            _logger.debug("invalid gossip search response id", exc_info=ke)
 
 
 def GossipSearchReqHandler(searcher, transport, gossiper,
@@ -255,7 +254,7 @@ def GossipSearchReqHandler(searcher, transport, gossiper,
 
 def GossipSearchReplyHandler(gossiper, gossip_searcher):
     async def handle(event: GossipEvent):
-        _logger.info("[GOSSIP][SEARCH] reply received:", event.message, "for", event.from_addr)
+        _logger.info("reply received:", event.message, "for", event.from_addr)
         gossiper.message_arrived(*event)
         return gossip_searcher.reply_arrived(*event)
 
@@ -278,8 +277,8 @@ def register_handlers(gossip_service, gossip_searcher, gossip_message_handler):
         gossip_searcher,
         gossip_service.gossip_transport,
         gossip_service.gossiper,
-        gossip_message_handler
+        gossip_message_handler,
     )
     reply_handler = GossipSearchReplyHandler(gossip_service.gossiper, gossip_searcher)
-    gossip_service.g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REQ, req_handler)
-    gossip_service.g_dispatcher.register_handler(GOSSIP_HEADER.SEARCH_REPLY, reply_handler)
+    gossip_service.gossip_router.register_handler(GOSSIP_HEADER.SEARCH_REQ, req_handler)
+    gossip_service.gossip_router.register_handler(GOSSIP_HEADER.SEARCH_REPLY, reply_handler)

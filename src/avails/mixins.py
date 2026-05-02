@@ -132,11 +132,11 @@ class CallHandlerMixIn:
     if TYPE_CHECKING:
         registry: dict
 
-    async def call_handler(self, header, logger, *args, **kwargs):
+    async def call_handler(self, header, *args, _logger, **kwargs):
         try:
             handler = self.registry[header]
         except KeyError:
-            logger.error(f"{self._log_prefix} {self.__class__} no handler found for event {header=}")
+            _logger.error(f"{self._log_prefix} {self.__class__} no handler found for event {header=}")
             return None
 
         try:
@@ -146,11 +146,11 @@ class CallHandlerMixIn:
             return r
         except RuntimeError:
             if hasattr(self, '_handle_runtime_error'):
-                return await self._handle_runtime_error(logger)
+                return await self._handle_runtime_error(_logger)
             return None
         except Exception as e:
             # we can't afford exceptions here as they move into TaskGroupMixIn (formerly QueueMixIn)
-            return logger.error(f"{self._log_prefix} {handler}({args=},{kwargs=}) failed with: \n",
+            return _logger.error(f"{self._log_prefix} {handler}({args=},{kwargs=}) failed with: \n",
                                 exc_info=e)
 
     @property
@@ -170,7 +170,7 @@ class AExitStackMixIn:
         return await self._exit_stack.__aenter__()
 
     async def __aexit__(self, *exp_details):
-        if self._exiting is True:
+        if self._exiting:
             return None
         self._exiting = True
         try:
