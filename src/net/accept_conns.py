@@ -2,22 +2,19 @@ import asyncio
 import logging
 import socket
 import sys
-from asyncio import TaskGroup
 from typing import Optional
 
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
-from src.avails.mixins import AExitStackMixIn
+from src.avails.mixins import AExitStackMixIn, TaskGroupMixIn
 from src.avails.useables import COLORS
-from src.net.events import ConnectionEvent
-from . import bandwidth
-from .connect import Connection, Socket
+from .connect import Socket
 from .wire_io import WireIO
 
 _logger = logging.getLogger(__name__)
 
 
-class Acceptor(AExitStackMixIn):
+class Acceptor(TaskGroupMixIn, AExitStackMixIn):
 
     def __init__(
             self,
@@ -29,23 +26,22 @@ class Acceptor(AExitStackMixIn):
             *args, **kwargs
     ):
         super().__init__(*args, **kwargs)
-        from src.core.acceptor import ConnectionService
+        from src.managers.connection import ConnectionManager
         self.address = listen_addr
         self._finalizing = finalizing
-        self.conn_service: ConnectionService = conn_service
+        self.conn_service: ConnectionManager = conn_service
         self.peer_service = peer_service
         self.main_socket: Optional[Socket] = None
         self.back_log = 4
         self.network_protocol = protocol
-        self.max_timeout = 90
-        self._task_group = TaskGroup()
-        self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
         self.blocked_ips = set()
 
     async def initiate(self):
         _logger.info(f"Initiating Acceptor {self.address}")
         _logger.info("Listening for connections")
         self._start_socket()
+        assert self.main_socket is not None
+
         await self._exit_stack.enter_async_context(self._task_group)
         stopping = self._finalizing.is_set
         while not stopping():
@@ -88,23 +84,19 @@ class Acceptor(AExitStackMixIn):
     async def __accept_connection(self, initial_conn):
 
         handshake = await self._perform_handshake(initial_conn)
-        if not handshake:
+        if handshake is None:
             return
         _logger.info(f"handshake successful {handshake}")
         try:
             peer = await self.peer_service.get_remote_peer(handshake.peer_id)
         except RemotePeerNotFound:
-            _logger.warning("RemotePeer not found in the network, closing an unexpected connection")
+            _logger.warning(f"RemotePeer with id={handshake.peer_id} not found in the network, closing an unexpected connection")
             initial_conn.close()
             return
 
-        peer.status = RemotePeer.STATUS.ONLINE
-        conn = Connection.create_from(initial_conn, peer)
+        self.peer_service.change_peer_status(peer, RemotePeer.STATUS.ONLINE)
         self._exit_stack.enter_context(initial_conn)
-        con_event = ConnectionEvent(conn, handshake)
-        watcher = bandwidth.Watcher()
-        watcher.watch(initial_conn, conn)
-        await self.conn_service.new_connection(con_event)
+        self.conn_service.new_connection(initial_conn, peer, handshake)
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):
@@ -130,6 +122,12 @@ class Acceptor(AExitStackMixIn):
 
     def unblock_ip(self, ip):
         self.blocked_ips.discard(ip)
+
+    async def __aenter__(self):
+        self._exit_stack.__aenter__()
+        self._exit_stack.enter_context(self._task_group)
+        self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await use.safe_cancel_task(self._initiate_task)

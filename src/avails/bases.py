@@ -1,8 +1,8 @@
 import enum
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Callable, ClassVar, NamedTuple, Protocol
+from dataclasses import astuple, dataclass
+from typing import Callable, ClassVar, Protocol
 
 from src.avails.useables import camel_to_snake
 
@@ -29,23 +29,6 @@ class HasIdProperty(Protocol):
 HasID = _HasID | HasIdProperty
 
 
-class AbstractHandler(ABC):
-
-    @abstractmethod
-    async def handle(self, event: NamedTuple):
-        pass
-
-
-class BaseHandler(AbstractHandler):
-    __slots__ = ()
-
-    def __call__(self, *args, **kwargs):
-        return self.handle(*args, **kwargs)
-
-    async def handle(self, event: NamedTuple):
-        """called when event occurs"""
-
-
 class AbstractDispatcher(ABC):
 
     @abstractmethod
@@ -55,6 +38,26 @@ class AbstractDispatcher(ABC):
     @abstractmethod
     def register_handler(self, event_trigger, handler):
         pass
+
+
+class Router:
+    """Wrap a bunch of functions into a single callable object, calls respective handlers registered
+
+    A Very lightweight dispatcher
+
+    This provides a basic implementation, if any arguments are to be transformed or some other logic is to be applied
+    subclasses can override `__call__` and implement their own logic
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.registry = kwargs.pop('registry', {})
+
+    def __call__(self, event_header, *args, **kwargs):
+        return self.registry[event_header](*args, **kwargs)
+
+    def register_handler(self, event_trigger, handler):
+        self.registry[event_trigger] = handler
 
 
 class BaseDispatcher(AbstractDispatcher):
@@ -78,7 +81,7 @@ class BaseDispatcher(AbstractDispatcher):
         """
 
     def register_handler(self, event_trigger: enum.Enum | str | bytes | int,
-                         handler: BaseHandler | AbstractDispatcher | Callable):
+                         handler: AbstractDispatcher | Callable):
         """
         Args:
             handler(BaseHandler): this is called when registered event occurs
@@ -94,7 +97,7 @@ class BaseDispatcher(AbstractDispatcher):
 
 
 class _EventMeta(type):
-    registry: dict[str, type["EventBase"]] = {}
+    registry: dict[str, type["AppEventBase"]] = {}
 
     def __new__(mcls, name, bases, namespace):
         cls = super().__new__(mcls, name, bases, namespace)
@@ -108,6 +111,15 @@ class _EventMeta(type):
 
 @dataclass(frozen=True, slots=True)
 class AppEventBase(metaclass=_EventMeta):
+    """Application event base class.
+
+    Every event has a header that is used to identify the event type.
+    defaults to snake case of the class name, one can override this by setting HEADER class variable
+
+    Always access the header via `AppEventBase.header` or `AppEventBase.event_name()` as
+    per the context of the event
+    """
+
     HEADER: ClassVar[str | None] = None
 
     @property
@@ -122,14 +134,16 @@ class AppEventBase(metaclass=_EventMeta):
     def registered_headers(cls) -> tuple[str, ...]:
         return tuple(_EventMeta.registry)
 
+    def __iter__(self):
+        return astuple(self).__iter__()
+
 
 __all__ = (
-    'AbstractHandler',
     'AbstractDispatcher',
-    'BaseHandler',
     'BaseDispatcher',
     'HasIdProperty',
     'HasID',
     'HasPeerId',
     'AppEventBase',
+    'Router',
 )

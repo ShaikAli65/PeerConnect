@@ -6,22 +6,23 @@ import asyncio
 import os
 import pickle
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import kademlia.node
 from kademlia import crawling, network, node, protocol, routing
 from kademlia.crawling import NodeSpiderCrawl
 from kademlia.protocol import log as _logger
 from rpcudp.protocol import RPCProtocol
-
 from src import net
 from src.avails import PeerDict, RemotePeer, const, use
 from src.avails.bases import BaseDispatcher
 from src.avails.useables import override
 from src.configurations.appconfig import AppRunTime
-from src.core import app_events, peers
-from src.core.app_events import AppEventsBus
+from src.core import peers
 from src.core.peerstore import ForgetfulStorage, PeerStorage
-from src.net.connectivity import Connectivity
+
+if TYPE_CHECKING:
+    from src.core.peers import PeerService
 
 
 class RPCFindResponse(crawling.RPCFindResponse):
@@ -102,7 +103,6 @@ class RPCReceiver(RPCProtocol):
         return list(map(tuple, neighbors))
 
     def rpc_find_value(self, sender, sender_peer, key):
-        # source = self._check_in(sender_peer)
         self._check_in(sender_peer)
         value = self.storage.get(key, None)
         if value is None:
@@ -110,7 +110,6 @@ class RPCReceiver(RPCProtocol):
         return {'value': value}
 
     def rpc_find_list_of_peers(self, sender, sender_peer, list_key):
-        # caller_peer = self._check_in(sender_peer)
         self._check_in(sender_peer)
         value = self.storage.get_list_of_peers(list_key)
         if value is None:
@@ -118,22 +117,22 @@ class RPCReceiver(RPCProtocol):
         return {'value': value}
 
     def rpc_store_peers_in_list(self, _, caller_peer, list_key, peer_list):
-        # caller_peer = RemotePeer.load_from(caller_peer)
         self._check_in(caller_peer)
         return self.storage.store_peers_in_list(list_key, peer_list)
 
     def rpc_search_peers(self, _, caller_peer, search_string):
         self._check_in(caller_peer)
-        relevant_peers = use.search_relevant_peers(self.peer_list, search_string)
+        relevant_peers = self.peer_service.search_relevant_peers(search_string)
         return list(map(bytes, relevant_peers))
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, peer_state_change_callback, interface, source_node, storage, ksize):
+    def __init__(self, peer_service, peer_state_change_callback, interface, source_node, storage, ksize):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(peer_state_change_callback, self, ksize, source_node)
         self.storage = storage
         self.interface = interface
+        self.peer_service = peer_service
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
@@ -151,7 +150,7 @@ class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
                 new_node_close = peer.distance_to(key_node) < last
                 first = neighbors[0].distance_to(key_node)
                 this_closest = self.source_node.distance_to(key_node) < first
-            if not neighbors or (new_node_close and this_closest):  # noqa
+            if not neighbors or (new_node_close and this_closest):
                 for i in peer_list:
                     asyncio.create_task(self.call_store_peers_in_list(peer, list_key, [i, ]))
 
@@ -182,28 +181,26 @@ class PeerServer(network.Server):
     protocol_class = KadProtocol
 
     def __init__(
-            self,
-            peer_list,
-            in_network_event,
-            app_event_bus,
-            interface,
-            connectivity,
-            state_dump_file=None,
-            ksize=20,
-            alpha=3,
-            peer_id=None,
-            storage=None,
+          self,
+          in_network_event: asyncio.Event,
+          interface: net.Interface,
+          peer_service: "PeerService",
+          state_dump_file=None,
+          ksize=20,
+          alpha=3,
+          peer_id=None,
+          storage=None,
     ):
         super().__init__(ksize, alpha, peer_id, storage)
         self.__add_this_peer_task = None
         self._transport = None
         self.stopping = False
-        self.peer_list: PeerDict = peer_list
-        self.in_network: asyncio.Event = in_network_event
-        self.app_event_bus: AppEventsBus = app_event_bus
-        self.interface: net.Interface = interface
         self.state_dump_file = state_dump_file
-        self._connectivity_checker: Connectivity = connectivity
+
+        self.peer_list: PeerDict = peer_service.peer_list
+        self.in_network: asyncio.Event = in_network_event
+        self.peer_service: "PeerService" = peer_service
+        self.interface: net.Interface = interface
 
     @override
     async def bootstrap_node(self, addr):
@@ -213,6 +210,7 @@ class PeerServer(network.Server):
     @override
     def _create_protocol(self):
         return self.protocol_class(
+            self.peer_service,
             self._peer_state_changed,
             self.interface,
             self.node,
@@ -226,10 +224,9 @@ class PeerServer(network.Server):
 
     def _peer_state_changed(self, peer, status=RemotePeer.STATUS):
         if status == RemotePeer.STATUS.ONLINE:
-            self.peer_list.add_peer(peer)
-            self.app_event_bus.publish(app_events.PeerStatusUpdate(peer))
+            self.peer_service.add_peer(peer)
         elif status == RemotePeer.STATUS.OFFLINE:
-            peers.remove_peer(self._connectivity_checker, peer, self.app_event_bus)
+            self.peer_service.remove_peer(peer)
 
     async def get_list_of_nodes(self, list_key):
         """Get Peers registered in ``list_key`` list from network
@@ -391,7 +388,8 @@ class PeerServer(network.Server):
         if data['neighbors']:
             try:
                 await self.bootstrap([
-                    self.interface.addr_tuple(port=t[1], ip=t[1]) for t in data['neighbors'] if t[0] != self.node.ip
+                    self.interface.addr_tuple(port=t[1], ip=t[1]) for t in data['neighbors'] if
+                    t[0] != self.node.ip
                 ])
             except Exception as exp:
                 _logger.debug("failed to bootstrap from previous state", exc_info=exp)
@@ -418,18 +416,16 @@ def register_into_dispatcher(server, dispatcher: BaseDispatcher):
 
 
 async def prepare_kad_server(
-        data_transport,
-        app_runtime: AppRunTime,
-        interface,
-        this_remote_peer,
-        connectivity,
+      data_transport,
+      app_runtime: AppRunTime,
+      interface,
+      this_remote_peer,
+      peer_service,
 ):
     kad_server = PeerServer(
-        app_runtime.peer_list,
         app_runtime.in_network,
-        app_runtime.app_events,
         interface,
-        connectivity,
+        peer_service,
         state_dump_file=Path(const.PATH_CONFIG, const.KAD_SERVER_STATE_FILE_NAME),
         storage=PeerStorage()
     )
