@@ -62,7 +62,7 @@ Interface = IPAddress
 
 
 def create_connection_sync(
-        protocol: NetworkProtocol, address, timeout=None
+      protocol: NetworkProtocol, address, timeout=None
 ) -> Socket:
     if const.USING_IP_V6 and len(address) != 4:
         raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
@@ -87,7 +87,7 @@ REQ_URI = "req_uri"
 
 
 def connect_to_peer(
-        protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
+      protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ) -> Socket:
     """Creates a basic socket connection to the peer_obj passed in.
 
@@ -98,18 +98,21 @@ def connect_to_peer(
     :param _peer_obj: RemotePeer object
     :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
             uses :param timeout: as initial value
+
+    Args:
+        protocol:
     """
 
     address = getattr(_peer_obj, to_which)
 
     if timeout is None:
-        return create_connection_sync(const.PROTOCOL, address)
+        return create_connection_sync(protocol, address)
 
     retry_count = 0
     for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
             return create_connection_sync(
-                const.PROTOCOL, address, timeout=timeout
+                protocol, address, timeout=timeout
             )
         except OSError:
             retry_count += 1
@@ -121,7 +124,7 @@ def connect_to_peer(
 
 @use.awaitable(connect_to_peer)
 async def connect_to_peer(
-        protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
+      protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ) -> Socket:
     """
     Creates a basic socket connection to the peer_obj passed in.
@@ -192,7 +195,7 @@ def get_free_port(ip=None) -> int:
 
 
 def ipv4_multicast_socket_helper(
-        sock, local_addr, multicast_addr, *, loop_back=0, ttl=1, add_membership=True, logger=None
+      sock, local_addr, multicast_addr, *, loop_back=0, ttl=1, add_membership=True, logger=None
 ):
     sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_TTL, ttl)
     sock.setsockopt(_socket.IPPROTO_IP, _socket.IP_MULTICAST_LOOP, loop_back)
@@ -215,7 +218,7 @@ def ipv4_multicast_socket_helper(
 
 
 def ipv6_multicast_socket_helper(
-        sock, multicast_addr, *, loop_back=0, add_membership=True, hops=1, logger=None
+      sock, multicast_addr, *, loop_back=0, add_membership=True, hops=1, logger=None
 ):
     sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_LOOP, loop_back)
     sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_MULTICAST_HOPS, hops)

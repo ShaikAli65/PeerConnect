@@ -1,10 +1,12 @@
 import struct
-from asyncio import Event, Lock as aLock, get_running_loop, sleep
+from asyncio import Event, get_running_loop, sleep
 from asyncio.trsock import TransportSocket
+from dataclasses import dataclass
+from enum import Enum
 from time import perf_counter
-from typing import Annotated, Any, Awaitable, Callable, NamedTuple, TYPE_CHECKING, TypeVar
+from typing import Annotated, Awaitable, Callable, TypeVar
 
-from src.avails import const
+from src.avails import RemotePeer, const
 from src.avails.exceptions import FailedToReceive, InvalidPacket
 from src.avails.wire import WireData
 from ._asocket import Socket
@@ -17,7 +19,10 @@ __all__ = (
     "MsgConnection",
     "MsgConnectionNoRecv",
     "ChunkedReceiver",
+    "ConnectionType",
 )
+
+from src.avails.useables import Lock
 
 
 class _PauseMixIn:
@@ -43,7 +48,7 @@ class ThroughputMixin:
     """
 
     BYTES_PER_KB = const.BYTES_PER_KB
-    RATE_WINDOW = const.RATE_WINDOW
+    RATE_WINDOW = const.RATE_CALC_WINDOW
     CALIBRATION_FACTOR = 1.06  # Compensate for overhead
 
     def __init__(self, *args, **kwargs):
@@ -261,15 +266,14 @@ async def ChunkedReceiver(receiver: ReceiverType, size: int, chunk_size: int):
         yield data
 
 
-class Lock(aLock):
-    def __str__(self):
-        return f"<Lock(locked={self.locked()})>"
-
-    def __repr__(self):
-        return str(self)
+class ConnectionType(Enum):
+    MESSAGE = 0
+    TRANSFERS = 1
+    TBD = 2  # to be defined
 
 
-class Connection(NamedTuple):
+@dataclass(slots=True)
+class Connection:
     """
     To represent A p2p connection
 
@@ -290,20 +294,14 @@ class Connection(NamedTuple):
     socket: TransportSocket
     send: Sender
     recv: Receiver
-
-    if TYPE_CHECKING:
-        from src.avails import RemotePeer
-
-        peer: RemotePeer
-    else:
-        peer: Any
-
+    peer: RemotePeer
     lock: Lock
+    type: ConnectionType
 
-    @staticmethod
-    def create_from(socket: Socket, peer):
-        return Connection(
-            TransportSocket(socket), Sender(socket), Receiver(socket), peer, Lock()
+    @classmethod
+    def create_from(cls, socket: Socket, peer):
+        return cls(
+            TransportSocket(socket), Sender(socket), Receiver(socket), peer, Lock(), ConnectionType.TBD
         )
 
     def __enter__(self):
@@ -316,6 +314,10 @@ class Connection(NamedTuple):
     async def __aexit__(self, *exp_details):
         self.lock.release()
 
+    @property
+    def busy(self):
+        return self.lock.locked()
+
 
 class MsgConnection:
     """Send or Receive WireData object from connection"""
@@ -326,14 +328,10 @@ class MsgConnection:
     def __init__(self, connection):
         self._connection = connection
 
-    if TYPE_CHECKING:
-        async def send(self, data: WireData):
-            ...
-    else:
-        def send(self, data):
-            byted_data = bytes(data)  # marshall
-            data_size = struct.pack("!I", len(byted_data))
-            return self._connection.send(data_size + byted_data)
+    def send(self, data: WireData):
+        byted_data = bytes(data)  # marshall
+        data_size = struct.pack("!I", len(byted_data))
+        return self._connection.send(data_size + byted_data)
 
     async def recv(self):
         try:

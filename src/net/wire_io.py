@@ -48,7 +48,7 @@ class WireIO:
         return sock.sendall(data_size + data)
 
     @staticmethod
-    def send_datagram(sock: _Socket | BaseTransport, address, data: bytes):
+    def send_datagram(sock: _Socket, address, data: bytes):
         if len(data) > _const.MAX_DATAGRAM_SEND_SIZE:
             raise ValueError(
                 f"maximum send datagram size is {_const.MAX_DATAGRAM_SEND_SIZE} "
@@ -113,13 +113,11 @@ class WireIO:
         return WireIO.load_datagram(data), addr
 
 
-def unpack_datagram(data_payload) -> Optional[WireData]:
-    """Utility function to unpack raw datagram
-
-        from `datagram_received` callback from asyncio' s DatagramProtocol
-        or any other datagram transferred using wire protocol
-        Unpack the raw data received using peer-connect' s wire protocol
-        into WireData and handle exceptions
+def unpack_datagram(data_payload) -> WireData:
+    """
+    Utility function to unpack raw datagram from `datagram_received` callback from
+    asyncio's DatagramProtocol or any other datagram transferred using wire protocol
+    Unpack the raw data received using peer-connect's wire protocol into WireData and handle exceptions
 
     Args:
         data_payload(bytes) : byte string to unpack
