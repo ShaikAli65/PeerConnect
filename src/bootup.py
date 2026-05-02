@@ -4,16 +4,16 @@ import subprocess
 import webbrowser
 from pathlib import Path
 
-from kademlia.utils import digest
-
 import src.core.async_runner  # noqa
+from kademlia.utils import digest
 from src.avails import RemotePeer, constants as const, use
 from src.conduit import pagehandle
 from src.configurations import configure, interfaces as _interfaces
 from src.configurations.appconfig import AppConfig, AppRunTime
-from src.core import acceptor, peers, requests
+from src.core import peers, requests
 from src.managers import ProfileManager, logmanager, message, profilemanager
-from src.net import is_wsl_bridged
+from src.managers.connection import init_connection_manager
+from src.net import Acceptor, is_wsl_bridged
 
 _logger = logging.getLogger(__name__)
 
@@ -159,30 +159,44 @@ async def init_app(app_runtime: AppRunTime):
     _logger.info("printing configurations")
     configure.print_app(this_remote_peer, this_ip, app_config)
 
+    peer_service = peers.PeerService(
+        None, None, None,
+        app_runtime.peer_list,
+        app_runtime.app_events,
+    )
+
     _logger.info("initiating requests")
-    req_service, gossip_service, gossip_searcher, discovery_service, kad_server, connectivity = await requests.initiate(
+    req_service, gossip_service, gossip_searcher, discovery_service, kad_server = await requests.initiate(
         this_ip,
         this_remote_peer,
+        peer_service,
         app_runtime,
         app_config,
     )
 
-    peer_service = peers.PeerService(kad_server, gossip_searcher, app_runtime.peer_list)
+    conn_manager = await init_connection_manager(
+        req_service,
+        app_runtime.exit_stack,
+        current_profile, this_remote_peer
+    )
+
+    peer_service.requests_service = req_service
+    peer_service.gossip_searcher = gossip_searcher
+    peer_service.connection_manager = conn_manager
 
     _logger.info("initiating comms")
-    conn_service = await acceptor.initiate_acceptor(
-        app_runtime.exit_stack,
+
+    acceptor = Acceptor(
         app_runtime.finalizing,
-        app_config,
-        this_ip,
-        current_profile,
-        this_remote_peer,
-        peer_service
+        this_ip.addr_tuple(ip=None, port=app_config.this_port),
+        conn_manager,
+        peer_service,
+        app_config.protocol
     )
 
     _logger.info("starting message connections")
     msg_conn_service = await message.initiate(
         app_runtime,
         this_remote_peer,
-        conn_service,
+        conn_manager.connection_router,
     )

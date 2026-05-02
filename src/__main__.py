@@ -18,13 +18,6 @@ from src.net import TCPProtocol
 from src.core.async_runner import AppRunner
 
 
-# TODO: Fix this: Error handling is inconsistent and leaky
-# Some modules raise custom exceptions
-# Some print
-# Some swallow errors
-# Some return None and hope
-
-
 cancellation_started = 0.0
 
 
@@ -39,7 +32,7 @@ async def _async_initiate_helper(init_app, exit_stack):
             # (which will be mostly related to keyboard interrupts)
 
             global cancellation_started
-            cancellation_started = time.perf_counter()
+            cancellation_started = time.monotonic()
         except BaseException as be:
             if const.debug:
                 print(COLORS.RED, "CRITICAL EXCEPTION NOT EXPECTING", COLORS.RESET)
@@ -59,9 +52,11 @@ def initiate(init_app, app_runtime):
         if const.debug:
             print_str = f"{'-' * 80}\n" \
                         f"## PRINTING TRACEBACK, {const.debug=}\n" \
-                        f"{'-' * 80}\n" \
-                        f"clean exit completed within {time.perf_counter() - cancellation_started:.6f}s\n"
+                        f"{'-' * 80}\n"
             be.add_note(print_str)
+
+            if cancellation_started:
+                be.add_note(f"clean exit completed within {time.monotonic() - cancellation_started:.6f}s\n")
             raise be
 
         sys.exit(-1)
