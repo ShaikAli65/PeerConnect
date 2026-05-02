@@ -10,11 +10,15 @@ class WebSocketRegistryReStarted(Exception):
     """WebSocketRegistry already started"""
 
 
-class InvalidPacket(TypeError):
-    """Ill formed Packet"""
+class AppConnectionError(ConnectionError):
+    """Errors raised by the application code explicitly for connection related issues."""
 
 
-class UnknownConnectionType(Exception):
+class CannotConnect(AppConnectionError):
+    """Cannot connect to provided address or peer"""
+
+
+class UnknownConnectionType(AppConnectionError):
     """Unknown connection type"""
 
 
@@ -30,12 +34,12 @@ class CancelTransfer(TransferIncomplete):
     """Request to Cancel the transfer"""
 
 
+class InvalidPacket(TypeError):
+    """Ill formed Packet"""
+
+
 class InvalidStateError(Exception):
     """The operation is not allowed in this state."""
-
-
-class CannotConnect(ConnectionError):
-    """Cannot connect to provided address or peer"""
 
 
 class ResourceBusy(Exception):
