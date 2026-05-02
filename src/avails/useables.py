@@ -4,26 +4,22 @@ import asyncio
 import enum
 import functools
 import inspect
+import logging
 import os
 import platform
 import re
 import subprocess
-import sys
-import traceback
 import uuid
 from functools import wraps
 from pathlib import Path
 from sys import _getframe  # noqa
-
-if sys.version_info > (3, 12):
-    from typing import override as _override
-else:
-    def _override(func):
-        return func  # noqa
+from typing import override
 
 from src.avails import constants as const
 
-override = _override
+override = override
+
+_logger = logging.getLogger(__name__)
 
 
 def func_str(func_name):
@@ -163,16 +159,6 @@ async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIR
         yield
 
 
-def echo_print(*args, **kwargs):
-    """Prints the given arguments to the console.
-
-    Args:
-        *args: The arguments to print.
-    """
-    # with LOCK_PRINT:
-    return print(*args, COLORS.RESET, **kwargs)
-
-
 async def async_input(helper_str=""):
     try:
         return await asyncio.to_thread(input, helper_str)
@@ -291,14 +277,18 @@ class COLORS(enum.StrEnum):
     RESET = "\033[0m"
 
 
-def wrap_with_tryexcept(func, *args, **kwargs):
+def wrap_with_tryexcept(func, *args, _logger=_logger, **kwargs):
     """
     Designed to use like:
 
     >>> f = wrap_with_tryexcept(func, *args, **kwargs)
     >>> asyncio.create_task(f())  # sort of `functools.partial` aesthetics
 
+    Swallows Exception and logs them, basically stopping the exeception from propagating to the caller
+    Best used for async functions running in a TaskGroup where we don't want to cancel the whole group
+
     Args:
+        _logger: An Optional logger to log exceptions
         func : any async function
         args, kwargs : to forward
 
@@ -307,66 +297,14 @@ def wrap_with_tryexcept(func, *args, **kwargs):
     @functools.wraps(func)
     async def wrapped_with_tryexcept():
         try:
-            nonlocal args, kwargs
             return await func(*args, **kwargs)
         except Exception as e:
-
-            print(f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e)} : {e}",
-                  file=sys.stderr)
-            traceback.print_exc()
-            tb = traceback.extract_tb(e.__traceback__)
-            filtered_tb = [frame for frame in tb if "wrapped_with_tryexcept" not in frame.name]
-
-            print(
-                f"{COLORS.GREEN}got an exception for function {func_str(func)} : {type(e).__name__} : {e}",
-                file=sys.stderr,
+            _logger.exception(
+                f"got an exception for function {func_str(func)} : {type(e)} : {e}",
+                stack_info=True
             )
-            # Print the filtered traceback
-            for frame in filtered_tb:
-                print(f"  File \'{frame.filename}\', line {frame.lineno}, in {frame.name}")
-                if frame.line:
-                    print(f"    {frame.line}")
-            print(COLORS.RESET)
-            raise
 
     return wrapped_with_tryexcept
-
-
-def spawn_task(func, *args, bookeep=None, done_callback=None, **kwargs):
-    f = wrap_with_tryexcept(func, *args, **kwargs)
-    t = asyncio.create_task(f())
-    if done_callback:
-        t.add_done_callback(done_callback)
-    if bookeep:
-        bookeep(t)
-    else:
-        return t
-
-
-def search_relevant_peers(peer_list, search_string):
-    """
-    Searches for relevant peers based on the search string,
-
-    Uses a copy of the current peer IDs to avoid modification errors.
-    Provides an option to use a lock for safety if the GIL is not guaranteed
-    (e.g., Jython).
-
-    Args:
-        search_string (str): The string to search for relevance.
-        peer_list(PeerDict): The dictionary of id to peer object mapping
-    Yields:
-        list: peers
-    """
-
-    peer_ids = list(peer_list.keys())
-
-    for peer_id in peer_ids:
-        try:
-            peer = peer_list[peer_id]  # May raise KeyError if removed concurrently
-        except KeyError:
-            continue  # Skip removed peer
-        if peer.is_relevant(search_string):
-            yield peer
 
 
 def keep_task_reference(func):
@@ -382,8 +320,6 @@ def keep_task_reference(func):
 
     return task_wrapper
 
-def to_snake_case(name):
-    return
 
 class NotInUse:
     __annotations__ = {
@@ -417,3 +353,11 @@ class NotInUse:
 
 def camel_to_snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+class Lock(asyncio.Lock):
+    def __str__(self):
+        return f"<Lock(locked={self.locked()})>"
+
+    def __repr__(self):
+        return str(self)

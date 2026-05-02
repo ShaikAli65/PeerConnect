@@ -2,13 +2,11 @@
 Helper functions to deal with peers in network
 """
 
-import asyncio
 import logging
-from contextlib import aclosing
-from typing import AsyncIterator, Awaitable, NamedTuple, Optional
+from dataclasses import dataclass
+from typing import AsyncIterator, Optional
 
 from kademlia import crawling
-
 from src.avails import PeerDict, RemotePeer, const, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
@@ -16,6 +14,7 @@ from src.core import app_events
 from src.core._kademlia import PeerServer
 from src.core.peerstore import node_list_ids
 from src.core.search import GossipSearch, SearchCrawler
+from src.managers.connection import ConnectionManager
 
 _logger = logging.getLogger(__name__)
 
@@ -54,18 +53,39 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         return []
 
 
-class PeerService(NamedTuple):
+@dataclass
+class PeerService:
     kad_server: PeerServer
     gossip_searcher: GossipSearch
+    connection_manager: ConnectionManager
     peer_list: PeerDict
-
-    def get_more_peers(self) -> Awaitable[list[RemotePeer]]:
-        _logger.debug("getting more peers")
-        return PeerListGetter.get_more_peers(self.kad_server)
+    app_event_bus: app_events.AppEventsBus
 
     async def gossip_search(self, search_string) -> AsyncIterator[RemotePeer]:
         async for peer in self.gossip_searcher.search_for(search_string):
             yield peer
+
+    def search_relevant_peers(self, search_string):
+        """
+        Searches for relevant peers based on the search string,
+
+        Uses a copy of the current peer IDs to avoid modification errors.
+
+        Args:
+            search_string (str): The string to search for relevance.
+        Yields:
+            list: peers
+        """
+
+        peer_ids = list(self.peer_list.keys())
+
+        for peer_id in peer_ids:
+            try:
+                peer = self.peer_list[peer_id]  # May raise KeyError if removed concurrently
+            except KeyError:
+                continue  # Skip removed peer
+            if peer.is_relevant(search_string):
+                yield peer
 
     def search_for_peers_with_name(self, search_string):
         """Searches for nodes relevant to given `search_string`
@@ -96,12 +116,12 @@ class PeerService(NamedTuple):
         byte_id = convert_peer_id_to_byte_id(peer_id)
         _logger.debug(f"getting peer with id {peer_id} from network")
 
-        async with aclosing(use.async_timeouts(max_retries=const.PEER_SEARCH_RETRIES)) as timeouts:
-            async for _ in timeouts:
-                peer = await self.kad_server.get_remote_peer(byte_id)
-                if peer is not None:
-                    return peer
-            return None
+        async for _ in use.async_timeouts(max_retries=const.PEER_SEARCH_RETRIES):
+            peer = await self.kad_server.get_remote_peer(byte_id)
+            if peer is not None:
+                return peer
+
+        return None
 
     async def get_remote_peer(self, peer_id) -> Optional[RemotePeer]:  # TODO: fix this
         """
@@ -128,43 +148,25 @@ class PeerService(NamedTuple):
             err.peer_id = peer_id
             raise err
         else:
-            peer_obj.status = RemotePeer.STATUS.ONLINE
+            self.change_peer_status(peer_obj, RemotePeer.STATUS.ONLINE)
         return peer_obj
 
+    async def remove_peer(self, peer_id):
+        peer = await self.get_remote_peer(peer_id)
+        if peer is None:
+            return
 
-async def get_remote_peer(kad_server, peer_list, peer_id) -> Optional[RemotePeer]:  # TODO: fix this
-    ...
+        is_reachable = await self.connection_manager.is_peer_reachable(peer)
+        if not is_reachable:
+            self.change_peer_status(peer, RemotePeer.STATUS.OFFLINE)
 
+    def change_peer_status(self, peer, status):
+        if peer.status == status:
+            return
+        peer.status = status
+        self.app_event_bus.publish(app_events.PeerStatusUpdate(peer))
 
-def remove_peer(connectivity, peer, app_event_bus):
-    """
-    Does not directly remove peer
-    Spawns a Task that tries to check connectivity status of peer
-    If peer is reachable then it is not removed else peer is marked as offline
+    def add_peer(self, peer):
+        self.peer_list.add_peer(peer)
+        self.app_event_bus.publish(app_events.PeerStatusUpdate(peer))
 
-    Args:
-        app_event_bus: Reports PeerStatusUpdate event to this bus
-        connectivity: connectivity checker instance
-        peer(RemotePeer): peer obj to remove
-    """
-
-    async def _check_and_remove_if_needed():
-        _may_be_remove(peer, await fut, app_event_bus)
-
-    _logger.warning(f"a request for removal of {peer}")
-    req, fut = connectivity.new_check(peer)
-
-    if fut.done():
-        # fast complete without spawning a Task if result is available
-        return _may_be_remove(peer, fut.result(), app_event_bus)
-
-    return asyncio.create_task(_check_and_remove_if_needed())
-
-
-def _may_be_remove(peer, what, app_event_bus):
-    if not what:
-        _logger.info(f"connectivity check failed, changing status of {peer} to offline")
-        peer.status = RemotePeer.STATUS.OFFLINE
-        app_event_bus.publish(app_events.PeerStatusUpdate(peer))
-    else:
-        _logger.info(f"connectivity check succeeded for {peer}")
