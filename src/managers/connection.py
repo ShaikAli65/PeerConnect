@@ -3,7 +3,6 @@ import logging
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import AsyncContextManager
 
 from src.avails import RemotePeer, Router, WireData, const
 from src.avails.exceptions import InvalidPacket
@@ -11,27 +10,16 @@ from src.avails.mixins import AExitStackMixIn, TaskGroupMixIn
 from src.avails.useables import Lock, get_unique_id, wrap_with_tryexcept
 from src.managers.directorymanager import DirConnectionHandler
 from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
-from src.net import ConnectionEvent, WireIO
+from src.net import ConnectionEvent, WireIO, ConnectionContext
 from src.net.connection_pool import ConnectionPool
 from src.net.requests import send_request
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
 
-ConnectionContext = AsyncContextManager[ConnectionEvent]
 
-
-async def init_connection_manager(req_service, exit_stack,current_profile, this_remote_peer):
-    connection_router = Router()
-
-    c_reg_handler = connection_router.register_handler
-    c_reg_handler(HEADERS.CMD_FILE_CONN, FileConnectionHandler(current_profile))
-    c_reg_handler(HEADERS.CMD_BIG_FILE_CONN, BigFileConnectionHandler(current_profile))
-    c_reg_handler(HEADERS.CMD_DIR_CONN, DirConnectionHandler(current_profile))
-    c_reg_handler(HEADERS.OTM_UPDATE_STREAM_LINK, OTMConnectionHandler())
-    c_reg_handler(HEADERS.PING, PingHandler(this_remote_peer))
-
-    connection_manager = ConnectionManager(connection_router, req_service)
+async def init_connection_manager(req_service, exit_stack):
+    connection_manager = ConnectionManager(Router(), req_service)
     await exit_stack.enter_async_context(connection_manager)
     return connection_manager
 
@@ -159,7 +147,7 @@ class ConnectionManager(TaskGroupMixIn, AExitStackMixIn):
                 event = ConnectionEvent(connection, service_header)
                 await self._route_connection(event)
 
-        self._task_group.create_task(_listener())
+        self._task_group.create_task(_listener(), name=f"connection-listener-{connection.peer_id}")
 
     async def __aenter__(self):
         self._exit_stack.__aenter__()
@@ -173,14 +161,15 @@ class ConnectionManager(TaskGroupMixIn, AExitStackMixIn):
 
 
 def PingHandler(this_peer):
-    async def handler(event: ConnectionEvent):
-        handshake = event.handshake
-        echo = WireData(
-            header=handshake.header,
-            peer_id=this_peer.peer_id,
-            msg_id=handshake.msg_id,
-        )
-        async with (conn := event.connection):
-            await conn.send(bytes(echo))
+    async def handler(event_ctx: ConnectionContext):
+        async with event_ctx as event:
+            handshake = event.handshake
+            echo = WireData(
+                header=handshake.header,
+                peer_id=this_peer.peer_id,
+                msg_id=handshake.msg_id,
+            )
+            async with (conn := event.connection):
+                await conn.send(bytes(echo))
 
     return handler
