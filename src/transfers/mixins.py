@@ -1,4 +1,4 @@
-from asyncio import CancelledError
+import asyncio
 from contextlib import AbstractAsyncContextManager
 from typing import Callable, ParamSpec, TypeVar
 
@@ -12,13 +12,19 @@ __all__ = (
     "ControlMixIn",
 )
 
+from .. import net
+
 
 class CancelOperationMixIn:
+    # expected fields
+    state: TransferState
+    transfer_task: asyncio.Task
+    should_stop: bool
+
     async def cancel(self):
         """Cancel the transfer"""
         state = getattr(self, "state")
         transfer_task = getattr(self, "transfer_task")
-        expected_exps = getattr(self, "_expected_exps")
 
         if state not in (TransferState.SENDING, TransferState.RECEIVING):
             raise InvalidStateError(f"state is not expected to be in {state=}")
@@ -26,29 +32,18 @@ class CancelOperationMixIn:
         assert transfer_task.done() is False, "main task is done"
 
         setattr(self, "should_stop", True)
-        expected_exps.add(ct := CancelTransfer())
+        ct = CancelTransfer()
         transfer_task.cancel(ct)
         await transfer_task
 
 
 class CommonAExitMixIn(AbstractAsyncContextManager):
     __slots__ = ()
+    # expected fields
+    _on_completion_event: asyncio.Event
+    state: TransferState
 
     async def __aexit__(self, exc_type, exc_value, traceback, /):
-
-        # extract the hidden cancel transfer put by CommonCancelMixIn.cancel
-        # if present
-        if exc_type is CancelledError and any(exc_value.args):
-
-            if (
-                  isinstance(cancel_transfer := exc_value.args[0], CancelTransfer)
-                  and getattr(self, "state") is TransferState.ABORTING
-                  and cancel_transfer in getattr(self, "_expected_exps")
-            ):
-                return
-
-        if exc_type not in getattr(self, "_expected_exps"):
-            return
 
         if (
               exc_type is TransferIncomplete
@@ -60,25 +55,25 @@ class CommonAExitMixIn(AbstractAsyncContextManager):
                 f"found state={getattr(self, 'state')}"
             )
         getattr(self, "_on_completion_event").set()
-        getattr(self, "_expected_exps").clear()
         return None
 
 
 class ExceptionRouterMixIn:
+    # expected fields
+    _log_prefix: str
+    state: TransferState
+
     def _raise_transfer_incomplete_and_change_state(self, prev_error=None, detail=""):
         log_prefix = getattr(self, "_log_prefix")
-        expected_exps = getattr(self, "_expected_exps")
 
         _logger.debug(f"{log_prefix} changing state to paused")
         self.state = TransferState.PAUSED
         err = TransferIncomplete(prev_error, f"{detail=}")
         err.__cause__ = prev_error
-        expected_exps.add(err)
         raise err
 
     def _handle_os_error(self, err, detail=""):
         log_prefix = getattr(self, "_log_prefix")
-        expected_exps = getattr(self, "_expected_exps")
 
         _logger.info(f"{log_prefix} got error, pausing transfer")
         _logger.debug("", exc_info=True)
@@ -90,33 +85,20 @@ class ExceptionRouterMixIn:
             ti = TransferIncomplete(detail)
             ti.__cause__ = err
 
-        expected_exps.add(ti)
         raise ti
 
     def _handle_cancel_transfer(self, ct):
         log_prefix = getattr(self, "_log_prefix")
-        expected_exps = getattr(self, "_expected_exps")
-
-        if ct in expected_exps:
-            # we definitely reach here if we are cancelled using AbstractTransferHandle.cancel
-            _logger.error(
-                f"{log_prefix} cancelled receiving, changing state to ABORTING",
-                exc_info=True,
-            )
-            self.state = TransferState.ABORTING
-        else:
-            raise
+        self.state = TransferState.ABORTING
+        _logger.error(
+            f"{log_prefix} cancelled receiving, changing state to ABORTING",
+            exc_info=True,
+        )
 
     def _handle_transfer_incomplete(self, err):
         log_prefix = getattr(self, "_log_prefix")
-        expected_exps = getattr(self, "_expected_exps")
-
-        if err in expected_exps:
-            raise
-
-        expected_exps.add(err)
         _logger.error(f"{log_prefix} got error, pausing transfer")
-        _logger.debug("", exc_info=True)
+        _logger.exception("")
         self.state = TransferState.PAUSED
         raise err
 
@@ -159,6 +141,11 @@ class ExceptionRouterMixIn:
 
 class ControlMixIn:
     __slots__ = ()
+
+    # expected fields
+    net_receiver: net.Receiver
+    net_sender: net.Sender
+    state: TransferState
 
     def pause(self):
         setattr(self, "state", TransferState.PAUSED)
