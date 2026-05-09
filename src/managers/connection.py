@@ -8,8 +8,6 @@ from src.avails import RemotePeer, Router, WireData, const
 from src.avails.exceptions import InvalidPacket
 from src.avails.mixins import AExitStackMixIn, TaskGroupMixIn
 from src.avails.useables import Lock, get_unique_id, wrap_with_tryexcept
-from src.managers.directorymanager import DirConnectionHandler
-from src.managers.filemanager import BigFileConnectionHandler, FileConnectionHandler, OTMConnectionHandler
 from src.net import ConnectionEvent, WireIO, ConnectionContext
 from src.net.connection_pool import ConnectionPool
 from src.net.requests import send_request
