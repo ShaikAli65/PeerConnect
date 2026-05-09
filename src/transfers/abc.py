@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import typing
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from enum import Enum
 from pathlib import Path
 from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING
 
@@ -12,8 +15,6 @@ from src.transfers._state import TransferState
 
 if TYPE_CHECKING:
     from src.transfers.files._fileobject import FileItem
-else:
-    FileItem = Any
 
 
 class AbstractRWBase(ABC):
@@ -44,8 +45,8 @@ class AbstractRWBase(ABC):
 
 class AbstractReader(AbstractRWBase):
 
-    @asynccontextmanager
     @abstractmethod
+    @asynccontextmanager
     async def start_reading(self):
         """Start the Reader
             This is usually a context manager that returns an async iterator, or itself a async generator
@@ -57,7 +58,7 @@ class AbstractReader(AbstractRWBase):
                     ...
 
         """
-        return NotImplemented
+        yield NotImplemented
 
     @property
     @abstractmethod
@@ -144,7 +145,6 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
     peer: RemotePeer
     state: TransferState
     should_stop: bool
-    _expected_exps: set
     transfer_task: asyncio.Task | None
 
     @abstractmethod
@@ -184,8 +184,8 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
 
     @property
     @abstractmethod
-    def current_file(self) -> FileItem | None:
-        """File under transfer"""
+    def current_transfer(self) -> "FileItem | None":
+        """Item under transfer"""
 
     @property
     def _log_prefix(self):
@@ -195,7 +195,7 @@ class AbstractTransferHandle(AbstractAsyncContextManager, ABC):
         return (
             f"<{self.__class__.__name__}("
             f"peer={self.peer}, "
-            f"curr={self.current_file}, "
+            f"curr={self.current_transfer}, "
             f"state={self.state}, "
             f")>"
         )
@@ -212,7 +212,7 @@ class AbstractSender(AbstractTransferHandle):
           self,
           peer_obj,
           transfer_id,
-          file_list: list[FileItem | AbstractReader],
+          file_list: list["FileItem" | AbstractReader],
           status_updater: AbstractStatusMix | AbstractStatusIterator,
     ): ...
 
@@ -244,3 +244,27 @@ class AbstractRumorPolicy(ABC):
 
     @abstractmethod
     def should_rumor(self, message: GossipMessage): ...
+
+
+class TransferKind(Enum):
+    FILES = "files"
+    DIRECTORY = "directory"
+    BIG_FILE = "big_file"
+    OTM_FILES = "otm_files"
+
+
+class TransferEvents(ABC):
+    @abstractmethod
+    async def transfer_started(self, transfer: AbstractTransferHandle): ...
+
+    @abstractmethod
+    async def transfer_update(self, transfer: AbstractTransferHandle): ...
+
+    @abstractmethod
+    async def transfer_completed(self, transfer: AbstractTransferHandle): ...
+
+    @abstractmethod
+    async def transfer_incomplete(self, transfer: AbstractTransferHandle, error): ...
+
+    @abstractmethod
+    async def transfer_confirmation(self, transfer: AbstractTransferHandle, confirmation_details): ...

@@ -7,13 +7,13 @@ from src.conduit import headers, ui_codec
 from src.conduit.ui_codec import DataWeaver
 from src.conduit.ui_events_bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
     UIPromptReply
-
+from src.transfers.abc import AbstractTransferHandle, TransferEvents
 
 def send_data_to_frontend(data, expect_reply=False) -> _asyncio.Future[DataWeaver] | asyncio.Task:
     """Send a packet to frontend based on type code
 
     Args:
-        data(src.conduit.ui_codec.DataWeaver): packet to send
+        data(DataWeaver): packet to send
         expect_reply: if expecting a reply, this function returns an asyncio.Future
 
     Returns:
@@ -60,7 +60,7 @@ def _json_peer(peer):
 
 
 async def failed_to_reach(peer_id):
-    send_data_to_frontend(  # noqa
+    send_data_to_frontend(
         DataWeaver(header=headers.FAILED_TO_REACH, peer_id=peer_id)
     )
 
@@ -84,6 +84,24 @@ async def get_transfer_ok(profile, peer_id):
     return bool(confirmation.content['confirmed'])
 
 
+class WebpageTransferEvents(TransferEvents):
+
+    async def transfer_started(self, transfer: AbstractTransferHandle):
+        pass
+
+    async def transfer_update(self, transfer: AbstractTransferHandle):
+        pass
+
+    async def transfer_completed(self, transfer: AbstractTransferHandle):
+        pass
+
+    async def transfer_incomplete(self, transfer: AbstractTransferHandle, error):
+        pass
+
+    async def transfer_confirmation(self, transfer: AbstractTransferHandle, confirmation_details):
+        pass
+
+
 async def transfer_confirmation(transfer_handle, confirmation):
     send_data_to_frontend(  # noqa
         DataWeaver(
@@ -98,7 +116,7 @@ async def transfer_update(transfer_handle):
     status_update = DataWeaver(
         header=headers.TRANSFER_UPDATE,
         content={
-            'item_path': str(transfer_handle.current_file.path),
+            'item_path': str(transfer_handle.current_transfer.path),
             'progress': transfer_handle.status_updater.current_status,
             'transfer_id': transfer_handle.id,
         },
@@ -112,10 +130,10 @@ async def transfer_incomplete(transfer_handle, detail=None):
         'transfer_id': transfer_handle.id,
         'cancelled': True,
     }
-    if transfer_handle.current_file is not None:
+    if transfer_handle.current_transfer is not None:
         content.update(
             {
-                'item_path': str(transfer_handle.current_file.path),
+                'item_path': str(transfer_handle.current_transfer.path),
                 'progress': transfer_handle.status_updater.current_status,
             })
 
