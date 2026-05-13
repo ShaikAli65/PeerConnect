@@ -7,7 +7,8 @@ from src import net
 from src.avails import BaseDispatcher, Router, const
 from src.avails.mixins import CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from src.configurations.appconfig import AppConfig, AppRunTime
-from src.core import _kademlia, gossip
+from src.core import _kademlia
+from src.gossip import app_gossip
 from src.core.discover import discovery_initiate
 from src.net import requests
 
@@ -129,7 +130,7 @@ async def initiate(
 
     _kademlia.register_into_dispatcher(kad_server, req_dispatcher)
 
-    gossip_service, gossip_searcher = await gossip.initiate_gossip(
+    gossip_service, gossip_searcher = await app_gossip.initiate_gossip(
         dgram_transport,
         this_remote_peer,
         req_dispatcher,
