@@ -42,7 +42,7 @@ class SimpleRumorMessageList(AbstractRumorMessageList):
         return time.monotonic()
 
     def _get_list_of_peers(self):
-        return NotImplemented
+        raise NotImplementedError
 
     def push(self, message: GossipMessage):
         message_item = RumorMessageItem(
@@ -124,7 +124,7 @@ class RumorMongerProtocol:
         self._is_initiated = True
         self.global_peer_list = global_peer_list
 
-    def message_arrived(self, data: GossipMessage, from_addr):
+    def message_arrived(self, data: GossipMessage, _):
 
         if not data.fields_check():
             _logger.debug(f"fields missing, ignoring message: {data.actual_data}")
@@ -135,11 +135,11 @@ class RumorMongerProtocol:
 
         if data.id in self.message_list:
             # no need to re-enter message into list, this refreshes timer of that message
-            _logger.debug("[GOSSIP] forwarding seen message")
+            _logger.debug("forwarding seen message")
             self._gossip_forward(message=data)
         else:
             self.gossip_message(data)
-        _logger.info("[GOSSIP] message received and processed: %s" % data)
+        _logger.info("message received and processed: %s" % data)
 
         return True
 
@@ -152,7 +152,7 @@ class RumorMongerProtocol:
             pass
 
     def gossip_message(self, message):
-        _logger.info(f"[GOSSIP] gossiping new message {message}")
+        _logger.info(f"gossiping new message {message}")
         self.message_list.push(message)
         self._gossip_forward(message)
 

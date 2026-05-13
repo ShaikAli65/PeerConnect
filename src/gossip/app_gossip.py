@@ -6,13 +6,13 @@ from src.avails import GossipMessage, const
 from src.avails.bases import Router
 from src.avails.useables import override
 from src.core import search
-from src.transfers import GOSSIP_HEADER, GossipTransport, RumorMongerProtocol, SimpleRumorMessageList
+from src.gossip.rumor import GossipTransport, RumorMongerProtocol, SimpleRumorMessageList
+from src.transfers import GOSSIP_HEADER
 
 _logger = logging.getLogger(__name__)
 
 
 class GlobalGossipRumorMessageList(SimpleRumorMessageList):
-    __slots__ = "global_peer_list",
 
     def __init__(self, global_peer_list, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -20,12 +20,6 @@ class GlobalGossipRumorMessageList(SimpleRumorMessageList):
 
     def _get_list_of_peers(self):
         return set(self.global_peer_list.keys())
-
-
-class GlobalRumorMonger(RumorMongerProtocol):
-    def __init__(self, transport, global_peer_list):
-        message_list = GlobalGossipRumorMessageList(global_peer_list, const.NODE_POV_GOSSIP_TTL)
-        super().__init__(transport, global_peer_list, message_list)
 
 
 def GlobalGossipMessageHandler(gossip_handler):
@@ -49,13 +43,15 @@ class GossipRouter(Router):
 class GossipService(NamedTuple):
     gossip_transport: GossipTransport
     gossip_router: GossipRouter
-    gossiper: GlobalRumorMonger
+    gossiper: RumorMongerProtocol
 
 
 async def initiate_gossip(data_transport, remote_peer, req_dispatcher, peer_list):
     gossip_transport = GossipTransport(data_transport)
     gossip_router = GossipRouter()
-    gossiper = GlobalRumorMonger(gossip_transport, peer_list)
+
+    message_list = GlobalGossipRumorMessageList(peer_list, const.NODE_POV_GOSSIP_TTL)
+    gossiper = RumorMongerProtocol(gossip_transport, peer_list, message_list)
 
     gossip_message_handler = GlobalGossipMessageHandler(gossiper)
     gossip_router.register_handler(GOSSIP_HEADER.MESSAGE, gossip_message_handler)

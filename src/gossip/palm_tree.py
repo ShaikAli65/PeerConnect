@@ -203,7 +203,7 @@ class PalmTreeRelay(asyncio.DatagramProtocol):
             tree_check_packet (WireData): Contains tree check data.
             addr (tuple): Address of the peer initiating the check.
         """
-        peer = await peers.get_remote_peer(tree_check_packet.id)
+        # peer = await peers.get_remote_peer(tree_check_packet.id)
         self.print_state(f"checking gossip tree {peer.username}, {peer.ip}")
         if self._may_be_make_rejection(tree_check_packet, addr):
             return
