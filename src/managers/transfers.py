@@ -6,7 +6,7 @@ import socket
 import struct
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager, suppress
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Awaitable, Callable
 
 from src import net
 from src.avails import (
@@ -23,7 +23,6 @@ from src.avails.exceptions import (
 )
 from src.conduit import webpage
 from src.conduit.ui_events import DecideIncomingTransfer, IncomingTransferDecisionRequested
-from src.core.peers import PeerService
 from src.managers import ProfileManager
 from src.managers.connection import ConnectionManager
 from src.net.events import ConnectionContext, ConnectionEvent
@@ -43,27 +42,21 @@ from src.transfers.status import StatusIterator, StatusMixIn
 
 _logger = logging.getLogger(__name__)
 
-PeerResolver = Callable[[str], Awaitable[RemotePeer | None]]
-TransferConsentPrompt = Callable[[str], Awaitable[Any]]
-
 
 def init_transfer_manager(
       this_peer: RemotePeer,
       current_profile: ProfileManager,
-      peer_resolver: PeerService,
       connection_manager: ConnectionManager,
 ) -> TransferManager:
-
-    async def ask_user(peer_id: str):  # TODO: ui code should not be here
-        confirmation: DecideIncomingTransfer = await webpage.send_prompt_and_get_response(
-            IncomingTransferDecisionRequested(use.get_unique_id(str), peer_id)
+    async def ask_user(peer_id: str):
+        confirmation = await webpage.send_prompt_and_get_response(
+            IncomingTransferDecisionRequested(use.get_unique_id(str), peer_id), DecideIncomingTransfer
         )
-        return confirmation.confirmed, confirmation.remember
+        return confirmation.confirmed, bool(confirmation.remember)
 
     transfer_consent = TransferConsent(current_profile, ask_user)
     tm = TransferManager(
         this_peer_id=this_peer.peer_id,
-        peer_resolver=peer_resolver.get_remote_peer,
         connection_manager=connection_manager,
         default_download_path=const.PATH_DOWNLOAD,
         transfer_consenter=transfer_consent,
@@ -86,6 +79,7 @@ class TransferConsent:
         * waits for the receiving peer's one-byte confirmation response
         * raises ``TransferRejected`` on rejection, timeout, or invalid response
     """
+    TransferConsentPrompt = Callable[[str], Awaitable[tuple[bool, bool]]]
 
     def __init__(
           self,
@@ -129,39 +123,23 @@ class TransferConsent:
         if confirmation != TRANSFER_OK:
             raise TransferRejected(f"unexpected transfer confirmation {confirmation!r}")
 
-    async def confirm_transfer_callback(self, _profile, peer_id: str) -> bool:
-        return await self.confirm_receiving(peer_id)
-
     def _remembered_choice(self, peer_id: str):
         return getattr(self.current_profile, "transfers_agreed", {}).get(peer_id, None)
 
-    @staticmethod
-    def _normalize_user_reply(reply) -> tuple[bool, bool | None]:
-        content = getattr(reply, "content", reply)
-
-        if isinstance(content, bool):
-            return content, None
-
-        if not isinstance(content, Mapping):
-            return bool(content), None
-
-        return bool(content["confirmed"]), content.get("remember", None)
-
 
 class TransferManager:
+    PeerResolver = Callable[[str], Awaitable[RemotePeer | None]]
 
     def __init__(
           self,
           *,
           this_peer_id: str,
-          peer_resolver: PeerResolver,
           connection_manager: ConnectionManager,
           default_download_path: Path,
           transfer_consenter: TransferConsent,
           transfer_events: TransferEvents,
     ):
         self.this_peer_id = this_peer_id
-        self.peer_resolver = peer_resolver
         self.default_download_path = default_download_path
         self.transfer_consenter = transfer_consenter
         self.transfer_events = transfer_events
@@ -395,7 +373,7 @@ class TransferManager:
             peers=peers_to_send,
             timeout=3,
         )
-        self.transfers_book.add_to_scheduled(sender)
+        self.transfers_book.move(sender.id, TransferBookBucket.SCHEDULED)
         return sender
 
     def new_otm_request_arrived(self, req_data: WireData, this_peer: RemotePeer):
@@ -416,7 +394,7 @@ class TransferManager:
             passive_endpoint_address,
             this_peer.uri,
         )
-        self.transfers_book.add_to_scheduled(receiver)
+        self.transfers_book.move(receiver.id, TransferBookBucket.SCHEDULED)
         return bytes(
             OTMInformResponse(
                 peer_id=this_peer.peer_id,
@@ -513,8 +491,7 @@ class TransferManager:
     ):
         receiver_handle = None
         try:
-            peer = await self._peer_from_event(event)
-            receiver_handle = await handle_factory(peer, transfer_id)  # TODO: handle errors
+            receiver_handle = await handle_factory(event.connection.peer, transfer_id)  # TODO: handle errors
             self._add_current(receiver_handle, kind)
             await self._run_transfer(
                 receiver_handle.status_updater,
@@ -543,12 +520,6 @@ class TransferManager:
             async for _ in loop:
                 if status_iter.should_yield():
                     await self.transfer_events.transfer_update(transfer_handle)
-
-    async def _peer_from_event(self, event: ConnectionEvent) -> RemotePeer | None:
-        if event.connection.peer:
-            return event.connection.peer
-
-        return await self.peer_resolver(event.handshake.peer_id)
 
     async def _make_file_receiver(self, peer: RemotePeer, transfer_id: str):
         status_updater = StatusMixIn(const.TRANSFER_STATUS_UPDATE_FREQ)
