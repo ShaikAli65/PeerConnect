@@ -17,7 +17,7 @@ from src.conduit.ui_events import (
     PeerSummary,
     TransferUpdate,
 )
-from src.conduit.ui_events_bases import AnyUIEventObject, UIEvent
+from src.conduit.bases import AnyUIEventObject, UIEvent
 
 
 def remote_peer_to_peer_summary(peer: RemotePeer) -> PeerSummary:

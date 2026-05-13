@@ -12,7 +12,7 @@ import enum
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
-from src.conduit.ui_events_bases import UICommand, UIError, UINotification, UIPrompt, UIPromptReply, UIResult
+from src.conduit.bases import UICommand, UIError, UINotification, UIPrompt, UIPromptReply, UIResult
 
 JsonMap = dict[str, Any]
 JsonList = list[Any]

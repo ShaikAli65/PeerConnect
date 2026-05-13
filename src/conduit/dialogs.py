@@ -1,7 +1,8 @@
 import os
 import platform
 import subprocess
-from abc import ABC, abstractmethod
+
+from src.conduit.bases import IDialogs
 
 try:
     import tkinter as tk
@@ -10,17 +11,7 @@ except ImportError:
     tk = False
     filedialog = False
 
-import src.avails.constants as const
-
-
-class IDialogs(ABC):
-    @classmethod
-    @abstractmethod
-    def open_file_dialog_window(cls) -> list[str]: ...
-
-    @classmethod
-    @abstractmethod
-    def open_directory_dialog_window(cls) -> str: ...
+from src.avails import const
 
 
 class TkDialogs(IDialogs):

@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import typing
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 from src.avails.useables import camel_to_snake
+
+
+class IDialogs(ABC):
+    @classmethod
+    @abstractmethod
+    def open_file_dialog_window(cls) -> list[str]: ...
+
+    @classmethod
+    @abstractmethod
+    def open_directory_dialog_window(cls) -> str: ...
 
 
 class UIEventMeta(type):
@@ -21,12 +32,12 @@ class UIEventMeta(type):
             mcls.registry[header] = cls
 
             if any(base.__name__ == "UIInboundEvent" for base in bases) or any(
-                    getattr(base, "__is_inbound_event_base__", False) for base in bases
+                  getattr(base, "__is_inbound_event_base__", False) for base in bases
             ):
                 mcls.inbound_registry[header] = cls
 
             if any(base.__name__ == "UIOutboundEvent" for base in bases) or any(
-                    getattr(base, "__is_outbound_event_base__", False) for base in bases
+                  getattr(base, "__is_outbound_event_base__", False) for base in bases
             ):
                 mcls.outbound_registry[header] = cls
 
@@ -127,3 +138,78 @@ AnyUINotification = typing.TypeVar("AnyUINotification", bound=UINotification)
 AnyUIPrompt = typing.TypeVar("AnyUIPrompt", bound=UIPrompt)
 AnyUIResult = typing.TypeVar("AnyUIResult", bound=UIResult)
 AnyUIError = typing.TypeVar("AnyUIError", bound=UIError)
+
+
+class FrontEnd(Protocol):
+    """
+    Interface for defining the structure and interaction of a front-end system.
+
+    This protocol specifies the standard methods that a front-end system should
+    implement in order to communicate with the back-end or other functional
+    components. It lays out how to notify users, handle errors, send prompts,
+    and deliver results.
+
+    Methods are specified with no implementation, allowing concrete implementations
+    to define their own behavior.
+    """
+
+    def notify(self, message: AnyUINotification):
+        """
+        Sends a notification using the provided message.
+
+        This method handles the delivery of a notification to a target, where the
+        specific implementation depends on the notification details provided.
+
+        Args:
+            message (AnyUINotification): The notification object that contains the
+                details and data required for delivery.
+        """
+
+    def send_error(self, error: AnyUIError):
+        """
+        Sends an error for handling or display to the user interface.
+
+        This method processes a given error and ensures it is handled or passed
+        to a relevant component for user notification or logging.
+
+        Args:
+            error: The error to be sent for handling. This should be an
+                instance of `AnyUIError`, representing an error intended for
+                user interface handling.
+        """
+
+    async def send_prompt_and_get_response(
+          self,
+          prompt: AnyUIPrompt,
+    ):
+        """
+        Sends a prompt to the designated handler and retrieves the response.
+
+        This asynchronous method is responsible for delivering the provided prompt
+        to the intended recipient or processor and awaiting the corresponding
+        response. The interaction occurs within the constraints of the system's
+        defined execution flow.
+
+        Args:
+            prompt: The prompt to be sent, containing all necessary details for
+                the interaction. Must conform to the type AnyUIPrompt.
+
+        Returns:
+            The response generated as a result of the prompt being sent. The exact
+            type depends on the implementation of the recipient's response logic.
+
+        Raises:
+            Any errors that occur during communication or the response process
+            may be propagated. These should be handled accordingly based on the
+            specific implementation.
+        """
+
+    def send_result(self, result: AnyUIResult):
+        """
+        Sends the result to the appropriate handler or processor. This method is intended
+        to process or forward the provided result object.
+
+        Args:
+            result (AnyUIResult): The result object containing data necessary for
+                further processing or handling.
+        """
