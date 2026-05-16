@@ -1,10 +1,8 @@
-import asyncio
-
-from src.conduit import logger, webpage
-from src.conduit.pagehandle import PROFILE_WAIT
-from src.conduit.ui_events import RequestProfilesSync, SetSelectedProfile
+from conduit.bases import FrontEnd
+from src.avails import use
+from src.conduit import logger
+from src.conduit.ui_events import ProfileDataExchange, ProfileDataExchangeReply
 from src.configurations import interfaces
-from src.configurations.interfaces import get_interfaces
 from src.managers import (
     ProfileManager,
     all_profiles,
@@ -12,19 +10,21 @@ from src.managers import (
     refresh_profile_list, set_current_profile,
 )
 
-_alignment_done = asyncio.Event()
 
-
-async def align_profiles(_: RequestProfilesSync):
+async def align_profiles(frontend: FrontEnd):
     interfaces.reset()
-    _alignment_done.clear()
     logger.info("[PROFILES] sending profiles")
-    await webpage.send_prompt_and_get_response()
-    updated_profiles = await webpage.send_profiles_and_get_updated_profiles(
-        all_profiles(), get_interfaces()
+    profile_data = ProfileDataExchange(
+        use.get_unique_id(str),
+        profiles=all_profiles(),
+        interfaces=[getattr(v, '_asdict')() for v in interfaces.get_interfaces()]
     )
-    await configure_further_profile_data(updated_profiles)
-    _alignment_done.set()
+
+    updated_profiles = await frontend.send_prompt_and_get_response(
+        profile_data, ProfileDataExchangeReply
+    )
+    await configure_further_profile_data(updated_profiles.profiles)
+    return updated_profiles.selected_profile
 
 
 async def configure_further_profile_data(profiles_data):
@@ -63,7 +63,7 @@ async def configure_further_profile_data(profiles_data):
     for may_be_profile_name, profile_settings in profiles_data.items():
         profile_object = get_profile_from_profile_file_name(may_be_profile_name)
         if profile_object is None:
-            profile_settings['USER']['id'] = int(profile_settings['USER']['id'])  # = new_remote_peer_id()
+            profile_settings['USER']['id'] = int(profile_settings['USER']['id'])
             preferred_ip = interfaces.get_ip_with_ifname(profile_settings["INTERFACE"]["if_name"])
             profile_settings["INTERFACE"] = getattr(preferred_ip, '_asdict')()
 
@@ -79,26 +79,20 @@ async def configure_further_profile_data(profiles_data):
             await profile_object.edit_profile(header, content)
 
 
-async def set_selected_profile(selected_profile: SetSelectedProfile):
-    await _alignment_done.wait()
+async def set_selected_profile(selected_profile):
 
-    assert PROFILE_WAIT is not None, "PROFILE WAIT IS NONE"
-
-    if PROFILE_WAIT.done():
-        logger.warning(f"current profile is already set, ignoring choice {selected_profile.profile}")
-        return
-    
     await refresh_profile_list()
     for profile in ProfileManager.PROFILE_LIST:
         profile: ProfileManager
         if profile == selected_profile.profile:
             assert profile.interface is not None, "interface not configured properly can't select this profile"
-            assert bool(profile.file_name) is True, "file name not configured properly can't select this profile"
+            assert bool(
+                profile.file_name) is True, "file name not configured properly can't select this profile"
             assert bool(profile.id) is True, "id not configured properly can't select this profile"
 
             await set_current_profile(profile)
             logger.info(f"profile selected and updated {profile=}")
-            PROFILE_WAIT.set_result(profile)
-            return
+            return profile
 
     logger.critical("selected profile not found in current list")
+    return None

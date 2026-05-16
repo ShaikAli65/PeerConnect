@@ -181,7 +181,8 @@ class FrontEnd(Protocol):
     async def send_prompt_and_get_response(
           self,
           prompt: AnyUIPrompt,
-    ):
+          resp_type: type[AnyUIPromptReply] | None = None,
+    ) -> AnyUIPromptReply:
         """
         Sends a prompt to the designated handler and retrieves the response.
 
@@ -191,6 +192,7 @@ class FrontEnd(Protocol):
         defined execution flow.
 
         Args:
+            resp_type: Optional parameter specifying the expected type of the result
             prompt: The prompt to be sent, containing all necessary details for
                 the interaction. Must conform to the type AnyUIPrompt.
 

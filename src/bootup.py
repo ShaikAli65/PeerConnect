@@ -26,8 +26,6 @@ async def set_ip_config(current_profile):
 
     clear_logs() if const.CLEAR_LOGS else None
 
-    const.THIS_IP = current_profile.interface
-
     _logger.info(f"setting {current_profile.interface=}")
     return current_profile.interface
 
@@ -154,7 +152,6 @@ async def init_app(app_runtime: AppRunTime):
     _logger.debug("waiting for profile selection")
     current_profile = await pagehandle.wait_for_profile_selection(frontend, app_runtime)
 
-    _logger.info("boot_up initiating")
     this_ip = await set_ip_config(current_profile)
 
     _logger.info("configuring this peer object")

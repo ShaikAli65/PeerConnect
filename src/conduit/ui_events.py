@@ -53,16 +53,6 @@ class RequestUsersSync(UICommand):
 
 
 @dataclass(frozen=True, slots=True)
-class RequestProfilesSync(UICommand):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class SetSelectedProfile(UICommand):
-    profile: dict
-
-
-@dataclass(frozen=True, slots=True)
 class SearchPeersByName(UICommand):
     query: str
 
@@ -120,11 +110,6 @@ class SendDirectoryToMultiplePeers(UICommand):
 
 
 @dataclass(frozen=True, slots=True)
-class ChooseInterface(UIPromptReply):
-    interface_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
 class DecideIncomingTransfer(UIPromptReply):
     peer_id: str
     confirmed: bool
@@ -134,13 +119,6 @@ class DecideIncomingTransfer(UIPromptReply):
 @dataclass(frozen=True, slots=True)
 class ProvideDiscoveryPeerName(UIPromptReply):
     peer_name: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class ProfilesSnapshot(UIResult):
-    profiles: JsonMap
-    interfaces: JsonList
-    request_id: str | int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +168,18 @@ class TransferStatusChanged(UINotification):
 class InterfaceChoiceRequested(UIPrompt):
     interfaces: JsonMap
     type: str = EventType.DATA
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileDataExchange(UIPrompt):
+    profiles: JsonMap
+    interfaces: JsonList
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileDataExchangeReply(UIPromptReply):
+    profiles: JsonMap
+    selected_profile: JsonMap
 
 
 @dataclass(frozen=True, slots=True)

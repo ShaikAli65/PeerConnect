@@ -18,6 +18,7 @@ from avails import Router
 from avails.mixins import AExitStackMixIn
 from conduit.bases import FrontEnd
 from conduit.frontend_web import WebFrontend
+from conduit.handleprofiles import align_profiles, set_selected_profile
 from src.avails import const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import Dispatcher
@@ -331,7 +332,8 @@ async def init_page_servers(app_config, app_runtime: AppRunTime):
 
 
 async def wait_for_profile_selection(frontend: FrontEnd, app_runtime: AppRunTime):
-    ...
+    selected_profile = await align_profiles(frontend)
+    return await set_selected_profile(selected_profile)
 
 
 async def initiate_page_handlers(
@@ -339,10 +341,6 @@ async def initiate_page_handlers(
       app_config: AppConfig,
       app_runtime: AppRunTime,
 ):
-    # global PROFILE_WAIT
-    # if PROFILE_WAIT is None:
-    #     PROFILE_WAIT = _asyncio.get_event_loop().create_future()
-    #
     from src.conduit import handlesignals, handledata
 
     handlesignals.register_handlers(
@@ -358,4 +356,3 @@ async def initiate_page_handlers(
         web_frontend,
         app_runtime.exit_stack
     )
-    # return PROFILE_WAIT
