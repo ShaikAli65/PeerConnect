@@ -29,8 +29,6 @@ from websockets import ConnectionClosedError, WebSocketServerProtocol
 
 logger = logging.getLogger(__name__)
 
-PROFILE_WAIT: _asyncio.Future | None = None
-
 
 class FrontEndWebSocket:
     """Wrapping a Websocket Transport with buffering
@@ -338,18 +336,25 @@ async def wait_for_profile_selection(frontend: FrontEnd, app_runtime: AppRunTime
 
 async def initiate_page_handlers(
       web_frontend: WebFrontend,
-      app_config: AppConfig,
+      conn_service,
+      msg_service,
+      peer_service,
       app_runtime: AppRunTime,
 ):
     from src.conduit import handlesignals, handledata
 
     handlesignals.register_handlers(
         web_frontend.frontend_messages_dispatcher,
+        conn_service,
+        msg_service,
+        peer_service,
+        app_runtime.peer_list,
+        web_frontend,
     )
 
     handledata.register_handlers(
         web_frontend.frontend_messages_dispatcher,
-    )
+    ) # TODO: complete this
 
     await subscribe_to_app_events(
         app_runtime.app_events,

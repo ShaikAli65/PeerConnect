@@ -209,6 +209,12 @@ async def init_app(app_runtime: AppRunTime):
     )
 
     _logger.info("attaching page handlers")
-    await pagehandle.initiate_page_handlers(frontend, app_config, app_runtime)
+    await pagehandle.initiate_page_handlers(
+        frontend,
+        conn_manager,
+        msg_conn_service,
+        peer_service,
+        app_runtime,
+    )
 
     _logger.info("boot_up complete")
