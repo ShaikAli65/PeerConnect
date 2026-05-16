@@ -51,7 +51,7 @@ class Router:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.registry = kwargs.pop('registry', {})
+        self.registry: dict = kwargs.pop('registry', {})
 
     def __call__(self, event_header, *args, **kwargs):
         return self.registry[event_header](*args, **kwargs)

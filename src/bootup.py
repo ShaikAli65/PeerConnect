@@ -13,6 +13,7 @@ from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import peers, requests
 from src.managers import ProfileManager, logmanager, message, profilemanager
 from src.managers.connection import init_connection_manager
+from src.managers.transfers import init_transfer_manager
 from src.net import Acceptor, is_wsl_bridged
 
 _logger = logging.getLogger(__name__)
@@ -101,6 +102,8 @@ async def launch_web_page(app_config):
             _logger.fatal(f"cannot launch UI: {comment}")
             return
 
+        assert bridged is None, "we are in a linux environment, but wsl is not detected"
+
     try:
         webbrowser.open(page_url)
     except webbrowser.Error:
@@ -144,11 +147,12 @@ async def init_app(app_runtime: AppRunTime):
 
     _logger.info(f"runtime context {app_runtime=}")
 
-    _logger.info("initiating page handle")
-    profile_selection = await pagehandle.initiate_page_handle(app_config, app_runtime)
+    _logger.info("initiating web page servers")
+
+    frontend = await pagehandle.init_page_servers(app_config, app_runtime)
 
     _logger.debug("waiting for profile selection")
-    current_profile = await profile_selection
+    current_profile = await pagehandle.wait_for_profile_selection(frontend, app_runtime)
 
     _logger.info("boot_up initiating")
     this_ip = await set_ip_config(current_profile)
@@ -177,7 +181,6 @@ async def init_app(app_runtime: AppRunTime):
     conn_manager = await init_connection_manager(
         req_service,
         app_runtime.exit_stack,
-        current_profile, this_remote_peer
     )
 
     peer_service.requests_service = req_service
@@ -200,3 +203,15 @@ async def init_app(app_runtime: AppRunTime):
         this_remote_peer,
         conn_manager.connection_router,
     )
+
+    _logger.info("initiating transfer manager")
+    transfer_manager = init_transfer_manager(
+        this_remote_peer,
+        current_profile,
+        conn_manager
+    )
+
+    _logger.info("attaching page handlers")
+    await pagehandle.initiate_page_handlers(frontend, app_config, app_runtime)
+
+    _logger.info("boot_up complete")
