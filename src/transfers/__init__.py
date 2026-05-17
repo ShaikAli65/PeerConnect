@@ -3,7 +3,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 from src.net.events import ConnectionEvent
 from src.transfers._headers import *
-from src.transfers.rumor import *
 
 thread_pool_for_disk_io = ThreadPoolExecutor(thread_name_prefix="transfers-diskio-thread-")
 

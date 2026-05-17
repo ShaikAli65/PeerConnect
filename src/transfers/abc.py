@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from enum import Enum
 from pathlib import Path
-from typing import Any, AsyncGenerator, AsyncIterable, TYPE_CHECKING
+from typing import Any, AsyncGenerator, AsyncIterable, Protocol, TYPE_CHECKING
 
 from src.avails import RemotePeer
 from src.avails.wire import GossipMessage
@@ -253,18 +253,49 @@ class TransferKind(Enum):
     OTM_FILES = "otm_files"
 
 
-class TransferEvents(ABC):
-    @abstractmethod
-    async def transfer_started(self, transfer: AbstractTransferHandle): ...
+class TransferEvents(Protocol):
+    async def transfer_started(self, transfer: AbstractTransferHandle):
+        """
+        Notifies that a transfer operation has started.
 
-    @abstractmethod
-    async def transfer_update(self, transfer: AbstractTransferHandle): ...
+        Executed when a data transfer is initiated, enabling tracking or handling of the
+        transfer state at the beginning of the process.
 
-    @abstractmethod
-    async def transfer_completed(self, transfer: AbstractTransferHandle): ...
+        Args:
+            transfer: AbstractTransferHandle
+                The handle representing the transfer operation that has started.
+        """
 
-    @abstractmethod
-    async def transfer_incomplete(self, transfer: AbstractTransferHandle, error): ...
+    async def transfer_update(self, transfer: AbstractTransferHandle):
+        """
+        Notifies that an active transfer has new progress or state.
 
-    @abstractmethod
-    async def transfer_confirmation(self, transfer: AbstractTransferHandle, confirmation_details): ...
+        Args:
+            transfer: The transfer handle that produced the update.
+        """
+
+    async def transfer_completed(self, transfer: AbstractTransferHandle):
+        """
+        Notifies that a transfer finished successfully.
+
+        Args:
+            transfer: The completed transfer handle.
+        """
+
+    async def transfer_incomplete(self, transfer: AbstractTransferHandle, error):
+        """
+        Notifies that a transfer stopped before completion.
+
+        Args:
+            transfer: The transfer handle that failed or paused.
+            error: The error or reason associated with the incomplete transfer.
+        """
+
+    async def transfer_confirmation(self, transfer: AbstractTransferHandle, confirmation_details):
+        """
+        Requests or reports confirmation details for a pending transfer.
+
+        Args:
+            transfer: The transfer handle awaiting confirmation.
+            confirmation_details: Context needed to decide or record confirmation.
+        """

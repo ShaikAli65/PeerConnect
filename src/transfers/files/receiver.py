@@ -1,6 +1,7 @@
 import asyncio
 import struct
 from contextlib import aclosing
+from typing import Callable, Awaitable
 
 from src import net
 from src.avails import const
@@ -24,17 +25,17 @@ class Receiver(
     version = const.VERSIONS["FO"]
 
     def __init__(self, peer_obj, file_id, download_path, status_updater):
-        self.transfer_task = None
+        self.transfer_task = None  # type: asyncio.Task | None
         self.state = TransferState.PREPARING
         self.peer = peer_obj
         self._transfer_id = file_id
         self.connection_wait = asyncio.get_event_loop().create_future()
         self.download_path = download_path
-        self._current_file: FileItem | None = None
+        self._current_file: FileItem
         self.should_stop = False  # only set when Receiver.cancel is called
         self.file_items = []
-        self.net_sender = None
-        self.net_receiver = None
+        self.net_sender = None  # type: Callable[[bytes],Awaitable[int]]
+        self.net_receiver = None  # type: Callable[[int], Awaitable[bytes]]
         self.status_updater = status_updater
         self._expected_exps = set()
         self._on_completion_event = asyncio.Event()
@@ -104,7 +105,7 @@ class Receiver(
         return True
 
     async def _recv_file_once(self):
-        if await self._prepare_file_item() is False:
+        if not await self._prepare_file_item():
             return
         assert self._current_file is not None
         self.status_updater.status_setup(
@@ -180,13 +181,13 @@ class Receiver(
 
         _logger.debug(f"FILE[{self._transfer_id}] changing state to receiving")
         self.state = TransferState.RECEIVING
-        assert self._current_file is not None
+        assert self._current_file is not None, f"current file is not set to resume transfer, {self.id=}"
         # synchronizing last received file seek
         s = struct.pack("!Q", self._current_file.seeked)
         await self.wrap_exp_handling(self.net_sender, s)
 
         while True:
-            if not self._should_proceed():
+            if not await self._should_proceed():
                 break
 
             # getting remaining files
@@ -213,7 +214,7 @@ class Receiver(
         return f"[FILE] {self._current_file}"
 
     @property
-    def current_file(self):
+    def current_transfer(self):
         return self._current_file
 
     @property

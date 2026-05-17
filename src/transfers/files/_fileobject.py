@@ -58,14 +58,14 @@ class FileItem:
         self._name = value
         self.path = self.path.with_name(self._name)
 
-    @staticmethod
-    def load_from(data: bytes, file_parent_path):
+    @classmethod
+    def load_from(cls, data: bytes, file_parent_path):
         name, size, seeked = umsgpack.loads(data)
 
         if const.IS_WINDOWS:
             name = name.replace('\\', '_')
 
-        file = FileItem(Path(file_parent_path, name), seeked)
+        file = cls(Path(file_parent_path, name), seeked)
         file._name = name
         file.size = size
         return file
@@ -127,7 +127,7 @@ class FileItem:
         if original_path.exists():
             raise FileExistsError(f"The original file {original_path} already exists.")
 
-        self.path.rename(original_path)
+        self.path = self.path.rename(original_path)
         self._name = original_path.name  # Update the name attribute
         del self.original_ext
         return self._name

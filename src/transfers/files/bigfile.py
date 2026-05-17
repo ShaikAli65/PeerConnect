@@ -169,14 +169,13 @@ class _BigChunkSender(FSender):
         self.should_stop = False
         self.state = TransferState.SENDING
         self._current_file_idx = -1
-        self._expected_exps.clear()
         self._current_part = big_chunk
         self._big_chunk_id = chunk_id
 
         await self.send_file_metadata(big_chunk)
-        assert self.current_file is not None
+        assert self.current_transfer is not None
 
-        file_reader = FileItemReader(self.current_file)
+        file_reader = FileItemReader(self.current_transfer)
 
         async with aclosing(self.send_one_file(file_reader)) as loop:
             try:
@@ -184,9 +183,9 @@ class _BigChunkSender(FSender):
                 async for bytes_sent in loop:
                     await updater(bytes_sent)
             finally:
-                self.current_file.seeked = file_reader.seek_pos
+                self.current_transfer.seeked = file_reader.seek_pos
                 _logger.debug(
-                    f"setting seeked attribute of {self.current_file=}, {file_reader=}"
+                    f"setting seeked attribute of {self.current_transfer=}, {file_reader=}"
                 )
 
     @override
@@ -203,7 +202,7 @@ class _BigChunkSender(FSender):
         await self.net_sender(metadata)
 
     @property
-    def current_file(self):
+    def current_transfer(self):
         return self._current_part
 
 
@@ -303,7 +302,7 @@ class Sender(
 
     async def _send_task(self, net_connection, index):
         await self._start_transfer.wait()
-        if not self.state == TransferState.RECEIVING:
+        if not self.state == TransferState.SENDING:
             return
 
         sender = _BigChunkSender(self.peer, self.id, self.status_updater)
@@ -367,7 +366,7 @@ class Sender(
     async def cancel(self):
         self.should_stop = True
         self.state = TransferState.ABORTING
-        ct = CancelTransfer("User canceled the transfer")
+        ct = CancelTransfer("User cancelled the transfer")
         self.task_group.cancel_all_tasks(ct)
         await self.status_updater.stop(ct)
 
@@ -376,7 +375,7 @@ class Sender(
         return self.transfer_id
 
     @property
-    def current_file(self):
+    def current_transfer(self):
         return self.file
 
     @property
@@ -417,7 +416,6 @@ class _BigChunkReceiver(FReceiver):
 
     def _setup_state(self):
         self._current_file = None
-        self._expected_exps.clear()
         if self.net_sender is None:
             raise AssertionError("connection not made yet")
 
@@ -532,7 +530,7 @@ class Receiver(
             return
 
         receiver = _BigChunkReceiver(
-            self.current_file,
+            self.current_transfer,
             self.peer,
             self.transfer_id,
             self.download_path,
@@ -590,7 +588,7 @@ class Receiver(
             finally:
                 if new_file is None:
                     # try getting new_file from part-receiver
-                    new_file = receiver.current_file
+                    new_file = receiver.current_transfer
 
                 if new_file and new_file.seeked < new_file.size:
                     # this chunk is not completely done
@@ -670,11 +668,11 @@ class Receiver(
         return self.transfer_id
 
     @property
-    def current_file(self):
+    def current_transfer(self):
         return self._file
 
-    @current_file.setter
-    def current_file(self, file):
+    @current_transfer.setter
+    def current_transfer(self, file):
         self._file = file
 
     def __repr__(self):

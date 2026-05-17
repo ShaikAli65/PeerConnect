@@ -20,6 +20,7 @@ from .sender import Sender
 
 _FILE_CODE = b'\x01'
 _PATH_CODE = b'\x02'
+_STOP_CODE = b'\x00'
 
 
 def rename_directory_with_increment(root_path: Path, relative_path: Path):
@@ -123,7 +124,7 @@ class DirSender(Sender):
                 assert (await self.net_receiver(1)) == _FILE_CODE
 
         _logger.debug(f"{self._log_prefix} sending end of transfer code")
-        await self.net_sender(b'\x00')  # code to inform end of transfer
+        await self.net_sender(_STOP_CODE)  # code to inform end of transfer
         self.state = TransferState.COMPLETED
 
     @use.override
@@ -136,11 +137,9 @@ class DirSender(Sender):
     async def __send_code_parts(self, code, path: Path):
 
         rel_path = path.relative_to(self.root_path)
-        parent = rel_path.parent
+        parent = rel_path.parent.as_posix()
         name = rel_path.name
 
-        if const.IS_WINDOWS:
-            parent = parent.as_posix()
         if const.IS_LINUX:
             name = name.replace('\\', '_')
 
@@ -160,7 +159,7 @@ class DirSender(Sender):
         raise NotImplementedError
 
     @property
-    def current_file(self) -> FileItem:
+    def current_transfer(self) -> FileItem:
         return self._current_file
 
 
@@ -193,14 +192,15 @@ class DirReceiver(Receiver):
         _logger.debug(f"{self._log_prefix} receiving directory, into {self.download_path}")
 
         while True:
-            if not (code := await self._should_proceed()):
+            code = await self._should_proceed()
+            if code == _STOP_CODE or not code:
                 _logger.debug(f"{self._log_prefix} got exit code, finalizing recv loop")
                 break
 
             if code == _FILE_CODE:
                 _logger.debug(f"{self._log_prefix} got sub-file code")
                 async with aclosing(self._recv_file_once()) as loop:
-                    _logger.debug(f"receiving sub-file={self.current_file}")
+                    _logger.debug(f"receiving sub-file={self.current_transfer}")
                     async for _ in loop:
                         yield _
                 await self.net_sender(code)

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import socket
 import sys
+from asyncio import TaskGroup
 from typing import Optional
 
 from src.avails import RemotePeer, WireData, const, use
@@ -14,7 +15,7 @@ from .wire_io import WireIO
 _logger = logging.getLogger(__name__)
 
 
-class Acceptor(TaskGroupMixIn, AExitStackMixIn):
+class Acceptor(AExitStackMixIn):
 
     def __init__(
             self,
@@ -35,6 +36,7 @@ class Acceptor(TaskGroupMixIn, AExitStackMixIn):
         self.back_log = 4
         self.network_protocol = protocol
         self.blocked_ips = set()
+        self._task_group = TaskGroup()
 
     async def initiate(self):
         _logger.info(f"Initiating Acceptor {self.address}")
@@ -42,7 +44,6 @@ class Acceptor(TaskGroupMixIn, AExitStackMixIn):
         self._start_socket()
         assert self.main_socket is not None
 
-        await self._exit_stack.enter_async_context(self._task_group)
         stopping = self._finalizing.is_set
         while not stopping():
             try:
@@ -125,7 +126,7 @@ class Acceptor(TaskGroupMixIn, AExitStackMixIn):
 
     async def __aenter__(self):
         self._exit_stack.__aenter__()
-        self._exit_stack.enter_context(self._task_group)
+        await self._exit_stack.enter_async_context(self._task_group)
         self._initiate_task = asyncio.create_task(self.initiate(), name="net.AcceptEndpoint")
         return self
 

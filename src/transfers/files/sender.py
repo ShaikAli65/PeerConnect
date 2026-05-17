@@ -1,6 +1,8 @@
 import asyncio
 import struct
 from contextlib import aclosing
+from typing import Awaitable
+from typing import Callable
 
 from src import net
 from src.avails import const
@@ -39,7 +41,7 @@ class Sender(
     timeout = const.DEFAULT_TRANSFER_TIMEOUT
 
     def __init__(self, peer_obj, transfer_id, file_list: list[FileItem], status_updater):
-        self.transfer_task = None
+        self.transfer_task = None  # type: asyncio.Task | None
         self.state = TransferState.PREPARING
         self.files_to_send = file_list
         self._transfer_id = transfer_id
@@ -47,9 +49,9 @@ class Sender(
         self.status_updater = status_updater
         self.should_stop = False
         self._current_file_idx = -1
-        self.net_sender = None
-        self.net_receiver = None
-        self._expected_exps = set()
+        self.net_sender = None  # type: Callable[[bytes],Awaitable[int]]
+        self.net_receiver = None # type: Callable[[int], Awaitable[bytes]]
+
         self._on_completion_event = asyncio.Event()
 
     async def start_transfer(self):
@@ -64,28 +66,31 @@ class Sender(
               and self.should_stop is False
         ):
             self._current_file_idx += 1
-            await self.wrap_exp_handling(self.net_sender, HEADERS.CONTINUE_TRANSFER)
 
-            await self.send_file_metadata(self.current_file)
+            try:
+                await self.net_sender(HEADERS.CONTINUE_TRANSFER)
+                await self.send_file_metadata(self.current_transfer)
+            except Exception as exp:
+                self.handle_exception(exp)
 
-            file_reader = FileItemReader(self.current_file)
+            file_reader = FileItemReader(self.current_transfer)
             self.setup_status(file_reader)
 
             async with aclosing(self.send_one_file(file_reader)) as loop:
                 try:
                     updater = self.status_updater.update_status  # localize function
-                    _logger.info(f"sending file {self.current_file}")
+                    _logger.info(f"sending file {self.current_transfer}")
                     async for _ in loop:
                         await updater(file_reader.seek_pos)
                         yield _
                 finally:
-                    self.current_file.seeked = file_reader.seek_pos
+                    self.current_transfer.seeked = file_reader.seek_pos
                     _logger.debug(
-                        f"setting seeked attribute of {self.current_file=}, {file_reader=}"
+                        f"setting seeked attribute of {self.current_transfer=}, {file_reader=}"
                     )
 
             await self.status_updater.close()
-            _logger.info(f"file sent {self.current_file}")
+            _logger.info(f"file sent {self.current_transfer}")
 
         # end of transfer, signalling that there are no more files
         await self.wrap_exp_handling(self.net_sender, HEADERS.END_OF_TRANSFER)
@@ -122,7 +127,7 @@ class Sender(
         )
         file_object = bytes(file_item)
         file_packet = struct.pack("!I", len(file_object)) + file_object
-        await self.wrap_exp_handling(self.net_sender, file_packet)
+        await self.net_sender(file_packet)
 
     async def send_one_file(self, file_reader: AbstractReader):
         """
@@ -151,6 +156,7 @@ class Sender(
         self.state = TransferState.SENDING
         self._on_completion_event.clear()
         interrupted_file = self.files_to_send[self._current_file_idx]
+        _logger.debug(f"{self._log_prefix} resuming transfer of {interrupted_file=}")
         # synchronizing last file sent
         try:
             interrupted_file.seeked = await net.recv_int(
@@ -190,7 +196,7 @@ class Sender(
         return self._transfer_id
 
     @property
-    def current_file(self) -> FileItem:
+    def current_transfer(self) -> FileItem:
         return self.files_to_send[self._current_file_idx]
 
     async def __aenter__(self):

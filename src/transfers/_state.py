@@ -1,5 +1,6 @@
 import enum
 
+
 class TransferState(enum.Enum):
     PREPARING = 1
     CONNECTING = 2
