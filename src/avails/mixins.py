@@ -1,5 +1,8 @@
 import asyncio
+import functools
+import inspect
 import logging
+import reprlib
 import sys
 from asyncio import CancelledError, TaskGroup
 from contextlib import AsyncExitStack
@@ -197,6 +200,194 @@ class AggregatingAsyncExitStack(AsyncExitStack):
     resources need to release simultaneously and all errors should be visible.
     """
     __slots__ = ()
+
+    def print_exit_callbacks(self, *, file=None, include_closure=True):
+        """Print a structured view of registered exit callbacks.
+
+        The output is intentionally diagnostic: it uses CPython's private
+        ``_exit_callbacks`` storage because that is where ``AsyncExitStack``
+        keeps the registered ``__exit__``/``__aexit__`` wrappers. This method
+        only reads the deque and does not change unwind order.
+        """
+        file = file or sys.stdout
+        exit_callbacks = list(getattr(self, '_exit_callbacks', ()))
+        print(
+            f"{self.__class__.__name__} exit callbacks "
+            f"(count={len(exit_callbacks)}, order=LIFO/unwind order)",
+            file=file,
+        )
+
+        if not exit_callbacks:
+            print("  <empty>", file=file)
+            return
+
+        total = len(exit_callbacks)
+        for unwind_index, (is_sync, callback) in enumerate(reversed(exit_callbacks), 1):
+            registered_index = total - unwind_index
+            print(f"\n[{unwind_index}] registered_index={registered_index}", file=file)
+            details = self._describe_exit_callback(
+                callback,
+                is_sync=is_sync,
+                include_closure=include_closure,
+            )
+            self._print_structured(details, file=file, indent=2)
+
+    @classmethod
+    def _describe_exit_callback(cls, callback, *, is_sync, include_closure):
+        details = {
+            "exit_type": "sync __exit__/callback" if is_sync else "async __aexit__/callback",
+            "callback": cls._describe_callable(callback, include_closure=include_closure),
+        }
+
+        wrapped = getattr(callback, "__wrapped__", None)
+        if wrapped is not None:
+            details["wrapped_callback"] = cls._describe_callable(
+                wrapped,
+                include_closure=False,
+            )
+
+        if inspect.ismethod(callback):
+            details["bound_method"] = {
+                "self": cls._describe_object(callback.__self__),
+                "function": cls._describe_callable(
+                    callback.__func__,
+                    include_closure=include_closure,
+                ),
+            }
+
+        if isinstance(callback, functools.partial):
+            details["partial"] = cls._describe_partial(callback, include_closure=include_closure)
+
+        return details
+
+    @classmethod
+    def _describe_callable(cls, callback, *, include_closure):
+        unwrapped = inspect.unwrap(callback)
+        details = {
+            "object_type": cls._type_name(callback),
+            "module": getattr(callback, "__module__", None),
+            "qualname": getattr(callback, "__qualname__", None),
+            "name": getattr(callback, "__name__", None),
+            "source": cls._source_location(unwrapped),
+        }
+
+        if unwrapped is not callback:
+            details["unwrapped"] = {
+                "module": getattr(unwrapped, "__module__", None),
+                "qualname": getattr(unwrapped, "__qualname__", None),
+                "source": cls._source_location(unwrapped),
+            }
+
+        if include_closure:
+            closure = cls._closure_details(callback)
+            if closure:
+                details["closure"] = closure
+
+        return details
+
+    @classmethod
+    def _describe_partial(cls, callback, *, include_closure):
+        return {
+            "func": cls._describe_callable(
+                callback.func,
+                include_closure=include_closure,
+            ),
+            "args": [cls._safe_repr(arg) for arg in callback.args],
+            "keywords": {
+                key: cls._safe_repr(value)
+                for key, value in (callback.keywords or {}).items()
+            },
+        }
+
+    @classmethod
+    def _closure_details(cls, callback):
+        try:
+            closure_vars = inspect.getclosurevars(callback)
+        except TypeError:
+            return {}
+
+        details = {}
+        if closure_vars.nonlocals:
+            details["nonlocals"] = {
+                key: cls._safe_repr(value)
+                for key, value in closure_vars.nonlocals.items()
+            }
+        if closure_vars.globals:
+            details["globals"] = sorted(closure_vars.globals)
+        if closure_vars.unbound:
+            details["unbound"] = sorted(closure_vars.unbound)
+        return details
+
+    @classmethod
+    def _describe_object(cls, obj):
+        return {
+            "object_type": cls._type_name(obj),
+            "module": getattr(obj, "__module__", None),
+            "class": cls._type_name(type(obj)),
+        }
+
+    @staticmethod
+    def _source_location(callback):
+        try:
+            source_file = inspect.getsourcefile(callback) or inspect.getfile(callback)
+        except TypeError:
+            return None
+
+        try:
+            _, start_line = inspect.getsourcelines(callback)
+        except (OSError, TypeError):
+            start_line = None
+
+        if source_file is None:
+            return None
+        if start_line is None:
+            return source_file
+        return f"{source_file}:{start_line}"
+
+    @staticmethod
+    def _safe_signature(callback, *, follow_wrapped=True):
+        try:
+            return str(inspect.signature(callback, follow_wrapped=follow_wrapped))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _safe_repr(obj):
+        try:
+            return reprlib.repr(obj)
+        except Exception as exp:
+            return f"<repr failed: {type(exp).__name__}: {exp}>"
+
+    @staticmethod
+    def _type_name(obj):
+        typ = obj if isinstance(obj, type) else type(obj)
+        return f"{typ.__module__}.{typ.__qualname__}"
+
+    @classmethod
+    def _print_structured(cls, value, *, file, indent):
+        prefix = " " * indent
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if isinstance(item, (dict, list, tuple)):
+                    print(f"{prefix}{key}:", file=file)
+                    cls._print_structured(item, file=file, indent=indent + 2)
+                else:
+                    print(f"{prefix}{key}: {item}", file=file)
+            return
+
+        if isinstance(value, (list, tuple)):
+            if not value:
+                print(f"{prefix}[]", file=file)
+                return
+            for item in value:
+                if isinstance(item, (dict, list, tuple)):
+                    print(f"{prefix}-", file=file)
+                    cls._print_structured(item, file=file, indent=indent + 2)
+                else:
+                    print(f"{prefix}- {item}", file=file)
+            return
+
+        print(f"{prefix}{value}", file=file)
 
     async def __aexit__(self, *exc_details):
         if any(exc_details):
