@@ -39,6 +39,7 @@ class TransferUpdate:
     progress: int | float | None = None
     confirmation: bool | None = None
     cancelled: bool = False
+    completed: bool = False
     error: str | None = None
 
 

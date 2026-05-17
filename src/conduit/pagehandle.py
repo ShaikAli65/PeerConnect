@@ -22,7 +22,7 @@ from conduit.handleprofiles import align_profiles, set_selected_profile
 from src.avails import const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import Dispatcher
-from src.conduit.app_event_subs import sub_to_remote_peer_updates
+from src.conduit.app_event_subs import sub_to_remote_peer_updates, sub_to_transfer_updates
 from src.conduit.ui_codec import DataWeaver
 from src.configurations.appconfig import AppConfig, AppRunTime
 from websockets import ConnectionClosedError, WebSocketServerProtocol
@@ -316,6 +316,7 @@ async def subscribe_to_app_events(
 ):
     await exit_stack.enter_async_context(tg := TaskGroup())
     sub_to_remote_peer_updates(app_events, frontend, tg)
+    sub_to_transfer_updates(app_events, frontend, tg)
 
 
 async def init_page_servers(app_config, app_runtime: AppRunTime):
