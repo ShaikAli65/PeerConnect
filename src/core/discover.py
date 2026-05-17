@@ -35,14 +35,12 @@ Discovery State Machine
 
 import asyncio
 import logging
-from typing import NamedTuple, TYPE_CHECKING
+from typing import NamedTuple
 
 import src.net.utils as net_util
-from src.avails import Router, WireData, const, use
-from src.avails.mixins import Dispatcher
-from src.conduit import webpage
 from src import net
-from src.conduit.ui_events import DiscoveryPeerNameRequested
+from src.avails import Router, WireData, const, use
+from src.core.user_prompts import UserPrompts
 from src.transfers import DISCOVERY
 
 _logger = logging.getLogger(__name__)
@@ -57,6 +55,7 @@ async def discovery_initiate(
         in_network,
         finalizing_event,
         transport,
+        user_prompts: UserPrompts,
 ):
     """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
     discovery_router = Router()
@@ -81,7 +80,8 @@ async def discovery_initiate(
             in_network,
             finalizing_event,
             discovery_transport,
-            this_remote_peer
+            this_remote_peer,
+            user_prompts,
         )
     )
     return DiscoveryService(discovery_transport, discovery_router)
@@ -128,7 +128,8 @@ async def send_discovery_requests(multicast_addr,
                                   in_network,
                                   finalizing,
                                   transport,
-                                  this_remote_peer):
+                                  this_remote_peer,
+                                  user_prompts: UserPrompts):
     """Sends multicast discovery requests with timeouts and passive fallback; queries user for peer name if unbootstrapped"""
 
     ping_data = bytes(
@@ -171,18 +172,16 @@ async def send_discovery_requests(multicast_addr,
     # try requesting user a host name of peer that is already in network
     if not kad_server.is_bootstrapped:
         _logger.debug(f"requesting user for peer name after waiting for {const.DISCOVER_TIMEOUT}s")
-        # TODO: Improve on this
-        await _try_asking_user(transport, ping_data)
+        await _try_asking_user(transport, ping_data, user_prompts)
 
     if not task.done():
         await task
 
 
-async def _try_asking_user(transport, discovery_packet):
+async def _try_asking_user(transport, discovery_packet, user_prompts: UserPrompts):
     reason = None
     while True:
-        # webpage.send_prompt_and_get_response(DiscoveryPeerNameRequested())
-        if peer_name := await webpage.ask_user_peer_name_for_discovery(reason):
+        if peer_name := await user_prompts.ask_discovery_peer_name(reason):
             try:
                 async for family, sock_type, proto, _, addr in net_util.get_addr_info(
                         peer_name,

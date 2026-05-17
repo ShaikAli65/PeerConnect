@@ -10,6 +10,7 @@ from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import _kademlia
 from src.gossip import app_gossip
 from src.core.discover import discovery_initiate
+from src.core.user_prompts import UserPrompts
 from src.net import requests
 
 _logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ async def initiate(
       peer_service,
       app_runtime: AppRunTime,
       app_config: AppConfig,
+      user_prompts: UserPrompts,
 ):
     """
     Initializes the networking and peer-to-peer communication components
@@ -148,6 +150,7 @@ async def initiate(
         app_runtime.in_network,
         app_runtime.finalizing,
         dgram_transport,
+        user_prompts,
     )
 
     # this task is internally managed by KademliaServer

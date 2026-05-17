@@ -149,6 +149,7 @@ async def init_app(app_runtime: AppRunTime):
     _logger.info("initiating web page servers")
 
     frontend = await pagehandle.init_page_servers(app_config, app_runtime)
+    user_prompts = frontend_web.WebUserPrompts(frontend)
 
     _logger.debug("waiting for profile selection")
     current_profile = await pagehandle.wait_for_profile_selection(frontend, app_runtime)
@@ -174,6 +175,7 @@ async def init_app(app_runtime: AppRunTime):
         peer_service,
         app_runtime,
         app_config,
+        user_prompts,
     )
 
     conn_manager = await init_connection_manager(
@@ -208,8 +210,8 @@ async def init_app(app_runtime: AppRunTime):
         this_remote_peer,
         current_profile,
         conn_manager,
-        frontend_web.ask_user_for_transfer_consent(frontend),
-        frontend_web.WebpageTransferEvents(frontend),
+        user_prompts,
+        app_runtime.app_events,
     )
 
     _logger.info("attaching page handlers")

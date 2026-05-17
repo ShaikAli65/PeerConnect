@@ -17,6 +17,11 @@ _logger = logging.getLogger(__name__)
 
 __all__ = (
     "PeerStatusUpdate",
+    "TransferStarted",
+    "TransferProgressUpdated",
+    "TransferCompleted",
+    "TransferIncomplete",
+    "TransferConfirmation",
     "AppEventsBus",
     "create_app_events_bus",
 )
@@ -25,6 +30,43 @@ __all__ = (
 @dataclass(frozen=True, slots=True)
 class PeerStatusUpdate(AppEventBase):
     remote_peer: "RemotePeer"
+
+
+@dataclass(frozen=True, slots=True)
+class TransferStarted(AppEventBase):
+    transfer_id: str
+    peer_id: str
+    kind: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TransferProgressUpdated(AppEventBase):
+    transfer_id: str
+    peer_id: str
+    item_path: str | None
+    progress: int | float
+
+
+@dataclass(frozen=True, slots=True)
+class TransferCompleted(AppEventBase):
+    transfer_id: str
+    peer_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class TransferIncomplete(AppEventBase):
+    transfer_id: str
+    peer_id: str
+    item_path: str | None
+    progress: int | float | None
+    error: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TransferConfirmation(AppEventBase):
+    transfer_id: str
+    peer_id: str
+    confirmed: bool
 
 
 class AppEventsBus:

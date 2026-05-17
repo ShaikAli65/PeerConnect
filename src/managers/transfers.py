@@ -20,6 +20,8 @@ from src.avails.exceptions import (
     TransferIncomplete,
     TransferRejected,
 )
+from src.core import app_events
+from src.core.user_prompts import UserPrompts
 from src.managers import ProfileManager
 from src.managers.connection import ConnectionManager
 from src.net.events import ConnectionContext, ConnectionEvent
@@ -44,16 +46,16 @@ def init_transfer_manager(
       this_peer: RemotePeer,
       current_profile: ProfileManager,
       connection_manager: ConnectionManager,
-      ask_user: TransferConsent.TransferConsentPrompt,
-      transfer_events: TransferEvents,
+      user_prompts: UserPrompts,
+      app_event_bus: app_events.AppEventsBus,
 ) -> TransferManager:
-    transfer_consent = TransferConsent(current_profile, ask_user)
+    transfer_consent = TransferConsent(current_profile, user_prompts)
     tm = TransferManager(
         this_peer_id=this_peer.peer_id,
         connection_manager=connection_manager,
         default_download_path=const.PATH_DOWNLOAD,
         transfer_consenter=transfer_consent,
-        transfer_events=transfer_events,
+        transfer_events=AppEventTransferEvents(app_event_bus),
     )
 
     return tm
@@ -72,24 +74,22 @@ class TransferConsent:
         * waits for the receiving peer's one-byte confirmation response
         * raises ``TransferRejected`` on rejection, timeout, or invalid response
     """
-    TransferConsentPrompt = Callable[[str], Awaitable[tuple[bool, bool]]]
-
     def __init__(
           self,
-          current_profile,
-          ask_user: TransferConsentPrompt,
+          current_profile: ProfileManager,
+          user_prompts: UserPrompts,
           *,
           timeout=const.DEFAULT_TRANSFER_TIMEOUT,
     ):
         self.current_profile = current_profile
-        self.ask_user = ask_user
+        self.user_prompts = user_prompts
         self.timeout = timeout
 
     async def confirm_receiving(self, peer_id: str) -> bool:
         if (agreed := self._remembered_choice(peer_id)) is not None:
             return bool(agreed)
 
-        confirmed, remember = await self.ask_user(peer_id)
+        confirmed, remember = await self.user_prompts.ask_transfer_consent(peer_id)
 
         if remember is not None:
             await self.current_profile.add_transfers_agreed(peer_id, remember)
@@ -118,6 +118,68 @@ class TransferConsent:
 
     def _remembered_choice(self, peer_id: str):
         return getattr(self.current_profile, "transfers_agreed", {}).get(peer_id, None)
+
+
+class AppEventTransferEvents(TransferEvents):
+    def __init__(self, app_event_bus: app_events.AppEventsBus):
+        self.app_event_bus = app_event_bus
+
+    async def transfer_started(self, transfer: AbstractTransferHandle):
+        self.app_event_bus.publish(
+            app_events.TransferStarted(
+                transfer_id=str(transfer.id),
+                peer_id=transfer.peer.peer_id,
+                kind=self._transfer_kind(transfer),
+            )
+        )
+
+    async def transfer_update(self, transfer: AbstractTransferHandle):
+        self.app_event_bus.publish(
+            app_events.TransferProgressUpdated(
+                transfer_id=str(transfer.id),
+                peer_id=transfer.peer.peer_id,
+                item_path=self._current_item_path(transfer),
+                progress=transfer.status_updater.current_status,
+            )
+        )
+
+    async def transfer_completed(self, transfer: AbstractTransferHandle):
+        self.app_event_bus.publish(
+            app_events.TransferCompleted(
+                transfer_id=str(transfer.id),
+                peer_id=transfer.peer.peer_id,
+            )
+        )
+
+    async def transfer_incomplete(self, transfer: AbstractTransferHandle, error):
+        self.app_event_bus.publish(
+            app_events.TransferIncomplete(
+                transfer_id=str(transfer.id),
+                peer_id=transfer.peer.peer_id,
+                item_path=self._current_item_path(transfer),
+                progress=transfer.status_updater.current_status,
+                error=str(error) if error else None,
+            )
+        )
+
+    async def transfer_confirmation(self, transfer: AbstractTransferHandle, confirmation_details):
+        self.app_event_bus.publish(
+            app_events.TransferConfirmation(
+                transfer_id=str(transfer.id),
+                peer_id=transfer.peer.peer_id,
+                confirmed=bool(confirmation_details),
+            )
+        )
+
+    @staticmethod
+    def _current_item_path(transfer: AbstractTransferHandle):
+        current = transfer.current_transfer
+        return str(current.path) if current is not None else None
+
+    @staticmethod
+    def _transfer_kind(transfer: AbstractTransferHandle):
+        record = getattr(transfer, "kind", None)
+        return getattr(record, "value", record)
 
 
 class TransferManager:
@@ -173,6 +235,7 @@ class TransferManager:
             async with self._sender_connection(sender, HEADERS.CMD_FILE_CONN) as connection:
                 await self._run_transfer(status_updater, sender, connection)
         except TransferRejected as exp:
+            await self.transfer_events.transfer_confirmation(sender, False)
             await self.transfer_events.transfer_incomplete(sender, exp)
             raise
         finally:
@@ -203,6 +266,7 @@ class TransferManager:
             ) as connection:
                 await self._run_transfer(status_updater, sender, connection)
         except TransferRejected as exp:
+            await self.transfer_events.transfer_confirmation(sender, False)
             await self.transfer_events.transfer_incomplete(sender, exp)
             raise
         finally:
@@ -239,6 +303,7 @@ class TransferManager:
                 await self._run_transfer(status_iterator, sender, connection1)
 
         except TransferRejected as exp:
+            await self.transfer_events.transfer_confirmation(sender, False)
             await self.transfer_events.transfer_incomplete(sender, exp)
             raise
         finally:
@@ -506,6 +571,7 @@ class TransferManager:
           transfer_handle: AbstractTransferHandle,
           *connections,
     ):
+        await self.transfer_events.transfer_started(transfer_handle)
         async with transfer_handle, aclosing(transfer_handle.start_transfer()) as loop:
             for connection in connections:
                 transfer_handle.connection_made(connection)
@@ -568,5 +634,7 @@ class TransferManager:
 
         if transfer_handle.state in (TransferState.COMPLETED, TransferState.ABORTING):
             self.transfers_book.move(transfer_handle.id, TransferBookBucket.COMPLETED)
+            if transfer_handle.state is TransferState.COMPLETED:
+                await self.transfer_events.transfer_completed(transfer_handle)
         elif transfer_handle.state in (TransferState.PAUSED, TransferState.CONNECTING):
             self.transfers_book.move(transfer_handle.id, TransferBookBucket.SCHEDULED)

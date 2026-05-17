@@ -1,23 +1,28 @@
 import asyncio
-from typing import runtime_checkable
+from typing import TYPE_CHECKING, runtime_checkable
 
-from conduit import headers
-from conduit.pagehandle import FrontEndMessagesDispatcher, FrontEndWebSockets
-from conduit.ui_events import DecideIncomingTransfer, IncomingTransferDecisionRequested
+from src.conduit.ui_events import (
+    DecideIncomingTransfer,
+    DiscoveryPeerNameRequested,
+    IncomingTransferDecisionRequested,
+    ProvideDiscoveryPeerName,
+)
 from src.avails import use
 from src.avails.exceptions import InvalidPacket
 from src.conduit import ui_codec
 from src.conduit.bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
     FrontEnd, UIPromptReply
 from src.conduit.ui_codec import DataWeaver
-from transfers.abc import AbstractTransferHandle, TransferEvents
+
+if TYPE_CHECKING:
+    from src.conduit.pagehandle import FrontEndMessagesDispatcher, FrontEndWebSockets
 
 
 @runtime_checkable
 class WebFrontend(FrontEnd):
     """Frontend Abstraction for Web UI"""
 
-    def __init__(self, sender: FrontEndWebSockets, receiver: FrontEndMessagesDispatcher):
+    def __init__(self, sender: "FrontEndWebSockets", receiver: "FrontEndMessagesDispatcher"):
         self.sender = sender
         self.receiver = receiver
 
@@ -76,64 +81,19 @@ class WebFrontend(FrontEnd):
         return self.receiver
 
 
-class WebpageTransferEvents(TransferEvents):
-    def __init__(self, web_frontend: WebFrontend):
-        self.web_frontend = web_frontend
+class WebUserPrompts:
+    def __init__(self, frontend: WebFrontend):
+        self.frontend = frontend
 
-    async def transfer_started(self, transfer: AbstractTransferHandle):
-        pass
-
-    async def transfer_update(self, transfer_handle: AbstractTransferHandle):
-        # TODO: use `TransferStatusChanged` and `TransferUpdate` from ui_events for all of the below methods
-        status_update = DataWeaver(
-            header=headers.TRANSFER_UPDATE,
-            content={
-                'item_path': str(transfer_handle.current_transfer.path),
-                'progress': transfer_handle.status_updater.current_status,
-                'transfer_id': transfer_handle.id,
-            },
-            peer_id=transfer_handle.peer.peer_id,
+    async def ask_discovery_peer_name(self, reason: str | None) -> str | None:
+        reply = await self.frontend.send_prompt_and_get_response(
+            DiscoveryPeerNameRequested(use.get_unique_id(str), reason),
+            ProvideDiscoveryPeerName,
         )
-        self.web_frontend.send_data_to_frontend(status_update)
+        return reply.peer_name
 
-    async def transfer_completed(self, transfer: AbstractTransferHandle):
-        pass
-
-    async def transfer_incomplete(self, transfer_handle: AbstractTransferHandle, error):
-        content = {
-            'transfer_id': transfer_handle.id,
-            'cancelled': True,
-        }
-        if transfer_handle.current_transfer is not None:
-            content.update(
-                {
-                    'item_path': str(transfer_handle.current_transfer.path),
-                    'progress': transfer_handle.status_updater.current_status,
-                })
-
-        content.update({'error': str(error)} if error else {})
-
-        status_update = DataWeaver(
-            header=headers.TRANSFER_UPDATE,
-            content=content,
-            peer_id=transfer_handle.peer.peer_id,
-        )
-        self.web_frontend.send_data_to_frontend(status_update)
-
-    async def transfer_confirmation(self, transfer_handle: AbstractTransferHandle, confirmation_details):
-        dw = DataWeaver(
-            header=headers.TRANSFER_UPDATE,
-            content={"confirmation": confirmation_details, 'transferId': transfer_handle.id},
-            peer_id=transfer_handle.peer.peer_id,
-        )
-        self.web_frontend.send_data_to_frontend(dw)
-
-
-def ask_user_for_transfer_consent(frontend):
-    async def _ask_user_for_transfer_consent(peer_id: str):
-        confirmation = await frontend.send_prompt_and_get_response(
+    async def ask_transfer_consent(self, peer_id: str) -> tuple[bool, bool | None]:
+        confirmation = await self.frontend.send_prompt_and_get_response(
             IncomingTransferDecisionRequested(use.get_unique_id(str), peer_id), DecideIncomingTransfer
         )
-        return confirmation.confirmed, bool(confirmation.remember)
-
-    return _ask_user_for_transfer_consent
+        return confirmation.confirmed, confirmation.remember
