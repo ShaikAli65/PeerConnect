@@ -154,6 +154,6 @@ async def initiate(
     )
 
     # this task is internally managed by KademliaServer
-    await asyncio.create_task(kad_server.add_this_peer_to_lists())
+    asyncio.create_task(kad_server.add_this_peer_to_lists())
 
     return requests_service, gossip_service, gossip_searcher, discovery_service, kad_server

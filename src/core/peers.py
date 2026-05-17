@@ -4,7 +4,7 @@ Helper functions to deal with peers in network
 
 import logging
 from dataclasses import dataclass
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 from kademlia import crawling
 from src.avails import PeerDict, RemotePeer, const, use
@@ -123,7 +123,7 @@ class PeerService:
 
         return None
 
-    async def get_remote_peer(self, peer_id) -> Optional[RemotePeer]:  # TODO: fix this
+    async def get_remote_peer(self, peer_id) -> RemotePeer:
         """
         Tries to check for peer_id in cached App.peer_list
 
