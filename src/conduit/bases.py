@@ -140,6 +140,7 @@ AnyUIResult = typing.TypeVar("AnyUIResult", bound=UIResult)
 AnyUIError = typing.TypeVar("AnyUIError", bound=UIError)
 
 
+@typing.runtime_checkable
 class FrontEnd(Protocol):
     """
     Interface for defining the structure and interaction of a front-end system.

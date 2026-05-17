@@ -1,6 +1,7 @@
 """Typed UI event contract for the conduit boundary.
 
 These classes describe semantic events that cross the UI boundary.
+
 They do not describe websocket framing, reply bookkeeping, or dispatcher
 implementation details. The websocket layer should serialize/deserialize
 these events through a codec module.
@@ -111,13 +112,6 @@ class SendDirectoryToMultiplePeers(UICommand):
 
 
 @dataclass(frozen=True, slots=True)
-class DecideIncomingTransfer(UIPromptReply):
-    peer_id: str
-    confirmed: bool
-    remember: bool | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class ProvideDiscoveryPeerName(UIPromptReply):
     peer_name: str | None
 
@@ -192,3 +186,10 @@ class DiscoveryPeerNameRequested(UIPrompt):
 class IncomingTransferDecisionRequested(UIPrompt):
     peer_id: str
     type: str = EventType.DATA
+
+
+@dataclass(frozen=True, slots=True)
+class DecideIncomingTransfer(UIPromptReply):
+    peer_id: str
+    confirmed: bool
+    remember: bool | None = None

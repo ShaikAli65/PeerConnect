@@ -11,6 +11,7 @@ import sys
 from asyncio import TaskGroup
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
+from functools import wraps
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import websockets
@@ -24,14 +25,17 @@ from src.avails.exceptions import InvalidPacket, TransferIncomplete
 from src.avails.mixins import Dispatcher
 from src.conduit.app_event_subs import sub_to_remote_peer_updates, sub_to_transfer_updates
 from src.conduit.ui_codec import DataWeaver
-from src.configurations.appconfig import AppConfig, AppRunTime
+from src.configurations.appconfig import AppRunTime
 from websockets import ConnectionClosedError, WebSocketServerProtocol
 
 logger = logging.getLogger(__name__)
 
 
 class FrontEndWebSocket:
-    """Wrapping a Websocket Transport with buffering
+    """
+    Wrapping a Websocket Transport with buffering if websocket fails, this will retry sending
+    the failed messages to the websocket when it becomes available through the `update_transport` method.
+    Immediately sends messages to the websocket if it is connected, otherwise buffers them
 
     Notes:
         * Does not own the websocket transport, context manager enter and exit should be dealt with by the caller
@@ -116,8 +120,8 @@ class FrontEndWebSocket:
         if not self.buffer.empty():
             logger.warning(f"websocket buffer not empty len={self.buffer.qsize()}")
 
-        if (t := getattr(self, '_buffer_sender_task', None)) and not t.done():
-            await use.safe_cancel_task(t)
+        if self._buffer_sender_task.done():
+            await use.safe_cancel_task(self._buffer_sender_task)
 
         logger.debug("closed front end websocket")
         self._finalized = True
@@ -153,10 +157,12 @@ class FrontEndWebSockets(AExitStackMixIn):
         while True:
             message = await self._msg_queue.get()
             if message is None:
-                return
+                break
             await self(message)
 
             logger.debug(f"sent, message to frontend={repr(message)[:30]}")
+
+        logger.debug("exiting frontend message sender")
 
     async def __call__(self, message: DataWeaver):
         try:
@@ -173,13 +179,14 @@ class FrontEndWebSockets(AExitStackMixIn):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self._msg_queue.put_nowait(None)
-        await use.safe_cancel_task(self._send_loop_task)
+        # await use.safe_cancel_task(self._send_loop_task)
+        await self._send_loop_task
 
         if not self._msg_queue.empty():
             logger.warning(f"frontend message queue not empty while context manager exit,\
              discarding buffer queue size={self._msg_queue.qsize()}")
 
-        return await self.__aexit__(exc_type, exc_val, exc_tb)
+        return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
 class FrontEndMessagesDispatcher(*Dispatcher):
@@ -226,8 +233,8 @@ async def validate_connection(
     logger.info("verified websocket, waiting for data from websocket")
 
 
-async def _ui_msg_handler(frontend_websockets, msg_dispatcher):
-    async def _handle_ui(web_socket: WebSocketServerProtocol):
+def _ui_msg_handler(frontend_websockets, msg_dispatcher):
+    async def handle_ui(web_socket: WebSocketServerProtocol):
         try:
             await validate_connection(frontend_websockets, web_socket)
         except ConnectionError:
@@ -252,9 +259,10 @@ async def _ui_msg_handler(frontend_websockets, msg_dispatcher):
 
             msg_dispatcher(parsed_data)
 
+    @wraps(handle_ui)
     async def error_wrap(*args, **kwargs):
         try:
-            await _handle_ui(*args, **kwargs)
+            await handle_ui(*args, **kwargs)
         except websockets.WebSocketException as we:
             logger.exception(f"error occurred in handler exp:{we}", stacklevel=2)
 
@@ -323,6 +331,7 @@ async def init_page_servers(app_config, app_runtime: AppRunTime):
     _run_page_server(port_page_serve=app_config.page_serve_port, exit_stack=app_runtime.exit_stack)
     msg_disp = FrontEndMessagesDispatcher()
     frontend_websockets = FrontEndWebSockets()
+    await app_runtime.exit_stack.enter_async_context(msg_disp)
     await app_runtime.exit_stack.enter_async_context(
         start_websocket_server(_ui_msg_handler(frontend_websockets, msg_disp))
     )
