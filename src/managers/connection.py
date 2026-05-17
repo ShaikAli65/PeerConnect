@@ -1,13 +1,15 @@
 import asyncio
 import logging
 import time
+from asyncio import TaskGroup
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from src.avails import RemotePeer, Router, WireData, const
 from src.avails.exceptions import InvalidPacket
-from src.avails.mixins import AExitStackMixIn, TaskGroupMixIn
+from src.avails.mixins import AExitStackMixIn
 from src.avails.useables import Lock, get_unique_id, wrap_with_tryexcept
+from src.controllers.bandwidth import BandwidthWatcher
 from src.net import ConnectionEvent, WireIO, ConnectionContext
 from src.net.connection_pool import ConnectionPool
 from src.net.requests import send_request
@@ -22,17 +24,7 @@ async def init_connection_manager(req_service, exit_stack):
     return connection_manager
 
 
-class BandwidthWatcher:
-    def __init__(
-          self,
-          connection_pool: ConnectionPool,
-          max_combined_mbps=None,
-    ):
-        self.connection_pool = connection_pool
-        self.max_combined_mbps = max_combined_mbps
-
-
-class ConnectionManager(TaskGroupMixIn, AExitStackMixIn):
+class ConnectionManager(AExitStackMixIn):
     def __init__(self, connection_router, req_service, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.connection_pool = ConnectionPool(
@@ -45,6 +37,7 @@ class ConnectionManager(TaskGroupMixIn, AExitStackMixIn):
         self._connectivity_check_locks = defaultdict(Lock)
         self.req_service = req_service
         self._stopping = asyncio.Event()
+        self._task_group = TaskGroup()
 
     @asynccontextmanager
     async def get_connection(self, peer: RemotePeer):
@@ -148,7 +141,7 @@ class ConnectionManager(TaskGroupMixIn, AExitStackMixIn):
         self._task_group.create_task(_listener(), name=f"connection-listener-{connection.peer_id}")
 
     async def __aenter__(self):
-        self._exit_stack.__aenter__()
+        await self._exit_stack.__aenter__()
         self._stopping.clear()
         await self._exit_stack.enter_async_context(self._task_group)
         return self
