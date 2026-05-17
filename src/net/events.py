@@ -1,14 +1,11 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import AsyncContextManager
 
 from src.avails import AppEventBase
 from src.avails.wire import GossipMessage, WireData
 from .connect import Connection, MsgConnection, NetAddr
 
-__all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'MessageEvent')
-
-if TYPE_CHECKING:
-    from src.managers.connection import ConnectionManager
+__all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'MessageEvent', 'ConnectionContext')
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,3 +36,6 @@ class ConnectionEvent(NetworkEvent):
 class MessageEvent(NetworkEvent):
     msg: WireData
     connection: MsgConnection
+
+
+ConnectionContext = AsyncContextManager[ConnectionEvent]

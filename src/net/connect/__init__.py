@@ -186,10 +186,10 @@ def is_socket_connected(sock: Socket):
             return False
 
 
-def get_free_port(ip=None) -> int:
+def get_free_port(ip) -> int:
     """Gets a free port from the system."""
-    ip = const.THIS_IP.addr_tuple(port=0, ip=ip)
     with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
+        s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
         s.bind(ip)
         return s.getsockname()[1]  # Port is empty
 
