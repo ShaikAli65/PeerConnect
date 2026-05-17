@@ -11,7 +11,7 @@ from src.transfers.files.directory import DirReceiver, DirSender
 from src.transfers.files.receiver import Receiver
 from src.transfers.files.sender import Sender
 
-from tests.common.transfers import DummyStatus
+from tests.utils.transfers import DummyStatus
 
 
 class MemoryEndpoint:
