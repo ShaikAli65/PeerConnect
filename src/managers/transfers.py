@@ -15,14 +15,11 @@ from src.avails import (
     RemotePeer,
     TransferBookBucket, TransfersBook, WireData,
     const,
-    use,
 )
 from src.avails.exceptions import (
     TransferIncomplete,
     TransferRejected,
 )
-from src.conduit import webpage
-from src.conduit.ui_events import DecideIncomingTransfer, IncomingTransferDecisionRequested
 from src.managers import ProfileManager
 from src.managers.connection import ConnectionManager
 from src.net.events import ConnectionContext, ConnectionEvent
@@ -47,20 +44,16 @@ def init_transfer_manager(
       this_peer: RemotePeer,
       current_profile: ProfileManager,
       connection_manager: ConnectionManager,
+      ask_user: TransferConsent.TransferConsentPrompt,
+      transfer_events: TransferEvents,
 ) -> TransferManager:
-    async def ask_user(peer_id: str):
-        confirmation = await webpage.send_prompt_and_get_response(
-            IncomingTransferDecisionRequested(use.get_unique_id(str), peer_id), DecideIncomingTransfer
-        )
-        return confirmation.confirmed, bool(confirmation.remember)
-
     transfer_consent = TransferConsent(current_profile, ask_user)
     tm = TransferManager(
         this_peer_id=this_peer.peer_id,
         connection_manager=connection_manager,
         default_download_path=const.PATH_DOWNLOAD,
         transfer_consenter=transfer_consent,
-        transfer_events=webpage.WebpageTransferEvents(),
+        transfer_events=transfer_events,
     )
 
     return tm

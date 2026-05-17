@@ -3,6 +3,8 @@ from typing import runtime_checkable
 
 from conduit import headers
 from conduit.pagehandle import FrontEndMessagesDispatcher, FrontEndWebSockets
+from conduit.ui_events import DecideIncomingTransfer, IncomingTransferDecisionRequested
+from src.avails import use
 from src.avails.exceptions import InvalidPacket
 from src.conduit import ui_codec
 from src.conduit.bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
@@ -125,3 +127,13 @@ class WebpageTransferEvents(TransferEvents):
             peer_id=transfer_handle.peer.peer_id,
         )
         self.web_frontend.send_data_to_frontend(dw)
+
+
+def ask_user_for_transfer_consent(frontend):
+    async def _ask_user_for_transfer_consent(peer_id: str):
+        confirmation = await frontend.send_prompt_and_get_response(
+            IncomingTransferDecisionRequested(use.get_unique_id(str), peer_id), DecideIncomingTransfer
+        )
+        return confirmation.confirmed, bool(confirmation.remember)
+
+    return _ask_user_for_transfer_consent

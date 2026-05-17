@@ -5,6 +5,7 @@ import webbrowser
 from pathlib import Path
 
 import src.core.async_runner  # noqa
+from conduit import frontend_web
 from kademlia.utils import digest
 from src.avails import RemotePeer, constants as const, use
 from src.conduit import pagehandle
@@ -202,10 +203,13 @@ async def init_app(app_runtime: AppRunTime):
     )
 
     _logger.info("initiating transfer manager")
+
     transfer_manager = init_transfer_manager(
         this_remote_peer,
         current_profile,
-        conn_manager
+        conn_manager,
+        frontend_web.ask_user_for_transfer_consent(frontend),
+        frontend_web.WebpageTransferEvents(frontend),
     )
 
     _logger.info("attaching page handlers")
