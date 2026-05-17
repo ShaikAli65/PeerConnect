@@ -55,7 +55,7 @@ async def load_configs()
 - Constant initialization
 - Default profile creation
 
-### 3. Boot Process (`bootup.py`)  [src](/src/configurations/bootup.py)
+### 3. Boot Process (`bootup.py`)  [src](/bootup.py)
 
 ```python
 async def set_ip_config()

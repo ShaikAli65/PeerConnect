@@ -107,13 +107,7 @@ Efficient reassembly of the file from its big chunks is crucial. Two merging str
 - **Current Implementation:**  
   - The system presently employs the *lazy merging* strategy.
 
-## Conclusion
-
-The multi-stream approach outlined in this documentation significantly improves the transfer speed of large files by mitigating the limitations of TCP flow control and single-stream transfers. Through dynamic connection management and robust merging strategies, the protocol efficiently utilizes available bandwidth, ensuring faster and more reliable file transfers.
-
 ## References
 
 - [Manager API Documentation](/src_docs/managers/README.md)
 - [Connector API Documentation](/src_docs/core/connector.md)
-
-[back](/src_docs/transfer)

@@ -79,7 +79,7 @@ class PeerServer(network.Server):
 3. **Storage Integration**
 
     ```python
-    class Storage(peerstore.Storage):
+    class Storage(peerstore.PeerStorage):
         # Custom peer list storage implementation
     ```
 
