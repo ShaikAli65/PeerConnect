@@ -1,25 +1,24 @@
 import asyncio
-from typing import TYPE_CHECKING, runtime_checkable
+from typing import TYPE_CHECKING
 
+from src.avails import use
+from src.avails.exceptions import InvalidPacket
+from src.conduit import ui_codec
+from src.conduit.bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
+    UIPromptReply
+from src.conduit.ui_codec import DataWeaver
 from src.conduit.ui_events import (
     DecideIncomingTransfer,
     DiscoveryPeerNameRequested,
     IncomingTransferDecisionRequested,
     ProvideDiscoveryPeerName,
 )
-from src.avails import use
-from src.avails.exceptions import InvalidPacket
-from src.conduit import ui_codec
-from src.conduit.bases import AnyUIError, AnyUINotification, AnyUIPrompt, AnyUIPromptReply, AnyUIResult, \
-    FrontEnd, UIPromptReply
-from src.conduit.ui_codec import DataWeaver
 
 if TYPE_CHECKING:
     from src.conduit.pagehandle import FrontEndMessagesDispatcher, FrontEndWebSockets
 
 
-@runtime_checkable
-class WebFrontend(FrontEnd):
+class WebFrontend:  # protocol impl: FrontEnd
     """Frontend Abstraction for Web UI"""
 
     def __init__(self, sender: "FrontEndWebSockets", receiver: "FrontEndMessagesDispatcher"):
@@ -81,11 +80,11 @@ class WebFrontend(FrontEnd):
         return self.receiver
 
 
-class WebUserPrompts:
+class WebUserPrompts:  # protocol impl: UserPrompts
     def __init__(self, frontend: WebFrontend):
         self.frontend = frontend
 
-    async def ask_discovery_peer_name(self, reason: str | None) -> str | None:
+    async def ask_discovery_peer_name(self, reason: str) -> str | None:
         reply = await self.frontend.send_prompt_and_get_response(
             DiscoveryPeerNameRequested(use.get_unique_id(str), reason),
             ProvideDiscoveryPeerName,

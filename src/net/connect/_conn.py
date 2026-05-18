@@ -60,7 +60,7 @@ class ThroughputMixin:
         self._tokens = 0.0  # In bytes
         self._last_token_update = perf_counter()
 
-    async def _apply_limiting(self, nbytes):
+    async def _throttle(self, nbytes):
         if self.max_rate_limit is None:
             return
 
@@ -164,7 +164,7 @@ class Sender(
     async def _process_chunk(self, chunk):
         await self._limiter.wait()
         nbytes = len(chunk)
-        await self._apply_limiting(nbytes)
+        await self._throttle(nbytes)
         await self._send_func(self.sock, bytes(chunk))
         return self._update_throughput(nbytes)
 
@@ -221,7 +221,7 @@ class Receiver(
             received_data += chunk
 
             received_bytes = len(chunk)
-            await self._apply_limiting(received_bytes)
+            await self._throttle(received_bytes)
             self._update_throughput(received_bytes)
 
         return bytes(received_data)

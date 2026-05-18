@@ -88,6 +88,7 @@ async def initiate(
     gossip protocol-based network, and peer discovery services.
 
     Args:
+        user_prompts: user prompts protocol implementation for user inputs
         this_interface (net.Interface): The network interface to be used for communication.
         this_remote_peer: Object representing the remote peer in the network.
         peer_service: Object providing services related to peer management.

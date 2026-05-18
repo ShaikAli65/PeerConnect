@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class UserPrompts(Protocol):
     async def ask_discovery_peer_name(self, reason: str | None) -> str | None:
         """Ask the user for a peer host/name to help discovery."""
