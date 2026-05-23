@@ -1,145 +1,119 @@
 import asyncio
 import itertools
 import logging
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from typing import Any
 
+from avails.exceptions import InvalidStateError
 from src.avails.exceptions import FailedToSend
 
 _logger = logging.getLogger(__name__)
 
-
-class ReAddableOrderedQueue:
-    def __init__(self, size):
-        self.queue = asyncio.PriorityQueue(size)
-        self._ordering = itertools.count()
-
-    async def put(self, item: Any):
-        return await self.queue.put((next(self._ordering), item))
-
-    async def put_back(self, queue_item: Any, ordering):
-        return await self.queue.put((ordering, queue_item))
-
-    async def get(self):
-        return await self.queue.get()
-
-    def put_nowait(self, item: Any):
-        return self.queue.put_nowait((next(self._ordering), item))
-
-    def qsize(self):
-        return self.queue.qsize()
-
-    def empty(self):
-        return self.queue.empty()
-
-    def get_nowait(self):
-        return self.queue.get_nowait()
-
-    @property
-    def maxsize(self):
-        return self.queue.maxsize
-
-    def task_done(self):
-        return self.queue.task_done()
-
-    async def join(self):
-        return await self.queue.join()
+__all__ = ("MessageSocket", "BufferedSend")
 
 
-class ReAddableQueue:
-    def __init__(self, size):
-        self.queue = asyncio.Queue(size)
-
-    async def put_back(self, queue_item, ordering=None):
-        return await self.queue.put(queue_item)
-
-    async def put(self, item: Any):
-        return await self.queue.put(item)
-
-    async def get(self):
-        return None, await self.queue.get()
-
-    def get_nowait(self):
-        return None, self.queue.get_nowait()
-
-    def put_nowait(self, item: Any):
-        return self.queue.put_nowait(item)
-
-    def qsize(self):
-        return self.queue.qsize()
-
-    def empty(self):
-        return self.queue.empty()
-
-    @property
-    def maxsize(self):
-        return self.queue.maxsize
-
-    def task_done(self):
-        return self.queue.task_done()
-
-    async def join(self):
-        return await self.queue.join()
+@dataclass(order=True, slots=True)
+class BufferedSend:
+    ordering: int
+    data: Any = field(compare=False)
+    future: asyncio.Future = field(compare=False)
 
 
 class MessageSocket:
     """
-    Wrapping a Socket Transport with buffering if Socket fails, this will retry sending
-    the failed messages to the Socket when it becomes available through the `update_transport` method.
+    MessageSocket facilitates the management of message sending over a transport
+    connection with optional buffering, ordering, and error handling.
 
-    * Immediately sends messages using Socket if it is connected, otherwise buffers them
-
-    Notes:
-        * Does not own the socket transport, context manager enter and exit should be dealt with by the caller
-
+    This class provides functionality to send messages over a transport, handle
+    disconnections and connection errors gracefully, buffer messages when the
+    transport is unavailable, and ensure ordered delivery if specified. It is
+    suitable for use in scenarios where reliable message delivery and queuing
+    during temporary transport unavailability are desired.
     """
 
     def __init__(
           self,
           transport=None,
+          use_buffering=True,
           buffer_size=None,
           should_prune_buffer_on_full=True,
           ordering=False,
           raise_on_send_failure=False,
           logger=None,
     ):
-        self.stopping = False
-        self.ping_sender = asyncio.Condition()
-        self.max_buffer_size = buffer_size or 0
+        """
+        Args:
+            ordering (bool):
+                Specifies whether messages should be sent in the same order as they are provided
+                when they are failed to send.
+
+            raise_on_send_failure (bool): Determines whether to raise an exception or
+                                          buffer messages upon send failure.
+
+            transport: The transport object used for sending messages.
+
+            use_buffering (bool): Indicates whether buffering should be enabled for
+                                  failed message sends, if False, exceptions will be raised immediately.
+
+            should_prune_buffer_on_full (bool): Specifies whether to prune the buffer
+                                                when it becomes full.
+        """
+
+        self.connection_restablished = asyncio.Condition()
         self.ordering = ordering
         self.raise_on_send_failure = raise_on_send_failure
-        self.buffer = ReAddableOrderedQueue(self.max_buffer_size) if ordering else ReAddableQueue(self.max_buffer_size)
-        self._is_transport_connected = bool(transport)
+        self.buffer = asyncio.PriorityQueue[BufferedSend](buffer_size)
         self.transport = transport
-        self._finalized = False
-        self._logger = logger or _logger
+        self.use_buffering = use_buffering
         self.should_prune_buffer_on_full = should_prune_buffer_on_full
+
+        self._is_transport_connected = bool(transport)
+        self._logger = logger or _logger
         self._prev_connection_error = None
+        self._ordering_msg_buffer_counter = itertools.count()
+        self._finalized = False
 
     async def update_transport(self, transport):
+        if self._finalized:
+            raise InvalidStateError("socket has been finalized")
+
+        if self._is_transport_connected:
+            _logger.warning(
+                f"!> changing transport while connected current={self.transport}, new={transport=}")
+
         self._is_transport_connected = True
         self.transport = transport
-        async with self.ping_sender:
-            self.ping_sender.notify_all()
+        # self.connection_restablished.set()
+        # self.connection_restablished.clear()
+
+        async with self.connection_restablished:
+            self.connection_restablished.notify_all()
 
     async def __call__(self, data):
+        if self._finalized:
+            raise FailedToSend("socket has been finalized")
 
         if not self._is_transport_connected:
-            self._logger.debug(f"! transport not connected buffering data: {data=}")
+            self._logger.debug(f"!> transport not connected buffering data: {data=}")
             return await self._handle_failure(data)
 
         try:
-            self._logger.debug(f"> sending data using connection: {data=!r}")
-            await self.transport.send(data)
-        except OSError as ce:
+            self._logger.debug(f"#> sending data using connection: {data=!r}")
+            return await self.transport.send(data)
+        except ConnectionError as ce:
             self._is_transport_connected = False
             self._prev_connection_error = ce
             return await self._handle_failure(data)
 
     async def _handle_failure(self, data):
+        if not self.use_buffering:
+            raise self._prev_connection_error
+
         future = asyncio.get_running_loop().create_future()
-        await self._add_to_buffer(data, future)
+        await self._add_to_buffer(BufferedSend(next(self._ordering_msg_buffer_counter), data, future))
         if self.raise_on_send_failure:
-            ftos = FailedToSend(f"! transport failed, buffering data: {data=}")
+            ftos = FailedToSend(f"transport failed, buffering data: {data=}")
             ftos.item = data
             ftos.future = future
             raise ftos from self._prev_connection_error
@@ -147,68 +121,59 @@ class MessageSocket:
             return await future
 
     async def _send_buffer(self):
-        while not self.stopping:
-            async with self.ping_sender:
-                await self.ping_sender.wait_for(
-                    lambda: self.stopping or (
-                        self._is_transport_connected
-                        and not self.buffer.empty()
-                    )
+        while not self._finalized:
+            async with self.connection_restablished:
+                await self.connection_restablished.wait_for(
+                    lambda: self._finalized or self._is_transport_connected
                 )
+            # await self.connection_restablished.wait()
 
-            if self.stopping:
-                break
-
-            while not self.stopping and not self.buffer.empty():
-                ordering, (msg, fut) = self.buffer.get_nowait()
+            while not self._finalized:
+                buffered_send = await self.buffer.get()
+                msg, fut = buffered_send.data, buffered_send.future
                 try:
                     if fut.done():
-                        self._logger.debug(f"! dropping cancelled message: {msg=!r}, {fut=!r}")
+                        self._logger.debug(f"!> dropping cancelled message: {msg=!r}, {fut=!r}")
                         continue
-                    self._logger.debug(f"> sending data using connection: {msg=!r}")
+                    self._logger.debug(f"#> sending data using connection: {msg=!r}")
                     fut.set_result(await self.transport.send(msg))
                 except OSError:
                     self._is_transport_connected = False
-                    await self._add_to_buffer(msg, fut, ordering)
+                    await self._add_to_buffer(buffered_send)
                     break
                 except AttributeError:
                     # transport is None, and we got \\"None does not have .send"\\ thing
                     self._is_transport_connected = False
-                    await self._add_to_buffer(msg, fut, ordering)
+                    await self._add_to_buffer(buffered_send)
                     break
 
-    async def _add_to_buffer(self, item, fut, ordering=None):
+    async def _add_to_buffer(self, buffer_send):
         if self._is_buffer_full():
             if not self.should_prune_buffer_on_full:
                 raise ValueError("failed buffer is full, cannot add new packet")
             self._prune_buffer()
-
-        if ordering is None:
-            await self.buffer.put((item, fut))
-            return fut
-
-        await self.buffer.put_back((item, fut), ordering)
-        return fut
+        await self.buffer.put(buffer_send)
+        return buffer_send.future
 
     def _is_buffer_full(self):
-        return 0 < self.max_buffer_size <= self.buffer.qsize()
+        return self.buffer.full()
 
     def _prune_buffer(self):
         """Logs a warning and removes the oldest queued message."""
         try:
-            _ordering, (msg, fut) = self.buffer.get_nowait()
+            buffered_send = self.buffer.get_nowait()
         except asyncio.QueueEmpty:
             return None
 
-        if not fut.done():
+        if not buffered_send.future.done():
             ftos = FailedToSend("failed buffer is full, discarding oldest packet")
-            ftos.item = msg
-            fut.set_exception(ftos)
+            ftos.item = buffered_send.data
+            buffered_send.future.set_exception(ftos)
         self._logger.warning(
-            f"discarding socket message {msg}, buffer full",
+            f"!> discarding socket message {buffered_send}, buffer full",
             exc_info=True,
         )
-        return msg
+        return buffered_send.data
 
     def _may_be_prune_buffer(self):
         """Logs a warning and removes top element from queue"""
@@ -218,30 +183,40 @@ class MessageSocket:
 
     def _fail_pending_buffer(self):
         while not self.buffer.empty():
-            _ordering, (msg, fut) = self.buffer.get_nowait()
-            if fut.done():
+            buffered_msg = self.buffer.get_nowait()
+            if buffered_msg.future.done():
                 continue
             ftos = FailedToSend("message socket closed before buffered packet was sent")
-            ftos.item = msg
-            fut.set_exception(ftos)
+            ftos.item = buffered_msg.data
+            buffered_msg.future.set_exception(ftos)
 
-    async def __aenter__(self):
-        self._buffer_sender_task = asyncio.create_task(self._send_buffer(),
-                                                       name="msg-socket-buffer-sender")
-        return self
+    @asynccontextmanager
+    async def context_manager(self):
+        try:
+            self._buffer_sender_task = asyncio.create_task(self._send_buffer(),
+                                                           name="msg-socket-buffer-sender")
+            yield self
+        finally:
+            if self._finalized:
+                self._logger.warning("!> sending message socket already finalized, ignoring __aexit__")
+                return
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._finalized:
-            return
+            if not self.buffer.empty():
+                self._logger.warning(f"!> failure buffer not empty len={self.buffer.qsize()}")
+                self._fail_pending_buffer()
 
-        if not self.buffer.empty():
-            self._logger.warning(f"failure buffer not empty len={self.buffer.qsize()}")
-            self._fail_pending_buffer()
+            self._finalized = True
+            async with self.connection_restablished:
+                self.connection_restablished.notify_all()
 
-        self.stopping = True
-        async with self.ping_sender:
-            self.ping_sender.notify_all()
+            await self._buffer_sender_task
+            _logger.debug(f"$> stopped message sender for {self.transport=}")
 
-        await self._buffer_sender_task
-        self._logger.debug("closed front end websocket")
-        self._finalized = True
+    def __repr__(self):
+        return (
+            f"<MessageSocket("
+            f"{self.transport}, "
+            f"connected={self._is_transport_connected}, "
+            f"{'[ordered]' if self.ordering else ''}, "
+            f"{'[finalized]' if self._finalized else ''})>"
+        )
