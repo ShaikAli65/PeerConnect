@@ -12,7 +12,6 @@ from src.avails.useables import Lock, get_unique_id, wrap_with_tryexcept
 from src.controllers.bandwidth import BandwidthWatcher
 from src.net import ConnectionEvent, WireIO, ConnectionContext
 from src.net.connection_pool import ConnectionPool
-from src.net.requests import send_request
 from src.transfers import HEADERS
 
 _logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ class ConnectionManager(AExitStackMixIn):
             try:
                 yield connection_event
             finally:
-                pass
+                pass  # TODO: gather connection details for bookkeeping
 
         f = wrap_with_tryexcept(self.connection_router, connection_event_ctx, _logger=_logger)
         return self._task_group.create_task(f)
@@ -85,7 +84,7 @@ class ConnectionManager(AExitStackMixIn):
             )
             _logger.debug(f"connectivity check initiating for {peer}")
             try:
-                t = send_request(self.req_service, ping_data, peer, expect_reply=True)
+                t = self.req_service.send_request(ping_data, peer, expect_reply=True)
                 await asyncio.wait_for(t, const.PING_TIMEOUT)
                 return True
             except TimeoutError:

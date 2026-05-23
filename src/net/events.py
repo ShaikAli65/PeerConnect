@@ -5,7 +5,7 @@ from src.avails import AppEventBase
 from src.avails.wire import GossipMessage, WireData
 from .connect import Connection, MsgConnection, NetAddr
 
-__all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'MessageEvent', 'ConnectionContext')
+__all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'ConnectionContext')
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,12 +30,6 @@ class GossipEvent(NetworkEvent):
 class ConnectionEvent(NetworkEvent):
     connection: Connection
     handshake: WireData
-
-
-@dataclass(frozen=True, slots=True)
-class MessageEvent(NetworkEvent):
-    msg: WireData
-    connection: MsgConnection
 
 
 ConnectionContext = AsyncContextManager[ConnectionEvent]
