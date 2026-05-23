@@ -2,14 +2,6 @@ import asyncio
 from typing import Any
 
 
-class DispatcherFinalizing(Exception):
-    """Dispatcher is finalizing no longer working"""
-
-
-class WebSocketRegistryReStarted(Exception):
-    """WebSocketRegistry already started"""
-
-
 class AppConnectionError(ConnectionError):
     """Errors raised by the application code explicitly for connection related issues."""
 
@@ -32,6 +24,20 @@ class TransferRejected(TransferIncomplete):
 
 class CancelTransfer(TransferIncomplete):
     """Request to Cancel the transfer"""
+
+
+class FailedToSend(TransferIncomplete):
+    """Failed to Send Something"""
+    item: Any
+    future: asyncio.Future
+
+
+class FailedToReceive(TransferIncomplete):
+    """Failed to receive completely"""
+
+    def __init__(self, received=0, *args):
+        super().__init__(received, *args)
+        self.received = received
 
 
 class InvalidPacket(TypeError):
@@ -59,16 +65,3 @@ class RemotePeerNotFound(LookupError):
 
 class SearchExhausted(Exception):
     """Search iterator is expired, cannot be iterated, This is different from StopIteration"""
-
-
-class FailedToSend(TransferIncomplete):
-    """Failed to Send Something"""
-    item: Any
-
-
-class FailedToReceive(TransferIncomplete):
-    """Failed to receive completely"""
-
-    def __init__(self, received=0, *args):
-        super().__init__(received, *args)
-        self.received = received

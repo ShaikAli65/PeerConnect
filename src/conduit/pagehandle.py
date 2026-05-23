@@ -14,117 +14,20 @@ from contextlib import asynccontextmanager
 from functools import wraps
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-import websockets
-from avails import Router
-from avails.mixins import AExitStackMixIn
+from avails import BaseDispatcher, Router
+from avails.mixins import AExitStackMixIn, CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from conduit.bases import FrontEnd
 from conduit.frontend_web import WebFrontend
 from conduit.handleprofiles import align_profiles, set_selected_profile
+from net.msg_socket import MessageSocket
 from src.avails import const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
-from src.avails.mixins import Dispatcher
-from src.conduit.app_event_subs import sub_to_remote_peer_updates, sub_to_transfer_updates
+from src.conduit.app_event_subs import sub_to_remote_peer_updates, sub_to_transfer_updates, sub_to_messages
 from src.conduit.ui_codec import DataWeaver
 from src.configurations.appconfig import AppRunTime
-from websockets import ConnectionClosedError, WebSocketServerProtocol
+from websockets import ConnectionClosedError, WebSocketException, WebSocketServerProtocol, serve
 
 logger = logging.getLogger(__name__)
-
-
-class FrontEndWebSocket:
-    """
-    Wrapping a Websocket Transport with buffering if websocket fails, this will retry sending
-    the failed messages to the websocket when it becomes available through the `update_transport` method.
-    Immediately sends messages to the websocket if it is connected, otherwise buffers them
-
-    Notes:
-        * Does not own the websocket transport, context manager enter and exit should be dealt with by the caller
-
-    """
-
-    def __init__(self, transport=None, buffer_size=const.MAX_FRONTEND_MESSAGE_BUFFER_LEN, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.stopping = False
-        self.ping_sender = _asyncio.Condition()
-        self.max_buffer_size = buffer_size
-        self.buffer = _asyncio.Queue(buffer_size)
-        if transport:
-            self._is_transport_connected = True
-        else:
-            self._is_transport_connected = False
-        self.transport = transport
-        self._finalized = False
-
-    async def update_transport(self, transport):
-        self._is_transport_connected = True
-        self.transport = transport
-        async with self.ping_sender:
-            self.ping_sender.notify_all()
-
-    async def __call__(self, data: DataWeaver):
-
-        if not self._is_transport_connected:
-            logger.debug(f"! transport not connected buffering data: {data=}")
-
-            await self._add_to_buffer(data)
-            return
-
-        try:
-            logger.debug(f"> data to page: {data=!r}")
-            await self.transport.send(str(data))
-        except websockets.WebSocketException as wse:
-            self._is_transport_connected = False
-            await self._add_to_buffer(data)
-            raise TransferIncomplete from wse
-
-    async def _send_buffer(self):
-        while not self.stopping:
-            async with self.ping_sender:
-                await self.ping_sender.wait()
-
-            while not self.stopping:
-                msg = await self.buffer.get()
-                try:
-                    logger.debug(f"> data to page: {msg=!r}")
-                    await self.transport.send(str(msg))
-                except websockets.WebSocketException:
-                    await self._add_to_buffer(msg)
-                    self._is_transport_connected = False
-                    break
-                except AttributeError:
-                    # transport is None, and we got \\"None does not have .send"\\ thing
-                    break
-
-    async def _add_to_buffer(self, msg: DataWeaver):
-        self._may_be_prune_buffer()
-        return await self.buffer.put(msg)
-
-    def _may_be_prune_buffer(self):
-        """Logs a warning and removes top element from queue"""
-        if self.buffer.qsize() >= self.max_buffer_size:
-            logger.warning(
-                f"discarding websocket message {self.buffer.get_nowait()}, buffer full",
-                exc_info=True,
-            )
-        return None
-
-    async def __aenter__(self):
-        self._buffer_sender_task = _asyncio.create_task(self._send_buffer(),
-                                                        name="frontend-websocket-watcher")
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._finalized:
-            return
-
-        if not self.buffer.empty():
-            logger.warning(f"websocket buffer not empty len={self.buffer.qsize()}")
-
-        if self._buffer_sender_task.done():
-            await use.safe_cancel_task(self._buffer_sender_task)
-
-        logger.debug("closed front end websocket")
-        self._finalized = True
 
 
 class FrontEndWebSockets(AExitStackMixIn):
@@ -136,18 +39,21 @@ class FrontEndWebSockets(AExitStackMixIn):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._msg_router = Router()
+        self._msg_router = Router[MessageSocket]()
         self._msg_queue = asyncio.Queue()
         self._send_loop_task = None
 
     async def add_websocket(self, type_code, ws):
         fws = self._msg_router.registry.get(type_code)
         if fws is None:
-            self._msg_router.register_handler(type_code, fws := FrontEndWebSocket(ws))
+            self._msg_router.register_handler(
+                type_code,
+                fws := MessageSocket(transport=ws)
+            )
             await self._exit_stack.enter_async_context(fws)
             return
 
-        assert isinstance(fws, FrontEndWebSocket)
+        assert isinstance(ws, WebSocketServerProtocol)
         await fws.update_transport(ws)
 
     def send_message(self, message: DataWeaver):
@@ -189,7 +95,12 @@ class FrontEndWebSockets(AExitStackMixIn):
         return await super().__aexit__(exc_type, exc_val, exc_tb)
 
 
-class FrontEndMessagesDispatcher(*Dispatcher):
+class FrontEndMessagesDispatcher(
+    TaskGroupMixIn,
+    ReplyRegistryMixIn,
+    CallHandlerMixIn,
+    BaseDispatcher
+):
     """Router messages from frontend to respective handlers"""
 
     __slots__ = ()
@@ -263,7 +174,7 @@ def _ui_msg_handler(frontend_websockets, msg_dispatcher):
     async def error_wrap(*args, **kwargs):
         try:
             await handle_ui(*args, **kwargs)
-        except websockets.WebSocketException as we:
+        except WebSocketException as we:
             logger.exception(f"error occurred in handler exp:{we}", stacklevel=2)
 
     return error_wrap
@@ -272,7 +183,7 @@ def _ui_msg_handler(frontend_websockets, msg_dispatcher):
 @asynccontextmanager
 async def start_websocket_server(ui_handler):
     try:
-        start_server = await websockets.serve(ui_handler, const.WEBSOCKET_BIND_IP,
+        start_server = await serve(ui_handler, const.WEBSOCKET_BIND_IP,
                                               const.PORT_PAGE)
     except OSError as oe:
         print(const.BIND_FAILED_MSG)
@@ -325,6 +236,7 @@ async def subscribe_to_app_events(
     await exit_stack.enter_async_context(tg := TaskGroup())
     sub_to_remote_peer_updates(app_events, frontend, tg)
     sub_to_transfer_updates(app_events, frontend, tg)
+    sub_to_messages(app_events, frontend, tg)
 
 
 async def init_page_servers(app_config, app_runtime: AppRunTime):
