@@ -3,7 +3,7 @@ from typing import AsyncContextManager
 
 from src.avails import AppEventBase
 from src.avails.wire import GossipMessage, WireData
-from .connect import Connection, MsgConnection, NetAddr
+from .connect import Connection, NetAddr
 
 __all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'ConnectionContext')
 
