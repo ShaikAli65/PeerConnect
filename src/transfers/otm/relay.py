@@ -7,14 +7,16 @@ from src.avails import WireData, constants as const
 from src.avails.useables import override
 from src.net.utils import LONG_INT, recv_int
 from src.transfers import HEADERS
-from .palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
+from src.gossip.palm_tree import PalmTreeLink, PalmTreeProtocol, PalmTreeRelay, TreeLink
+
+if TYPE_CHECKING:
+    from src.transfers.otm.receiver import FilesReceiver
 
 
 class OTMFilesRelay(PalmTreeRelay):
     # TODO: try using temporary-spooled files
-    if TYPE_CHECKING:
-        from src.transfers.otm.receiver import FilesReceiver
-        file_receiver: FilesReceiver
+
+    file_receiver: "FilesReceiver"
 
     def __init__(self, file_receiver, *args,**kwargs):
         super().__init__(*args, **kwargs)

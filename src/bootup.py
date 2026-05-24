@@ -180,6 +180,8 @@ async def init_app(app_runtime: AppRunTime):
 
     conn_manager = await init_connection_manager(
         req_service,
+        this_remote_peer,
+        app_config,
         app_runtime.exit_stack,
     )
 
@@ -201,7 +203,7 @@ async def init_app(app_runtime: AppRunTime):
     msg_conn_service = await message.initiate(
         app_runtime,
         this_remote_peer,
-        conn_manager.connection_router,
+        conn_manager,
     )
 
     _logger.info("initiating transfer manager")

@@ -14,13 +14,13 @@ class HEADERS:
     CMD_RECV_FILE_AGAIN = b"recv file again "
     CMD_VERIFY_HEADER = b"verify header   "
     CMD_MSG_CONN = b"message connection"
-    CMD_MSG_CONN_RECV_LOOP_BACK = b"message connection loop back"
+
     DUP_MSG_CONN = b"connection already exists"
 
     MSG_CONN_OK = b"connection ok"
     MSG_ACK = b"msg ack"
     MSG_READ_RECEIPT = b"msg read receipt"
-    
+
     CMD_RECV_FILE = b"receive file    "
     CMD_CLOSING_HEADER = b"close connection"
     CMD_TEXT = b"this is message "

@@ -16,20 +16,22 @@ class MessageTransport:
     def __init__(self, protocol: MessageProtocol):
         self._msg_socket = net.MessageSocket(should_prune_buffer_on_full=False, logger=logger)
         self.protocol = protocol
-        self._transport = None
         self._receiver_task = None
+        self.connection = None
 
     def connection_made(self, connection: net.Connection):
         self._msg_socket.update_transport(connection)
-        self._transport = connection
+        self.connection = connection
 
     async def start_receiving(self):
         while True:
             # TODO: what if connection is lost? and it is established again? and we lost the update
             # cause we didn't call wait_for before the connection was re-established
             async with self._msg_socket.connection_restablished:
-                await self._msg_socket.connection_restablished.wait_for(lambda : self._transport is not None)
+                logger.debug(f"#< waiting for connection to be re-established")
+                await self._msg_socket.connection_restablished.wait()
 
+            logger.debug("#< connection re-established, starting receiving")
             try:
                 await self._recv_loop()
             except OSError as exc:
@@ -39,7 +41,7 @@ class MessageTransport:
     async def _recv_loop(self):
         while True:
             try:
-                wire_data = await WireIO.recv_msg(self._transport)
+                wire_data = await WireIO.recv_msg(self.connection)
                 logger.debug(f"#< new msg {wire_data}")
             except InvalidPacket:
                 logger.info(f"!< malformed packet", exc_info=True)

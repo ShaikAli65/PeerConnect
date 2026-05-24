@@ -3,7 +3,7 @@ import contextlib
 from dataclasses import dataclass
 from typing import Any
 
-from src.avails import PeerDict, const
+from src.avails import PeerDict, const, use
 from src.avails.mixins import AggregatingAsyncExitStack
 from src.core.app_events import AppEventsBus
 from src.managers import ProfileManager
@@ -51,7 +51,7 @@ class AppConfig:
     version: Versions = Versions
 
 
-@dataclass
+@use.provide__init__(slots=True, frozen=True)
 class AppRunTime:
     """Represents the runtime context of the application.
 

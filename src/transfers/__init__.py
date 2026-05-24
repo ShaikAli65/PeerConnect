@@ -4,7 +4,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from src.net.events import ConnectionEvent
 from src.transfers._headers import *
 
-thread_pool_for_disk_io = ThreadPoolExecutor(thread_name_prefix="transfers-diskio-thread-")
+thread_pool_for_disk_io = ThreadPoolExecutor(thread_name_prefix="transfers-diskIO-thread-")
 
 TRANSFER_OK = b'\x01'
 TRANSFER_NOT_OK = b'\x00'

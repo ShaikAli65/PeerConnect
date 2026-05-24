@@ -1,5 +1,5 @@
-import asyncio
 from typing import NamedTuple
+
 from avails import RemotePeer, WireData, use
 from core.app_events import AppEventsBus, MessageReceived
 from transfers import HEADERS
@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     from transfers.messaging.transport import MessageTransport
 
 
-class MessageProtocol(NamedTuple):
+@use.provide__init__
+class MessageProtocol:
     app_event_bus: AppEventsBus
     transport: "MessageTransport"
     this_peer: RemotePeer
@@ -44,5 +45,9 @@ class MessageProtocol(NamedTuple):
             MessageReceived(None, from_peer_id, receipt["message_id"])
         )
 
+    async def connection_made(self, connection):
+        ...
+
     async def connection_lost(self, exc):
         ...
+
