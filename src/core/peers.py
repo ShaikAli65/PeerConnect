@@ -53,7 +53,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         return []
 
 
-@dataclass
+@use.provide__init__
 class PeerService:
     kad_server: PeerServer
     gossip_searcher: GossipSearch

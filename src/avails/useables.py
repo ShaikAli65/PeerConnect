@@ -10,6 +10,7 @@ import platform
 import re
 import subprocess
 import uuid
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from sys import _getframe  # noqa
@@ -361,3 +362,6 @@ class Lock(asyncio.Lock):
 
     def __repr__(self):
         return str(self)
+
+
+provide__init__ = dataclass

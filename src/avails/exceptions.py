@@ -14,6 +14,15 @@ class UnknownConnectionType(AppConnectionError):
     """Unknown connection type"""
 
 
+class ConnectionNotFound(LookupError):
+    """Connection not found"""
+    peer_id: str
+
+    def __init__(self, peer_id: str, *args):
+        super().__init__(*args)
+        self.peer_id = peer_id
+
+
 class TransferIncomplete(Exception):
     """Data Transfer was paused or broken in between"""
 
