@@ -169,10 +169,7 @@ class MessageSocket:
             ftos = FailedToSend("failed buffer is full, discarding oldest packet")
             ftos.item = buffered_send.data
             buffered_send.future.set_exception(ftos)
-        self._logger.warning(
-            f"!> discarding socket message {buffered_send}, buffer full",
-            exc_info=True,
-        )
+        self._logger.warning(f"!> discarding socket message {buffered_send}, buffer full")
         return buffered_send.data
 
     def _may_be_prune_buffer(self):

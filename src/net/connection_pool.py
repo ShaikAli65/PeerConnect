@@ -20,8 +20,8 @@ class ConnectionPool:
         self.max_per_peer = max_per_peer
         self.eviction_threshold = int(max_global_connections * eviction_threshold)
         self._active_conns: dict[RemotePeer, set[net.Connection]] = defaultdict(set)
-        self.pool = defaultdict(set)
-
+        self.connection_pool = defaultdict(set)
+        self._socket_map = {}
         # Metrics
         self._total_connections = 0
         self._evictions = 0
@@ -29,14 +29,17 @@ class ConnectionPool:
 
     def add(self, socket, peer):
         con = net.Connection.create_from(socket, peer)
-        self.pool[peer].add(con)
+        self.connection_pool[peer].add(con)
+        self._socket_map[con] = socket
         return con
 
     def mark_available(self, connection):
         ...
 
     def remove(self, connection):
-        self.pool[connection.peer].remove(connection)
+        """Removes connection from pool and returns socket associated with it."""
+        self.connection_pool[connection.peer].remove(connection)
+        return self._socket_map.pop(connection)
 
-    def get_free_connection(self, peer):
+    def get_free_connection(self, peer) -> net.Connection:
         ...
