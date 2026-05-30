@@ -1,14 +1,11 @@
-import struct
 from asyncio import Event, get_running_loop, sleep
 from asyncio.trsock import TransportSocket
-from dataclasses import dataclass
 from enum import Enum
 from time import perf_counter
 from typing import Annotated, Awaitable, Callable, TypeVar
 
-from src.avails import RemotePeer, const
-from src.avails.exceptions import FailedToReceive, InvalidPacket
-from src.avails.wire import WireData
+from src.avails import RemotePeer, const, use
+from src.avails.exceptions import FailedToReceive
 from ._asocket import Socket
 
 __all__ = (
@@ -16,13 +13,9 @@ __all__ = (
     "Sender",
     "Receiver",
     "Connection",
-    "MsgConnection",
-    "MsgConnectionNoRecv",
     "ChunkedReceiver",
     "ConnectionType",
 )
-
-from src.avails.useables import Lock
 
 
 class _PauseMixIn:
@@ -272,7 +265,7 @@ class ConnectionType(Enum):
     TBD = 2  # to be defined
 
 
-@dataclass(slots=True)
+@use.provide__init__(slots=True)
 class Connection:
     """
     To represent A p2p connection
@@ -295,7 +288,7 @@ class Connection:
     send: Sender
     recv: Receiver
     peer: RemotePeer
-    lock: Lock
+    lock: use.Lock
     type: ConnectionType
 
     @classmethod
@@ -318,44 +311,44 @@ class Connection:
     def busy(self):
         return self.lock.locked()
 
-
-class MsgConnection:
-    """Send or Receive WireData object from connection"""
-
-    __slots__ = ("_connection",)
-    _connection: Connection
-
-    def __init__(self, connection):
-        self._connection = connection
-
-    def send(self, data: WireData):
-        byted_data = bytes(data)  # marshall
-        data_size = struct.pack("!I", len(byted_data))
-        return self._connection.send(data_size + byted_data)
-
-    async def recv(self):
-        try:
-            data_size = struct.unpack("!I", await self._connection.recv(4))[0]
-        except struct.error as se:
-            raise InvalidPacket from se
-        raw_data = await self._connection.recv(data_size)
-        return WireData.load_from(raw_data)
-
-    @property
-    def socket(self):
-        return self._connection.socket
-
-    @property
-    def peer(self):
-        return self._connection.peer
-
-    @property
-    def connection(self):
-        return self._connection
-
-
-class MsgConnectionNoRecv(MsgConnection):
-    __slots__ = ()
-
-    async def recv(self, *args):
-        raise NotImplementedError("not allowed")
+#
+# class MsgConnection:
+#     """Send or Receive WireData object from connection"""
+#
+#     __slots__ = ("_connection",)
+#     _connection: Connection
+#
+#     def __init__(self, connection):
+#         self._connection = connection
+#
+#     def send(self, data: WireData):
+#         byted_data = bytes(data)  # marshall
+#         data_size = struct.pack("!I", len(byted_data))
+#         return self._connection.send(data_size + byted_data)
+#
+#     async def recv(self):
+#         try:
+#             data_size = struct.unpack("!I", await self._connection.recv(4))[0]
+#         except struct.error as se:
+#             raise InvalidPacket from se
+#         raw_data = await self._connection.recv(data_size)
+#         return WireData.load_from(raw_data)
+#
+#     @property
+#     def socket(self):
+#         return self._connection.socket
+#
+#     @property
+#     def peer(self):
+#         return self._connection.peer
+#
+#     @property
+#     def connection(self):
+#         return self._connection
+#
+#
+# class MsgConnectionNoRecv(MsgConnection):
+#     __slots__ = ()
+#
+#     async def recv(self, *args):
+#         raise NotImplementedError("not allowed")

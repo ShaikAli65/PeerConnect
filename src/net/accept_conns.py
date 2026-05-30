@@ -7,7 +7,7 @@ from typing import Optional
 
 from src.avails import RemotePeer, WireData, const, use
 from src.avails.exceptions import InvalidPacket, RemotePeerNotFound
-from src.avails.mixins import AExitStackMixIn, TaskGroupMixIn
+from src.avails.mixins import AExitStackMixIn
 from src.avails.useables import COLORS
 from .connect import Socket
 from .wire_io import WireIO
@@ -97,7 +97,7 @@ class Acceptor(AExitStackMixIn):
 
         self.peer_service.change_peer_status(peer, RemotePeer.STATUS.ONLINE)
         self._exit_stack.enter_context(initial_conn)
-        self.conn_service.new_connection(initial_conn, peer, handshake)
+        await self.conn_service.new_connection(initial_conn, peer, handshake)
 
     @classmethod
     async def _perform_handshake(cls, initial_conn):

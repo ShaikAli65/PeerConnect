@@ -1,8 +1,8 @@
 """Functions to subscribe to app events and propagate them to the UI or other perform some routines"""
-from src.conduit.ui_events import PeerPresenceChanged, TransferStatusChanged, TransferUpdate
+from src.conduit.ui_events import PeerPresenceChanged, TransferStatusChanged, TransferUpdate, MessageReceived as UIMessageReceived
 from src.core.app_events import (
     AppEventsBus,
-    PeerStatusUpdate,
+    MessageReceived, PeerStatusUpdate,
     TransferCompleted,
     TransferConfirmation,
     TransferIncomplete,
@@ -56,6 +56,19 @@ def sub_to_transfer_updates(app_event_bus: AppEventsBus, frontend: FrontEnd, tas
             frontend.notify(TransferStatusChanged(converters[type(event)](event)))
 
     task_group.create_task(_handler(), name="app-event-handler-transfer-updates")
+
+
+def sub_to_messages(app_event_bus, frontend: FrontEnd, task_group):
+    q = app_event_bus.subscribe(MessageReceived)
+
+    async def _handler():
+        while True:
+            event = await q.get()
+            if event is None:
+                return
+            frontend.notify(UIMessageReceived(event.peer_id, event.msg))
+
+    task_group.create_task(_handler(), name="app-event-handler-message")
 
 
 def _started_to_ui_update(event: TransferStarted):

@@ -13,7 +13,7 @@ from src.managers import (
 
 async def align_profiles(frontend: FrontEnd):
     interfaces.reset()
-    logger.info("[PROFILES] sending profiles")
+    logger.info("sending profiles")
     profile_data = ProfileDataExchange(
         use.get_unique_id(str),
         profiles=all_profiles(),

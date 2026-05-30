@@ -3,14 +3,15 @@ import logging
 import sys
 from typing import NamedTuple
 
+from avails.exceptions import InvalidPacket
 from src import net
 from src.avails import BaseDispatcher, Router, const
 from src.avails.mixins import CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import _kademlia
-from src.gossip import app_gossip
 from src.core.discover import discovery_initiate
 from src.core.user_prompts import UserPrompts
+from src.gossip import app_gossip
 from src.net import requests
 
 _logger = logging.getLogger(__name__)
@@ -54,7 +55,6 @@ class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, B
         self.register_handler(net.REQUESTS_HEADERS.REQUEST, self.req_router)
 
     async def submit(self, req_event: net.RequestEvent):
-
         if self.is_registered(req_event.request):
             self.reply_arrived(req_event.request)
             return None
@@ -71,6 +71,31 @@ class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, B
 class RequestsService(NamedTuple):
     dispatcher: RequestsDispatcher
     transport: net.RequestsTransport
+
+    async def send_request(self, msg, peer, *, expect_reply=False):
+        """Send a msg to requests endpoint of the peer
+
+        Notes:
+            if expect_reply is True and no msg_id available in msg raises InvalidPacket
+
+        Args:
+            msg(WireData): message to send
+            peer(RemotePeer): msg is sent to
+            expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
+
+        Raises:
+            InvalidPacket: if msg does not contain msg_id and expecting a reply
+        """
+        # TODO: add retries
+
+        if msg.msg_id is None and expect_reply is True:
+            raise InvalidPacket("msg_id not found and expecting a reply")
+
+        self.transport.sendto(bytes(msg), peer.req_uri)
+
+        if expect_reply:
+            return await self.dispatcher.register_reply(msg.msg_id)
+        return None
 
 
 async def initiate(

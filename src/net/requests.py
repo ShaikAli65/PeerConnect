@@ -101,29 +101,3 @@ def _subscribe_to_multicast(sock, multicast_addr):
         _logger.debug(f"registered request socket for multicast v6 {multicast_addr}")
     return sock
 
-
-async def send_request(req_service, msg, peer, *, expect_reply=False):
-    """Send a msg to requests endpoint of the peer
-
-    Notes:
-        if expect_reply is True and no msg_id available in msg raises InvalidPacket
-
-    Args:
-        req_service(RequestService): requests service to use for sending and receiving ack.
-        msg(WireData): message to send
-        peer(RemotePeer): msg is sent to
-        expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
-
-    Raises:
-        InvalidPacket: if msg does not contain msg_id and expecting a reply
-    """
-    # TODO: add retries
-
-    if msg.msg_id is None and expect_reply is True:
-        raise InvalidPacket("msg_id not found and expecting a reply")
-
-    req_service.transport.sendto(bytes(msg), peer.req_uri)
-
-    if expect_reply:
-        return await req_service.router.register_reply(msg.msg_id)
-    return None

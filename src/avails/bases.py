@@ -2,7 +2,7 @@ import enum
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import astuple, dataclass
-from typing import Callable, ClassVar, Protocol
+from typing import Callable, ClassVar, Protocol, TypeVar
 
 from src.avails.useables import camel_to_snake
 
@@ -40,7 +40,10 @@ class AbstractDispatcher(ABC):
         pass
 
 
-class Router:
+_RegistryType = TypeVar("_RegistryType", bound=Callable)
+
+
+class Router[_RegistryType]:
     """Wrap a bunch of functions into a single callable object, calls respective handlers registered
 
     A Very lightweight dispatcher
@@ -49,9 +52,9 @@ class Router:
     subclasses can override `__call__` and implement their own logic
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, registry=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.registry: dict = kwargs.pop('registry', {})
+        self.registry: dict[str, _RegistryType] = registry or {}
 
     def __call__(self, event_header, *args, **kwargs):
         return self.registry[event_header](*args, **kwargs)

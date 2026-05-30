@@ -1,12 +1,10 @@
 import struct
-from asyncio import BaseTransport
-from typing import Any, Awaitable, Coroutine, Optional
+from typing import Awaitable
 
 import umsgpack
-
 from src.avails import WireData, const as _const
 from src.avails.exceptions import InvalidPacket
-from .connect import MsgConnection, Receiver, Socket as _Socket, is_socket_connected
+from .connect import Receiver, Socket as _Socket, is_socket_connected
 from .utils import recv_int
 from .waiters import Actuator, wait_for_sock_read
 
@@ -20,27 +18,35 @@ class WireIO:
         return await sock.asendall(data_size + data)
 
     @staticmethod
-    def send_msg(connection, msg) -> Awaitable[None]:
-        """Just a handy a wrapper around `MsgConnection.send`.
+    def send_msg(connection, msg) -> Awaitable[int]:
+        """Send data with its length prepended. (length is encoded as 4 byte integer)`.
 
         Args:
             connection(Connection): connection object
             msg(WireData):data to send
 
         """
-        messaged = MsgConnection(connection)
-        return messaged.send(msg)
+        byted_data = bytes(msg)  # marshall
+        data_size = struct.pack("!I", len(byted_data))
+        return connection.send(data_size + byted_data)
 
-    @staticmethod
-    def recv_msg(connection) -> Coroutine[Any, Any, WireData]:
-        """
+    @classmethod
+    async def recv_msg(cls, connection) -> WireData:
+        """Receive data with its length prepended. (length is encoded as 4 byte integer)
+
+        Complimentary to `send_msg`
+
         Args:
             connection(Connection): connection object
         Returns:
             WireData: on successful receive
         """
-        msg_con = MsgConnection(connection)
-        return msg_con.recv()
+        try:
+            data_size = await recv_int(connection)
+        except struct.error as se:
+            raise InvalidPacket from se
+        raw_data = connection.recv(data_size)
+        return WireData.load_from(raw_data)
 
     @staticmethod
     def send(sock: _Socket, data: bytes):

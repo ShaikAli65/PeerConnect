@@ -9,6 +9,7 @@ import logging
 from collections import defaultdict
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
 from src.avails import RemotePeer
 from src.avails.bases import AppEventBase
@@ -22,6 +23,8 @@ __all__ = (
     "TransferCompleted",
     "TransferIncomplete",
     "TransferConfirmation",
+    "ConnectionArrived",
+    "MessageReceived",
     "AppEventsBus",
     "create_app_events_bus",
 )
@@ -67,6 +70,24 @@ class TransferConfirmation(AppEventBase):
     transfer_id: str
     peer_id: str
     confirmed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionArrived(AppEventBase):
+    peer_id: str
+    connection_info: Any
+
+
+@dataclass(frozen=True, slots=True)
+class MessageReceived(AppEventBase):
+    msg: str | None
+    peer_id: str
+    msg_id: str
+
+#
+# @dataclass(frozen=True, slots=True)
+# class ConnectionLost(AppEventBase):
+#     peer_id: str
 
 
 class AppEventsBus:
