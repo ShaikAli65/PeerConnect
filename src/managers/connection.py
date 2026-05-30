@@ -139,14 +139,13 @@ class ConnectionManager(AExitStackMixIn):
             try:
                 yield connection_event
             finally:
-                pass  # TODO: gather connection details for bookkeeping
+                pass  # TODO: gather connection details for book keeping
 
         f = wrap_with_tryexcept(self.connection_router, connection_event_ctx, _logger=_logger)
         return self._task_group.create_task(f)
 
     def _attach_listener(self, connection):
         async def _listener():
-
             while not self._stopping.is_set():
                 try:
                     service_header_func = asyncio.wait_for(

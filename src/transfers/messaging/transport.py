@@ -13,6 +13,21 @@ logger = logging.getLogger(__package__)
 
 
 class MessageTransport:
+    """
+    Handles the transportation of messages over a network by interfacing with a given protocol.
+
+    It ensures that data is received and sent across a connection while adhering to a specified protocol. It can
+    handle message receipts, malformed packets, and re-establishment of lost connections. It operates
+    asynchronously to support non-blocking communication using `net.MessageSocket`.
+
+    Note:
+        Does not handle connection establishment or disconnection or ownership of the connection.
+        Connection
+    Attributes:
+        protocol (MessageProtocol): The protocol instance that manages message semantics and callbacks.
+        connection (net.Connection): The current network connection used for communication.
+
+    """
     def __init__(self, protocol: MessageProtocol):
         self._msg_socket = net.MessageSocket(should_prune_buffer_on_full=False, logger=logger)
         self.protocol = protocol

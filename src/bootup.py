@@ -177,6 +177,8 @@ async def init_app(app_runtime: AppRunTime):
         app_config,
         user_prompts,
     )
+    peer_service.requests_service = req_service
+    peer_service.gossip_searcher = gossip_searcher
 
     conn_manager = await init_connection_manager(
         req_service,
@@ -185,8 +187,6 @@ async def init_app(app_runtime: AppRunTime):
         app_runtime.exit_stack,
     )
 
-    peer_service.requests_service = req_service
-    peer_service.gossip_searcher = gossip_searcher
     peer_service.connection_manager = conn_manager
 
     _logger.info("initiating comms")

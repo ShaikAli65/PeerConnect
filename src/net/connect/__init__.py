@@ -4,7 +4,7 @@ import asyncio as _asyncio
 import ipaddress
 import socket as _socket
 import struct
-from typing import NamedTuple
+from typing import Awaitable, NamedTuple
 
 from src.avails import const, use
 from ._asocket import *
@@ -125,7 +125,7 @@ def connect_to_peer(
 @use.awaitable(connect_to_peer)
 async def connect_to_peer(
       protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
-) -> Socket:
+):
     """
     Creates a basic socket connection to the peer_obj passed in.
     pass `const.REQ_URI_CONNECT` to connect to req_uri of peer

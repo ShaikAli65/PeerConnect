@@ -48,11 +48,17 @@ class MsgConnService:
 
     async def msg_connection_arrived(self, event_ctx: ConnectionContext):
         event = await self.exit_stack.enter_async_context(event_ctx)
-        self._peer_connections[event.handshake.peer_id] = self._prepare_pair(event.connection)
-        _logger.debug(f"new msg connection, peer={event.handshake.peer_id}")
+        try:
+            protocol, transport = self._peer_connections[event.handshake.peer_id]
+            _logger.debug(f"new msg connection, peer={event.handshake.peer_id}, updating existing message transport")
+            transport.connection_made(event.connection)
+        except KeyError:
+            self._peer_connections[event.handshake.peer_id] = protocol, transport = self._prepare_pair(event.connection)
+            await self.exit_stack.enter_async_context(transport.context_manager())
+            _logger.debug(f"new msg connection, peer={event.handshake.peer_id}, creating message protocol, transport pair")
 
     async def close_pooled_connection(self, remote_peer):
-        pair = self._peer_connections.get(remote_peer.peer_id, None)
+        pair = self._peer_connections.pop(remote_peer.peer_id, None)
         if pair is None:
             return
         await self.connection_manager.close_connection(pair[0].transport.connection)

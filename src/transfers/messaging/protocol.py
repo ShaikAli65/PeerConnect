@@ -1,5 +1,3 @@
-from typing import NamedTuple
-
 from avails import RemotePeer, WireData, use
 from core.app_events import AppEventsBus, MessageReceived
 from transfers import HEADERS

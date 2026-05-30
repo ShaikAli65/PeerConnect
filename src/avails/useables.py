@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from sys import _getframe  # noqa
-from typing import override
+from typing import Awaitable, Callable, ParamSpec, TypeVar, override
 
 from src.avails import constants as const
 
@@ -219,7 +219,11 @@ def sync(coro):
         return si.value
 
 
-def awaitable(syncfunc):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def awaitable(syncfunc: Callable[P, R]) -> Callable[P, Awaitable[R]]:
     """
     # this uses code from curio package
 
