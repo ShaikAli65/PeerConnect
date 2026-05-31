@@ -151,10 +151,11 @@ class CallHandlerMixIn:
             if hasattr(self, '_handle_runtime_error'):
                 return await self._handle_runtime_error(_logger)
             return None
-        except Exception as e:
-            # we can't afford exceptions here as they move into TaskGroupMixIn (formerly QueueMixIn)
-            return _logger.error(f"{self._log_prefix} {handler}({args=},{kwargs=}) failed with: \n",
-                                exc_info=e)
+        except Exception as exp:
+            # we can't afford exceptions here as they move into TaskGroupMixIn
+            return _logger.exception(
+                f"{self._log_prefix} {handler}({args=},{kwargs=}) failed with: \n", exc_info=exp
+            )
 
     @property
     def _log_prefix(self):

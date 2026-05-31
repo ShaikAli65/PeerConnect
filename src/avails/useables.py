@@ -144,7 +144,7 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
 
 async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_value=5.0):
     """
-    same as :func: `get_timeouts` but delays itself in yielding
+    same as :func: `get_timeouts` but delays itself in yielding, first yield is immediate
 
     Example::
 
@@ -154,6 +154,8 @@ async def async_timeouts(*, initial=0.001, factor=2, max_retries=const.MAX_RETIR
     Yields:
         None
     """
+
+    yield
 
     for timeout in get_timeouts(initial, factor, max_retries, max_value):
         await asyncio.sleep(timeout)
