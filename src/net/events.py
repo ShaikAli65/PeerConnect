@@ -3,6 +3,7 @@ from typing import AsyncContextManager
 
 from src.avails import AppEventBase
 from src.avails.wire import GossipMessage, WireData
+from . import REQUESTS_FLAG
 from .connect import Connection, NetAddr
 
 __all__ = ('RequestEvent', 'GossipEvent', 'ConnectionEvent', 'ConnectionContext')
@@ -15,7 +16,7 @@ class NetworkEvent(AppEventBase):
 
 @dataclass(frozen=True, slots=True)
 class RequestEvent(NetworkEvent):
-    root_code: bytes
+    root_code: REQUESTS_FLAG
     request: WireData
     from_addr: NetAddr
 

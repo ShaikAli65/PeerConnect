@@ -96,6 +96,7 @@ DISCOVER_TIMEOUT = 2.5
 TIMEOUT_TO_WAIT_FOR_MSG_PROCESSING_TASK = 4
 MSG_RECV_TIMEOUT = 4
 TIMEOUT_TO_GATHER_SEARCH_RESULTS = 5
+ACK_FUTURES_TTL = 60  # seconds to keep ACK futures in the registry before forgetting them
 
 VERSIONS = {
     "GLOBAL": 1.1,

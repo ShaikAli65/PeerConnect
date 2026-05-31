@@ -412,7 +412,7 @@ class PeerServer(network.Server):
 
 def register_into_dispatcher(server, dispatcher: BaseDispatcher):
     handler = KademliaHandler(server)
-    dispatcher.register_handler(net.REQUESTS_HEADERS.KADEMLIA, handler)
+    dispatcher.register_handler(net.REQUESTS_FLAG.KADEMLIA, handler)
 
 
 async def prepare_kad_server(

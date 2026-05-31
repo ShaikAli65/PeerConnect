@@ -60,7 +60,7 @@ async def discovery_initiate(
     """Initializes discovery dispatcher and transport; registers handlers; sends multicast requests"""
     discovery_router = Router()
     discovery_transport = net.DiscoveryTransport(transport)
-    requests_dispatcher.register_handler(net.REQUESTS_HEADERS.DISCOVERY, discovery_router)
+    requests_dispatcher.register_handler(net.REQUESTS_FLAG.DISCOVERY, discovery_router)
 
     discovery_reply_handler = DiscoveryReplyHandler(interface, kad_server)
     discovery_req_handler = DiscoveryRequestHandler(

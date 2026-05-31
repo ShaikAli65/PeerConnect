@@ -1,11 +1,11 @@
 import asyncio
 import logging
 import sys
-from typing import NamedTuple
 
-from avails.exceptions import InvalidPacket
+from avails.exceptions import FailedToSend, InvalidPacket
+from net import REQUESTS_FLAG
 from src import net
-from src.avails import BaseDispatcher, Router, const
+from src.avails import BaseDispatcher, Router, WireData, const, use
 from src.avails.mixins import CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import _kademlia
@@ -30,7 +30,7 @@ async def _make_req_endpoint(
         req_dispatcher (RequestsDispatcher):
     """
     try:
-        transport = await requests.setup_endpoint(
+        transport, req_endpoint_protocol = await requests.setup_endpoint(
             requests.get_bind_address(port_req, interface),
             multicast_address,
             req_dispatcher,
@@ -43,7 +43,7 @@ async def _make_req_endpoint(
         _logger.critical("failed to bind acceptor", exc_info=True)
         raise RuntimeError from oe
 
-    return transport, net.RequestsTransport(transport)
+    return transport, net.RequestsTransport(transport), req_endpoint_protocol
 
 
 class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, BaseDispatcher):
@@ -52,7 +52,7 @@ class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, B
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.req_router = Router()
-        self.register_handler(net.REQUESTS_HEADERS.REQUEST, self.req_router)
+        self.register_handler(net.REQUESTS_FLAG.REQUEST, self.req_router)
 
     async def submit(self, req_event: net.RequestEvent):
         if self.is_registered(req_event.request):
@@ -63,17 +63,24 @@ class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, B
 
     def register_simple_handler(self, header, handler):
         """Register a simple callback against ``REQUESTS_HEADERS.REQUEST``
-        These handlers mostly invoked when a datagram is sent using ``requests_transport``, that has root_code = REQUESTS_HEADERS.REQUEST
+        These handlers are mostly invoked when a datagram is sent using ``requests_transport``
         """
         self.req_router.register_handler(header, handler)
 
 
-class RequestsService(NamedTuple):
+@use.provide__init__
+class RequestsService:
     dispatcher: RequestsDispatcher
     transport: net.RequestsTransport
+    req_endpoint: requests.RequestsEndPoint
 
-    async def send_request(self, msg, peer, *, expect_reply=False):
+    async def send_request(
+          self, msg, peer, *, expect_reply=False, confirm_delivery=False, retries=3
+    ):
         """Send a msg to requests endpoint of the peer
+
+        While using confirm_delivery, msg_id is generated if not available in msg and will be used to
+        track ack from the peer.
 
         Notes:
             if expect_reply is True and no msg_id available in msg raises InvalidPacket
@@ -82,20 +89,32 @@ class RequestsService(NamedTuple):
             msg(WireData): message to send
             peer(RemotePeer): msg is sent to
             expect_reply(bool): waits until a reply is arrived with the same id as the msg packet
+            confirm_delivery(bool): if True, retries until the message is acknowledged by the peer
+            retries(int): number of retries if confirm_delivery is True
 
         Raises:
             InvalidPacket: if msg does not contain msg_id and expecting a reply
+            FailedToSend: if confirm_delivery is True and ack is not received after retries
         """
-        # TODO: add retries
 
-        if msg.msg_id is None and expect_reply is True:
-            raise InvalidPacket("msg_id not found and expecting a reply")
-
-        self.transport.sendto(bytes(msg), peer.req_uri)
+        if confirm_delivery:
+            msg.id = msg.msg_id or next(self.req_endpoint.ack_id_counter).to_bytes(4)
+            async for timeout in use.get_timeouts(max_retries=retries):
+                self.transport.sendto(bytes(msg), peer.req_uri, extra=REQUESTS_FLAG.REQUIRE_ACK)
+                try:
+                    await self.req_endpoint.wait_for_ack(msg.msg_id, timeout)
+                    break
+                except asyncio.TimeoutError:
+                    continue
+            else:
+                raise FailedToSend(f"ack not received after {retries} retries")
 
         if expect_reply:
+            if msg.msg_id is None:
+                raise InvalidPacket("msg_id not found and expecting a reply")
             return await self.dispatcher.register_reply(msg.msg_id)
-        return None
+
+        return self.transport.sendto(bytes(msg), peer.req_uri)
 
 
 async def initiate(
@@ -139,14 +158,14 @@ async def initiate(
         const.PORT_NETWORK
     )
 
-    dgram_transport, req_transport = await _make_req_endpoint(
+    dgram_transport, req_transport, req_endpoint_protocol = await _make_req_endpoint(
         req_dispatcher,
         multicast_address,
         app_config.req_port,
         this_interface,
         app_runtime.finalizing,
     )
-    requests_service = RequestsService(req_dispatcher, req_transport)
+    requests_service = RequestsService(req_dispatcher, req_transport, req_endpoint_protocol)
 
     kad_server = await _kademlia.prepare_kad_server(
         dgram_transport,
