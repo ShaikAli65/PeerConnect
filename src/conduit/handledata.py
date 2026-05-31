@@ -2,12 +2,11 @@ import asyncio
 from pathlib import Path
 
 from conduit import ui_events
-from conduit.bases import FrontEnd, UIError
+from conduit.bases import UIError
 from src.avails import RemotePeer
 from src.avails.exceptions import FailedToSend, RemotePeerNotFound
-from src.conduit import logger, webpage
+from src.conduit import logger
 from src.conduit.dialogs import get_dialog_handler
-from src.conduit.ui_codec import DataWeaver
 
 
 def handlers_to_register(
@@ -130,7 +129,7 @@ def SendFileToMultiplePeersHandler(
 ):
     async def send_files_to_multiple_peers(event: ui_events.SendFilesToMultiplePeers):
         if not any(selected_files := await _get_file_paths(event, prompter=open_file_selector)):
-            # TODO: may be we need a no file selected event, so frontend can handle it in all of the functions here
+            # TODO: may be we need a no_file_selected event, so frontend can handle it. in all of the functions here
             return
 
         peer_objs = await asyncio.gather(*((peer_service.get_remote_peer(peer_id)) for peer_id in event.peer_ids),
@@ -153,7 +152,6 @@ def SendFileToMultiplePeersHandler(
         file_sender = transfer_manager.start_new_otm_file_transfer(
             selected_files,
             success_peers,
-            this_peer.peer_id
         )
 
         async for update in file_sender.start():

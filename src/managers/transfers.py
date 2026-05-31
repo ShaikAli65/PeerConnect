@@ -423,11 +423,10 @@ class TransferManager:
           self,
           files_list: list[Path],
           peers_to_send: list[RemotePeer],
-          this_remote_peer: RemotePeer,
     ):
         sender = otm.FilesSender(
             file_list=files_list,
-            this_peer=this_remote_peer,
+            this_peer=self.this_peer,
             peers=peers_to_send,
             timeout=3,
         )
