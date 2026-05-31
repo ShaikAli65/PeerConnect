@@ -51,7 +51,7 @@ class AppConfig:
     version: Versions = Versions
 
 
-@use.provide__init__(slots=True, frozen=True)
+@use.provide__init__(slots=True)
 class AppRunTime:
     """Represents the runtime context of the application.
 
