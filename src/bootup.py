@@ -165,6 +165,7 @@ async def init_app(app_runtime: AppRunTime):
     peer_service = peers.PeerService(
         None, None, None,
         app_runtime.peer_list,
+        this_remote_peer,
         app_runtime.app_events,
     )
 

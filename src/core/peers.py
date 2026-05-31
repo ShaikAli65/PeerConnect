@@ -3,7 +3,6 @@ Helper functions to deal with peers in network
 """
 
 import logging
-from dataclasses import dataclass
 from typing import AsyncIterator
 
 from kademlia import crawling
@@ -57,9 +56,10 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 class PeerService:
     kad_server: PeerServer
     gossip_searcher: GossipSearch
-    connection_manager: ConnectionManager
+    _connection_manager: ConnectionManager
     peer_list: PeerDict
-    app_event_bus: app_events.AppEventsBus
+    this_peer: RemotePeer
+    _app_event_bus: app_events.AppEventsBus
 
     async def gossip_search(self, search_string) -> AsyncIterator[RemotePeer]:
         async for peer in self.gossip_searcher.search_for(search_string):
@@ -156,7 +156,7 @@ class PeerService:
         if peer is None:
             return
 
-        is_reachable = await self.connection_manager.is_peer_reachable(peer)
+        is_reachable = await self._connection_manager.is_peer_reachable(peer)
         if not is_reachable:
             self.change_peer_status(peer, RemotePeer.STATUS.OFFLINE)
 
@@ -164,9 +164,9 @@ class PeerService:
         if peer.status == status:
             return
         peer.status = status
-        self.app_event_bus.publish(app_events.PeerStatusUpdate(peer))
+        self._app_event_bus.publish(app_events.PeerStatusUpdate(peer))
 
     def add_peer(self, peer):
         self.peer_list.add_peer(peer)
-        self.app_event_bus.publish(app_events.PeerStatusUpdate(peer))
+        self._app_event_bus.publish(app_events.PeerStatusUpdate(peer))
 
