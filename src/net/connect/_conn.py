@@ -158,7 +158,7 @@ class Sender(
         await self._limiter.wait()
         nbytes = len(chunk)
         await self._throttle(nbytes)
-        await self._send_func(self.sock, bytes(chunk))
+        await self._send_func(self.sock, chunk)
         return self._update_throughput(nbytes)
 
     async def __call__(self, buf: bytes | memoryview) -> Annotated[int, "bytes sent"]:
@@ -166,6 +166,7 @@ class Sender(
         length = len(buf)
 
         with memoryview(buf) as mv:  # <-- wrap the original bytes in a memoryview
+            # TODO: try to align the chunk size to the socket buffer size and actual packet size on the wire
             while total_sent < length:
                 # Dynamic chunk sizing
                 if self.max_rate_limit:

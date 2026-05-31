@@ -4,6 +4,7 @@ import time
 from asyncio import TaskGroup
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from pickletools import read_uint1
 
 from avails.exceptions import ConnectionNotFound
 from src import net
@@ -64,28 +65,23 @@ class ConnectionManager(AExitStackMixIn):
             else:
                 await self.close_connection(conn)
 
-    async def new_connection(self, socket, peer: RemotePeer, handshake_data=None):
+    async def new_connection(self, socket, peer: RemotePeer, handshake_data):
         connection = self.connection_pool.add(socket, peer)
 
-        # This is a connection already used and re-entered, hence no handshake data is available
-        if handshake_data is None:
+        if handshake_data.match_header(HEADERS.PING):
+            un_ping = WireData(
+                header=HEADERS.UNPING,
+                peer_id=self.this_peer.peer_id,
+                msg_id=handshake_data.msg_id,
+            )
+            # Send a ping back to the peer to confirm that the connection is alive and keep
+            # listening for incoming messages
+            await WireIO.send_msg(connection, un_ping)
             self._attach_listener(connection)
             return
 
-        if not handshake_data.match_header(HEADERS.PING):
-            con_event = ConnectionEvent(connection, handshake_data)
-            self._route_connection(con_event)
-            return
-
-        un_ping = WireData(
-            header=HEADERS.UNPING,
-            peer_id=self.this_peer.peer_id,
-            msg_id=handshake_data.msg_id,
-        )
-        await WireIO.send_msg(connection, un_ping)
-        # Send a ping back to the peer to confirm that the connection is alive and keep
-        # listening for incoming messages
-        self._attach_listener(connection)
+        con_event = ConnectionEvent(connection, handshake_data)
+        self._route_connection(con_event)
 
     async def is_peer_reachable(self, peer: RemotePeer):
         async def new_check():

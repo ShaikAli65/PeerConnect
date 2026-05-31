@@ -4,8 +4,9 @@ import asyncio as _asyncio
 import ipaddress
 import socket as _socket
 import struct
-from typing import Awaitable, NamedTuple
+from typing import NamedTuple, TypeAlias
 
+from avails.exceptions import CannotConnect
 from src.avails import const, use
 from ._asocket import *
 from ._conn import *
@@ -42,23 +43,22 @@ class IPAddress(NamedTuple):
         """
 
         if ip is None:
-            ip = ipaddress.ip_address(self.ip)
+            ip = ipaddress.ip_address(self.ip)  # noqa
         else:
             ip = ipaddress.ip_address(ip)
 
         if ip.version == 4:
             return str(ip), port
 
-        if ip.version == 6:
-            ipaddr = str(ip)
-            flow_info = 0
-            scope_id = max(0, int(self.scope_id))
-            return ipaddr, port, flow_info, scope_id
-        return None
+        # if ip.version == 6:
+        ipaddr = str(ip)
+        flow_info = 0
+        scope_id = max(0, int(self.scope_id))
+        return ipaddr, port, flow_info, scope_id
 
 
 NetAddr = IPAddress | tuple[str, int] | tuple[str, int, int, int]
-Interface = IPAddress
+Interface: TypeAlias = IPAddress
 
 
 def create_connection_sync(
@@ -77,10 +77,12 @@ def create_connection_sync(
 async def create_connection_async(protocol, address, timeout=None) -> Socket:
     loop = _asyncio.get_running_loop()
     if const.USING_IP_V6 and len(address) != 4:
-        raise OSError("invalid address tuple, expected tuple length of 4 in ipv6")
-    sock = await protocol.create_connection_async(loop, address, timeout)
-    return sock
-
+        raise CannotConnect("invalid address tuple, expected tuple length of 4 in ipv6")
+    try:
+        sock = await protocol.create_connection_async(loop, address, timeout)
+        return sock
+    except OSError as oe:
+        raise CannotConnect(*oe.args) from oe
 
 CONN_URI = "uri"
 REQ_URI = "req_uri"
@@ -93,14 +95,13 @@ def connect_to_peer(
 
     pass `REQ_URI` to connect to req_uri of peer
 
-    :param timeout: initial timeout to start from, in exponential retries
-    :param to_which: specifies to what uri should the connection made
-    :param _peer_obj: RemotePeer object
-    :param retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
-            uses :param timeout: as initial value
-
     Args:
         protocol:
+        timeout: initial timeout to start from, in exponential retries
+        to_which: specifies to what uri should the connection made
+        _peer_obj: RemotePeer object
+        retries: if given tries reconnecting with exponential backoff using :func:`useables.get_timeouts`
+                uses :param timeout: as initial value
     """
 
     address = getattr(_peer_obj, to_which)
@@ -124,7 +125,7 @@ def connect_to_peer(
 
 @use.awaitable(connect_to_peer)
 async def connect_to_peer(
-      protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
+      protocol, peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
 ):
     """
     Creates a basic socket connection to the peer_obj passed in.
@@ -132,11 +133,11 @@ async def connect_to_peer(
 
     Args:
         protocol (NetworkProtocol): protocol object that creates the socket
-        timeout: initial timeout to start from, in exponential retries
+        peer_obj: RemotePeer object to connect to
         to_which: specifies to what uri should the connection made
-        _peer_obj: RemotePeer object
+        timeout: initial timeout to start from, in exponential retries
         retries: if given tries reconnecting with exponential backoff using :func:`use.get_timeouts`
-        timeout: uses as initial value
+
     Raises:
         OSError: if connection fails
 
@@ -144,7 +145,7 @@ async def connect_to_peer(
         Socket: connected socket
 
     """
-    address = getattr(_peer_obj, to_which)
+    address = getattr(peer_obj, to_which)
     retry_count = 0
 
     if timeout is None:
@@ -153,11 +154,12 @@ async def connect_to_peer(
     for timeout in use.get_timeouts(timeout, max_retries=retries):
         try:
             return await create_connection_async(protocol, address, timeout)
-        except OSError:
+        except OSError as exp:
             retry_count += 1
             if retry_count >= retries:
-                raise
-    raise OSError
+                raise exp
+
+    raise CannotConnect("connection failed")
 
 
 def is_socket_connected(sock: Socket):
@@ -170,7 +172,7 @@ def is_socket_connected(sock: Socket):
         sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
         sock.getpeername()
         data = sock.recv(1, _socket.MSG_PEEK)
-        sock.send(b"")
+        sock.send(b"")  # noqa
         return data != b""
     except BlockingIOError:
         return True
@@ -186,11 +188,12 @@ def is_socket_connected(sock: Socket):
             return False
 
 
-def get_free_port(ip) -> int:
+def get_free_port(interface: Interface) -> int:
     """Gets a free port from the system."""
     with _socket.socket(const.IP_VERSION, _socket.SOCK_STREAM) as s:
         s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-        s.bind(ip)
+        s.setblocking(False)
+        s.bind(interface.addr_tuple(port=0))
         return s.getsockname()[1]  # Port is empty
 
 
@@ -228,7 +231,7 @@ def ipv6_multicast_socket_helper(
 
     if add_membership:
         group = _socket.inet_pton(_socket.AF_INET6, f"{multicast_addr[0]}")
-        mreq = group + struct.pack("@I", interface_id)
+        mreq = group + struct.pack("@I", interface_id)  # noqa
         sock.setsockopt(_socket.IPPROTO_IPV6, _socket.IPV6_JOIN_GROUP, mreq)
 
     sock_options = {

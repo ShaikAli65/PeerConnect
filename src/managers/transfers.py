@@ -51,7 +51,7 @@ def init_transfer_manager(
 ) -> TransferManager:
     transfer_consent = TransferConsent(current_profile, user_prompts)
     tm = TransferManager(
-        this_peer_id=this_peer.peer_id,
+        this_peer=this_peer,
         connection_manager=connection_manager,
         default_download_path=const.PATH_DOWNLOAD,
         transfer_consenter=transfer_consent,
@@ -183,18 +183,18 @@ class AppEventTransferEvents(TransferEvents):
 
 
 class TransferManager:
-    PeerResolver = Callable[[str], Awaitable[RemotePeer | None]]
+    type PeerResolver = Callable[[str], Awaitable[RemotePeer | None]]
 
     def __init__(
           self,
           *,
-          this_peer_id: str,
+          this_peer: RemotePeer,
           connection_manager: ConnectionManager,
           default_download_path: Path,
           transfer_consenter: TransferConsent,
           transfer_events: TransferEvents,
     ):
-        self.this_peer_id = this_peer_id
+        self.this_peer = this_peer
         self.default_download_path = default_download_path
         self.transfer_consenter = transfer_consenter
         self.transfer_events = transfer_events
@@ -387,7 +387,7 @@ class TransferManager:
                 )
             except TypeError:
                 _logger.error("ill formed file item, rejecting big-file transfer")
-                watcher = net.Watcher()
+                watcher = net.Watcher()  # TODO: WTF IS THIS?
                 await watcher.request_closing(event.connection)
                 return
 
@@ -434,7 +434,7 @@ class TransferManager:
         self.transfers_book.move(sender.id, TransferBookBucket.SCHEDULED)
         return sender
 
-    def new_otm_request_arrived(self, req_data: WireData, this_peer: RemotePeer):
+    def new_otm_request_arrived(self, req_data: WireData):
         session = OTMSession(
             originate_id=req_data.id,
             session_id=req_data["session_id"],
@@ -445,19 +445,19 @@ class TransferManager:
             file_count=req_data["file_count"],
             chunk_size=req_data["chunk_size"],
         )
-        passive_endpoint_address = (this_peer.ip, net.get_free_port())
+        passive_endpoint_address = (self.this_peer.ip, net.get_free_port(self.this_peer.interface))
         receiver = otm.FilesReceiver(
             session,
-            this_peer,
+            self.this_peer,
             passive_endpoint_address,
-            this_peer.uri,
+            self.this_peer.uri,
         )
         self.transfers_book.move(receiver.id, TransferBookBucket.SCHEDULED)
         return bytes(
             OTMInformResponse(
-                peer_id=this_peer.peer_id,
+                peer_id=self.this_peer.peer_id,
                 passive_addr=passive_endpoint_address,
-                active_addr=this_peer.uri,
+                active_addr=self.this_peer.uri,
                 session_key=session.key,
             )
         )
@@ -505,7 +505,7 @@ class TransferManager:
             handshake = WireData(
                 header=header,
                 transfer_id=extras.pop("transfer_id", transfer_handle.id),
-                peer_id=extras.pop("peer_id", self.this_peer_id),
+                peer_id=extras.pop("peer_id", self.this_peer.id),
                 **extras,
             )
             await net.WireIO.send_msg(connection, handshake)

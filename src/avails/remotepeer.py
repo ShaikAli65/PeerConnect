@@ -87,6 +87,10 @@ class RemotePeer:
         self._interface = interface
 
     @property
+    def interface(self):
+        return self._interface
+
+    @property
     def uri(self):
         if self._interface:
             return self._interface.addr_tuple(port=self._conn_port, ip=self.ip)
