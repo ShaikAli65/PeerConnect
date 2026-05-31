@@ -62,5 +62,5 @@ async def initiate_gossip(data_transport, remote_peer, req_dispatcher, peer_list
         gossip_service,
         gossip_message_handler,
     )
-    req_dispatcher.register_handler(net.REQUESTS_HEADERS.GOSSIP, gossip_router)
+    req_dispatcher.register_handler(net.REQUESTS_FLAG.GOSSIP, gossip_router)
     return gossip_service, gossip_searcher
