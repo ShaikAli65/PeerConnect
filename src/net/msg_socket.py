@@ -92,14 +92,13 @@ class MessageSocket:
 
     async def __call__(self, data):
         if self._finalized:
-            raise FailedToSend("socket has been finalized")
+            raise FailedToSend("message socket has been finalized")
 
         if not self._is_transport_connected:
-            self._logger.debug(f"!> transport not connected buffering data: {data=}")
             return await self._handle_failure(data)
 
         try:
-            self._logger.debug(f"#> sending data using connection: {data=!r}")
+            self._logger.debug(f"#> sending {data=!r}")
             return await self.transport.send(data)
         except ConnectionError as ce:
             self._is_transport_connected = False
@@ -110,6 +109,7 @@ class MessageSocket:
         if not self.use_buffering:
             raise self._prev_connection_error
 
+        self._logger.debug(f"!> transport not connected buffering data: {data=}")
         future = asyncio.get_running_loop().create_future()
         await self._add_to_buffer(BufferedSend(next(self._ordering_msg_buffer_counter), data, future))
         if self.raise_on_send_failure:
@@ -208,6 +208,10 @@ class MessageSocket:
 
             await self._buffer_sender_task
             _logger.debug(f"$> stopped message sender for {self.transport=}")
+
+    @property
+    def is_transport_connected(self):
+        return self._is_transport_connected
 
     def __repr__(self):
         return (

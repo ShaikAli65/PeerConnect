@@ -48,31 +48,45 @@ class MessageTransport:
 
             logger.debug("#< connection re-established, starting receiving")
             try:
-                await self._recv_loop()
+                while True:
+                    await self._recv_once()
             except OSError as exc:
                 logger.info("!< transport closed")
                 await self.protocol.connection_lost(exc)
 
-    async def _recv_loop(self):
-        while True:
-            try:
-                wire_data = await WireIO.recv_msg(self.connection)
-                logger.debug(f"#< new msg {wire_data}")
-            except InvalidPacket:
-                logger.info(f"!< malformed packet", exc_info=True)
-                continue
+    async def _recv_once(self):
+        try:
+            wire_data = await WireIO.recv_msg(self.connection)
+            logger.debug(f"#< new msg {wire_data}")
+        except InvalidPacket:
+            logger.info(f"!< malformed packet", exc_info=True)
+            return
 
-            if wire_data.match_header(HEADERS.MSG_READ_RECEIPT):
-                await self.protocol.message_receipt_received(
-                    wire_data.body["receipt"],
-                    wire_data.peer_id
-                )
-                continue
+        if wire_data.match_header(HEADERS.MSG_READ_RECEIPT):
+            await self.protocol.message_receipt_received(
+                wire_data.body["receipt"],
+                wire_data.peer_id
+            )
+            return
 
-            await self.protocol.message_received(wire_data.body, wire_data.peer_id)
+        if wire_data.match_header(HEADERS.PING):
+            return
+
+        await self.protocol.message_received(wire_data.body, wire_data.peer_id)
 
     async def send_data(self, data: WireData):
         await self._msg_socket(bytes(data))
+
+    async def ping(self):
+        """To check if the connection is still alive, if this call fails with an OSError, the connection is lost."""
+        return await self.send_data(
+            WireData(
+                header=HEADERS.PING,
+                message=None,
+                message_id=None,
+                peer_id=self.protocol.this_peer.peer_id
+            )
+        )
 
     @asynccontextmanager
     async def context_manager(self):
