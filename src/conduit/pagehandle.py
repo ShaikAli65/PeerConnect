@@ -22,7 +22,7 @@ from conduit.handleprofiles import align_profiles, set_selected_profile
 from net.msg_socket import MessageSocket
 from src.avails import const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
-from src.conduit.app_event_subs import sub_to_remote_peer_updates, sub_to_transfer_updates, sub_to_messages
+from src.conduit.app_event_subs import sub_to_messages, sub_to_remote_peer_updates, sub_to_transfer_updates
 from src.conduit.ui_codec import DataWeaver
 from src.configurations.appconfig import AppRunTime
 from websockets import ConnectionClosedError, WebSocketException, WebSocketServerProtocol, serve
@@ -50,7 +50,7 @@ class FrontEndWebSockets(AExitStackMixIn):
                 type_code,
                 fws := MessageSocket(transport=ws)
             )
-            await self._exit_stack.enter_async_context(fws)
+            await self._exit_stack.enter_async_context(fws.context_manager())
             return
 
         assert isinstance(ws, WebSocketServerProtocol)
@@ -184,7 +184,7 @@ def _ui_msg_handler(frontend_websockets, msg_dispatcher):
 async def start_websocket_server(ui_handler):
     try:
         start_server = await serve(ui_handler, const.WEBSOCKET_BIND_IP,
-                                              const.PORT_PAGE)
+                                   const.PORT_PAGE)
     except OSError as oe:
         print(const.BIND_FAILED_MSG)
         logger.critical(f"failed to bind websocket: {oe}")
@@ -265,18 +265,11 @@ async def initiate_page_handlers(
 ):
     from src.conduit import handlesignals, handledata
 
-    handlesignals.register_handlers(
-        web_frontend.frontend_messages_dispatcher,
-        conn_service,
-        msg_service,
-        peer_service,
-        app_runtime.peer_list,
-        web_frontend,
-    )
+    for event, handler in handlesignals.handlers_to_register(conn_service, msg_service, web_frontend):
+        web_frontend.frontend_messages_dispatcher.register_handler(event.event_name(), handler)
 
-    handledata.register_handlers(
-        web_frontend.frontend_messages_dispatcher,
-    ) # TODO: complete this
+    for event, handler in handledata.handlers_to_register(peer_service, web_frontend):
+        web_frontend.frontend_messages_dispatcher.register_handler(event.event_name(), handler)
 
     await subscribe_to_app_events(
         app_runtime.app_events,

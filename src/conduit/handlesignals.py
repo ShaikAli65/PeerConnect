@@ -1,10 +1,12 @@
 import asyncio
 from typing import AsyncIterator
 
+from conduit import ui_events
 from conduit.bases import FrontEnd
+from conduit.frontend_web import WebFrontend
+from managers.message import MessagingService
 from src.avails import const
 from src.conduit import logger, ui_codec
-from src.conduit.pagehandle import FrontEndMessagesDispatcher
 from src.conduit.ui_codec import DataWeaver
 from src.conduit.ui_events import ConnectPeer, GossipSearchPeers, PeerConnectionStatus, PeerSummary, \
     RequestPeerList, \
@@ -12,29 +14,20 @@ from src.conduit.ui_events import ConnectPeer, GossipSearchPeers, PeerConnection
     SearchPeersByName, SearchResults, \
     UsersSnapshot
 from src.core.peers import PeerListGetter, PeerService
-from src.managers import message
 
 
-def register_handlers(
-      dispatcher: FrontEndMessagesDispatcher,
-      conn_service,
+def handlers_to_register(
       msg_conn_service,
       peer_service,
-      peer_list,
-      frontend: FrontEnd,
+      frontend: WebFrontend,
 ):
-    dispatcher.register_handler(
-        ConnectPeer.event_name(), ConnectUserHandler(
-            conn_service,
-            msg_conn_service,
-            peer_service,
-            frontend,
-        ))
-    dispatcher.register_handler(RequestUsersSync.event_name(), SyncUsersHandler(peer_list, frontend))
-    dispatcher.register_handler(SearchPeersByName.event_name(),
-                                SearchUserHandler(peer_service.kad_server, frontend))
-    dispatcher.register_handler(RequestPeerList.event_name(), SendListHandler(peer_service, frontend))
-    dispatcher.register_handler(GossipSearchPeers.event_name(), GossipSearchHandler(peer_service, frontend))
+    return [
+        (ConnectPeer, ConnectUserHandler(msg_conn_service, peer_service, frontend)),
+        (RequestUsersSync, SyncUsersHandler(peer_service, frontend)),
+        (SearchPeersByName, SearchUserHandler(peer_service.kad_server, frontend)),
+        (RequestPeerList, SendListHandler(peer_service, frontend)),
+        (GossipSearchPeers, GossipSearchHandler(peer_service, frontend)),
+    ]
 
 
 def SearchUserHandler(peer_service: PeerService, frontend: FrontEnd):
@@ -49,7 +42,7 @@ def SearchUserHandler(peer_service: PeerService, frontend: FrontEnd):
             peer_service.search_for_peers_with_name(search_string),
             const.TIMEOUT_TO_GATHER_SEARCH_RESULTS
         )
-        frontend.send_result(SearchResults(peer_list, "list", data.msg_id))
+        frontend.send_result(SearchResults(peer_list, ui_events.SearchSource.LIST, data.msg_id))
 
     return search_for_user
 
@@ -81,7 +74,7 @@ def GossipSearchHandler(peer_service: PeerService, frontend: FrontEnd):
             const.TIMEOUT_TO_GATHER_SEARCH_RESULTS
         )
         frontend.send_result(
-            SearchResults(peer_list, "gossip", data.msg_id)
+            SearchResults(peer_list, ui_events.SearchSource.GOSSIP, data.msg_id)
         )
 
     return gossip_search
@@ -95,7 +88,7 @@ def SendListHandler(peer_service: PeerService, frontend: FrontEnd):
         frontend.send_result(SearchResults(
             [ui_codec.remote_peer_to_peer_summary(peer) for peer in peer_list]
             if peer_list else [],
-            "list",
+            ui_events.SearchSource.GOSSIP,
             data.msg_id
         ))
 
@@ -103,29 +96,23 @@ def SendListHandler(peer_service: PeerService, frontend: FrontEnd):
 
 
 def ConnectUserHandler(
-      conn_service,
-      msg_conn_service,
+      msg_conn_service: MessagingService,
       peer_service,
       frontend: FrontEnd
 ):
     async def connect_peer(connect_peer_req: ConnectPeer):
-        what = await message.connect_ahead(
-            connect_peer_req.peer_id,
-            conn_service,
-            msg_conn_service,
-            peer_service,
-            connectivity_checker,
-        )
-        frontend.notify(PeerConnectionStatus(connect_peer_req.peer_id, what))
+        peer = await peer_service.get_remote_peer(connect_peer_req.peer_id)
+        connection_pair = await msg_conn_service.ensure_connection(peer)
+        frontend.notify(PeerConnectionStatus(connect_peer_req.peer_id, bool(connection_pair)))
 
     return connect_peer
 
 
-def SyncUsersHandler(peer_list, frontend: FrontEnd):
-    async def sync_users(_: DataWeaver):
+def SyncUsersHandler(peer_service, frontend: FrontEnd):
+    async def sync_users(_: ui_events.RequestPeerList):
         refreshed = []
 
-        for peer in peer_list.values():
+        for peer in peer_service.peer_list.values():
             refreshed.append(
                 PeerSummary(
                     name=peer.username,

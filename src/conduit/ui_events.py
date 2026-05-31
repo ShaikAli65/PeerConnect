@@ -11,13 +11,18 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, TypedDict
 
 from src.conduit.bases import UICommand, UIError, UINotification, UIPrompt, UIPromptReply, UIResult
 
 JsonMap = dict[str, Any]
 JsonList = list[Any]
-SearchSource = Literal["kad", "gossip", "list"]
+
+
+class SearchSource(enum.StrEnum):
+    KAD = "kad"
+    GOSSIP = "gossip"
+    LIST = "list"
 
 
 class EventType(enum.StrEnum):
