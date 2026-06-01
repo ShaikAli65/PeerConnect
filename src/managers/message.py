@@ -9,14 +9,13 @@ import logging
 from contextlib import AsyncExitStack
 from dataclasses import field
 
-from avails.exceptions import FailedToSend
-from core.app_events import AppEventsBus
-from managers.connection import ConnectionManager
 from src.avails import RemotePeer, use
-from src.avails.exceptions import ConnectionNotFound
+from src.avails.exceptions import ConnectionNotFound, FailedToSend
+from src.core.app_events import AppEventsBus
+from src.managers.connection import ConnectionManager
 from src.net.events import ConnectionContext
 from src.transfers import HEADERS
-from transfers.messaging import MessageProtocol, MessageTransport
+from src.transfers.messaging import MessageProtocol, MessageTransport
 
 _logger = logging.getLogger(__name__)
 

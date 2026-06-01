@@ -4,12 +4,10 @@ import time
 from asyncio import TaskGroup
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from pickletools import read_uint1
 
-from avails.exceptions import ConnectionNotFound
 from src import net
 from src.avails import RemotePeer, Router, WireData, const
-from src.avails.exceptions import InvalidPacket
+from src.avails.exceptions import ConnectionNotFound, InvalidPacket
 from src.avails.mixins import AExitStackMixIn
 from src.avails.useables import Lock, get_unique_id, wrap_with_tryexcept
 from src.controllers.bandwidth import BandwidthWatcher

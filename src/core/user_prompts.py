@@ -5,7 +5,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class UserPrompts(Protocol):
-    async def ask_discovery_peer_name(self, reason: str | None) -> str | None:
+    async def ask_discovery_peer_name(self, reason: str) -> str | None:
         """Ask the user for a peer host/name to help discovery."""
 
     async def ask_transfer_consent(self, peer_id: str) -> tuple[bool, bool | None]:

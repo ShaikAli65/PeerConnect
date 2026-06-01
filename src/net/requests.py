@@ -6,11 +6,11 @@ from itertools import count
 from logging import getLogger
 
 from kademlia.storage import ForgetfulStorage
-from net import REQUESTS_FLAG, RequestsTransport
 from src.avails import const
 from src.net import UDPProtocol, ipv4_multicast_socket_helper, ipv6_multicast_socket_helper, unpack_datagram
 from src.net.connect import Interface
 from src.net.events import RequestEvent
+from .transports import REQUESTS_FLAG, RequestsTransport
 
 _logger = getLogger(__name__)
 

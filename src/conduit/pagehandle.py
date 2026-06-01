@@ -9,22 +9,21 @@ import asyncio as _asyncio
 import logging
 import sys
 from asyncio import TaskGroup
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from functools import wraps
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-from avails import BaseDispatcher, Router
-from avails.mixins import AExitStackMixIn, CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
-from conduit.bases import FrontEnd
-from conduit.frontend_web import WebFrontend
-from conduit.handleprofiles import align_profiles, set_selected_profile
-from net.msg_socket import MessageSocket
-from src.avails import const, use
+from src.avails import BaseDispatcher, Router, const, use
 from src.avails.exceptions import InvalidPacket, TransferIncomplete
+from src.avails.mixins import AExitStackMixIn, CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from src.conduit.app_event_subs import sub_to_messages, sub_to_remote_peer_updates, sub_to_transfer_updates
+from src.conduit.bases import FrontEnd
+from src.conduit.frontend_web import WebFrontend
+from src.conduit.handleprofiles import align_profiles, set_selected_profile
 from src.conduit.ui_codec import DataWeaver
 from src.configurations.appconfig import AppRunTime
+from src.net.msg_socket import MessageSocket
 from websockets import ConnectionClosedError, WebSocketException, WebSocketServerProtocol, serve
 
 logger = logging.getLogger(__name__)
@@ -199,33 +198,41 @@ async def start_websocket_server(ui_handler):
         logger.info("websocket server closed")
 
 
-def _http_server(bind, port, directory):
+def _run_page_server(host="localhost", port_page_serve=const.PORT_PAGE_SERVE, exit_stack=None):
     class HTTPServer(ThreadingHTTPServer):
         def finish_request(self, request, client_address):
-            self.RequestHandlerClass(request, client_address, self, directory=directory)  # noqa
+            self.RequestHandlerClass(request, client_address, self, directory=const.PATH_PAGE)  # noqa
 
-    with HTTPServer((bind, port), SimpleHTTPRequestHandler) as httpd:  # noqa
-        host, port = httpd.socket.getsockname()[:2]
-        url_host = f'[{host}]' if ':' in host else host
-        logger.info(
-            f"Serving HTTP on {host} port {port} "
-            f"(http://{url_host}:{port}/) ..."
-        )
-        try:
+    httpd = HTTPServer((host, port_page_serve), SimpleHTTPRequestHandler)
+
+    def _http_server(*args, **kwargs):
+        with httpd:
+            host, port = httpd.socket.getsockname()[:2]
+            url_host = f'[{host}]' if ':' in host else host
+            logger.info(
+                f"Serving HTTP on {host} port {port} "
+                f"(http://{url_host}:{port}/) ..."
+            )
             httpd.serve_forever()
-        except KeyboardInterrupt:
-            logger.info("\nKeyboard interrupt received, exiting.")
+            logger.info("HTTP server stopped.")
 
+    def _close_http_server(*args, **kwargs):
+        assert args == () and kwargs == {}, f"not expecting any args, {args=} {kwargs=}"
+        logger.debug("calling shutdown")
+        httpd.server_close()
+        httpd.shutdown()
+        logger.debug("calling shutdown done")
 
-def _run_page_server(host="localhost", port_page_serve=const.PORT_PAGE_SERVE, exit_stack=None):
     async def _helper():
-        with ProcessPoolExecutor(1) as pool:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(pool, _http_server, host, port_page_serve, const.PATH_PAGE)  # noqa
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="http-deamon-thread") as th:
+            try:
+                await loop.run_in_executor(th, _http_server)
+            finally:
+                # has to be ran in a different thread, otherwise it will deadlock
+                await loop.run_in_executor(th, _close_http_server)
 
-    run_server = asyncio.create_task(_helper(), name="http-demon-for-ui-page")
-    if exit_stack:
-        exit_stack.push_async_callback(use.safe_cancel_task, run_server)
+    use.long_running_task(_helper(), "http-server", exit_stack)
 
 
 async def subscribe_to_app_events(
@@ -268,7 +275,7 @@ async def initiate_page_handlers(
     for event, handler in handlesignals.handlers_to_register(conn_service, msg_service, web_frontend):
         web_frontend.frontend_messages_dispatcher.register_handler(event.event_name(), handler)
 
-    for event, handler in handledata.handlers_to_register(peer_service, web_frontend):
+    for event, handler in handledata.handlers_to_register(peer_service, web_frontend):  # TODO: fix this
         web_frontend.frontend_messages_dispatcher.register_handler(event.event_name(), handler)
 
     await subscribe_to_app_events(

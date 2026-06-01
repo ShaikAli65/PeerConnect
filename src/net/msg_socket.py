@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from avails.exceptions import InvalidStateError
+from src.avails.exceptions import InvalidStateError
 from src.avails.exceptions import FailedToSend
 
 _logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class MessageSocket:
         self.connection_restablished = asyncio.Condition()
         self.ordering = ordering
         self.raise_on_send_failure = raise_on_send_failure
-        self.buffer = asyncio.PriorityQueue[BufferedSend](buffer_size)
+        self.buffer = asyncio.PriorityQueue[BufferedSend](buffer_size or 0)
         self.transport = transport
         self.use_buffering = use_buffering
         self.should_prune_buffer_on_full = should_prune_buffer_on_full
@@ -130,6 +130,10 @@ class MessageSocket:
 
             while not self._finalized:
                 buffered_send = await self.buffer.get()
+                if buffered_send is None:
+                    self._logger.debug(f"!> received None in buffer, exiting send loop...")
+                    return
+
                 msg, fut = buffered_send.data, buffered_send.future
                 try:
                     if fut.done():
@@ -206,7 +210,9 @@ class MessageSocket:
             async with self.connection_restablished:
                 self.connection_restablished.notify_all()
 
+            self.buffer.put_nowait(None)
             await self._buffer_sender_task
+
             _logger.debug(f"$> stopped message sender for {self.transport=}")
 
     @property

@@ -34,65 +34,95 @@ def get_unique_id(_type: type = str, *, u_version="1"):
     return _type(id_gen())
 
 
-async def safe_cancel_task(task: asyncio.Task):
-    """Cancels task and waits until it returns
+async def safe_cancel(task: asyncio.Task):
+    """Cancels ``task`` and waits until it is fully done.
 
-    * Handles the case when the parent task gets cancelled and catching that cancelled error misjudges event loop
+    Correctly handles the case where the calling task is also cancelled concurrently,
+    without suppressing that external cancellation.
 
-    * If the task containing this function call gets cancelled then, this function raises cancellation and returns
-      irrespective of the completion of `:param task:` (even though it is probably cancelled)
+    If the task containing this function call gets cancelled then, this function raises cancellation and returns
+    without waiting for the given task to finish, or cleanup.
 
-    * Assumes that task will always re-raise the same cancelled error that was passed in, as per asyncio standard
-      if not this function does not work as expected
+    Note:
+        Assumes that task will always re-raise the same cancelled error that was passed
+        in (as per asyncio standard). otherwise this function does not work as expected
 
-    Notes:
-        Make sure that ``task`` is active and not done, if it's result already available then we may get an invalid
-        state exception
     Args:
-        task(asyncio.Task): task to cancel
+        task: an asyncio.Task that is not yet done; call task.done() before this if unsure.
     """
-    return task.cancel()
-    # await _safe_cancel1(task=task)
+    __tracebackhide__ = True
 
-
-async def _safe_cancel1(task):
-    class CancelFlag(object):
-        task_name = None
+    @provide__init__
+    class CancelFlag:
+        task_name: str
 
         def __repr__(self):
-            return f"<{self.__class__.__name__}(task_name={self.task_name},id={id(self)})>"
+            return f"<{self.__class__.__name__}(task_name={self.task_name}, id={id(self)})>"
 
     assert isinstance(task, asyncio.Task), "expected asyncio.Task instance"
-    task.cancel(sentinel := CancelFlag())
-    sentinel.task_name = task.get_name()
 
-    f = asyncio.shield(task)
+    # Nothing to do — also avoids the InvalidStateError that task.cancel() raises on a
+    # finished task.
+    if task.done():
+        return
+
+    # Request cancellation unconditionally.
+    # _safe_cancel1 returned early when task.cancelling() > 0, which skipped the wait.
+    # We still call cancel() here even if a cancellation is already in-flight: it is
+    # idempotent from the task's perspective (increments the internal counter by 1) and
+    # ensures the task will stop even if the earlier cancel was somehow swallowed.
+    task.cancel(sentinel := CancelFlag(task_name=task.get_name()))
 
     try:
+        # Yield once so the event loop can deliver the CancelledError into task.
+        # Fast path: cooperative tasks that cancel immediately are done after this yield.
         await asyncio.sleep(0)
         if task.done():
             return
 
-        # it's not a good choice to pass cancelled error of outer function
-        # into an already-expected-to-be cancelled task
-        return await f  # wait until return
-    except asyncio.CancelledError as ce:
-        curr = asyncio.current_task()
-        if not task.done():
-            # this means `ce` is not raised by completion of task
-            # and `ce` belongs to current task
-            raise ce
+        # Wait for task to finish, but without forwarding any *external* cancellation
+        # that arrives on the calling task.
+        #
+        # Without shield: if this coroutine's own task is cancelled externally while we
+        # are waiting, asyncio would forward that CE into `task` as an extra task.cancel()
+        # call — a second, unintended cancellation.  asyncio.shield() breaks this by
+        # creating a separate outer future that absorbs the external CE, leaving `task`
+        # itself undisturbed so it can finish on its own schedule.
+        await asyncio.shield(task)
 
-        try:
-            # we lose our sentinel inside shield as it plays cleverly with futures
-            task.exception()  # unwrap
-        except asyncio.CancelledError as ce_task:
-            if sentinel in ce_task.args:
-                if curr.cancelling():
-                    # edge case where task gets done immediately after cancellation
-                    # and `ce` belongs to current task
-                    raise ce
-                return
+    except asyncio.CancelledError as ce:
+        # A CancelledError reaches here from exactly two sources:
+        #
+        #   (A) task finished with cancellation — shield propagates the inner task's
+        #       cancelled state to the outer future, which then raises CE here.
+        #
+        #   (B) the calling coroutine's own task was cancelled externally — asyncio
+        #       throws a CE at the nearest suspension point (the shield await).
+        #
+        # task.done() is the correct discriminator:
+        # shield only propagates the inner task's result *after* task has fully completed,
+        # so if task is not done the CE cannot have come from source (A).
+
+        if not task.done():
+            # Source (B) only: our task is being cancelled while task is still running.
+            # task.cancel() was already called above, so task will finish on its own.
+            # We must not suppress our own task's cancellation — re-raise immediately.
+            raise ce.with_traceback(None)
+
+        # task IS done. The CE may have come from (A), (B), or both arriving together.
+        #
+        # curr.cancelling() > 0 means the calling task has at least one pending external
+        # cancel request outstanding.  We must re-raise in that case, regardless of how
+        # task finished (cancelled, returned normally, or raised another exception).
+        if asyncio.current_task().cancelling():
+            raise ce.with_traceback(None)
+
+        # task is done and there is no outstanding cancellation on the calling task.
+        # The CE came from source (A) only: task's cancellation propagated through shield.
+        # This is the normal success path — swallow the CE and return.
+        # with a assurance check that CE contains the exception we put into the task
+        if sentinel not in ce.args:
+            raise ce.with_traceback(None)  # this is something else than our own cancellation
 
 
 def shorten_path(path: Path, max_length):
@@ -308,7 +338,8 @@ def wrap_with_tryexcept(func, *args, _logger=_logger, **kwargs):
         except Exception as e:
             _logger.exception(
                 f"got an exception for function {func_str(func)} : {type(e)} : {e}",
-                stack_info=True
+                stack_info=True,
+                stacklevel=2,
             )
 
     return wrapped_with_tryexcept
@@ -316,7 +347,8 @@ def wrap_with_tryexcept(func, *args, _logger=_logger, **kwargs):
 
 def keep_task_reference(func):
     """Decorator
-    Event does not hold a reference to running tasks, to prevent task disappearing
+
+    Event loop does not hold a reference to running tasks, to prevent task disappearing
     in the middle of its execution, this keeps a strong reference to current running task
     """
 
@@ -326,6 +358,36 @@ def keep_task_reference(func):
         return func(*args, **kwargs)
 
     return task_wrapper
+
+
+def long_running_task(coro, name, app_exit_stack, *, cleanup_on_exit=True):
+    """
+    Run a coroutine as a background task with optional cleanup on exit.
+
+    This function creates an asyncio Task from the given coroutine and optionally
+    registers it with an application-level exit stack for proper cleanup. The task
+    can be canceled either asynchronously or synchronously based on the specified
+    parameters.
+
+    Parameters:
+        coro (Coroutine): The coroutine to be run as a background task.
+        name (str): A name for the asyncio Task to aid debugging.
+        app_exit_stack (AsyncExitStack): The exit stack used to manage application-level
+            cleanup.
+        cleanup_on_exit (bool): Whether to perform safe cleanup on application exit.
+            If True, the task will be canceled asynchronously using a registered
+            callback. Defaults to True.
+
+    Returns:
+        asyncio.Task: The created asyncio Task running the provided coroutine.
+    """
+
+    t = asyncio.create_task(coro, name=name)
+    if cleanup_on_exit:
+        app_exit_stack.push_async_callback(safe_cancel, t)
+    else:
+        app_exit_stack.push_callback(t.cancel)
+    return t
 
 
 class NotInUse:

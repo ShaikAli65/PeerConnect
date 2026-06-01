@@ -2,10 +2,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from avails import WireData
-from avails.exceptions import InvalidPacket
-from net import WireIO
 from src import net
+from src.avails import WireData
+from src.avails.exceptions import InvalidPacket
+from src.net import WireIO
 from src.transfers import HEADERS
 from .protocol import MessageProtocol
 

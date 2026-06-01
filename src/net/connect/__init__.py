@@ -6,7 +6,7 @@ import socket as _socket
 import struct
 from typing import NamedTuple, TypeAlias
 
-from avails.exceptions import CannotConnect
+from src.avails.exceptions import CannotConnect
 from src.avails import const, use
 from ._asocket import *
 from ._conn import *

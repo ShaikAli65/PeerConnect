@@ -59,7 +59,7 @@ async def test_ordered_failed_sends_raise_buffer_and_replay_when_transport_recov
           failing_transport,
           ordering=True,
           raise_on_send_failure=True,
-    ) as msg_socket:
+    ).context_manager() as msg_socket:
         for message in messages:
             with pytest.raises(FailedToSend) as exc_info:
                 await msg_socket(message)

@@ -1,4 +1,4 @@
-from conduit.bases import FrontEnd
+from src.conduit.bases import FrontEnd
 from src.avails import use
 from src.conduit import logger
 from src.conduit.ui_events import ProfileDataExchange, ProfileDataExchangeReply

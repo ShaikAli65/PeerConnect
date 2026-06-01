@@ -1,10 +1,10 @@
-from avails import RemotePeer, WireData, use
-from core.app_events import AppEventsBus, MessageReceived
-from transfers import HEADERS
+from src.avails import RemotePeer, WireData, use
+from src.core.app_events import AppEventsBus, MessageReceived
+from src.transfers import HEADERS
 from typing_extensions import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from transfers.messaging.transport import MessageTransport
+    from src.transfers.messaging.transport import MessageTransport
 
 
 @use.provide__init__

@@ -2,17 +2,16 @@ import asyncio
 import logging
 import sys
 
-from avails.exceptions import FailedToSend, InvalidPacket
-from net import REQUESTS_FLAG
 from src import net
 from src.avails import BaseDispatcher, Router, WireData, const, use
+from src.avails.exceptions import FailedToSend, InvalidPacket
 from src.avails.mixins import CallHandlerMixIn, ReplyRegistryMixIn, TaskGroupMixIn
 from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import _kademlia
 from src.core.discover import discovery_initiate
 from src.core.user_prompts import UserPrompts
 from src.gossip import app_gossip
-from src.net import requests
+from src.net import REQUESTS_FLAG, requests
 
 _logger = logging.getLogger(__name__)
 
@@ -192,8 +191,7 @@ async def initiate(
         this_interface,
         this_remote_peer,
         kad_server,
-        app_runtime.in_network,
-        app_runtime.finalizing,
+        app_runtime,
         dgram_transport,
         user_prompts,
     )

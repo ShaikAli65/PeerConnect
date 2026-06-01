@@ -38,6 +38,7 @@ async def _async_initiate_helper(init_app, exit_stack):
                 print(COLORS.RED, "CRITICAL EXCEPTION NOT EXPECTING", COLORS.RESET)
                 traceback.print_exc()
             error = be
+        raise error
 
     if error is not None:
         raise error
@@ -45,7 +46,7 @@ async def _async_initiate_helper(init_app, exit_stack):
 
 def initiate(init_app, app_runtime):
     try:
-        with AppRunner(finalizing=app_runtime.finalizing, debug=const.debug and False) as runner:
+        with AppRunner(finalizing=app_runtime.finalizing, debug=const.debug) as runner:
             eventloop.set_eager_task_factory()
             runner.run(_async_initiate_helper(init_app, app_runtime.exit_stack))
     except BaseException as be:

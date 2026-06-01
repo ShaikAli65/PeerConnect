@@ -52,8 +52,7 @@ async def discovery_initiate(
         interface,
         this_remote_peer,
         kad_server,
-        in_network,
-        finalizing_event,
+        app_runtime,
         transport,
         user_prompts: UserPrompts,
 ):
@@ -72,17 +71,18 @@ async def discovery_initiate(
     discovery_router.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discovery_router.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
-    # TODO: who is the owner of this task??
-    asyncio.create_task(
+    use.long_running_task(
         send_discovery_requests(
             multicast_address,
             kad_server,
-            in_network,
-            finalizing_event,
+            app_runtime.in_network,
+            app_runtime.finalizing_event,
             discovery_transport,
             this_remote_peer,
             user_prompts,
-        )
+        ),
+        "discovery-send-requests",
+        app_runtime.exit_stack,
     )
     return DiscoveryService(discovery_transport, discovery_router)
 
