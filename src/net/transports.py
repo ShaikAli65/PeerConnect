@@ -20,9 +20,10 @@ class REQUESTS_FLAG(enum.IntFlag):
     ACK = 32  # special flag for ACK messages
     REQUIRE_ACK = 64  # special flag for messages that require ACK
 
-    @property
-    def max_byte_len(self):
-        return 1
+    # @property
+    # def max_byte_len(self):
+    #     return 1
+    max_byte_len = 1
 
     @property
     def flag_to_bytes(self):

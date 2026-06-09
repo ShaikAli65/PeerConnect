@@ -5,7 +5,6 @@ import time
 import traceback
 from asyncio import CancelledError
 
-
 if __name__ == "__main__":
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -17,7 +16,6 @@ from src.core import eventloop
 from src.net import TCPProtocol
 from src.core.async_runner import AppRunner
 
-
 cancellation_started = 0.0
 
 
@@ -25,7 +23,7 @@ async def _async_initiate_helper(init_app, exit_stack):
     error = None
     async with exit_stack:
         try:
-            await init_app()
+            return await init_app()
         except CancelledError as ce:
             error = ce
             # no point of passing cancelled error related to main task into exit_stack
@@ -38,17 +36,18 @@ async def _async_initiate_helper(init_app, exit_stack):
                 print(COLORS.RED, "CRITICAL EXCEPTION NOT EXPECTING", COLORS.RESET)
                 traceback.print_exc()
             error = be
-        raise error
 
     if error is not None:
         raise error
+
+    return 1  # should never reach here
 
 
 def initiate(init_app, app_runtime):
     try:
         with AppRunner(finalizing=app_runtime.finalizing, debug=const.debug) as runner:
             eventloop.set_eager_task_factory()
-            runner.run(_async_initiate_helper(init_app, app_runtime.exit_stack))
+            return runner.run(_async_initiate_helper(init_app, app_runtime.exit_stack))
     except BaseException as be:
         if const.debug:
             print_str = f"{'-' * 80}\n" \
@@ -60,14 +59,9 @@ def initiate(init_app, app_runtime):
                 be.add_note(f"clean exit completed within {time.monotonic() - cancellation_started:.6f}s\n")
             raise be
 
-        sys.exit(-1)
-
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     app_runtime = init_app_runtime()
     const.PROTOCOL = TCPProtocol
-    initiate(
-        lambda: init_app(app_runtime),
-        app_runtime,
-    )
+    sys.exit(initiate(lambda: init_app(app_runtime), app_runtime))

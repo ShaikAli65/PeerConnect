@@ -232,7 +232,7 @@ def _run_page_server(host="localhost", port_page_serve=const.PORT_PAGE_SERVE, ex
                 # has to be ran in a different thread, otherwise it will deadlock
                 await loop.run_in_executor(th, _close_http_server)
 
-    use.long_running_task(_helper(), "http-server", exit_stack)
+    use.run_background_task(_helper(), "http-server", exit_stack)
 
 
 async def subscribe_to_app_events(

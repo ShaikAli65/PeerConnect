@@ -166,7 +166,7 @@ async def test_bigfile_sender_and_receiver_transfer_parts_over_multiple_connecti
     source_path = tmp_path / "large.bin"
     final_path = tmp_path / "download" / "large.bin"
     final_path.parent.mkdir()
-    payload = b"abcdefghijklmnop"
+    payload = b"abcdefghijklmnop"  # TODO: use bigger payload of size >2GB
     source_path.write_bytes(payload)
     source_item = FileItem(source_path, 0)
     final_item = FileItem(final_path, 0)

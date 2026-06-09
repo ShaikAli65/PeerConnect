@@ -47,8 +47,12 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         self.requests_transport = RequestsTransport(transport)
         _logger.info(f"started requests endpoint at {transport.get_extra_info('socket')}")
 
-    async def wait_for_ack(self, msg_id, timeout):
-        f = self._ack_futs[msg_id] = asyncio.get_running_loop().create_future()
+    async def wait_for_ack(self, msg_id: bytes, timeout):
+        assert isinstance(msg_id, bytes), "msg_id should be bytes"
+        if msg_id not in self._ack_futs.data:
+            self._ack_futs[msg_id] = asyncio.get_running_loop().create_future()
+        # f = self._ack_futs.data.setdefault(msg_id, asyncio.get_running_loop().create_future())
+        f = self._ack_futs[msg_id]
         return await asyncio.wait_for(shield(f), timeout=timeout)
 
     def datagram_received(self, actual_data, addr):
@@ -69,14 +73,12 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
         code = REQUESTS_FLAG.bytes_to_flag(code)
         base_flag = REQUESTS_FLAG(code & (REQUESTS_FLAG.EXTRA - 1))
         extra_flags = REQUESTS_FLAG(code & ~(REQUESTS_FLAG.EXTRA - 1))
-
         if extra_flags & REQUESTS_FLAG.ACK:
             try:
                 fut = self._ack_futs[data]
             except KeyError:
                 _logger.warning(f"received ack for unknown message id: {data}")
                 return None, None
-
             if not fut.done():
                 fut.set_result(None)
 
@@ -84,7 +86,7 @@ class RequestsEndPoint(asyncio.DatagramProtocol):
 
         req_data = unpack_datagram(data)
         if extra_flags & REQUESTS_FLAG.REQUIRE_ACK:
-            self.requests_transport.sendto(req_data.msg_id.encode(), addr, extra_flags=REQUESTS_FLAG.ACK)
+            self.requests_transport.sendto(req_data.msg_id.encode(), addr, extra=REQUESTS_FLAG.ACK)
             _logger.debug(f"received request to send ack, acking {req_data.msg_id=}")
 
         return base_flag, req_data

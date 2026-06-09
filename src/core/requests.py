@@ -94,24 +94,30 @@ class RequestsService:
         Raises:
             InvalidPacket: if msg does not contain msg_id and expecting a reply
             FailedToSend: if confirm_delivery is True and ack is not received after retries
+
+        Returns:
+            - number of bytes sent if not expecting a reply, else reply is returned
         """
 
         if confirm_delivery:
             msg.id = msg.msg_id or next(self.req_endpoint.ack_id_counter).to_bytes(4)
-            async for timeout in use.get_timeouts(max_retries=retries):
-                self.transport.sendto(bytes(msg), peer.req_uri, extra=REQUESTS_FLAG.REQUIRE_ACK)
+            for timeout in use.get_timeouts(max_retries=retries):
+                sendto_ret = self.transport.sendto(bytes(msg), peer.req_uri, extra=REQUESTS_FLAG.REQUIRE_ACK)
                 try:
-                    await self.req_endpoint.wait_for_ack(msg.msg_id, timeout)
+                    await self.req_endpoint.wait_for_ack(msg.msg_id.encode(), timeout)
                     break
                 except asyncio.TimeoutError:
                     continue
             else:
                 raise FailedToSend(f"ack not received after {retries} retries")
 
+            if not expect_reply:  # wait for the reply to be received
+                return sendto_ret
+
         if expect_reply:
             if msg.msg_id is None:
                 raise InvalidPacket("msg_id not found and expecting a reply")
-            return await self.dispatcher.register_reply(msg.msg_id)
+            return await (self.dispatcher.register_reply(msg.msg_id))
 
         return self.transport.sendto(bytes(msg), peer.req_uri)
 
@@ -197,6 +203,8 @@ async def initiate(
     )
 
     # this task is internally managed by KademliaServer
-    asyncio.create_task(kad_server.add_this_peer_to_lists())
+    use.run_background_task(
+        kad_server.add_this_peer_to_lists(), "kad_server.add_this_peer_to_lists", app_runtime.exit_stack
+    )
 
     return requests_service, gossip_service, gossip_searcher, discovery_service, kad_server
