@@ -3,19 +3,21 @@ Helper functions to deal with peers in network
 """
 
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, TYPE_CHECKING
 
 from kademlia import crawling
 from src.avails import PeerDict, RemotePeer, const, use
 from src.avails.exceptions import RemotePeerNotFound
 from src.avails.remotepeer import convert_peer_id_to_byte_id
 from src.core import app_events
-from src.core._kademlia import PeerServer
 from src.core.peerstore import node_list_ids
 from src.core.search import GossipSearch, SearchCrawler
 from src.managers.connection import ConnectionManager
 
 _logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.core._kademlia import PeerServer
 
 
 class PeerListGetter(crawling.ValueSpiderCrawl):
@@ -54,7 +56,7 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
 
 @use.provide__init__
 class PeerService:
-    kad_server: PeerServer
+    kad_server: "PeerServer"
     gossip_searcher: GossipSearch
     _connection_manager: ConnectionManager
     peer_list: PeerDict

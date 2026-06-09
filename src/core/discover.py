@@ -71,7 +71,7 @@ async def discovery_initiate(
     discovery_router.register_handler(DISCOVERY.NETWORK_FIND_REPLY, discovery_reply_handler)
     discovery_router.register_handler(DISCOVERY.NETWORK_FIND, discovery_req_handler)
 
-    use.long_running_task(
+    use.run_background_task(
         send_discovery_requests(
             multicast_address,
             kad_server,

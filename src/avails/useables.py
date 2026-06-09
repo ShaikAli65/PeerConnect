@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from sys import _getframe  # noqa
-from typing import Awaitable, Callable, ParamSpec, TypeVar, override
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, override
 
 from src.avails import constants as const
 
@@ -42,6 +42,9 @@ async def safe_cancel(task: asyncio.Task):
 
     If the task containing this function call gets cancelled then, this function raises cancellation and returns
     without waiting for the given task to finish, or cleanup.
+
+    This function will collect the error of the given task properly maintaining the clean up, for a
+    different behaviour when error collection is not needed, see `cancel_and_wait`
 
     Note:
         Assumes that task will always re-raise the same cancelled error that was passed
@@ -123,6 +126,26 @@ async def safe_cancel(task: asyncio.Task):
         # with a assurance check that CE contains the exception we put into the task
         if sentinel not in ce.args:
             raise ce.with_traceback(None)  # this is something else than our own cancellation
+
+
+async def cancel_and_wait(task: asyncio.Task[Any]):
+    """Cancel the *fut* future or task and wait until it completes."""
+
+    def _release_waiter(*args):
+        if not waiter.done():
+            waiter.set_result(None)
+
+    loop = asyncio.get_running_loop()
+    waiter = loop.create_future()
+    task.add_done_callback(_release_waiter)
+
+    try:
+        task.cancel()
+        # We cannot wait on *task* directly to make
+        # sure _cancel_and_wait itself is reliably cancellable.
+        await waiter
+    finally:
+        task.remove_done_callback(_release_waiter)
 
 
 def shorten_path(path: Path, max_length):
@@ -360,7 +383,7 @@ def keep_task_reference(func):
     return task_wrapper
 
 
-def long_running_task(coro, name, app_exit_stack, *, cleanup_on_exit=True):
+def run_background_task(coro, name, app_exit_stack, *, cleanup_on_exit=True):
     """
     Run a coroutine as a background task with optional cleanup on exit.
 
@@ -386,7 +409,7 @@ def long_running_task(coro, name, app_exit_stack, *, cleanup_on_exit=True):
     if cleanup_on_exit:
         app_exit_stack.push_async_callback(safe_cancel, t)
     else:
-        app_exit_stack.push_callback(t.cancel)
+        app_exit_stack.push_async_callback(cancel_and_wait, t)
     return t
 
 
