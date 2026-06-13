@@ -6,6 +6,7 @@ import re
 import socket
 import struct
 import typing
+from enum import Enum
 from socket import AddressFamily, IPPROTO_TCP, IPPROTO_UDP
 from typing import Annotated, Awaitable, Union
 
@@ -94,7 +95,7 @@ async def _run_cmd(*args):
     return stdout.decode().strip()
 
 
-def _is_wsl_environment() -> bool:
+def is_wsl_environment() -> bool:
     if os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"):
         return True
 
@@ -145,7 +146,7 @@ def _extract_ipv4_from_addr(ip_output: str) -> tuple[str | None, int | None]:
     return None, None
 
 
-async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
+async def is_wsl_bridged(_cache=[]) -> tuple[bool, str]:
     """Check if system's networking mode is Bridged or not in WSL environment.
 
     Returns:
@@ -156,10 +157,6 @@ async def is_wsl_bridged(_cache=[]) -> tuple[bool | None, str]:
     """
 
     if _cache:
-        return _cache[0]
-
-    if not _is_wsl_environment():
-        _cache.append((None, "Not running in a WSL environment"))
         return _cache[0]
 
     try:

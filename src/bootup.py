@@ -5,10 +5,10 @@ import webbrowser
 from pathlib import Path
 
 import src.core.async_runner  # noqa
-from conduit import frontend_web
 from kademlia.utils import digest
+from net import is_wsl_environment
 from src.avails import RemotePeer, constants as const, use
-from src.conduit import pagehandle
+from src.conduit import frontend_web, pagehandle
 from src.configurations import configure, interfaces as _interfaces
 from src.configurations.appconfig import AppConfig, AppRunTime
 from src.core import peers, requests
@@ -54,8 +54,10 @@ def make_this_remote_peer(profile):
 def retrace_browser_path():
     if const.IS_WINDOWS:
         import winreg
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                             r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice")
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"
+        )
         prog_id, _ = winreg.QueryValueEx(key, 'ProgId')
         key.Close()
 
@@ -66,21 +68,25 @@ def retrace_browser_path():
         return path.strip().split('"')[1]
 
     if const.IS_DARWIN:
-        return subprocess.check_output(["osascript",
-                                        "-e",
-                                        'tell application "System Events" to get POSIX path of (file of process "Safari" as alias)'
-                                        ]).decode().strip()
+        return subprocess.check_output([
+            "osascript",
+            "-e",
+            'tell application "System Events" to get POSIX path of (file of process "Safari" as alias)'
+        ]).decode().strip()
 
     if const.IS_LINUX:
-        command_output = subprocess.check_output(["xdg-settings", "get", "default-web-browser"]).decode().strip()
+        command_output = subprocess.check_output(
+            ["xdg-settings", "get", "default-web-browser"]).decode().strip()
 
         if command_output.startswith('userapp-'):
-            command_output = subprocess.check_output(["xdg-mime", "query", "default", "text/html"]).decode().strip()
+            command_output = subprocess.check_output(
+                ["xdg-mime", "query", "default", "text/html"]).decode().strip()
 
         return command_output
+    return None
 
 
-def _build_local_page_url(app_config:AppConfig) -> str:
+def _build_local_page_url(app_config: AppConfig) -> str:
     return f"http://localhost:{app_config.page_serve_port}/?port={app_config.page_port}"
 
 
@@ -91,17 +97,14 @@ async def launch_web_page(app_config):
         _logger.fatal(f"cannot launch UI: invalid local page configuration: {exc}")
         return
 
-    if const.IS_LINUX:
-        bridged, comment = await is_wsl_bridged()
-        if bridged:
-            _logger.info(f"detected wsl, launching page through powershell: {comment}")
-            await _open_page_in_win_shell(page_url)
+    if const.IS_LINUX and is_wsl_environment():
+        is_bridged, reason = await is_wsl_bridged()
+        if not is_bridged:
+            _logger.fatal(f"cannot launch UI: wsl is detected, but not bridged, {reason=}")
             return
-        if bridged is False:
-            _logger.fatal(f"cannot launch UI: {comment}")
-            return
-
-        assert bridged is None, "we are in a linux environment, but wsl is not detected"
+        _logger.info(f"detected wsl, launching page through powershell: {reason}")
+        await _open_page_in_win_shell(page_url)
+        return
 
     try:
         webbrowser.open(page_url)
@@ -147,7 +150,6 @@ async def init_app(app_runtime: AppRunTime):
     _logger.info(f"runtime context {app_runtime=}")
 
     _logger.info("initiating web page servers")
-
     frontend = await pagehandle.init_page_servers(app_config, app_runtime)
     user_prompts = frontend_web.WebUserPrompts(frontend)
 
@@ -227,3 +229,5 @@ async def init_app(app_runtime: AppRunTime):
     )
 
     _logger.info("boot_up complete")
+
+    return 0
