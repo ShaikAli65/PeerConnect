@@ -89,7 +89,7 @@ REQ_URI = "req_uri"
 
 
 def connect_to_peer(
-      protocol, _peer_obj=None, to_which=CONN_URI, timeout=None, retries: int = 1
+      protocol, _peer_obj=None, to_which=CONN_URI, timeout=const.CONNECTION_TIMEOUT, retries: int = 1
 ) -> Socket:
     """Creates a basic socket connection to the peer_obj passed in.
 
@@ -106,8 +106,8 @@ def connect_to_peer(
 
     address = getattr(_peer_obj, to_which)
 
-    if timeout is None:
-        return create_connection_sync(protocol, address)
+    if retries <= 1:
+        return create_connection_sync(protocol, address, timeout)
 
     retry_count = 0
     for timeout in use.get_timeouts(timeout, max_retries=retries):

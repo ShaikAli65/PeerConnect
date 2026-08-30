@@ -1,9 +1,7 @@
 """Low level Networking and Protocol Modules"""
 
 from .accept_conns import *
-from .bandwidth import Watcher
 from .connect import *
-from .connector import *
 from .utils import *
 from .wire_io import *
 from .transports import *

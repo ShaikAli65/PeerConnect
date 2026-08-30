@@ -277,7 +277,6 @@ class Connection:
     Note:
         does not own the resource (socket), just a handy wrapper to pass between functions
 
-
     Attributes:
         socket: underlying socket (for introspection)
         send: sender API, async callable that returns when data passed is sent successfully
@@ -295,7 +294,7 @@ class Connection:
     @classmethod
     def create_from(cls, socket: Socket, peer):
         return cls(
-            TransportSocket(socket), Sender(socket), Receiver(socket), peer, Lock(), ConnectionType.TBD
+            TransportSocket(socket), Sender(socket), Receiver(socket), peer, use.Lock(), ConnectionType.TBD  # noqa
         )
 
     def __enter__(self):
@@ -311,45 +310,3 @@ class Connection:
     @property
     def busy(self):
         return self.lock.locked()
-
-#
-# class MsgConnection:
-#     """Send or Receive WireData object from connection"""
-#
-#     __slots__ = ("_connection",)
-#     _connection: Connection
-#
-#     def __init__(self, connection):
-#         self._connection = connection
-#
-#     def send(self, data: WireData):
-#         byted_data = bytes(data)  # marshall
-#         data_size = struct.pack("!I", len(byted_data))
-#         return self._connection.send(data_size + byted_data)
-#
-#     async def recv(self):
-#         try:
-#             data_size = struct.unpack("!I", await self._connection.recv(4))[0]
-#         except struct.error as se:
-#             raise InvalidPacket from se
-#         raw_data = await self._connection.recv(data_size)
-#         return WireData.load_from(raw_data)
-#
-#     @property
-#     def socket(self):
-#         return self._connection.socket
-#
-#     @property
-#     def peer(self):
-#         return self._connection.peer
-#
-#     @property
-#     def connection(self):
-#         return self._connection
-#
-#
-# class MsgConnectionNoRecv(MsgConnection):
-#     __slots__ = ()
-#
-#     async def recv(self, *args):
-#         raise NotImplementedError("not allowed")
