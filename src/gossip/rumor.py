@@ -41,7 +41,7 @@ class SimpleRumorMessageList(AbstractRumorMessageList):
     def _get_current_clock():
         return time.monotonic()
 
-    def _get_list_of_peers(self):
+    def _get_list_of_peers(self) -> set[str]:
         raise NotImplementedError
 
     def push(self, message: GossipMessage):

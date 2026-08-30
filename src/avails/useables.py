@@ -40,7 +40,8 @@ async def safe_cancel(task: asyncio.Task):
     Correctly handles the case where the calling task is also cancelled concurrently,
     without suppressing that external cancellation.
 
-    If the task containing this function call gets cancelled then, this function raises cancellation and returns
+    If the task containing this function call gets cancelled then, this function raises cancellation and
+    returns
     without waiting for the given task to finish, or cleanup.
 
     This function will collect the error of the given task properly maintaining the clean up, for a
@@ -117,14 +118,24 @@ async def safe_cancel(task: asyncio.Task):
         # curr.cancelling() > 0 means the calling task has at least one pending external
         # cancel request outstanding.  We must re-raise in that case, regardless of how
         # task finished (cancelled, returned normally, or raised another exception).
-        if asyncio.current_task().cancelling():
-            raise ce.with_traceback(None)
+        if asyncio.current_task().cancelling() > 0:
+            ce.add_note("trying to safe cancel task, but the safe_cancel is being cancelled concurrently")
+            _logger.warning(
+                f"trying to safe cancel task, but the safe_cancel is being cancelled concurrently, "
+                f"{sentinel=}")
+            raise ce
 
         # task is done and there is no outstanding cancellation on the calling task.
         # The CE came from source (A) only: task's cancellation propagated through shield.
         # This is the normal success path — swallow the CE and return.
         # with a assurance check that CE contains the exception we put into the task
         if sentinel not in ce.args:
+            ce.add_note(
+                "trying to safe cancel task, but the task is being cancelled concurrently different than "
+                "the safe_cancel")
+            _logger.warning(
+                f"trying to safe cancel task, but the task is being cancelled concurrently different than "
+                f"the safe_cancel, {sentinel=}")
             raise ce.with_traceback(None)  # this is something else than our own cancellation
 
 
@@ -169,7 +180,8 @@ def get_timeouts(initial=0.001, factor=2, max_retries=const.MAX_RETIRES, max_val
     Args:
         initial (float): The initial timeout value in seconds. Defaults to 0.001.
         factor (int): The factor by which the timeout value is multiplied at each step. Defaults to 2.
-        max_retries (int): The maximum number of retries. Defaults to 5, if -1 is provided then yields infinitely
+        max_retries (int): The maximum number of retries. Defaults to 5, if -1 is provided then yields
+                            infinitely
         max_value (float): The maximum timeout value in seconds. Defaults to 5.0.
 
     Yields:
@@ -424,7 +436,8 @@ class NotInUse:
         """Decorator class to mark functions as not in use or not fully tested.
 
         Used to mark functions that are not currently in use or haven't been fully tested.
-        By marking a function with this class, it prevents the call to the function unless explicitly allowed by the user.
+        By marking a function with this class, it prevents the call to the function unless explicitly
+        allowed by the user.
 
         Args:
             function: The function to be decorated.

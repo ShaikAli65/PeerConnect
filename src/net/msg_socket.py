@@ -200,20 +200,19 @@ class MessageSocket:
         finally:
             if self._finalized:
                 self._logger.warning("!> sending message socket already finalized, ignoring __aexit__")
-                return
+            else:
+                if not self.buffer.empty():
+                    self._logger.warning(f"!> failure buffer not empty len={self.buffer.qsize()}")
+                    self._fail_pending_buffer()
 
-            if not self.buffer.empty():
-                self._logger.warning(f"!> failure buffer not empty len={self.buffer.qsize()}")
-                self._fail_pending_buffer()
+                self._finalized = True
+                async with self.connection_restablished:
+                    self.connection_restablished.notify_all()
 
-            self._finalized = True
-            async with self.connection_restablished:
-                self.connection_restablished.notify_all()
+                self.buffer.put_nowait(None)
+                await self._buffer_sender_task
 
-            self.buffer.put_nowait(None)
-            await self._buffer_sender_task
-
-            _logger.debug(f"$> stopped message sender for {self.transport=}")
+                _logger.debug(f"$> stopped message sender for {self.transport=}")
 
     @property
     def is_transport_connected(self):

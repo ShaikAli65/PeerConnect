@@ -387,8 +387,6 @@ class TransferManager:
                 )
             except TypeError:
                 _logger.error("ill formed file item, rejecting big-file transfer")
-                watcher = net.Watcher()  # TODO: WTF IS THIS?
-                await watcher.request_closing(event.connection)
                 return
 
             validatename(main_file, self.default_download_path)

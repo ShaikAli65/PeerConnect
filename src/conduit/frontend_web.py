@@ -1,5 +1,5 @@
 import asyncio
-from typing import TYPE_CHECKING
+from typing import Awaitable, TYPE_CHECKING
 
 from src.avails import use
 from src.avails.exceptions import InvalidPacket
@@ -25,7 +25,7 @@ class WebFrontend:  # protocol impl: FrontEnd
         self.sender = sender
         self.receiver = receiver
 
-    def send_data_to_frontend(self, data, expect_reply=False) -> asyncio.Future[DataWeaver] | None:
+    def send_data_to_frontend(self, data, expect_reply=False) -> Awaitable[DataWeaver] | None:
         """Send a packet to frontend based on type code
 
         Args:

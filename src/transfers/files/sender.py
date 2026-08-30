@@ -26,7 +26,6 @@ class Sender(
     """Send a bunch of files
 
     Transfer layout::
-
         [{1} b'1'] -> [{2} file metadata] -> [{3} file contents] -(ok)-> [more ?] ->[{1}]
                                                       |               |
                                                   (exception)       [{4} b'0']
@@ -34,7 +33,6 @@ class Sender(
                                             [{5} preserve status]  [{7} finalize]
                                                       |
                                                 [{6} pause]
-
     """
 
     version = const.VERSIONS["FO"]
@@ -49,7 +47,7 @@ class Sender(
         self.status_updater = status_updater
         self.should_stop = False
         self._current_file_idx = -1
-        self.net_sender = None  # type: Callable[[bytes],Awaitable[int]]
+        self.net_sender = None  # type: Callable[[bytes], Awaitable[int]]
         self.net_receiver = None # type: Callable[[int], Awaitable[bytes]]
 
         self._on_completion_event = asyncio.Event()

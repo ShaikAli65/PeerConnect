@@ -19,7 +19,7 @@ class IDialogs(ABC):
 
 
 class UIEventMeta(type):
-    registry: dict[str, type["UIEvent"]] = {}
+    registry: dict[str, "UIEventMeta"] = {}
     inbound_registry: dict[str, type["UIInboundEvent"]] = {}
     outbound_registry: dict[str, type["UIOutboundEvent"]] = {}
 
@@ -60,7 +60,7 @@ class UIEvent(metaclass=UIEventMeta):
         return cls.HEADER or camel_to_snake(cls.__name__)
 
     @classmethod
-    def resolve(cls, header: str) -> AnyUIEvent:
+    def resolve(cls, header: str) -> UIEventMeta:
         return UIEventMeta.registry[header]
 
     @classmethod

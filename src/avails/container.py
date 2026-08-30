@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from itertools import count
 from typing import Any, Iterable, ValuesView
-from weakref import WeakSet
 
 from src.avails.bases import HasPeerId
 from src.avails.remotepeer import RemotePeer
@@ -35,7 +34,8 @@ class PeerDict(dict):
         """Adds peer to dictionary
 
         If peer_obj with peer_id is already there in dict, then calls `RemotePeer.update` that
-        changes/updates underlying attribute values inplace, this ensures that object references are maintained as-is.
+        changes/updates underlying attribute values inplace, this ensures that object references
+        are maintained as-is.
 
         If you want to force the addition, call remove_peer first.
 

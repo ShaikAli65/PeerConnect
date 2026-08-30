@@ -2,7 +2,7 @@ import enum
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import astuple, dataclass
-from typing import Callable, ClassVar, Protocol, TypeVar
+from typing import Any, Callable, ClassVar, Protocol, TypeVar
 
 from src.avails.useables import camel_to_snake
 
@@ -79,7 +79,7 @@ class BaseDispatcher(AbstractDispatcher):
     def __call__(self, *args, **kwargs):
         return self.submit(*args, **kwargs)
 
-    async def submit(self, event):
+    async def submit(self, event: Any) -> Any:
         """Called when event occurs
         """
 

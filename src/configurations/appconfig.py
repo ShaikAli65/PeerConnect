@@ -48,7 +48,7 @@ class AppConfig:
     req_port: int = const.PORT_REQ
     page_port: int = const.PORT_PAGE
     page_serve_port: int = const.PORT_PAGE_SERVE
-    version: Versions = Versions
+    version: type[Versions] = Versions
 
 
 @use.provide__init__(slots=True)
@@ -85,4 +85,12 @@ class AppRunTime:
 
 
 def init_app_runtime():
-    return AppRunTime([], asyncio.Event(), asyncio.Event(), PeerDict(), [], AggregatingAsyncExitStack(), AppEventsBus())
+    return AppRunTime(
+        profiles=[],
+        finalizing=(asyncio.Event()),
+        in_network=(asyncio.Event()),
+        peer_list=(PeerDict()),
+        interfaces=[],
+        exit_stack=(AggregatingAsyncExitStack()),
+        app_events=(AppEventsBus()),
+    )
