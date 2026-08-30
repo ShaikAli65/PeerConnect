@@ -54,6 +54,20 @@ class PeerListGetter(crawling.ValueSpiderCrawl):
         return []
 
 
+def RelaventPeerFinder(peers: PeerDict):
+    def _(search_string, relevance: RemotePeer):
+        peer_ids = list(peers.keys())
+
+        for peer_id in peer_ids:
+            try:
+                peer = peers[peer_id]  # May raise KeyError if removed concurrently
+            except KeyError:
+                continue  # Skip removed peer
+            if peer.is_relevant(search_string):
+                yield peer
+    return _
+
+
 @use.provide__init__
 class PeerService:
     kad_server: "PeerServer"
@@ -155,9 +169,6 @@ class PeerService:
 
     async def remove_peer(self, peer_id):
         peer = await self.get_remote_peer(peer_id)
-        if peer is None:
-            return
-
         is_reachable = await self._connection_manager.is_peer_reachable(peer)
         if not is_reachable:
             self.change_peer_status(peer, RemotePeer.STATUS.OFFLINE)
@@ -171,4 +182,3 @@ class PeerService:
     def add_peer(self, peer):
         self.peer_list.add_peer(peer)
         self._app_event_bus.publish(app_events.PeerStatusUpdate(peer))
-

@@ -121,18 +121,22 @@ class RPCReceiver(RPCProtocol):
         return self.storage.store_peers_in_list(list_key, peer_list)
 
     def rpc_search_peers(self, _, caller_peer, search_string):
-        self._check_in(caller_peer)
-        relevant_peers = self.peer_service.search_relevant_peers(search_string)
+        peer_obj = self._check_in(caller_peer)
+        relevant_peers = self.relavent_peers_finder(search_string, peer_obj)
         return list(map(bytes, relevant_peers))
 
 
 class KadProtocol(RPCCaller, RPCReceiver, protocol.KademliaProtocol):
-    def __init__(self, peer_service, peer_state_change_callback, interface, source_node, storage, ksize):
+    def __init__(
+          self,
+          relavent_peers_finder, peer_state_change_callback,
+          interface, source_node, storage, ksize
+    ):
         super().__init__(source_node, storage, ksize)
         self.router = AnotherRoutingTable(peer_state_change_callback, self, ksize, source_node)
         self.storage = storage
         self.interface = interface
-        self.peer_service = peer_service
+        self.relavent_peers_finder = relavent_peers_finder
 
     def _check_in(self, peer):
         s = RemotePeer.load_from(peer)
@@ -210,7 +214,7 @@ class PeerServer(network.Server):
     @override
     def _create_protocol(self):
         return self.protocol_class(
-            self.peer_service,
+            peers.RelaventPeerFinder(self.peer_list),
             self._peer_state_changed,
             self.interface,
             self.node,
@@ -273,7 +277,7 @@ class PeerServer(network.Server):
         _logger.info("entering passive mode for adding this peer to lists")
 
         while not self.stopping:
-            await asyncio.sleep(const.PERIODIC_TIMEOUT_TO_ADD_THIS_REMOTE_PEER_TO_LISTS)
+            await asyncio.sleep(const.PEER_LIST_REFRESH_INTERVAL)
             await self.in_network.wait()
             if not await self.__store_nodes_in_list(closest_list_id, [self.node]):
                 _logger.error("failed adding this peer object to lists")

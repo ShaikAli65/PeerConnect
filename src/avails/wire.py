@@ -9,15 +9,18 @@ One special class of wire protocol ``:class RemotePeer:`` is available in ``:mod
 Any Class that wraps data is immutable, once created not modifications are allowed, create another
 
 """
+from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import NamedTuple, TYPE_CHECKING
 
 import umsgpack
-
 from src.avails import const as _const
 from src.avails.exceptions import InvalidPacket
+
+if TYPE_CHECKING:
+    from src.net import NetAddr
 
 __all__ = (
     "WireData",
@@ -108,7 +111,7 @@ class GossipMessage:
 
     @property
     def message(self):
-        return self.actual_data.body.get("message", None)
+        return self.actual_data.body.get("message", "")
 
     @property
     def ttl(self):
@@ -143,7 +146,13 @@ class GossipMessage:
         return bytes(self.actual_data)
 
     def __repr__(self):
-        return f"<GossipMessage(id={self.id}, created={self.created}, ttl={self.ttl}, message={self.message[:11]},)>"
+        return (
+            f"<GossipMessage("
+            f"id={self.id}, "
+            f"created={self.created}, "
+            f"ttl={self.ttl}, "
+            f"message={self.message[:11]},)>"
+        )
 
 
 @dataclass(slots=True)
@@ -175,14 +184,14 @@ class PalmTreeInformResponse:
     """
     Args:
         peer_id(str) : id of peer who created this response
-        passive_addr(tuple[str, int]) : datagram endpoint address at where peer is reachable
-        active_addr(tuple[str, int]) : stream endpoint address
+        passive_addr(NetAddr) : datagram endpoint address at where peer is reachable
+        active_addr(NetAddr) : stream endpoint address
         session_key(str) : echoing back the session_key received
     """
 
     peer_id: str
-    passive_addr: tuple[str, int]
-    active_addr: tuple[str, int]
+    passive_addr: NetAddr
+    active_addr: NetAddr
     session_key: str
 
     def __bytes__(self):
@@ -201,23 +210,18 @@ class PalmTreeSession:
     """A dataclass that represents the structure of PalmTreeSession
 
     Args:
-        originate_id (str) : the one who initiated this session
+        originate_peer_id (str) : the one who initiated this session
         adjacent_peers (list[str]) : all the peers to whom we should be in contact
-        key (str) : session key used to encrypt data
         session_id (int) : self-explanatory
-        fanout (int) : maximum number of resends this instance should perform for every packet received
-        link_wait_timeout (double) : timeout for any i/o operations
-
     """
-
-    originate_id: str
+    originate_peer_id: str
     adjacent_peers: list[str]
     session_id: int
-    key: str
-    fanout: int
-    link_wait_timeout: int
-    adjacent_peers: list[str]
-    chunk_size: int
+    chunk_size: int  # n bytes
+    chunk_count: int
+
+    def __bytes__(self):
+        return umsgpack.dumps(dataclasses.astuple(self))  # noqa
 
 
 @dataclass(slots=True)

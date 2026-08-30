@@ -38,8 +38,8 @@ def print_app(this_remote_peer, this_ip, app_config: AppConfig):
         {"=" * 56}
         """
     )
-    print('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
-    return print(print_string)
+    _logger.info('GLOBAL VERSION', const.VERSIONS['GLOBAL'])
+    _logger.info(print_string)
 
 
 def _get_local_appdata_path():
@@ -188,7 +188,6 @@ def set_constants(config_map: configparser.ConfigParser):
     if config_map.has_option('NERD_OPTIONS', 'page_serve_port'):
         app_config.page_serve_port = config_map.getint('NERD_OPTIONS', 'page_serve_port')
     if config_map.has_option('NERD_OPTIONS', 'protocol'):
-        print(config_map.get('NERD_OPTIONS', 'protocol'))
         app_config.protocol = net.TCPProtocol if config_map.get('NERD_OPTIONS', 'protocol') == repr(
             net.TCPProtocol) else net.UDPProtocol
     if config_map.has_option('NERD_OPTIONS', 'ip_version'):

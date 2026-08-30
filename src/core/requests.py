@@ -62,7 +62,8 @@ class RequestsDispatcher(TaskGroupMixIn, ReplyRegistryMixIn, CallHandlerMixIn, B
 
     def register_simple_handler(self, header, handler):
         """Register a simple callback against ``REQUESTS_HEADERS.REQUEST``
-        These handlers are mostly invoked when a datagram is sent using ``requests_transport``
+        These handlers are mostly invoked when a datagram is sent using ``requests_transport`` contains
+        the respective header.
         """
         self.req_router.register_handler(header, handler)
 
